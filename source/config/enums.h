@@ -643,6 +643,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         LbitCircuitGateWeightKind,
         ProjectionPolicy,
         CachePolicy,
+        Precision,
         ModelType,
         EdgeStatus,
         TimeScale,
@@ -791,6 +792,10 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == CachePolicy::NONE)                                   return "NONE";
         if(item == CachePolicy::READ)                                   return "READ";
         if(item == CachePolicy::WRITE)                                  return "WRITE";
+    }
+    if constexpr(std::is_same_v<T, Precision>) {
+        if(item == Precision::SINGLE)                                   return "SINGLE";
+        if(item == Precision::DOUBLE)                                   return "DOUBLE";
     }
     if constexpr(std::is_same_v<T, ModelType>) {
         if(item == ModelType::ising_tf_rf)                              return "ising_tf_rf";
@@ -1067,6 +1072,7 @@ constexpr auto sv2enum(std::string_view item) {
         LbitCircuitGateWeightKind,
         ProjectionPolicy,
         CachePolicy,
+        Precision,
         ModelType,
         EdgeStatus,
         TimeScale,
@@ -1248,6 +1254,10 @@ constexpr auto sv2enum(std::string_view item) {
         if(item.find("READ")        != std::string_view::npos) policy |= CachePolicy::READ;
         if(item.find("WRITE")       != std::string_view::npos) policy |= CachePolicy::WRITE;
         return policy;
+    }
+    if constexpr(std::is_same_v<T, Precision>) {
+        if(item == "SINGLE")                                 return Precision::SINGLE;
+        if(item == "DOUBLE")                                 return Precision::DOUBLE;
     }
     if constexpr(std::is_same_v<T, EdgeStatus>) {
         if(item == "STALE")                                 return EdgeStatus::STALE ;

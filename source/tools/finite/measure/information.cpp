@@ -398,7 +398,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
 
     // finite::mps::move_center_point_to_pos_dir(state_temp, 0, 1, ip.svd_cfg);
     tools::log->info("subsystem_entanglement_entropies_log2: calculating | max bit err {:.2e} | max size eig {} svd {} trnc {:.2e} | prec {}",
-                     ip.bits_max_error.value(), ip.eig_max_size.value(), ip.svd_max_size.value(), ip.svd_trnc_lim.value(), enum2sv(ip.precision));
+                     ip.bits_max_error.value(), ip.eig_max_size.value(), ip.svd_max_size.value(), ip.svd_trnc_lim.value(), enum2sv(ip.precision.value()));
 
     constexpr auto  nan = std::numeric_limits<double>::quiet_NaN();
     auto            len = state_temp.get_length<long>();
@@ -507,7 +507,8 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
                                               sites_l2r, subsystem);
 
                 // Now we can read off the missing entropy
-                see(ext - 1, safe_cast<long>(posL)) = subsystem_entanglement_entropy_log2(state_l2r, num::range<size_t>(0, ext), ip.precision.value(), -1ul, "");
+                see(ext - 1, safe_cast<long>(posL)) =
+                    subsystem_entanglement_entropy_log2(state_l2r, num::range<size_t>(0, ext), ip.precision.value(), -1ul, "");
             }
             subsystemsL.pop_front();
             tools::log->info("swap l2r subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, posL,

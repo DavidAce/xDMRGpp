@@ -810,8 +810,8 @@ void AlgorithmFinite::update_dmrg_blocksize() {
                                            .eig_max_size   = 3200,
                                            .svd_max_size   = 1024,
                                            .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
-                                           .precision      = Precision::SINGLE,
-                                           .cachePolicy    = CachePolicy::READ};
+                                           .cachePolicy    = CachePolicy::READ,
+                                           .precision      = Precision::SINGLE};
         auto        ia        = tools::finite::measure::information_lattice_analysis(*tensors.state, ip);
         double      icom      = ia.icom;
         double      blocksize = std::max(1.0, icom);
@@ -1237,8 +1237,8 @@ AlgorithmFinite::log_entry::log_entry(const AlgorithmStatus &s, const TensorsFin
                            .eig_max_size   = 3200,
                            .svd_max_size   = 1024,
                            .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
-                           .precision      = Precision::SINGLE,
-                           .cachePolicy    = CachePolicy::READ};
+                           .cachePolicy    = CachePolicy::READ,
+                           .precision      = Precision::SINGLE};
     icom      = 0.0;
     if(settings::precision::infocom_saturation_sensitivity > 0.0 and status.algo_type != AlgorithmType::fLBIT) {
         icom = tools::finite::measure::information_center_of_mass(*t.state, ip);
