@@ -2,7 +2,6 @@
 
 #include "math/tenx/fwd_decl.h"
 // Eigen goes first
-#include "debug/exceptions.h"
 #include "math/float.h"
 #include "math/tenx/eval.h"
 #include "math/tenx/threads.h"
@@ -13,6 +12,27 @@ namespace tools::common::contraction {
     using TensorWrite = Eigen::TensorBase<T, Eigen::WriteAccessors>;
     template<typename T>
     using TensorRead = Eigen::TensorBase<T, Eigen::ReadOnlyAccessors>;
+
+    class dimlist : public std::vector<long> {
+        public:
+        using base_t = std::vector<long>;
+        using base_t::base_t;
+        template<auto rank>
+        dimlist(std::array<long, rank> arr) : base_t(arr.begin(), arr.end()) {}
+    };
+
+    std::string get_tblis_arch();
+
+    template<typename Scalar>
+    void contract_tblis(const Scalar *aptr, dimlist adim,         //
+                        const Scalar *bptr, dimlist bdim,         //
+                        Scalar *cptr, dimlist cdim,               //
+                        std::string_view la, std::string_view lb, //
+                        std::string_view lc, const void *tblis_config_ptr);
+
+    // template<typename A_t, typename B_t, typename C_t>
+    // void contract_tblis(const TensorRead<A_t> &ea, const TensorRead<B_t> &eb, TensorWrite<C_t> &ec, std::string_view la, std::string_view lb,
+    //                     std::string_view lc, const void *tblis_config_ptr);
 
     /* clang-format off */
     template<typename Scalar>

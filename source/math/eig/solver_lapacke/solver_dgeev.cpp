@@ -23,8 +23,8 @@
 int eig::solver::dgeev(fp64 *matrix, size_type L) {
     eig::log->trace("Starting eig_dgeev (non-optimized)");
     auto  t_start      = std::chrono::high_resolution_clock::now();
-    auto &eigvals_real = result.eigvals_real;
-    auto &eigvals_imag = result.eigvals_imag;
+    auto &eigvals_real = result.eigvals_real_fp64;
+    auto &eigvals_imag = result.eigvals_imag_fp64;
     eigvals_real.resize(safe_cast<size_t>(L));
     eigvals_imag.resize(safe_cast<size_t>(L));
     std::vector<double> eigvecsR_tmp(safe_cast<size_t>(L * L));
@@ -53,22 +53,22 @@ int eig::solver::dgeev(fp64 *matrix, size_type L) {
         result.meta.nev_converged  = Lint;
         result.meta.n              = L;
         result.meta.form           = Form::NSYM;
-        result.meta.type           = Type::REAL;
+        result.meta.type           = Type::FP64;
         result.meta.time_prep      = std::chrono::duration<double>(t_prep - t_start).count();
         result.meta.time_total     = std::chrono::duration<double>(t_total - t_start).count();
     } else {
         throw std::runtime_error("LAPACK dgeev failed with error: " + std::to_string(info));
     }
 
-    auto &eigvals  = result.eigvals_cplx;
-    auto &eigvecsR = result.eigvecsR_cplx;
-    auto &eigvecsL = result.eigvecsL_cplx;
+    auto &eigvals  = result.eigvals_cx64;
+    auto &eigvecsR = result.eigvecsR_cx64;
+    auto &eigvecsL = result.eigvecsL_cx64;
     eigvals.resize(safe_cast<size_t>(L));
     eigvecsR.resize(safe_cast<size_t>(L * L));
     eigvecsL.resize(safe_cast<size_t>(L * L));
 
     // Copy eigenvalues
-    for(size_t i = 0; i < safe_cast<size_t>(L); i++) eigvals[i] = std::complex<double>(eigvals_real[i], eigvals_imag[i]);
+    for(size_t i = 0; i < safe_cast<size_t>(L); i++) eigvals[i] = cx64(eigvals_real[i], eigvals_imag[i]);
     // Release real/imag parts
     eigvals_real.clear();
     eigvals_imag.clear();
@@ -86,11 +86,11 @@ int eig::solver::dgeev(fp64 *matrix, size_type L) {
                 count++;
                 j++;
             } else {
-                eigvecsR[count] = std::complex<double>(eigvecsR_tmp[i + j * rows], eigvecsR_tmp[i + (j + 1) * rows]);
-                eigvecsL[count] = std::complex<double>(eigvecsL_tmp[i + j * rows], eigvecsL_tmp[i + (j + 1) * rows]);
+                eigvecsR[count] = cx64(eigvecsR_tmp[i + j * rows], eigvecsR_tmp[i + (j + 1) * rows]);
+                eigvecsL[count] = cx64(eigvecsL_tmp[i + j * rows], eigvecsL_tmp[i + (j + 1) * rows]);
                 count++;
-                eigvecsR[count] = std::complex<double>(eigvecsR_tmp[i + j * rows], -eigvecsR_tmp[i + (j + 1) * rows]);
-                eigvecsL[count] = std::complex<double>(eigvecsL_tmp[i + j * rows], -eigvecsL_tmp[i + (j + 1) * rows]);
+                eigvecsR[count] = cx64(eigvecsR_tmp[i + j * rows], -eigvecsR_tmp[i + (j + 1) * rows]);
+                eigvecsL[count] = cx64(eigvecsL_tmp[i + j * rows], -eigvecsL_tmp[i + (j + 1) * rows]);
                 count++;
                 j += 2;
             }

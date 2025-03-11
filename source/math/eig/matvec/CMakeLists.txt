@@ -4,6 +4,7 @@ add_source_target(xdmrg++-math-eig-matvec
         matvec_sparse.cpp
         matvec_mpo.cpp
         matvec_mpos.cpp
+#        matvec_mpos_jcb_fp32.cpp
         matvec_zero.cpp
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

@@ -25,8 +25,8 @@
 int eig::solver::zheev(cx64 *matrix, size_type L) {
     eig::log->trace("Starting eig zheev. Eigvecs: {}", config.compute_eigvecs.value() == eig::Vecs::ON);
     auto  t_start = std::chrono::high_resolution_clock::now();
-    auto &eigvals = result.get_eigvals<Form::SYMM>();
-    auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::CPLX>();
+    auto &eigvals = result.get_eigvals<Form::SYMM, Type::CX64>();
+    auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::CX64>();
     eigvals.resize(safe_cast<size_t>(L));
 
     int  n             = safe_cast<int>(L);
@@ -61,7 +61,7 @@ int eig::solver::zheev(cx64 *matrix, size_type L) {
     result.meta.nev_converged  = n;
     result.meta.n              = L;
     result.meta.form           = Form::SYMM;
-    result.meta.type           = Type::CPLX;
+    result.meta.type           = Type::CX64;
     result.meta.time_prep      = std::chrono::duration<double>(t_prep - t_start).count();
     result.meta.time_total     = std::chrono::duration<double>(t_total - t_start).count();
 
@@ -71,8 +71,8 @@ int eig::solver::zheev(cx64 *matrix, size_type L) {
 int eig::solver::zheevd(cx64 *matrix, size_type L) {
     eig::log->trace("Starting eig zheevd. Eigvecs: {}", config.compute_eigvecs.value() == eig::Vecs::ON);
     auto  t_start = std::chrono::high_resolution_clock::now();
-    auto &eigvals = result.get_eigvals<Form::SYMM>();
-    auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::CPLX>();
+    auto &eigvals = result.get_eigvals<Form::SYMM, Type::CX64>();
+    auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::CX64>();
     eigvals.resize(static_cast<size_t>(L));
 
     int  n              = safe_cast<int>(L);
@@ -111,7 +111,7 @@ int eig::solver::zheevd(cx64 *matrix, size_type L) {
     result.meta.nev_converged  = n;
     result.meta.n              = L;
     result.meta.form           = Form::SYMM;
-    result.meta.type           = Type::CPLX;
+    result.meta.type           = Type::CX64;
     result.meta.time_prep      = std::chrono::duration<double>(t_prep - t_start).count();
     result.meta.time_total     = std::chrono::duration<double>(t_total - t_start).count();
 

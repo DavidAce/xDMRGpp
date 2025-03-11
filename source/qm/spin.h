@@ -38,7 +38,7 @@ namespace qm::spin {
             T mat(2, 2);
             mat.setZero();
             mat(0, 0) = 1.0;
-            mat(1, 1) = 1.0;
+            mat(1, 1) = -1.0;
             return mat;
         }
         template<typename T>

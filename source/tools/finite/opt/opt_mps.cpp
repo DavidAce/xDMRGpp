@@ -1,6 +1,7 @@
 #include "../opt_mps.h"
 #include "config/debug.h"
 #include "debug/exceptions.h"
+#include "general/sfinae.h"
 #include "io/fmt_custom.h"
 #include "math/float.h"
 #include "math/num.h"
@@ -39,6 +40,24 @@ const Eigen::Tensor<cx64, 3> &opt_mps::get_tensor() const {
     else
         throw except::runtime_error("opt_mps: tensor not set");
 }
+
+template<typename T>
+Eigen::Tensor<T, 3> opt_mps::get_tensor_as() const {
+    if constexpr(std::is_same_v<T, fp32> or std::is_same_v<T, fp64>) {
+        return get_tensor().real().template cast<T>();
+    } else if constexpr(std::is_same_v<T, cx32>) {
+        return get_tensor().template cast<T>();
+    } else if constexpr(std::is_same_v<T, cx64>) {
+        return get_tensor();
+    }
+    throw except::runtime_error("get_tensor(): invalid type <{}>", sfinae::type_name<T>());
+}
+
+template Eigen::Tensor<fp32, 3> opt_mps::get_tensor_as() const;
+template Eigen::Tensor<fp64, 3> opt_mps::get_tensor_as() const;
+template Eigen::Tensor<cx32, 3> opt_mps::get_tensor_as() const;
+template Eigen::Tensor<cx64, 3> opt_mps::get_tensor_as() const;
+
 const Eigen::Tensor<cx64, 2> &opt_mps::get_bond() const {
     if(bond)
         return bond.value();
@@ -122,7 +141,12 @@ double opt_mps::get_energy_shifted() const {
     else
         throw except::runtime_error("opt_mps: energy_shifted not set");
 }
-
+double opt_mps::get_hsquared() const {
+    if(hsquared)
+        return hsquared.value();
+    else
+        throw except::runtime_error("opt_mps: hsquared not set");
+}
 double opt_mps::get_variance() const {
     if(variance)
         return variance.value();
@@ -380,6 +404,7 @@ void opt_mps::set_energy(double energy_) {
     if(energy_shifted and not eshift) eshift = energy.value() - energy_shifted.value();
 }
 void opt_mps::set_energy_per_site(double energy_per_site_) { set_energy(energy_per_site_ * static_cast<double>(get_length())); }
+void opt_mps::set_hsquared(double hsquared_) { hsquared = hsquared_; }
 void opt_mps::set_variance(double variance_) { variance = variance_; }
 void opt_mps::set_rnorm_H1(const double rnorm_) { rnorm_H = rnorm_; }
 void opt_mps::set_rnorm_H2(const double rnorm_) { rnorm_H2 = rnorm_; }

@@ -3,6 +3,7 @@
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
+#include "general/sfinae.h"
 #include "math/cast.h"
 #include "math/eig.h"
 #include "math/linalg/tensor.h"
@@ -33,13 +34,16 @@ ModelFinite::ModelFinite(ModelType model_type_, size_t model_size_) { initialize
 // operator= and copy assignment constructor.
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
-ModelFinite::~ModelFinite()                               = default; // default dtor
-ModelFinite:: ModelFinite(ModelFinite &&other)            = default; // default move ctor
-ModelFinite  &ModelFinite::operator=(ModelFinite &&other) = default; // default move assign
+ModelFinite::~ModelFinite()                              = default; // default dtor
+ModelFinite::ModelFinite(ModelFinite &&other)            = default; // default move ctor
+ModelFinite &ModelFinite::operator=(ModelFinite &&other) = default; // default move assign
 
 /* clang-format off */
 ModelFinite::ModelFinite(const ModelFinite &other) :
-    cache(other.cache),
+    cache_fp32(other.cache_fp32),
+    cache_fp64(other.cache_fp64),
+    cache_cx32(other.cache_cx32),
+    cache_cx64(other.cache_cx64),
     active_sites(other.active_sites),
     model_type(other.model_type)
 {
@@ -55,7 +59,10 @@ ModelFinite::ModelFinite(const ModelFinite &other) :
 ModelFinite &ModelFinite::operator=(const ModelFinite &other) {
     // check for self-assignment
     if(this != &other) {
-        cache = other.cache;
+        cache_fp32 = other.cache_fp32;
+        cache_fp64 = other.cache_fp64;
+        cache_cx32 = other.cache_cx32;
+        cache_cx64 = other.cache_cx64;
         MPO.clear();
         MPO.reserve(other.MPO.size());
         for(const auto &other_mpo : other.MPO) MPO.emplace_back(other_mpo->clone());
@@ -78,6 +85,26 @@ void ModelFinite::initialize(ModelType model_type_, size_t model_size) {
     for(size_t site = 0; site < model_size; site++) { MPO.emplace_back(MpoFactory::create_mpo(site, model_type)); }
     if(MPO.size() != model_size) throw except::logic_error("Initialized MPO with wrong size");
 }
+
+template<typename T>
+ModelFinite::Cache<T> &ModelFinite::get_cache() const {
+    static_assert(sfinae::is_any_v<T, fp32, fp64, fp128, cx32, cx64, cx128>);
+    /* clang-format off */
+    if constexpr(std::is_same_v<T, fp32>) { return cache_fp32; }
+    else if constexpr(std::is_same_v<T, fp64>) { return cache_fp64; }
+    else if constexpr(std::is_same_v<T, fp128>) { return cache_fp128; }
+    else if constexpr(std::is_same_v<T, cx32>) { return cache_cx32; }
+    else if constexpr(std::is_same_v<T, cx64>) { return cache_cx64; }
+    else if constexpr(std::is_same_v<T, cx128>) { return cache_cx128; }
+    else throw std::logic_error("unrecognized cache type T");
+    /* clang-format on */
+}
+template ModelFinite::Cache<fp32>  &ModelFinite::get_cache() const;
+template ModelFinite::Cache<fp64>  &ModelFinite::get_cache() const;
+template ModelFinite::Cache<fp128> &ModelFinite::get_cache() const;
+template ModelFinite::Cache<cx32>  &ModelFinite::get_cache() const;
+template ModelFinite::Cache<cx64>  &ModelFinite::get_cache() const;
+template ModelFinite::Cache<cx128> &ModelFinite::get_cache() const;
 
 const MpoSite &ModelFinite::get_mpo(size_t pos) const {
     if(pos >= MPO.size()) throw except::range_error("get_mpo(pos) pos out of range: {}", pos);
@@ -158,39 +185,31 @@ void ModelFinite::randomize() {
 
 void ModelFinite::build_mpo() {
     tools::log->debug("Building MPO");
-    cache.multisite_ham   = std::nullopt;
-    cache.multisite_mpo   = std::nullopt;
-    cache.multisite_ham_t = std::nullopt;
-    cache.multisite_mpo_t = std::nullopt;
+    clear_cache();
     for(const auto &mpo : MPO) mpo->build_mpo();
-    for(const auto &mpo : MPO) mpo->build_mpo_t();
+    for(const auto &mpo : MPO) mpo->build_mpo_q();
 }
 
 void ModelFinite::build_mpo_squared() {
     tools::log->debug("Building MPO²");
-    cache.multisite_mpo_squared = std::nullopt;
-    cache.multisite_ham_squared = std::nullopt;
+    clear_cache_squared();
     for(const auto &mpo : MPO) mpo->build_mpo_squared();
 }
 
 void ModelFinite::clear_mpo_squared() {
     tools::log->debug("Clearing MPO²");
-    cache.multisite_mpo_squared = std::nullopt;
-    cache.multisite_ham_squared = std::nullopt;
+    clear_cache_squared();
     for(const auto &mpo : MPO) mpo->clear_mpo_squared();
 }
 
 void ModelFinite::compress_mpo() {
-    cache.multisite_mpo     = std::nullopt;
-    cache.multisite_mpo_ids = std::nullopt;
-    cache.multisite_ham     = std::nullopt;
-    auto mpo_compressed     = get_compressed_mpos();
+    clear_cache();
+    auto mpo_compressed = get_compressed_mpos();
     for(const auto &[pos, mpo] : iter::enumerate(MPO)) mpo->set_mpo(mpo_compressed[pos]);
 }
 
 void ModelFinite::compress_mpo_squared() {
-    cache.multisite_mpo_squared = std::nullopt;
-    cache.multisite_ham_squared = std::nullopt;
+    clear_cache_squared();
     auto mpo_squared_compressed = get_compressed_mpos_squared();
     for(const auto &[pos, mpo] : iter::enumerate(MPO)) mpo->set_mpo_squared(mpo_squared_compressed[pos]);
 }
@@ -249,12 +268,12 @@ std::vector<Eigen::Tensor<cx64, 4>> ModelFinite::get_all_mpo_tensors(MposWithEdg
 }
 
 std::vector<Eigen::Tensor<cx128, 4>> ModelFinite::get_all_mpo_tensors_t(MposWithEdges withEdges) {
-    tools::log->trace("Collecting all MPO_t: {} sites | with edges {}", MPO.size(), static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
+    tools::log->trace("Collecting all MPO_q: {} sites | with edges {}", MPO.size(), static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
     // Collect all the mpo (doesn't matter if they are already compressed)
     std::vector<Eigen::Tensor<cx128, 4>> mpos_t;
     mpos_t.reserve(MPO.size());
 
-    for(const auto &mpo : MPO) mpos_t.emplace_back(mpo->MPO_t());
+    for(const auto &mpo : MPO) mpos_t.emplace_back(mpo->MPO_q());
     switch(withEdges) {
         case MposWithEdges::OFF: return mpos_t;
         case MposWithEdges::ON: {
@@ -324,6 +343,13 @@ void ModelFinite::set_energy_shift_mpo(double energy_shift) {
 }
 
 void ModelFinite::set_parity_shift_mpo(OptRitz ritz, int sign, std::string_view axis) {
+    if(ritz == OptRitz::NONE or sign == 0 or axis.empty()) {
+        if(get_parity_shift_mpo() == std::make_tuple(ritz, 0, "")) return;
+        tools::log->info("Unsetting MPO parity shift");
+        for(const auto &mpo : MPO) mpo->set_parity_shift_mpo(ritz, 0, "");
+        clear_cache();
+        return;
+    }
     if(not qm::spin::half::is_valid_axis(axis)) return;
     auto axus = qm::spin::half::get_axis_unsigned(axis);
     if(get_parity_shift_mpo() == std::make_tuple(ritz, sign, axus)) {
@@ -410,8 +436,9 @@ ModelLocal ModelFinite::get_local() const { return get_local(active_sites); }
 
 std::array<long, 4> ModelFinite::active_dimensions() const { return tools::finite::multisite::get_dimensions(*this); }
 
-Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody, bool with_edgeL,
-                                                      bool with_edgeR) const {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> ModelFinite::get_multisite_mpo(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody, bool with_edgeL,
+                                                        bool with_edgeR) const {
     // Observe that nbody empty/nullopt have very different meanings
     //      - empty means that no interactions should be taken into account, effectively setting all J(i,j...) = 0
     //      - nullopt means that we want the default mpo with (everything on)
@@ -419,23 +446,24 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo(const std::vector<size_t> 
     //      - if nbody has a 0 value in it, it means we want to make an attempt to account for double-counting in multisite mpos.
 
     if(sites.empty()) throw std::runtime_error("No active sites on which to build a multisite mpo tensor");
+    auto &cache = get_cache<Scalar>();
     if(sites == active_sites and cache.multisite_mpo and not nbody) return cache.multisite_mpo.value();
 
-    auto                   nbody_str    = fmt::format("{}", nbody.has_value() ? nbody.value() : std::vector<size_t>{});
-    auto                   t_mpo        = tid::tic_scope("get_multisite_mpo", tid::level::highest);
-    constexpr auto         shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
-    constexpr auto         contract_idx = tenx::idx({1}, {0});
-    auto                   positions    = num::range<size_t>(sites.front(), sites.back() + 1);
-    auto                   skip         = std::vector<size_t>{};
-    auto                   keep_log     = std::vector<size_t>();
-    auto                   skip_log     = std::vector<size_t>();
-    bool                   do_cache     = !with_edgeL and !with_edgeR and nbody.has_value() and nbody->back() > 1; // Caching doesn't make sense for nbody == 1
-    auto                  &threads      = tenx::threads::get();
-    Eigen::Tensor<cx64, 4> multisite_mpo, mpoL, mpoR;
-    Eigen::Tensor<cx64, 2> mpoR_traced;
+    auto                     nbody_str    = fmt::format("{}", nbody.has_value() ? nbody.value() : std::vector<size_t>{});
+    auto                     t_mpo        = tid::tic_scope("get_multisite_mpo", tid::level::highest);
+    constexpr auto           shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
+    constexpr auto           contract_idx = tenx::idx({1}, {0});
+    auto                     positions    = num::range<size_t>(sites.front(), sites.back() + 1);
+    auto                     skip         = std::vector<size_t>{};
+    auto                     keep_log     = std::vector<size_t>();
+    auto                     skip_log     = std::vector<size_t>();
+    bool                     do_cache = !with_edgeL and !with_edgeR and nbody.has_value() and nbody->back() > 1; // Caching doesn't make sense for nbody == 1
+    auto                    &threads  = tenx::threads::get();
+    Eigen::Tensor<Scalar, 4> multisite_mpo, mpoL, mpoR;
+    Eigen::Tensor<Scalar, 2> mpoR_traced;
     // The hamiltonian is the lower left corner he full system mpo chain, which we can extract using edgeL and edgeR
-    Eigen::Tensor<cx64, 1> edgeL = get_mpo(sites.front()).get_MPO_edge_left();
-    Eigen::Tensor<cx64, 1> edgeR = get_mpo(sites.back()).get_MPO_edge_right();
+    Eigen::Tensor<Scalar, 1> edgeL = get_mpo(sites.front()).get_MPO_edge_left<Scalar>();
+    Eigen::Tensor<Scalar, 1> edgeR = get_mpo(sites.back()).get_MPO_edge_right<Scalar>();
 
     tools::log->trace("Contracting multisite mpo tensor with sites {} | nbody {} ", sites, nbody_str);
 
@@ -455,9 +483,9 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo(const std::vector<size_t> 
         if(pos == positions.front()) {
             auto t_pre = tid::tic_scope("prepending", tid::level::highest);
             if(nbody or not skip.empty()) {
-                multisite_mpo = get_mpo(pos).MPO_nbody_view(nbody, skip);
+                multisite_mpo = get_mpo(pos).MPO_nbody_view_as<Scalar>(nbody, skip);
             } else {
-                multisite_mpo = get_mpo(pos).MPO();
+                multisite_mpo = get_mpo(pos).MPO_as<Scalar>();
             }
             if(do_cache) {
                 if(do_trace) {
@@ -488,14 +516,14 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo(const std::vector<size_t> 
                  *         |                              |                       |
                  *         3                              2                       3
                  */
-                auto mpoR_edgeR = Eigen::Tensor<cx64, 4>(multisite_mpo.contract(edgeR.reshape(tenx::array2{edgeR.size(), 1}), tenx::idx({1}, {0})));
+                auto mpoR_edgeR = Eigen::Tensor<Scalar, 4>(multisite_mpo.contract(edgeR.reshape(tenx::array2{edgeR.size(), 1}), tenx::idx({1}, {0})));
                 multisite_mpo   = mpoR_edgeR.shuffle(tenx::array4{0, 3, 1, 2});
             }
             continue;
         }
 
         mpoL = multisite_mpo;
-        mpoR = nbody or not skip.empty() ? get_mpo(pos).MPO_nbody_view(nbody, skip) : get_mpo(pos).MPO();
+        mpoR = nbody or not skip.empty() ? get_mpo(pos).MPO_nbody_view_as<Scalar>(nbody, skip) : get_mpo(pos).MPO_as<Scalar>();
 
         if(with_edgeR and pos == positions.back()) {
             /* We can append edgeL to the first mpo to reduce the size of subsequent operations.
@@ -506,7 +534,7 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo(const std::vector<size_t> 
              *         |                              |                       |
              *         3                              2                       3
              */
-            auto mpoR_edgeR = Eigen::Tensor<cx64, 4>(mpoR.contract(edgeR.reshape(std::array<long, 2>{edgeR.size(), 1}), tenx::idx({1}, {0})));
+            auto mpoR_edgeR = Eigen::Tensor<Scalar, 4>(mpoR.contract(edgeR.reshape(std::array<long, 2>{edgeR.size(), 1}), tenx::idx({1}, {0})));
             mpoR            = mpoR_edgeR.shuffle(tenx::array4{0, 3, 1, 2});
         }
         if constexpr(settings::verbose_nbody) tools::log->trace("contracting position {} | mpoL {} | mpoR {}", pos, mpoL.dimensions(), mpoR.dimensions());
@@ -537,7 +565,7 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo(const std::vector<size_t> 
                 auto t_skip = tid::tic_scope("skipping", tid::level::highest);
                 // Trace the physical indices of this skipped mpo (this should trace an identity)
                 mpoR_traced = mpoR.trace(tenx::array2{2, 3});
-                mpoR_traced *= mpoR_traced.constant(cx64(0.5, 0.0)); // divide by 2 (after tracing identity)
+                mpoR_traced *= mpoR_traced.constant(static_cast<Scalar>(0.5)); // divide by 2 (after tracing identity)
                 // Append it to the multisite mpo
                 multisite_mpo.device(*threads->dev) = mpoL.contract(mpoR_traced, tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2}).reshape(new_dims);
             } else {
@@ -554,7 +582,7 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo(const std::vector<size_t> 
 }
 
 Eigen::Tensor<cx128, 4> ModelFinite::get_multisite_mpo_t(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody, bool with_edgeL,
-                                                          bool with_edgeR) const {
+                                                         bool with_edgeR) const {
     // Observe that nbody empty/nullopt have very different meanings
     //      - empty means that no interactions should be taken into account, effectively setting all J(i,j...) = 0
     //      - nullopt means that we want the default mpo with (everything on)
@@ -562,18 +590,19 @@ Eigen::Tensor<cx128, 4> ModelFinite::get_multisite_mpo_t(const std::vector<size_
     //      - if nbody has a 0 value in it, it means we want to make an attempt to account for double-counting in multisite mpos.
 
     if(sites.empty()) throw std::runtime_error("No active sites on which to build a multisite mpo tensor");
-    if(sites == active_sites and cache.multisite_mpo_t and not nbody) return cache.multisite_mpo_t.value();
+    auto &cache = get_cache<cx128>();
+    if(sites == active_sites and cache.multisite_mpo and not nbody) return cache.multisite_mpo.value();
 
-    auto                     nbody_str    = fmt::format("{}", nbody.has_value() ? nbody.value() : std::vector<size_t>{});
-    auto                     t_mpo        = tid::tic_scope("get_multisite_mpo_t", tid::level::highest);
-    constexpr auto           shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
-    constexpr auto           contract_idx = tenx::idx({1}, {0});
-    auto                     positions    = num::range<size_t>(sites.front(), sites.back() + 1);
-    auto                     skip         = std::vector<size_t>{};
-    auto                     keep_log     = std::vector<size_t>();
-    auto                     skip_log     = std::vector<size_t>();
-    bool                     do_cache = !with_edgeL and !with_edgeR and nbody.has_value() and nbody->back() > 1; // Caching doesn't make sense for nbody == 1
-    auto                    &threads  = tenx::threads::get();
+    auto                    nbody_str    = fmt::format("{}", nbody.has_value() ? nbody.value() : std::vector<size_t>{});
+    auto                    t_mpo        = tid::tic_scope("get_multisite_mpo_t", tid::level::highest);
+    constexpr auto          shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
+    constexpr auto          contract_idx = tenx::idx({1}, {0});
+    auto                    positions    = num::range<size_t>(sites.front(), sites.back() + 1);
+    auto                    skip         = std::vector<size_t>{};
+    auto                    keep_log     = std::vector<size_t>();
+    auto                    skip_log     = std::vector<size_t>();
+    bool                    do_cache     = !with_edgeL and !with_edgeR and nbody.has_value() and nbody->back() > 1; // Caching doesn't make sense for nbody == 1
+    auto                   &threads      = tenx::threads::get();
     Eigen::Tensor<cx128, 4> multisite_mpo_t, mpoL, mpoR;
     Eigen::Tensor<cx128, 2> mpoR_traced;
     // The hamiltonian is the lower left corner he full system mpo chain, which we can extract using edgeL and edgeR
@@ -598,9 +627,9 @@ Eigen::Tensor<cx128, 4> ModelFinite::get_multisite_mpo_t(const std::vector<size_
         if(pos == positions.front()) {
             auto t_pre = tid::tic_scope("prepending", tid::level::highest);
             if(nbody or not skip.empty()) {
-                multisite_mpo_t = get_mpo(pos).MPO_nbody_view_t(nbody, skip);
+                multisite_mpo_t = get_mpo(pos).MPO_nbody_view_q(nbody, skip);
             } else {
-                multisite_mpo_t = get_mpo(pos).MPO_t();
+                multisite_mpo_t = get_mpo(pos).MPO_q();
             }
             if(do_cache) {
                 if(do_trace) {
@@ -638,7 +667,7 @@ Eigen::Tensor<cx128, 4> ModelFinite::get_multisite_mpo_t(const std::vector<size_
         }
 
         mpoL = multisite_mpo_t;
-        mpoR = nbody or not skip.empty() ? get_mpo(pos).MPO_nbody_view_t(nbody, skip) : get_mpo(pos).MPO_t();
+        mpoR = nbody or not skip.empty() ? get_mpo(pos).MPO_nbody_view_q(nbody, skip) : get_mpo(pos).MPO_q();
 
         if(with_edgeR and pos == positions.back()) {
             /* We can append edgeL to the first mpo to reduce the size of subsequent operations.
@@ -670,9 +699,9 @@ Eigen::Tensor<cx128, 4> ModelFinite::get_multisite_mpo_t(const std::vector<size_
             }
         }
         auto new_cache_string = fmt::format("keep{}|skip{}|nbody{}|dims{}", keep_log, skip_log, nbody_str, new_dims);
-        if(do_cache and cache.multisite_mpo_t_temps.find(new_cache_string) != cache.multisite_mpo_t_temps.end()) {
+        if(do_cache and cache.multisite_mpo_temps.find(new_cache_string) != cache.multisite_mpo_temps.end()) {
             if constexpr(settings::debug_cache or settings::verbose_nbody) tools::log->trace("cache hit: {}", new_cache_string);
-            multisite_mpo_t = cache.multisite_mpo_t_temps.at(new_cache_string);
+            multisite_mpo_t = cache.multisite_mpo_temps.at(new_cache_string);
         } else {
             if constexpr(settings::verbose_nbody) tools::log->trace("cache new: {}", new_cache_string);
             if(do_trace) {
@@ -687,19 +716,20 @@ Eigen::Tensor<cx128, 4> ModelFinite::get_multisite_mpo_t(const std::vector<size_
                 multisite_mpo_t.device(*threads->dev) = mpoL.contract(mpoR, contract_idx).shuffle(shuffle_idx).reshape(new_dims);
             }
             // This intermediate multisite_mpo_t could be the result we are looking for at a later time, so cache it!
-            if(do_cache) cache.multisite_mpo_t_temps[new_cache_string] = multisite_mpo_t;
+            if(do_cache) cache.multisite_mpo_temps[new_cache_string] = multisite_mpo_t;
         }
     }
     if(with_edgeL) assert(multisite_mpo_t.dimension(0) == 1);
     if(with_edgeR) assert(multisite_mpo_t.dimension(1) == 1);
     return multisite_mpo_t;
 }
-
-Eigen::Tensor<cx64, 2> ModelFinite::get_multisite_ham(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 2> ModelFinite::get_multisite_ham(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const {
     /*! We use edges without particle content to get a hamiltonian for a subsystem (as opposed to an effective hamiltonian for a subsystem).
      *  To get an effective hamiltonian with particle-full edges, use TensorsFinite::get_effective_hamiltonian.
      */
     if(sites.empty()) throw std::runtime_error("No active sites on which to build a multisite hamiltonian tensor");
+    auto &cache = get_cache<Scalar>();
     if(sites == active_sites and cache.multisite_ham and not nbody) {
         if constexpr(settings::debug_cache) tools::log->info("cache hit: sites{}|nbody{}", sites, nbody.has_value() ? nbody.value() : std::vector<size_t>{});
         return cache.multisite_ham.value();
@@ -709,24 +739,30 @@ Eigen::Tensor<cx64, 2> ModelFinite::get_multisite_ham(const std::vector<size_t> 
     for(const auto &pos : sites) { spin_dim *= get_mpo(pos).get_spin_dimension(); }
     auto dim2 = tenx::array2{spin_dim, spin_dim};
     if(sites.size() <= 4) {
-        return get_multisite_mpo(sites, nbody, true, true).reshape(dim2);
+        return get_multisite_mpo<Scalar>(sites, nbody, true, true).reshape(dim2);
     } else {
         // When there are many sites, it is better to split sites into two equal chunks and then merge them (because edgeL/edgeR makes them small)
         auto half   = static_cast<long>((sites.size() + 1) / 2); // Let the left side take one more site in odd cases, because we contract from the left
         auto sitesL = std::vector<size_t>(sites.begin(), sites.begin() + half);
         auto sitesR = std::vector<size_t>(sites.begin() + half, sites.end());
-        auto mpoL   = get_multisite_mpo(sitesL, nbody, true, false); // Shuffle so we can use GEMM
-        auto mpoR   = get_multisite_mpo(sitesR, nbody, false, true);
+        auto mpoL   = get_multisite_mpo<Scalar>(sitesL, nbody, true, false); // Shuffle so we can use GEMM
+        auto mpoR   = get_multisite_mpo<Scalar>(sitesR, nbody, false, true);
         auto mpoLR  = tenx::gemm_mpo(mpoL, mpoR);
         return mpoLR.reshape(tenx::array2{spin_dim, spin_dim});
     }
 }
 
+template Eigen::Tensor<fp32, 2> ModelFinite::get_multisite_ham(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<fp64, 2> ModelFinite::get_multisite_ham(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<cx32, 2> ModelFinite::get_multisite_ham(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<cx64, 2> ModelFinite::get_multisite_ham(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+
 Eigen::Tensor<cx128, 2> ModelFinite::get_multisite_ham_t(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const {
     if(sites.empty()) throw std::runtime_error("No active sites on which to build a multisite hamiltonian tensor");
-    if(sites == active_sites and cache.multisite_ham_t and not nbody) {
+    auto &cache = get_cache<cx128>();
+    if(sites == active_sites and cache.multisite_ham and not nbody) {
         if constexpr(settings::debug_cache) tools::log->trace("cache hit: sites{}|nbody{}", sites, nbody.has_value() ? nbody.value() : std::vector<size_t>{});
-        return cache.multisite_ham_t.value();
+        return cache.multisite_ham.value();
     }
     long spin_dim = 1;
     for(const auto &pos : sites) { spin_dim *= get_mpo(pos).get_spin_dimension(); }
@@ -745,7 +781,9 @@ Eigen::Tensor<cx128, 2> ModelFinite::get_multisite_ham_t(const std::vector<size_
     }
 }
 
-const Eigen::Tensor<cx64, 4> &ModelFinite::get_multisite_mpo() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 4> &ModelFinite::get_multisite_mpo() const {
+    auto &cache = get_cache<Scalar>();
     if(cache.multisite_mpo and cache.multisite_mpo_ids and not active_sites.empty()) {
         if constexpr(settings::debug_cache) tools::log->trace("get_multisite_mpo: cache hit");
         // Check that the ids match
@@ -755,41 +793,55 @@ const Eigen::Tensor<cx64, 4> &ModelFinite::get_multisite_mpo() const {
                                         cache.multisite_mpo_ids.value());
         return cache.multisite_mpo.value();
     }
-    cache.multisite_mpo     = get_multisite_mpo(active_sites);
+    cache.multisite_mpo     = get_multisite_mpo<Scalar>(active_sites);
     cache.multisite_mpo_ids = get_active_ids();
     return cache.multisite_mpo.value();
 }
 
+template const Eigen::Tensor<fp32, 4> &ModelFinite::get_multisite_mpo() const;
+template const Eigen::Tensor<fp64, 4> &ModelFinite::get_multisite_mpo() const;
+template const Eigen::Tensor<cx32, 4> &ModelFinite::get_multisite_mpo() const;
+template const Eigen::Tensor<cx64, 4> &ModelFinite::get_multisite_mpo() const;
+
 const Eigen::Tensor<cx128, 4> &ModelFinite::get_multisite_mpo_t() const {
-    if(cache.multisite_mpo_t and not active_sites.empty()) {
-        if constexpr(settings::debug_cache) tools::log->trace("multisite_mpo_t: cache hit");
-        return cache.multisite_mpo_t.value();
+    auto &cache = get_cache<cx128>();
+    if(cache.multisite_mpo and not active_sites.empty()) {
+        if constexpr(settings::debug_cache) tools::log->trace("multisite_mpo: cache hit");
+        return cache.multisite_mpo.value();
     }
-    cache.multisite_mpo_t = get_multisite_mpo_t(active_sites);
-    return cache.multisite_mpo_t.value();
+    cache.multisite_mpo = get_multisite_mpo<cx128>(active_sites);
+    return cache.multisite_mpo.value();
 }
 
-const Eigen::Tensor<cx64, 2> &ModelFinite::get_multisite_ham() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 2> &ModelFinite::get_multisite_ham() const {
+    auto &cache = get_cache<Scalar>();
     if(cache.multisite_ham and not active_sites.empty()) return cache.multisite_ham.value();
-    cache.multisite_ham = get_multisite_ham(active_sites);
+    cache.multisite_ham = get_multisite_ham<Scalar>(active_sites);
+    return cache.multisite_ham.value();
+}
+template const Eigen::Tensor<fp32, 2> &ModelFinite::get_multisite_ham() const;
+template const Eigen::Tensor<fp64, 2> &ModelFinite::get_multisite_ham() const;
+template const Eigen::Tensor<cx32, 2> &ModelFinite::get_multisite_ham() const;
+template const Eigen::Tensor<cx64, 2> &ModelFinite::get_multisite_ham() const;
+
+const Eigen::Tensor<cx128, 2> &ModelFinite::get_multisite_ham_t() const {
+    auto &cache = get_cache<cx128>();
+    if(cache.multisite_ham and not active_sites.empty()) return cache.multisite_ham.value();
+    cache.multisite_ham = get_multisite_ham_t(active_sites);
     return cache.multisite_ham.value();
 }
 
-const Eigen::Tensor<cx128, 2> &ModelFinite::get_multisite_ham_t() const {
-    if(cache.multisite_ham_t and not active_sites.empty()) return cache.multisite_ham_t.value();
-    cache.multisite_ham_t = get_multisite_ham_t(active_sites);
-    return cache.multisite_ham_t.value();
-}
-
-Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_shifted_view(double energy_per_site) const {
-    auto                   t_mpo = tid::tic_scope("mpo_shifted_view");
-    Eigen::Tensor<cx64, 4> multisite_mpo, temp;
-    constexpr auto         shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
-    constexpr auto         contract_idx = tenx::idx({1}, {0});
-    auto                  &threads      = tenx::threads::get();
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> ModelFinite::get_multisite_mpo_shifted_view(double energy_per_site) const {
+    auto                     t_mpo = tid::tic_scope("mpo_shifted_view");
+    Eigen::Tensor<Scalar, 4> multisite_mpo, temp;
+    constexpr auto           shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
+    constexpr auto           contract_idx = tenx::idx({1}, {0});
+    auto                    &threads      = tenx::threads::get();
     for(const auto &site : active_sites) {
         if(multisite_mpo.size() == 0) {
-            multisite_mpo = get_mpo(site).MPO_energy_shifted_view(energy_per_site);
+            multisite_mpo = get_mpo(site).MPO_energy_shifted_view_as<Scalar>(energy_per_site);
             continue;
         }
         const auto         &mpo      = get_mpo(site);
@@ -799,25 +851,35 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_shifted_view(double energy
         long                dim3     = multisite_mpo.dimension(3) * mpo.MPO().dimension(3);
         std::array<long, 4> new_dims = {dim0, dim1, dim2, dim3};
         temp.resize(new_dims);
-        temp.device(*threads->dev) = multisite_mpo.contract(mpo.MPO_energy_shifted_view(energy_per_site), contract_idx).shuffle(shuffle_idx).reshape(new_dims);
-        multisite_mpo              = std::move(temp);
+        temp.device(*threads->dev) =
+            multisite_mpo.contract(mpo.MPO_energy_shifted_view_as<Scalar>(energy_per_site), contract_idx).shuffle(shuffle_idx).reshape(new_dims);
+        multisite_mpo = std::move(temp);
     }
     return multisite_mpo;
 }
+template Eigen::Tensor<fp32, 4> ModelFinite::get_multisite_mpo_shifted_view(double energy_per_site) const;
+template Eigen::Tensor<fp64, 4> ModelFinite::get_multisite_mpo_shifted_view(double energy_per_site) const;
+template Eigen::Tensor<cx32, 4> ModelFinite::get_multisite_mpo_shifted_view(double energy_per_site) const;
+template Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_shifted_view(double energy_per_site) const;
 
-Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_squared_shifted_view(double energy_per_site) const {
-    auto                   multisite_mpo_shifted = get_multisite_mpo_shifted_view(energy_per_site);
-    long                   dim0                  = multisite_mpo_shifted.dimension(0) * multisite_mpo_shifted.dimension(0);
-    long                   dim1                  = multisite_mpo_shifted.dimension(1) * multisite_mpo_shifted.dimension(1);
-    long                   dim2                  = multisite_mpo_shifted.dimension(2);
-    long                   dim3                  = multisite_mpo_shifted.dimension(3);
-    std::array<long, 4>    mpo_squared_dims      = {dim0, dim1, dim2, dim3};
-    Eigen::Tensor<cx64, 4> multisite_mpo_squared_shifted(mpo_squared_dims);
-    auto                  &threads = tenx::threads::get();
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> ModelFinite::get_multisite_mpo_squared_shifted_view(double energy_per_site) const {
+    auto                     multisite_mpo_shifted = get_multisite_mpo_shifted_view<Scalar>(energy_per_site);
+    long                     dim0                  = multisite_mpo_shifted.dimension(0) * multisite_mpo_shifted.dimension(0);
+    long                     dim1                  = multisite_mpo_shifted.dimension(1) * multisite_mpo_shifted.dimension(1);
+    long                     dim2                  = multisite_mpo_shifted.dimension(2);
+    long                     dim3                  = multisite_mpo_shifted.dimension(3);
+    std::array<long, 4>      mpo_squared_dims      = {dim0, dim1, dim2, dim3};
+    Eigen::Tensor<Scalar, 4> multisite_mpo_squared_shifted(mpo_squared_dims);
+    auto                    &threads = tenx::threads::get();
     multisite_mpo_squared_shifted.device(*threads->dev) =
         multisite_mpo_shifted.contract(multisite_mpo_shifted, tenx::idx({3}, {2})).shuffle(tenx::array6{0, 3, 1, 4, 2, 5}).reshape(mpo_squared_dims);
     return multisite_mpo_squared_shifted;
 }
+template Eigen::Tensor<fp32, 4> ModelFinite::get_multisite_mpo_squared_shifted_view(double energy_per_site) const;
+template Eigen::Tensor<fp64, 4> ModelFinite::get_multisite_mpo_squared_shifted_view(double energy_per_site) const;
+template Eigen::Tensor<cx32, 4> ModelFinite::get_multisite_mpo_squared_shifted_view(double energy_per_site) const;
+template Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_squared_shifted_view(double energy_per_site) const;
 
 std::array<long, 4> ModelFinite::active_dimensions_squared() const { return tools::finite::multisite::get_dimensions_squared(*this); }
 
@@ -964,19 +1026,21 @@ std::array<long, 4> ModelFinite::active_dimensions_squared() const { return tool
 //     return multisite_mpo_squared;
 // }
 
-Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const {
     if(sites.empty()) throw std::runtime_error("No active sites on which to build a multisite mpo squared tensor");
+    auto &cache = get_cache<Scalar>();
     if(sites == active_sites and cache.multisite_mpo_squared and not nbody) return cache.multisite_mpo_squared.value();
     tools::log->trace("Contracting multisite mpo² tensor with sites {}", sites);
-    auto                   t_mpo     = tid::tic_scope("get_multisite_mpo_squared", tid::level::highest);
-    auto                   positions = num::range<size_t>(sites.front(), sites.back() + 1);
-    Eigen::Tensor<cx64, 4> multisite_mpo_squared;
-    constexpr auto         shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
-    constexpr auto         contract_idx = tenx::idx({1}, {0});
-    tenx::array4           new_dims;
-    Eigen::Tensor<cx64, 4> temp;
-    bool                   first   = true;
-    auto                  &threads = tenx::threads::get();
+    auto                     t_mpo     = tid::tic_scope("get_multisite_mpo_squared", tid::level::highest);
+    auto                     positions = num::range<size_t>(sites.front(), sites.back() + 1);
+    Eigen::Tensor<Scalar, 4> multisite_mpo_squared;
+    constexpr auto           shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
+    constexpr auto           contract_idx = tenx::idx({1}, {0});
+    tenx::array4             new_dims;
+    Eigen::Tensor<Scalar, 4> temp;
+    bool                     first   = true;
+    auto                    &threads = tenx::threads::get();
     for(const auto &pos : positions) {
         // sites needs to be sorted, but may skip sites.
         // For instance, sites == {3,9} is valid. Then sites 4,5,6,7,8 are skipped.
@@ -986,27 +1050,29 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<
         auto nbody_local = nbody;
         bool skip        = std::find(sites.begin(), sites.end(), pos) == sites.end();
         if(skip) nbody_local = std::vector<size_t>{};
-
+        const auto &mpo = get_mpo(pos);
         if(first) {
             if(nbody_local)
-                multisite_mpo_squared = get_mpo(pos).MPO2_nbody_view(nbody_local);
+                multisite_mpo_squared = mpo.MPO2_nbody_view_as<Scalar>(nbody_local);
             else
-                multisite_mpo_squared = get_mpo(pos).MPO2();
+                multisite_mpo_squared = mpo.MPO2_as<Scalar>();
             first = false;
             continue;
         }
 
-        const auto &mpo  = get_mpo(pos);
+        const auto &MPO  = mpo.MPO_as<Scalar>();
+        const auto &MPO2 = mpo.MPO2_as<Scalar>();
         long        dim0 = multisite_mpo_squared.dimension(0);
-        long        dim1 = mpo.MPO2().dimension(1);
-        long        dim2 = multisite_mpo_squared.dimension(2) * mpo.MPO2().dimension(2);
-        long        dim3 = multisite_mpo_squared.dimension(3) * mpo.MPO2().dimension(3);
+        long        dim1 = MPO2.dimension(1);
+        long        dim2 = multisite_mpo_squared.dimension(2) * MPO2.dimension(2);
+        long        dim3 = multisite_mpo_squared.dimension(3) * MPO2.dimension(3);
         new_dims         = {dim0, dim1, dim2, dim3};
         temp.resize(new_dims);
         if(nbody_local) // Avoids creating a temporary
-            temp.device(*threads->dev) = multisite_mpo_squared.contract(mpo.MPO2_nbody_view(nbody_local), contract_idx).shuffle(shuffle_idx).reshape(new_dims);
+            temp.device(*threads->dev) =
+                multisite_mpo_squared.contract(mpo.MPO2_nbody_view_as<Scalar>(nbody_local), contract_idx).shuffle(shuffle_idx).reshape(new_dims);
         else
-            temp.device(*threads->dev) = multisite_mpo_squared.contract(mpo.MPO2(), contract_idx).shuffle(shuffle_idx).reshape(new_dims);
+            temp.device(*threads->dev) = multisite_mpo_squared.contract(MPO2, contract_idx).shuffle(shuffle_idx).reshape(new_dims);
 
         if(skip) {
             /*! We just got handed a multisite-mpo created as
@@ -1021,14 +1087,14 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<
              * In this step, a reshape brings back the 6 indices, and index 3 and 5 should be traced over.
              *
              */
-            long                   d0    = dim0;
-            long                   d1    = dim1;
-            long                   d2    = multisite_mpo_squared.dimension(2);
-            long                   d3    = mpo.MPO().dimension(2);
-            long                   d4    = multisite_mpo_squared.dimension(3);
-            long                   d5    = mpo.MPO().dimension(3);
-            Eigen::Tensor<cx64, 4> temp2 = temp.reshape(tenx::array6{d0, d1, d2, d3, d4, d5}).trace(tenx::array2{3, 5});
-            multisite_mpo_squared        = temp2 * temp2.constant(cx64(0.5, 0.0));
+            long                     d0    = dim0;
+            long                     d1    = dim1;
+            long                     d2    = multisite_mpo_squared.dimension(2);
+            long                     d3    = MPO.dimension(2);
+            long                     d4    = multisite_mpo_squared.dimension(3);
+            long                     d5    = MPO.dimension(3);
+            Eigen::Tensor<Scalar, 4> temp2 = temp.reshape(tenx::array6{d0, d1, d2, d3, d4, d5}).trace(tenx::array2{3, 5});
+            multisite_mpo_squared          = temp2 * temp2.constant(static_cast<Scalar>(0.5));
         } else {
             multisite_mpo_squared = std::move(temp);
         }
@@ -1036,11 +1102,18 @@ Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<
     return multisite_mpo_squared;
 }
 
-Eigen::Tensor<cx64, 2> ModelFinite::get_multisite_ham_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const {
+template Eigen::Tensor<fp32, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<fp64, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<cx32, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<cx64, 4> ModelFinite::get_multisite_mpo_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+
+template<typename Scalar>
+Eigen::Tensor<Scalar, 2> ModelFinite::get_multisite_ham_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const {
     /*! We use edges without particle content to get a hamiltonian for a subsystem.
      *  To get an effective hamiltonian with particle-full edges, use TensorsFinite::get_effective_hamiltonian.
      */
     if(sites.empty()) throw std::runtime_error("No active sites on which to build a multisite hamiltonian squared tensor");
+    auto &cache = get_cache<Scalar>();
     if(sites == active_sites and cache.multisite_ham_squared and not nbody) {
         tools::log->info("cache hit: sites{}|nbody{}", sites, nbody.has_value() ? nbody.value() : std::vector<size_t>{});
         return cache.multisite_ham_squared.value();
@@ -1050,18 +1123,23 @@ Eigen::Tensor<cx64, 2> ModelFinite::get_multisite_ham_squared(const std::vector<
     for(const auto &pos : sites) { spin_dim *= get_mpo(pos).get_spin_dimension(); }
     auto dim2 = tenx::array2{spin_dim, spin_dim};
     if(sites.size() <= 4) {
-        return get_multisite_mpo_squared(sites, nbody).reshape(dim2);
+        return get_multisite_mpo_squared<Scalar>(sites, nbody).reshape(dim2);
     } else {
         // When there are many sites, it is better to split sites into two equal chunks and then merge them, especially if when taking all mpos.
         auto half   = static_cast<long>((sites.size() + 1) / 2); // Let the left side take one more site in odd cases, because we contract from the left
         auto sitesL = std::vector<size_t>(sites.begin(), sites.begin() + half);
         auto sitesR = std::vector<size_t>(sites.begin() + half, sites.end());
-        auto mpo2L  = get_multisite_mpo_squared(sitesL, nbody);
-        auto mpo2R  = get_multisite_mpo_squared(sitesR, nbody);
+        auto mpo2L  = get_multisite_mpo_squared<Scalar>(sitesL, nbody);
+        auto mpo2R  = get_multisite_mpo_squared<Scalar>(sitesR, nbody);
         auto mpo2LR = tenx::gemm_mpo(mpo2L, mpo2R);
         return mpo2LR.reshape(tenx::array2{spin_dim, spin_dim});
     }
 }
+
+template Eigen::Tensor<fp32, 2> ModelFinite::get_multisite_ham_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<fp64, 2> ModelFinite::get_multisite_ham_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<cx32, 2> ModelFinite::get_multisite_ham_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
+template Eigen::Tensor<cx64, 2> ModelFinite::get_multisite_ham_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const;
 
 // Eigen::Tensor<cx64, 2> ModelFinite::get_multisite_ham_squared(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody) const {
 /*! We use edges without particle content to get a hamiltonian for a subsystem.
@@ -1090,7 +1168,9 @@ Eigen::Tensor<cx64, 2> ModelFinite::get_multisite_ham_squared(const std::vector<
 // return edgeL.contract(multisite_mpo_squared, tenx::idx({0}, {0})).contract(edgeR, tenx::idx({0}, {0})).reshape(tenx::array2{rows, cols});
 // }
 
-const Eigen::Tensor<cx64, 4> &ModelFinite::get_multisite_mpo_squared() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 4> &ModelFinite::get_multisite_mpo_squared() const {
+    auto &cache = get_cache<Scalar>();
     if(cache.multisite_mpo_squared and cache.multisite_mpo_squared_ids and not active_sites.empty()) {
         if constexpr(settings::debug_cache) tools::log->trace("get_multisite_mpo_squared: cache hit");
         // Check that the ids match
@@ -1100,20 +1180,56 @@ const Eigen::Tensor<cx64, 4> &ModelFinite::get_multisite_mpo_squared() const {
                                         cache.multisite_mpo_squared_ids.value());
         return cache.multisite_mpo_squared.value();
     }
-    cache.multisite_mpo_squared     = get_multisite_mpo_squared(active_sites);
+    cache.multisite_mpo_squared     = get_multisite_mpo_squared<Scalar>(active_sites);
     cache.multisite_mpo_squared_ids = get_active_ids_sq();
     return cache.multisite_mpo_squared.value();
 }
+template const Eigen::Tensor<fp32, 4> &ModelFinite::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<fp64, 4> &ModelFinite::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<cx32, 4> &ModelFinite::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<cx64, 4> &ModelFinite::get_multisite_mpo_squared() const;
 
-const Eigen::Tensor<cx64, 2> &ModelFinite::get_multisite_ham_squared() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 2> &ModelFinite::get_multisite_ham_squared() const {
+    auto &cache = get_cache<Scalar>();
     if(cache.multisite_ham_squared and not active_sites.empty()) return cache.multisite_ham_squared.value();
-    cache.multisite_ham_squared = get_multisite_ham_squared(active_sites);
+    cache.multisite_ham_squared = get_multisite_ham_squared<Scalar>(active_sites);
     return cache.multisite_ham_squared.value();
 }
+template const Eigen::Tensor<fp32, 2> &ModelFinite::get_multisite_ham_squared() const;
+template const Eigen::Tensor<fp64, 2> &ModelFinite::get_multisite_ham_squared() const;
+template const Eigen::Tensor<cx32, 2> &ModelFinite::get_multisite_ham_squared() const;
+template const Eigen::Tensor<cx64, 2> &ModelFinite::get_multisite_ham_squared() const;
 
 void ModelFinite::clear_cache(LogPolicy logPolicy) const {
     if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) tools::log->trace("Clearing model cache");
-    cache = Cache();
+    cache_fp32  = Cache<fp32>();
+    cache_fp64  = Cache<fp64>();
+    cache_fp128 = Cache<fp128>();
+    cache_cx32  = Cache<cx32>();
+    cache_cx64  = Cache<cx64>();
+    cache_cx128 = Cache<cx128>();
+}
+void ModelFinite::clear_cache_squared(LogPolicy logPolicy) const {
+    if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) tools::log->trace("Clearing model cache");
+    cache_fp32.multisite_mpo_squared      = std::nullopt;
+    cache_fp32.multisite_ham_squared      = std::nullopt;
+    cache_fp32.multisite_mpo_squared_ids  = std::nullopt;
+    cache_fp64.multisite_mpo_squared      = std::nullopt;
+    cache_fp64.multisite_ham_squared      = std::nullopt;
+    cache_fp64.multisite_mpo_squared_ids  = std::nullopt;
+    cache_fp128.multisite_mpo_squared     = std::nullopt;
+    cache_fp128.multisite_ham_squared     = std::nullopt;
+    cache_fp128.multisite_mpo_squared_ids = std::nullopt;
+    cache_cx32.multisite_mpo_squared      = std::nullopt;
+    cache_cx32.multisite_ham_squared      = std::nullopt;
+    cache_cx32.multisite_mpo_squared_ids  = std::nullopt;
+    cache_cx64.multisite_mpo_squared      = std::nullopt;
+    cache_cx64.multisite_ham_squared      = std::nullopt;
+    cache_cx64.multisite_mpo_squared_ids  = std::nullopt;
+    cache_cx128.multisite_mpo_squared     = std::nullopt;
+    cache_cx128.multisite_ham_squared     = std::nullopt;
+    cache_cx128.multisite_mpo_squared_ids = std::nullopt;
 }
 
 std::vector<size_t> ModelFinite::get_active_ids() const {

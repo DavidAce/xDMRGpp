@@ -3,6 +3,7 @@
 #include "config/debug.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
+#include "general/sfinae.h"
 #include "math/cast.h"
 #include "math/num.h"
 #include "math/tenx.h"
@@ -43,11 +44,16 @@ TensorsFinite::TensorsFinite(TensorsFinite &&other)            = default; // def
 TensorsFinite &TensorsFinite::operator=(TensorsFinite &&other) = default; // default move assign
 
 TensorsFinite::TensorsFinite(const TensorsFinite &other)
-    : state(std::make_unique<StateFinite>(*other.state)), model(std::make_unique<ModelFinite>(*other.model)),
+    : cache_fp32(other.cache_fp32), cache_fp64(other.cache_fp64), cache_cx32(other.cache_cx32), cache_cx64(other.cache_cx64),
+      state(std::make_unique<StateFinite>(*other.state)), model(std::make_unique<ModelFinite>(*other.model)),
       edges(std::make_unique<EdgesFinite>(*other.edges)), active_sites(other.active_sites), measurements(other.measurements) {}
 TensorsFinite &TensorsFinite::operator=(const TensorsFinite &other) {
     // check for self-assignment
     if(this != &other) {
+        cache_fp32   = other.cache_fp32;
+        cache_fp64   = other.cache_fp64;
+        cache_cx32   = other.cache_cx32;
+        cache_cx64   = other.cache_cx64;
         state        = std::make_unique<StateFinite>(*other.state);
         model        = std::make_unique<ModelFinite>(*other.model);
         edges        = std::make_unique<EdgesFinite>(*other.edges);
@@ -61,6 +67,22 @@ TensorsFinite &TensorsFinite::operator=(const TensorsFinite &other) {
 TensorsFinite::TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position) : TensorsFinite() {
     initialize(algo_type, model_type, model_size, position);
 }
+
+template<typename T>
+TensorsFinite::Cache<T> &TensorsFinite::get_cache() const {
+    static_assert(sfinae::is_any_v<T, fp32, fp64, cx32, cx64>);
+    /* clang-format off */
+         if constexpr(std::is_same_v<T, fp32>) { return cache_fp32; }
+    else if constexpr(std::is_same_v<T, fp64>) { return cache_fp64; }
+    else if constexpr(std::is_same_v<T, cx32>) { return cache_cx32; }
+    else if constexpr(std::is_same_v<T, cx64>) { return cache_cx64; }
+    else throw std::logic_error("unrecognized cache type T");
+    /* clang-format oon */
+}
+template TensorsFinite::Cache<fp32> &TensorsFinite::get_cache() const;
+template TensorsFinite::Cache<fp64> &TensorsFinite::get_cache() const;
+template TensorsFinite::Cache<cx32> &TensorsFinite::get_cache() const;
+template TensorsFinite::Cache<cx64> &TensorsFinite::get_cache() const;
 
 StateFinite       &TensorsFinite::get_state() { return *state; }
 ModelFinite       &TensorsFinite::get_model() { return *model; }
@@ -109,11 +131,23 @@ void TensorsFinite::normalize_state(std::optional<svd::config> svd_cfg, NormPoli
     }
 }
 
-const Eigen::Tensor<cx64, 3> &TensorsFinite::get_multisite_mps() const { return state->get_multisite_mps(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 3> &TensorsFinite::get_multisite_mps() const { return state->get_multisite_mps<Scalar>(); }
+template const Eigen::Tensor<fp32, 3> &TensorsFinite::get_multisite_mps() const;
+template const Eigen::Tensor<fp64, 3> &TensorsFinite::get_multisite_mps() const;
+template const Eigen::Tensor<cx32, 3> &TensorsFinite::get_multisite_mps() const;
+template const Eigen::Tensor<cx64, 3> &TensorsFinite::get_multisite_mps() const;
 
-const Eigen::Tensor<cx64, 4> &TensorsFinite::get_multisite_mpo() const { return model->get_multisite_mpo(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 4> &TensorsFinite::get_multisite_mpo() const { return model->get_multisite_mpo<Scalar>(); }
+template const Eigen::Tensor<fp32, 4> &TensorsFinite::get_multisite_mpo() const;
+template const Eigen::Tensor<fp64, 4> &TensorsFinite::get_multisite_mpo() const;
+template const Eigen::Tensor<cx32, 4> &TensorsFinite::get_multisite_mpo() const;
+template const Eigen::Tensor<cx64, 4> &TensorsFinite::get_multisite_mpo() const;
 
-const Eigen::Tensor<cx64, 4> &TensorsFinite::get_multisite_mpo_squared() const { return model->get_multisite_mpo_squared(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 4> &TensorsFinite::get_multisite_mpo_squared() const { return model->get_multisite_mpo_squared<Scalar>(); }
+template const Eigen::Tensor<fp32, 4> &TensorsFinite::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<fp64, 4> &TensorsFinite::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<cx32, 4> &TensorsFinite::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<cx64, 4> &TensorsFinite::get_multisite_mpo_squared() const;
 
 template<typename Scalar>
 Eigen::Tensor<Scalar, 2> contract_mpo_env(const Eigen::Tensor<Scalar, 4> &mpo, const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR) {
@@ -145,56 +179,54 @@ Eigen::Tensor<Scalar, 2> contract_mpo_env(const Eigen::Tensor<Scalar, 4> &mpo, c
 template<typename Scalar>
 const Eigen::Tensor<Scalar, 2> &TensorsFinite::get_effective_hamiltonian() const {
     auto t_ham = tid::tic_scope("ham");
-    if constexpr(std::is_same_v<Scalar, double>) {
-        if(cache.effective_hamiltonian_real and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian_real.value();
-    } else {
-        if(cache.effective_hamiltonian_cplx and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian_cplx.value();
-    }
-
-    const auto &mpo = model->get_multisite_mpo();
-    const auto &env = edges->get_multisite_env_ene_blk();
+    auto & cache = get_cache<Scalar>();
+    if(cache.effective_hamiltonian and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian.value();
+    const auto &mpo = get_multisite_mpo<Scalar>();
+    const auto &env = get_multisite_env_ene_blk_as<Scalar>();
     tools::log->trace("Contracting effective multisite Hamiltonian");
     cache.cached_sites_hamiltonian = active_sites;
-    if constexpr(std::is_same_v<Scalar, double>) {
-        cache.effective_hamiltonian_real = contract_mpo_env<double>(mpo.real(), env.L.real(), env.R.real());
-        return cache.effective_hamiltonian_real.value();
-    } else {
-        cache.effective_hamiltonian_cplx = contract_mpo_env<Scalar>(mpo, env.L, env.R);
-        return cache.effective_hamiltonian_cplx.value();
-    }
+    cache.effective_hamiltonian = contract_mpo_env<Scalar>(mpo, env.L, env.R);
+    return cache.effective_hamiltonian.value();
+
 }
-template const Eigen::Tensor<TensorsFinite::fp64, 2> &TensorsFinite::get_effective_hamiltonian() const;
-template const Eigen::Tensor<cx64, 2>                &TensorsFinite::get_effective_hamiltonian() const;
+template const Eigen::Tensor<fp32, 2> &TensorsFinite::get_effective_hamiltonian() const;
+template const Eigen::Tensor<fp64, 2> &TensorsFinite::get_effective_hamiltonian() const;
+template const Eigen::Tensor<cx32, 2> &TensorsFinite::get_effective_hamiltonian() const;
+template const Eigen::Tensor<cx64, 2> &TensorsFinite::get_effective_hamiltonian() const;
 
 template<typename Scalar>
 const Eigen::Tensor<Scalar, 2> &TensorsFinite::get_effective_hamiltonian_squared() const {
     auto t_ham = tid::tic_scope("ham²");
-    if constexpr(std::is_same_v<Scalar, double>) {
-        if(cache.effective_hamiltonian_squared_real and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian_squared_real.value();
-    } else {
-        if(cache.effective_hamiltonian_squared_cplx and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian_squared_cplx.value();
-    }
+    auto & cache = get_cache<Scalar>();
+    if(cache.effective_hamiltonian_squared and active_sites == cache.cached_sites_hamiltonian)
+        return cache.effective_hamiltonian_squared.value();
+
     tools::log->trace("TensorsFinite::get_effective_hamiltonian_squared(): contracting active sites {}", active_sites);
-    const auto &mpo = model->get_multisite_mpo_squared();
-    const auto &env = edges->get_multisite_env_var_blk();
-    // tools::log->info("get_effective_hamiltonian_squared: dims {} | edgeL {} | edgeR {}", mpo.dimensions(), env.L.dimensions(), env.R.dimensions());
-    // tools::log->info("get_effective_hamiltonian_squared: edgeL \n{}\n", linalg::tensor::to_string(env.L, 16));
-    // tools::log->info("get_effective_hamiltonian_squared: edgeR \n{}\n", linalg::tensor::to_string(env.R, 16));
-    // tools::log->info("get_effective_hamiltonian_squared: ham2  \n{}\n", linalg::tensor::to_string(mpo.real(), 16));
+    const auto &mpo = get_multisite_mpo_squared<Scalar>();
+    const auto &env = get_multisite_env_var_blk_as<Scalar>();
     cache.cached_sites_hamiltonian_squared = active_sites;
-    if constexpr(std::is_same_v<Scalar, double>) {
-        cache.effective_hamiltonian_squared_real = contract_mpo_env<double>(mpo.real(), env.L.real(), env.R.real());
-        return cache.effective_hamiltonian_squared_real.value();
-    } else {
-        cache.effective_hamiltonian_squared_cplx = contract_mpo_env<Scalar>(mpo, env.L, env.R);
-        return cache.effective_hamiltonian_squared_cplx.value();
-    }
+    cache.effective_hamiltonian_squared = contract_mpo_env<Scalar>(mpo, env.L, env.R);
+    return cache.effective_hamiltonian_squared.value();
 }
-template const Eigen::Tensor<TensorsFinite::fp64, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
-template const Eigen::Tensor<cx64, 2>                &TensorsFinite::get_effective_hamiltonian_squared() const;
+template const Eigen::Tensor<fp32, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
+template const Eigen::Tensor<fp64, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
+template const Eigen::Tensor<cx32, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
+template const Eigen::Tensor<cx64, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
 
 env_pair<const Eigen::Tensor<cx64, 3> &> TensorsFinite::get_multisite_env_ene_blk() const { return std::as_const(*edges).get_multisite_env_ene_blk(); }
 env_pair<const Eigen::Tensor<cx64, 3> &> TensorsFinite::get_multisite_env_var_blk() const { return std::as_const(*edges).get_multisite_env_var_blk(); }
+
+template<typename Scalar> env_pair<Eigen::Tensor<Scalar, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const { return std::as_const(*edges).get_multisite_env_ene_blk_as<Scalar>(); }
+template env_pair<Eigen::Tensor<fp32, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<fp64, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<cx32, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<cx64, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const;
+
+template<typename Scalar> env_pair<Eigen::Tensor<Scalar, 3>> TensorsFinite::get_multisite_env_var_blk_as() const { return std::as_const(*edges).get_multisite_env_var_blk_as<Scalar>(); }
+template env_pair<Eigen::Tensor<fp32, 3>> TensorsFinite::get_multisite_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<fp64, 3>> TensorsFinite::get_multisite_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<cx32, 3>> TensorsFinite::get_multisite_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<cx64, 3>> TensorsFinite::get_multisite_env_var_blk_as() const;
 
 void TensorsFinite::project_to_nearest_axis(std::string_view axis, std::optional<svd::config> svd_cfg) {
     auto sign = tools::finite::ops::project_to_nearest_axis(*state, axis, svd_cfg);
@@ -224,6 +256,10 @@ struct DebugStatus {
 };
 
 void TensorsFinite::set_parity_shift_mpo(OptRitz ritz, std::string_view axis) {
+    if(ritz == OptRitz::NONE or axis.empty()) {
+        model->set_parity_shift_mpo(ritz, 0, ""); // reset the parity shift
+        return;
+    }
     if(not qm::spin::half::is_valid_axis(axis)) return;
     auto sign = qm::spin::half::get_sign(axis);
     auto axus = qm::spin::half::get_axis_unsigned(axis);
@@ -250,7 +286,11 @@ void TensorsFinite::set_parity_shift_mpo_squared(std::string_view axis) {
     }
     auto parity_shift_new = std::make_pair(sign, axus);
     auto parity_shift_old = model->get_parity_shift_mpo_squared();
-    if(parity_shift_new == parity_shift_old) return;
+    if(parity_shift_new == parity_shift_old) {
+        tools::log->debug("set_parity_shift_mpo_squared: not needed -- parity shift is already [{} {}]", sign, axus);
+        return;
+    }
+
     model->set_parity_shift_mpo_squared(sign, axus); // will ignore the sign on the axis string if present
 }
 
@@ -713,7 +753,10 @@ void TensorsFinite::clear_measurements(LogPolicy logPolicy) const {
 
 void TensorsFinite::clear_cache(LogPolicy logPolicy) const {
     if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) tools::log->trace("Clearing tensors cache");
-    cache = Cache();
+    cache_fp32 = Cache<fp32>();
+    cache_fp64 = Cache<fp64>();
+    cache_cx32 = Cache<cx32>();
+    cache_cx64 = Cache<cx64>();
     model->clear_cache(logPolicy);
     state->clear_cache(logPolicy);
 }

@@ -32,7 +32,7 @@ namespace tenx::sfinae {
     void is_specialization_with_one_parameter_impl(const Template<InnerT, N> &);
     template<class T, template<typename InnerT, auto N> class Template>
     concept is_specialization_with_one_parameter_v = requires(const T &t) { is_specialization_with_one_parameter_impl<Template>(t); };
-//    static_assert(is_specialization_with_one_parameter_v<std::array<long,3>, std::array>);
+    //    static_assert(is_specialization_with_one_parameter_v<std::array<long,3>, std::array>);
 
     template<typename T>
     concept is_std_complex_v = is_specialization_v<T, std::complex>;
@@ -61,31 +61,27 @@ namespace tenx::sfinae {
         { m.dimensions() } -> is_eigen_dsizes_v;
     };
 
-
     template<typename T>
-    concept has_self_v = std::is_same_v<T, typename T::Self>;;
+    concept has_self_v = std::is_same_v<T, typename T::Self>;
 
     template<typename T>
     concept is_eigen_tensor_v = std::is_base_of_v<Eigen::TensorBase<std::decay_t<T>, Eigen::ReadOnlyAccessors>, std::decay_t<T>>;
-//    static_assert(is_eigen_tensor_v<decltype(Eigen::Tensor<double, 3>().shuffle(std::array<long, 3>{0}))>);
-//    static_assert(is_eigen_tensor_v<Eigen::Tensor<double, 3>>);
-//    static_assert(is_eigen_tensor_v<Eigen::TensorMap<Eigen::Tensor<double, 3>>>);
-//    static_assert(!is_eigen_tensor_v<Eigen::TensorBase<Eigen::Tensor<double, 3>, Eigen::AccessorLevels::ReadOnlyAccessors>>);
+    //    static_assert(is_eigen_tensor_v<decltype(Eigen::Tensor<double, 3>().shuffle(std::array<long, 3>{0}))>);
+    //    static_assert(is_eigen_tensor_v<Eigen::Tensor<double, 3>>);
+    //    static_assert(is_eigen_tensor_v<Eigen::TensorMap<Eigen::Tensor<double, 3>>>);
+    //    static_assert(!is_eigen_tensor_v<Eigen::TensorBase<Eigen::Tensor<double, 3>, Eigen::AccessorLevels::ReadOnlyAccessors>>);
 
     template<typename T>
-    concept is_eigen_tensorbase_v = requires(T m){
-        requires is_specialization_with_one_parameter_v<T, Eigen::TensorBase>;
-    };
-//    static_assert(!is_eigen_tensorbase_v<Eigen::Tensor<double, 3>>);
-//    static_assert(is_eigen_tensorbase_v<Eigen::TensorBase<Eigen::Tensor<double, 3>, Eigen::AccessorLevels::ReadOnlyAccessors>>);
+    concept is_eigen_tensorbase_v = requires(T m) { requires is_specialization_with_one_parameter_v<T, Eigen::TensorBase>; };
+    //    static_assert(!is_eigen_tensorbase_v<Eigen::Tensor<double, 3>>);
+    //    static_assert(is_eigen_tensorbase_v<Eigen::TensorBase<Eigen::Tensor<double, 3>, Eigen::AccessorLevels::ReadOnlyAccessors>>);
 
     template<typename T>
     concept is_plain_tensor_v = is_eigen_tensor_v<T> and has_data_v<T> and has_dimensions_v<T> and !has_expression_v<T>;
-//    static_assert(is_plain_tensor_v<Eigen::Tensor<double, 3>>);
-//    static_assert(is_plain_tensor_v<Eigen::TensorMap<Eigen::Tensor<double, 3>>>);
-//    static_assert(!is_plain_tensor_v<decltype(Eigen::Tensor<double, 3>().shuffle(std::array<long, 3>{0}))>);
-//    static_assert(!is_plain_tensor_v<Eigen::TensorBase<Eigen::Tensor<double, 3>, Eigen::AccessorLevels::WriteAccessors>>);
-
+    //    static_assert(is_plain_tensor_v<Eigen::Tensor<double, 3>>);
+    //    static_assert(is_plain_tensor_v<Eigen::TensorMap<Eigen::Tensor<double, 3>>>);
+    //    static_assert(!is_plain_tensor_v<decltype(Eigen::Tensor<double, 3>().shuffle(std::array<long, 3>{0}))>);
+    //    static_assert(!is_plain_tensor_v<Eigen::TensorBase<Eigen::Tensor<double, 3>, Eigen::AccessorLevels::WriteAccessors>>);
 
     template<typename T>
     concept is_eigen_tensormap_v = requires(T m) {
@@ -198,5 +194,14 @@ namespace tenx::sfinae {
     };
     template<typename T>
     inline constexpr bool is_eigen_rowmajor_v = is_eigen_rowmajor<T>::value;
+
+    template<typename T>
+    concept is_single_prec_v = type_is<T, fp32> or type_is<T, cx32>;
+
+    template<typename T>
+    concept is_double_prec_v = type_is<T, fp64> or type_is<T, cx64>;
+
+    template<typename T>
+    concept is_quadruple_prec_v = type_is<T, fp128> or type_is<T, cx128>;
 
 }

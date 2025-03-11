@@ -126,8 +126,8 @@ namespace rnd {
         for(size_t i = 0; i < n; i++) { arr[i] /= norm; }
         return arr;
     }
-    template std::vector<double>               uniform_unit_n_sphere(size_t n);
-    template std::vector<std::complex<double>> uniform_unit_n_sphere(size_t n);
+    template std::vector<fp64> uniform_unit_n_sphere(size_t n);
+    template std::vector<cx64> uniform_unit_n_sphere(size_t n);
 
     std::complex<double> uniform_complex_slice(double radius_max, double angle_min, double angle_max) {
         return std::polar(uniform_double_box(0, radius_max), uniform_double_box(angle_min, angle_max));
@@ -148,11 +148,19 @@ namespace rnd {
         }
 #endif
     }
-    template float       uniform(float mean, float std);
-    template double      uniform(double mean, double std);
+    template float  uniform(float mean, float std);
+    template double uniform(double mean, double std);
 #if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
     template fp128 uniform(fp128 mean, fp128 std);
 #endif
+
+    template<typename out_t>
+    out_t normal_box_muller(out_t mu, out_t sigma) { // Box-Muller from Wiki
+        constexpr out_t two_pi = std::numbers::pi_v<out_t> * 2;
+        out_t           u1 = 0, u2 = uniform<out_t>(0, 1);
+        while(u1 == 0) u1 = uniform<out_t>(0, 1);
+        return sigma * sqrt<out_t>(-2 * log<out_t>(u1)) * cos<out_t>(two_pi * u2) + mu;
+    }
 
     template<typename out_t>
     out_t normal(out_t mean, out_t std) {
@@ -164,14 +172,15 @@ namespace rnd {
         }
 #if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
         else if constexpr(std::is_same_v<out_t, fp128>) {
-            std::normal_distribution<long double> distribution(static_cast<long double>(mean), static_cast<long double>(std));
-            return static_cast<fp128>(distribution(internal::rng128));
+            return normal_box_muller(mean, std);
         }
 #endif
     }
-    template float       normal(float mean, float std);
-    template double      normal(double mean, double std);
-    template fp128       normal(fp128 mean, fp128 std);
+    template fp32 normal(fp32 mean, fp32 std);
+    template fp64 normal(fp64 mean, fp64 std);
+#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
+    template fp128 normal(fp128 mean, fp128 std);
+#endif
 
     template<typename out_t>
     out_t log_normal(out_t mean, out_t std) {
@@ -183,15 +192,16 @@ namespace rnd {
         }
 #if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
         else if constexpr(std::is_same_v<out_t, fp128>) {
-            std::lognormal_distribution<long double> distribution(static_cast<long double>(mean), static_cast<long double>(std));
-            return static_cast<fp128>(distribution(internal::rng128));
+            auto n = std * normal_box_muller<out_t>(0, 1) + mean;
+            return std::exp(n);
         }
 #endif
     }
-    template float       log_normal(float mean, float std);
-    template double      log_normal(double mean, double std);
-    template fp128       log_normal(fp128 mean, fp128 std);
-
+    template float  log_normal(float mean, float std);
+    template double log_normal(double mean, double std);
+#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
+    template fp128 log_normal(fp128 mean, fp128 std);
+#endif
     std::vector<int> random_with_replacement(const std::vector<int> &in) {
         std::vector<int> boot;
         boot.reserve(in.size());
@@ -248,8 +258,8 @@ namespace rnd {
             default: throw std::runtime_error("Invalid distribution");
         }
     }
-    template float       random<float>(dist d, float mean, float width);
-    template double      random<double>(dist d, double mean, double width);
+    template float  random<float>(dist d, float mean, float width);
+    template double random<double>(dist d, double mean, double width);
 #if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
     template fp128 random<fp128>(dist d, fp128 mean, fp128 width);
 #endif
@@ -257,9 +267,9 @@ namespace rnd {
     out_t random(std::string_view distribution, out_t mean, out_t width) {
         return random<out_t>(sv2enum(distribution), mean, width);
     }
-    template float       random<float>(std::string_view d, float mean, float width);
-    template double      random<double>(std::string_view d, double mean, double width);
-    template fp128       random<fp128>(std::string_view d, fp128 mean, fp128 width);
+    template float  random<float>(std::string_view d, float mean, float width);
+    template double random<double>(std::string_view d, double mean, double width);
+    template fp128  random<fp128>(std::string_view d, fp128 mean, fp128 width);
 
     template<typename out_t>
     std::vector<out_t> random(dist d, out_t mean, out_t width, size_t num) {
@@ -281,9 +291,9 @@ namespace rnd {
         else
             throw std::runtime_error("rnd::random: unrecognized type");
     }
-    template std::vector<float>       random<float>(dist d, float mean, float width, size_t num);
-    template std::vector<double>      random<double>(dist d, double mean, double width, size_t num);
-    template std::vector<fp128>       random<fp128>(dist d, fp128 mean, fp128 width, size_t num);
+    template std::vector<float>  random<float>(dist d, float mean, float width, size_t num);
+    template std::vector<double> random<double>(dist d, double mean, double width, size_t num);
+    template std::vector<fp128>  random<fp128>(dist d, fp128 mean, fp128 width, size_t num);
 
     template<typename out_t>
     std::vector<out_t> random(dist d, out_t mean, out_t width, const std::vector<out_t> &weights) {
@@ -291,24 +301,24 @@ namespace rnd {
         for(size_t i = 0; i < weights.size(); ++i) rndvec[i] *= weights[i];
         return rndvec;
     }
-    template std::vector<float>       random<float>(dist d, float mean, float width, const std::vector<float> &weights);
-    template std::vector<double>      random<double>(dist d, double mean, double width, const std::vector<double> &weights);
-    template std::vector<fp128>       random<fp128>(dist d, fp128 mean, fp128 width, const std::vector<fp128> &weights);
+    template std::vector<float>  random<float>(dist d, float mean, float width, const std::vector<float> &weights);
+    template std::vector<double> random<double>(dist d, double mean, double width, const std::vector<double> &weights);
+    template std::vector<fp128>  random<fp128>(dist d, fp128 mean, fp128 width, const std::vector<fp128> &weights);
 
     template<typename out_t>
     std::vector<out_t> random(std::string_view distribution, out_t mean, out_t width, size_t num) {
         return random<out_t>(sv2enum(distribution), mean, width, num);
     }
-    template std::vector<float>       random<float>(std::string_view d, float mean, float width, size_t num);
-    template std::vector<double>      random<double>(std::string_view d, double mean, double width, size_t num);
-    template std::vector<fp128>       random<fp128>(std::string_view d, fp128 mean, fp128 width, size_t num);
+    template std::vector<float>  random<float>(std::string_view d, float mean, float width, size_t num);
+    template std::vector<double> random<double>(std::string_view d, double mean, double width, size_t num);
+    template std::vector<fp128>  random<fp128>(std::string_view d, fp128 mean, fp128 width, size_t num);
 
     template<typename out_t>
     std::vector<out_t> random(std::string_view distribution, out_t mean, out_t width, const std::vector<out_t> &weights) {
         return random<out_t>(sv2enum(distribution), mean, width, weights);
     }
-    template std::vector<float>       random<float>(std::string_view d, float mean, float width, const std::vector<float> &weights);
-    template std::vector<double>      random<double>(std::string_view d, double mean, double width, const std::vector<double> &weights);
-    template std::vector<fp128>       random<fp128>(std::string_view d, fp128 mean, fp128 width, const std::vector<fp128> &weights);
+    template std::vector<float>  random<float>(std::string_view d, float mean, float width, const std::vector<float> &weights);
+    template std::vector<double> random<double>(std::string_view d, double mean, double width, const std::vector<double> &weights);
+    template std::vector<fp128>  random<fp128>(std::string_view d, fp128 mean, fp128 width, const std::vector<fp128> &weights);
 
 }

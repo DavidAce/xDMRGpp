@@ -415,9 +415,9 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
      * set another method, such as PRIMME_LOBPCG_OrthoBasis_Window, directly */
     primme_set_method(MethodAdapter(config.primme_method), &primme);
 
-    eig::log->debug("numEvals {} | maxMatvecs {} | eps {:.2e} | maxBasisSize {} | minRestartSize {} | maxBlockSize {} | maxPrevRetain {} | {}", primme.numEvals,
-                    primme.maxMatvecs, primme.eps, primme.maxBasisSize, primme.minRestartSize, primme.maxBlockSize, primme.restartingParams.maxPrevRetain,
-                    projToString(primme.projectionParams.projection));
+    eig::log->debug("numEvals {} | maxMatvecs {} | eps {:.2e} | maxBasisSize {} | minRestartSize {} | maxPrevRetain {} | maxBlockSize {} |  {}",
+                    primme.numEvals, primme.maxMatvecs, primme.eps, primme.maxBasisSize, primme.minRestartSize, primme.restartingParams.maxPrevRetain,
+                    primme.maxBlockSize, projToString(primme.projectionParams.projection));
     // Allocate space
     auto &eigvals = result.get_eigvals<eig::Form::SYMM>();
     auto &eigvecs = result.get_eigvecs<Scalar, eig::Form::SYMM>();

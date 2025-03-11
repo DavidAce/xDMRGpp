@@ -8,6 +8,7 @@
 #include "matvec/matvec_zero.h"
 #include "solver_arpack/solver_arpack.h"
 #include "tid/tid.h"
+#include <general/sfinae.h>
 
 int eig::getBasisSize(long L, int nev, std::optional<int> basisSize) {
     if(not basisSize.has_value() or basisSize.value() <= 0) { basisSize = nev * safe_cast<int>(std::ceil(std::log2(L))); }
@@ -36,8 +37,9 @@ void eig::solver::subtract_phase(std::vector<Scalar> &eigvecs, size_type L, int 
 // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
 // remove it from all other elements of v.
 {
-    if constexpr(std::is_same<Scalar, std::complex<double>>::value) {
+    if constexpr(std::is_same_v<Scalar, cx32> or std::is_same_v<Scalar, cx64>) {
         if(eigvecs.empty()) return;
+        using Real = typename Scalar::value_type;
         if(nev > 0) {
             for(int i = 0; i < nev; i++) {
                 if(eigvecs[safe_cast<size_t>(i * L)].imag() == 0.0) { continue; }
@@ -45,9 +47,8 @@ void eig::solver::subtract_phase(std::vector<Scalar> &eigvecs, size_type L, int 
                 auto   begin         = eigvecs.begin() + i * L;
                 auto   end           = begin + L;
                 Scalar exp_inv_phase = std::exp(inv_phase);
-                std::transform(begin, end, begin, [exp_inv_phase](std::complex<double> num) -> std::complex<double> { return (num * exp_inv_phase); });
-                std::transform(begin, end, begin,
-                               [](std::complex<double> num) -> std::complex<double> { return std::abs(num.imag()) > 1e-15 ? num : std::real(num); });
+                std::transform(begin, end, begin, [exp_inv_phase](Scalar num) -> Scalar { return (num * exp_inv_phase); });
+                std::transform(begin, end, begin, [](Scalar num) -> Scalar { return std::abs(num.imag()) > static_cast<Real>(1e-15) ? num : std::real(num); });
             }
         } else {
             throw std::logic_error("Subtract phase requires nev > 0");
@@ -55,8 +56,10 @@ void eig::solver::subtract_phase(std::vector<Scalar> &eigvecs, size_type L, int 
     }
 }
 
-template void eig::solver::subtract_phase(std::vector<cx64> &eigvecs, size_type L, int nev);
+template void eig::solver::subtract_phase(std::vector<fp32> &eigvecs, size_type L, int nev);
 template void eig::solver::subtract_phase(std::vector<fp64> &eigvecs, size_type L, int nev);
+template void eig::solver::subtract_phase(std::vector<cx64> &eigvecs, size_type L, int nev);
+template void eig::solver::subtract_phase(std::vector<cx32> &eigvecs, size_type L, int nev);
 
 void eig::solver::eig_init(Form form, Type type, Vecs compute_eigvecs, Dephase remove_phase) {
     eig::log->trace("eig init");
@@ -75,25 +78,45 @@ void eig::solver::eig(Scalar *matrix, size_type L, Vecs compute_eigvecs_, Dephas
     auto t_eig = tid::tic_scope("eig");
     int  info  = 0;
     try {
-        if constexpr(std::is_same_v<Scalar, fp64>) {
-            eig_init(form, Type::REAL, compute_eigvecs_, remove_phase_);
+        if constexpr(std::is_same_v<Scalar, fp32>) {
+            eig_init(form, Type::FP32, compute_eigvecs_, remove_phase_);
             if constexpr(form == Form::SYMM) {
-                if(config.tag.empty()) config.tag = "dsyevd";
-                info = dsyevd(matrix, L);
+                config.tag = fmt::format("{}{}lapack ssyevd", config.tag, config.tag.empty() ? "" : " ");
+                info       = ssyevd(matrix, L);
             } else if constexpr(form == Form::NSYM) {
-                if(config.tag.empty()) config.tag = "dgeev";
-                info = dgeev(matrix, L);
+                config.tag = fmt::format("{}{}lapack sgeev", config.tag, config.tag.empty() ? "" : " ");
+                info       = sgeev(matrix, L);
             }
-        } else if constexpr(std::is_same_v<Scalar, cx64>) {
-            eig_init(form, Type::CPLX, compute_eigvecs_, remove_phase_);
+        } else if constexpr(std::is_same_v<Scalar, fp64>) {
+            eig_init(form, Type::FP64, compute_eigvecs_, remove_phase_);
             if constexpr(form == Form::SYMM) {
-                if(config.tag.empty()) config.tag = "zheevd";
-                info = zheevd(matrix, L);
+                config.tag = fmt::format("{}{}lapack dsyevd", config.tag, config.tag.empty() ? "" : " ");
+                info       = dsyevd(matrix, L);
+            } else if constexpr(form == Form::NSYM) {
+                config.tag = fmt::format("{}{}lapack dgeev", config.tag, config.tag.empty() ? "" : " ");
+                info       = dgeev(matrix, L);
+            }
+        } else if constexpr(std::is_same_v<Scalar, cx32>) {
+            eig_init(form, Type::CX32, compute_eigvecs_, remove_phase_);
+            if constexpr(form == Form::SYMM) {
+                config.tag = fmt::format("{}{}lapack cheevd", config.tag, config.tag.empty() ? "" : " ");
+                info       = cheevd(matrix, L);
                 //                if(config.tag.empty()) config.tag = "zheev";
                 //                info = zheev(matrix, L);
             } else if constexpr(form == Form::NSYM) {
-                if(config.tag.empty()) config.tag = "zgeev";
-                info = zgeev(matrix, L);
+                config.tag = fmt::format("{}{}lapack cgeev", config.tag, config.tag.empty() ? "" : " ");
+                info       = cgeev(matrix, L);
+            }
+        } else if constexpr(std::is_same_v<Scalar, cx64>) {
+            eig_init(form, Type::CX64, compute_eigvecs_, remove_phase_);
+            if constexpr(form == Form::SYMM) {
+                config.tag = fmt::format("{}{}lapack zheevd", config.tag, config.tag.empty() ? "" : " ");
+                info       = zheevd(matrix, L);
+                //                if(config.tag.empty()) config.tag = "zheev";
+                //                info = zheev(matrix, L);
+            } else if constexpr(form == Form::NSYM) {
+                config.tag = fmt::format("{}{}lapack zgeev", config.tag, config.tag.empty() ? "" : " ");
+                info       = zgeev(matrix, L);
             }
         } else {
             throw except::runtime_error("Unknown type");
@@ -103,21 +126,27 @@ void eig::solver::eig(Scalar *matrix, size_type L, Vecs compute_eigvecs_, Dephas
         eig::log->error("Eigenvalue solver failed: {}", ex.what());
         throw except::runtime_error("Eigenvalue solver Failed: {}", ex.what());
     }
-
-    result.build_eigvals_cplx();
-    result.build_eigvecs_cplx();
+    result.build_eigvals_cx32();
+    result.build_eigvecs_cx32();
+    result.build_eigvals_cx64();
+    result.build_eigvecs_cx64();
 
     if(info == 0 and config.remove_phase and config.remove_phase.value() == Dephase::OFF) {
         // The solution to  the eigenvalue equation Av = l*v is determined up to a constant phase factor, i.e., if v
         // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
         // remove it from all other elements of v.
-        subtract_phase(result.eigvecsL_cplx, L, result.meta.nev);
-        subtract_phase(result.eigvecsR_cplx, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx32, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx32, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx64, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx64, L, result.meta.nev);
     }
 }
-
+template void eig::solver::eig<eig::Form::SYMM>(fp32 *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(fp32 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(fp64 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(fp64 *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(cx32 *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(cx32 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx64 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(cx64 *matrix, size_type, Vecs, Dephase);
 
@@ -128,43 +157,83 @@ void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, Vecs comput
     int  info  = 0;
     try {
         if(matrixB == nullptr) {
-            if constexpr(std::is_same_v<Scalar, fp64>) {
-                eig_init(form, Type::REAL, compute_eigvecs_, remove_phase_);
+            if constexpr(std::is_same_v<Scalar, fp32>) {
+                eig_init(form, Type::FP32, compute_eigvecs_, remove_phase_);
                 if constexpr(form == Form::SYMM) {
-                    if(config.tag.empty()) config.tag = "dsyevd";
-                    info = dsyevd(matrixA, L);
+                    config.tag = fmt::format("{}{}lapack ssyevd", config.tag, config.tag.empty() ? "" : " ");
+                    info       = ssyevd(matrixA, L);
 
                 } else if constexpr(form == Form::NSYM) {
-                    if(config.tag.empty()) config.tag = "dgeev";
-                    info = dgeev(matrixA, L);
+                    config.tag = fmt::format("{}{}lapack sgeev", config.tag, config.tag.empty() ? "" : " ");
+                    info       = sgeev(matrixA, L);
+                }
+            } else if constexpr(std::is_same_v<Scalar, fp64>) {
+                eig_init(form, Type::FP64, compute_eigvecs_, remove_phase_);
+                if constexpr(form == Form::SYMM) {
+                    config.tag = fmt::format("{}{}lapack dsyevd", config.tag, config.tag.empty() ? "" : " ");
+                    info       = dsyevd(matrixA, L);
+
+                } else if constexpr(form == Form::NSYM) {
+                    config.tag = fmt::format("{}{}lapack dgeev", config.tag, config.tag.empty() ? "" : " ");
+                    info       = dgeev(matrixA, L);
+                }
+            } else if constexpr(std::is_same_v<Scalar, cx32>) {
+                eig_init(form, Type::CX32, compute_eigvecs_, remove_phase_);
+                if constexpr(form == Form::SYMM) {
+                    config.tag = fmt::format("{}{}lapack cheevd", config.tag, config.tag.empty() ? "" : " ");
+                    info       = cheevd(matrixA, L);
+                } else if constexpr(form == Form::NSYM) {
+                    config.tag = fmt::format("{}{}lapack cgeev", config.tag, config.tag.empty() ? "" : " ");
+                    info       = cgeev(matrixA, L);
                 }
             } else if constexpr(std::is_same_v<Scalar, cx64>) {
-                eig_init(form, Type::CPLX, compute_eigvecs_, remove_phase_);
+                eig_init(form, Type::CX64, compute_eigvecs_, remove_phase_);
                 if constexpr(form == Form::SYMM) {
-                    if(config.tag.empty()) config.tag = "zheevd";
-                    info = zheevd(matrixA, L);
-                    //                if(config.tag.empty()) config.tag = "zheev";
-                    //                info = zheev(matrix, L);
+                    config.tag = fmt::format("{}{}lapack zheevd", config.tag, config.tag.empty() ? "" : " ");
+                    info       = zheevd(matrixA, L);
                 } else if constexpr(form == Form::NSYM) {
-                    if(config.tag.empty()) config.tag = "zgeev";
-                    info = zgeev(matrixA, L);
+                    config.tag = fmt::format("{}{}lapack zgeev", config.tag, config.tag.empty() ? "" : " ");
+                    info       = zgeev(matrixA, L);
                 }
             } else {
                 throw except::runtime_error("Unknown type");
             }
         } else {
-            if constexpr(std::is_same_v<Scalar, fp64>) {
-                eig_init(form, Type::REAL, compute_eigvecs_, remove_phase_);
+            if constexpr(std::is_same_v<Scalar, fp32>) {
+                eig_init(form, Type::FP32, compute_eigvecs_, remove_phase_);
                 if constexpr(form == Form::SYMM) {
-                    if(config.tag.empty()) config.tag = "dsygvd";
-                    info = dsygvd(matrixA, matrixB, L);
+                    config.tag = fmt::format("{}{}lapack ssygvd", config.tag, config.tag.empty() ? "" : " ");
+                    info       = ssygvd(matrixA, matrixB, L);
+                } else if constexpr(form == Form::NSYM) {
+                    throw except::logic_error("dggev has not been implemented");
+                    if(config.tag.empty()) config.tag = "sggev";
+                    // info = sggev(matrixA, matrixB, L);
+                }
+            } else if constexpr(std::is_same_v<Scalar, fp64>) {
+                eig_init(form, Type::FP64, compute_eigvecs_, remove_phase_);
+                if constexpr(form == Form::SYMM) {
+                    config.tag = fmt::format("{}{}lapack dsygvd", config.tag, config.tag.empty() ? "" : " ");
+                    info       = dsygvd(matrixA, matrixB, L);
                 } else if constexpr(form == Form::NSYM) {
                     throw except::logic_error("dggev has not been implemented");
                     if(config.tag.empty()) config.tag = "dggev";
                     // info = dggev(matrixA, matrixB, L);
                 }
+            } else if constexpr(std::is_same_v<Scalar, cx32>) {
+                eig_init(form, Type::CX32, compute_eigvecs_, remove_phase_);
+                if constexpr(form == Form::SYMM) {
+                    throw except::logic_error("chegvd has not been implemented");
+                    if(config.tag.empty()) config.tag = "chegvd";
+                    // info = zhegvd(matrixA, matrixB, L);
+                    //                if(config.tag.empty()) config.tag = "zheev";
+                    //                info = zheev(matrix, L);
+                } else if constexpr(form == Form::NSYM) {
+                    config.tag = fmt::format("{}{}lapack cggev", config.tag, config.tag.empty() ? "" : " ");
+                    throw except::logic_error("cggev has not been implemented");
+                    // info = zggev(matrixA, matrixB, L);
+                }
             } else if constexpr(std::is_same_v<Scalar, cx64>) {
-                eig_init(form, Type::CPLX, compute_eigvecs_, remove_phase_);
+                eig_init(form, Type::CX64, compute_eigvecs_, remove_phase_);
                 if constexpr(form == Form::SYMM) {
                     throw except::logic_error("zhegvd has not been implemented");
                     if(config.tag.empty()) config.tag = "zhegvd";
@@ -172,7 +241,7 @@ void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, Vecs comput
                     //                if(config.tag.empty()) config.tag = "zheev";
                     //                info = zheev(matrix, L);
                 } else if constexpr(form == Form::NSYM) {
-                    if(config.tag.empty()) config.tag = "zggev";
+                    config.tag = fmt::format("{}{}lapack zggev", config.tag, config.tag.empty() ? "" : " ");
                     throw except::logic_error("zggev has not been implemented");
                     // info = zggev(matrixA, matrixB, L);
                 }
@@ -185,20 +254,27 @@ void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, Vecs comput
         eig::log->error("Eigenvalue solver failed: {}", ex.what());
         throw except::runtime_error("Eigenvalue solver Failed: {}", ex.what());
     }
-
-    result.build_eigvals_cplx();
-    result.build_eigvecs_cplx();
+    result.build_eigvals_cx32();
+    result.build_eigvecs_cx32();
+    result.build_eigvals_cx64();
+    result.build_eigvecs_cx64();
 
     if(info == 0 and config.remove_phase and config.remove_phase.value() == Dephase::OFF) {
         // The solution to  the eigenvalue equation Av = l*v is determined up to a constant phase factor, i.e., if v
         // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
         // remove it from all other elements of v.
-        subtract_phase(result.eigvecsL_cplx, L, result.meta.nev);
-        subtract_phase(result.eigvecsR_cplx, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx32, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx32, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx64, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx64, L, result.meta.nev);
     }
 }
+template void eig::solver::eig<eig::Form::SYMM>(fp32 *matrixA, fp32 *matrixB, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(fp32 *matrixA, fp32 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(fp64 *matrixA, fp64 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(fp64 *matrixA, fp64 *matrixB, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(cx32 *matrixA, cx32 *matrixB, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(cx32 *matrixA, cx32 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx64 *matrixA, cx64 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(cx64 *matrixA, cx64 *matrixB, size_type, Vecs, Dephase);
 
@@ -209,18 +285,32 @@ void eig::solver::eig(Scalar *matrix, size_type L, char range, int il, int iu, d
     auto t_eig = tid::tic_scope("eig");
     int  info  = 0;
     try {
-        if constexpr(std::is_same_v<Scalar, fp64>) {
-            eig_init(form, Type::REAL, compute_eigvecs_, remove_phase_);
+        if constexpr(std::is_same_v<Scalar, fp32>) {
+            eig_init(form, Type::FP32, compute_eigvecs_, remove_phase_);
             if constexpr(form == Form::SYMM) {
-                if(config.tag.empty()) config.tag = "dsyevr";
-                info = dsyevr(matrix, L, range, il, iu, vl, vu);
+                config.tag = fmt::format("{}{}lapack ssyevr", config.tag, config.tag.empty() ? "" : " ");
+                info       = ssyevr(matrix, L, range, il, iu, vl, vu);
             }
             if constexpr(form == Form::NSYM) throw std::logic_error("?sygvr not implemented");
-        } else if constexpr(std::is_same_v<Scalar, cx64>) {
-            eig_init(form, Type::CPLX, compute_eigvecs_, remove_phase_);
+        } else if constexpr(std::is_same_v<Scalar, fp64>) {
+            eig_init(form, Type::FP64, compute_eigvecs_, remove_phase_);
             if constexpr(form == Form::SYMM) {
-                if(config.tag.empty()) config.tag = "zheevr";
-                info = zheevr(matrix, L, range, il, iu, vl, vu);
+                config.tag = fmt::format("{}{}lapack dsyevr", config.tag, config.tag.empty() ? "" : " ");
+                info       = dsyevr(matrix, L, range, il, iu, vl, vu);
+            }
+            if constexpr(form == Form::NSYM) throw std::logic_error("?sygvr not implemented");
+        } else if constexpr(std::is_same_v<Scalar, cx32>) {
+            eig_init(form, Type::CX32, compute_eigvecs_, remove_phase_);
+            if constexpr(form == Form::SYMM) {
+                config.tag = fmt::format("{}{}lapack cheevr", config.tag, config.tag.empty() ? "" : " ");
+                info       = cheevr(matrix, L, range, il, iu, vl, vu);
+            }
+            if constexpr(form == Form::NSYM) throw std::logic_error("?sygvx not implemented");
+        } else if constexpr(std::is_same_v<Scalar, cx64>) {
+            eig_init(form, Type::CX64, compute_eigvecs_, remove_phase_);
+            if constexpr(form == Form::SYMM) {
+                config.tag = fmt::format("{}{}lapack zheevr", config.tag, config.tag.empty() ? "" : " ");
+                info       = zheevr(matrix, L, range, il, iu, vl, vu);
             }
             if constexpr(form == Form::NSYM) throw std::logic_error("?sygvx not implemented");
         } else {
@@ -231,19 +321,24 @@ void eig::solver::eig(Scalar *matrix, size_type L, char range, int il, int iu, d
         eig::log->error("Eigenvalue solver failed: {}", ex.what());
         throw except::runtime_error("Eigenvalue solver Failed: {}", ex.what());
     }
-
-    result.build_eigvals_cplx();
-    result.build_eigvecs_cplx();
+    result.build_eigvals_cx32();
+    result.build_eigvecs_cx32();
+    result.build_eigvals_cx64();
+    result.build_eigvecs_cx64();
 
     if(info == 0 and config.remove_phase and config.remove_phase.value() == Dephase::OFF) {
         // The solution to  the eigenvalue equation Av = l*v is determined up to a constant phase factor, i.e., if v
         // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
         // remove it from all other elements of v.
-        subtract_phase(result.eigvecsL_cplx, L, result.meta.nev);
-        subtract_phase(result.eigvecsR_cplx, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx32, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx32, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx64, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx64, L, result.meta.nev);
     }
 }
+template void eig::solver::eig<eig::Form::SYMM>(fp32 *matrix, size_type, char, int, int, double, double, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(fp64 *matrix, size_type, char, int, int, double, double, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(cx32 *matrix, size_type, char, int, int, double, double, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx64 *matrix, size_type, char, int, int, double, double, Vecs, Dephase);
 
 template<eig::Form form, typename Scalar>
@@ -255,35 +350,65 @@ void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, char range,
     int  info  = 0;
     try {
         if(matrixB == nullptr) {
-            if constexpr(std::is_same_v<Scalar, fp64>) {
-                eig_init(form, Type::REAL, compute_eigvecs_, remove_phase_);
+            if constexpr(std::is_same_v<Scalar, fp32>) {
+                eig_init(form, Type::FP32, compute_eigvecs_, remove_phase_);
                 if constexpr(form == Form::SYMM) {
-                    if(config.tag.empty()) config.tag = "dsyevr";
-                    info = dsyevr(matrixA, L, range, il, iu, vl, vu);
+                    config.tag = fmt::format("{}{}lapack ssyevr", config.tag, config.tag.empty() ? "" : " ");
+                    info       = ssyevr(matrixA, L, range, il, iu, vl, vu);
                 }
                 if constexpr(form == Form::NSYM) throw std::logic_error("?sygvr not implemented");
-            } else if constexpr(std::is_same_v<Scalar, cx64>) {
-                eig_init(form, Type::CPLX, compute_eigvecs_, remove_phase_);
+            } else if constexpr(std::is_same_v<Scalar, fp64>) {
+                eig_init(form, Type::FP64, compute_eigvecs_, remove_phase_);
                 if constexpr(form == Form::SYMM) {
-                    if(config.tag.empty()) config.tag = "zheevr";
-                    info = zheevr(matrixA, L, range, il, iu, vl, vu);
+                    config.tag = fmt::format("{}{}lapack dsyevr", config.tag, config.tag.empty() ? "" : " ");
+                    info       = dsyevr(matrixA, L, range, il, iu, vl, vu);
+                }
+                if constexpr(form == Form::NSYM) throw std::logic_error("?sygvr not implemented");
+            } else if constexpr(std::is_same_v<Scalar, cx32>) {
+                eig_init(form, Type::CX32, compute_eigvecs_, remove_phase_);
+                if constexpr(form == Form::SYMM) {
+                    config.tag = fmt::format("{}{}lapack cheevr", config.tag, config.tag.empty() ? "" : " ");
+                    info       = cheevr(matrixA, L, range, il, iu, vl, vu);
+                }
+                if constexpr(form == Form::NSYM) throw std::logic_error("?sygvx not implemented");
+            } else if constexpr(std::is_same_v<Scalar, cx64>) {
+                eig_init(form, Type::CX64, compute_eigvecs_, remove_phase_);
+                if constexpr(form == Form::SYMM) {
+                    config.tag = fmt::format("{}{}lapack zheevr", config.tag, config.tag.empty() ? "" : " ");
+                    info       = zheevr(matrixA, L, range, il, iu, vl, vu);
                 }
                 if constexpr(form == Form::NSYM) throw std::logic_error("?sygvx not implemented");
             } else {
                 throw except::runtime_error("Unknown type");
             }
-        }else {
-            if constexpr(std::is_same_v<Scalar, fp64>) {
-                eig_init(form, Type::REAL, compute_eigvecs_, remove_phase_);
+        } else {
+            if constexpr(std::is_same_v<Scalar, fp32>) {
+                eig_init(form, Type::FP32, compute_eigvecs_, remove_phase_);
                 if constexpr(form == Form::SYMM) {
-                    if(config.tag.empty()) config.tag = "dsygvx";
-                    info = dsygvx(matrixA, matrixB, L, range, il, iu, vl, vu);
+                    config.tag = fmt::format("{}{}lapack ssygvx", config.tag, config.tag.empty() ? "" : " ");
+                    info       = ssygvx(matrixA, matrixB, L, range, il, iu, vl, vu);
                 }
                 if constexpr(form == Form::NSYM) throw std::logic_error("?sygvr not implemented");
-            } else if constexpr(std::is_same_v<Scalar, cx64>) {
-                eig_init(form, Type::CPLX, compute_eigvecs_, remove_phase_);
+            }
+            if constexpr(std::is_same_v<Scalar, fp64>) {
+                eig_init(form, Type::FP32, compute_eigvecs_, remove_phase_);
                 if constexpr(form == Form::SYMM) {
-                    if(config.tag.empty()) config.tag = "zhegvx";
+                    config.tag = fmt::format("{}{}lapack dsygvx", config.tag, config.tag.empty() ? "" : " ");
+                    info       = dsygvx(matrixA, matrixB, L, range, il, iu, vl, vu);
+                }
+                if constexpr(form == Form::NSYM) throw std::logic_error("?sygvr not implemented");
+            } else if constexpr(std::is_same_v<Scalar, cx32>) {
+                eig_init(form, Type::CX32, compute_eigvecs_, remove_phase_);
+                if constexpr(form == Form::SYMM) {
+                    config.tag = fmt::format("{}{}lapack chegvx", config.tag, config.tag.empty() ? "" : " ");
+                    throw except::logic_error("The generalized solvers have not been implemented (chegvx)");
+                    // info = zheevx(matrix, L, range, il, iu, vl, vu);
+                }
+                if constexpr(form == Form::NSYM) throw std::logic_error("?sygvx not implemented");
+            } else if constexpr(std::is_same_v<Scalar, cx64>) {
+                eig_init(form, Type::CX64, compute_eigvecs_, remove_phase_);
+                if constexpr(form == Form::SYMM) {
+                    config.tag = fmt::format("{}{}lapack zhegvx", config.tag, config.tag.empty() ? "" : " ");
                     throw except::logic_error("The generalized solvers have not been implemented (zhegvx)");
                     // info = zheevx(matrix, L, range, il, iu, vl, vu);
                 }
@@ -291,7 +416,6 @@ void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, char range,
             } else {
                 throw except::runtime_error("Unknown type");
             }
-
         }
 
     } catch(std::exception &ex) {
@@ -299,15 +423,15 @@ void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, char range,
         throw except::runtime_error("Eigenvalue solver Failed: {}", ex.what());
     }
 
-    result.build_eigvals_cplx();
-    result.build_eigvecs_cplx();
+    result.build_eigvals_cx64();
+    result.build_eigvecs_cx64();
 
     if(info == 0 and config.remove_phase and config.remove_phase.value() == Dephase::OFF) {
         // The solution to  the eigenvalue equation Av = l*v is determined up to a constant phase factor, i.e., if v
         // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
         // remove it from all other elements of v.
-        subtract_phase(result.eigvecsL_cplx, L, result.meta.nev);
-        subtract_phase(result.eigvecsR_cplx, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx64, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx64, L, result.meta.nev);
     }
 }
 template void eig::solver::eig<eig::Form::SYMM>(fp64 *matrixA, fp64 *matrixB, size_type, char, int, int, double, double, Vecs, Dephase);
@@ -450,10 +574,14 @@ void eig::solver::eigs(MatrixProductType &matrix, int nev, int ncv, Ritz ritz, F
     auto t_eig   = tid::tic_scope("eig");
     using Scalar = typename MatrixProductType::Scalar;
     Type type;
-    if constexpr(std::is_same_v<Scalar, fp64>)
-        type = Type::REAL;
+    if constexpr(std::is_same_v<Scalar, fp32>)
+        type = Type::FP32;
+    else if constexpr(std::is_same_v<Scalar, fp64>)
+        type = Type::FP64;
+    else if constexpr(std::is_same_v<Scalar, cx32>)
+        type = Type::CX32;
     else if constexpr(std::is_same_v<Scalar, cx64>)
-        type = Type::CPLX;
+        type = Type::CX64;
     else
         throw std::runtime_error("Unsupported type");
     eigs_init(matrix.rows(), nev, ncv, ritz, form, type, side, sigma, shift_invert, matrix.storage, compute_eigvecs, remove_phase, residual);

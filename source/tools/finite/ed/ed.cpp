@@ -26,11 +26,11 @@ namespace tools::finite::ed {
         tensors_ed.rebuild_edges();
         tensors_ed.activate_sites(sites);
         auto t_ham       = tid::tic_scope("get_ham");
-        auto hamiltonian = tensors_ed.model->get_multisite_ham();
+        auto hamiltonian = tensors_ed.model->get_multisite_ham<cx64>();
         t_ham.toc();
         auto t_tgt = tid::tic_scope("tgt_mps");
 
-        tools::finite::opt::opt_mps target_mps("target_mps", tensors_ed.state->get_multisite_mps(), sites,
+        tools::finite::opt::opt_mps target_mps("target_mps", tensors_ed.state->get_multisite_mps<cx64>(), sites,
                                                tools::finite::measure::energy_shift(tensors_ed),              // Energy shift for full system
                                                tools::finite::measure::energy_minus_energy_shift(tensors_ed), // Eigval
                                                tools::finite::measure::energy_variance(tensors_ed),

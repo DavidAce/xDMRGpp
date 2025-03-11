@@ -76,6 +76,7 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite &tensors,
 
                 mps.set_energy(energy);
                 mps.set_energy_shifted(std::real(vh1v));
+                mps.set_hsquared(std::real(vh2v));
                 mps.set_variance(variance);
 
                 mps.validate_basis_vector();
@@ -150,6 +151,7 @@ void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite 
 
                 mps.set_energy(energy);
                 mps.set_energy_shifted(std::real(vh1v));
+                mps.set_hsquared(std::real(vh2v));
                 mps.set_variance(variance);
 
                 // tools::log->info("extract_results_subspace: set variance: {:.16f}", variance);

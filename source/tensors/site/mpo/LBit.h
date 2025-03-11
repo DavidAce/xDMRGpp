@@ -6,14 +6,14 @@
 
 class LBit : public MpoSite {
     private:
-    h5tb_lbit                h5tb;
-    Eigen::Tensor<cx64, 4>   get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                     std::optional<std::vector<size_t>> skip = std::nullopt) const final;
-    Eigen::Tensor<cx128, 4> get_mpo_t(cx128 energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                       std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    h5tb_lbit               h5tb;
+    Eigen::Tensor<cx64, 4>  get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+                                    std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    Eigen::Tensor<cx128, 4> get_mpo_q(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+                                      std::optional<std::vector<size_t>> skip = std::nullopt) const final;
 
     public:
-                                           LBit(ModelType model_type_, size_t position_);
+    LBit(ModelType model_type_, size_t position_);
     [[nodiscard]] std::unique_ptr<MpoSite> clone() const final;
     [[nodiscard]] long                     get_spin_dimension() const final;
     [[nodiscard]] TableMap                 get_parameters() const final;

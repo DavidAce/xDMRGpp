@@ -1,8 +1,10 @@
 #pragma once
 #pragma once
-#include <complex>
 #include "config/enums.h"
+#include "math/float.h"
 #include "math/tenx/fwd_decl.h"
+#include "tensors/site/env/EnvPair.h"
+#include <complex>
 #include <memory>
 #include <optional>
 
@@ -11,8 +13,6 @@ class EnvVar;
 
 class EdgesInfinite {
     public:
-    using Scalar = std::complex<double>;
-
     private:
     std::unique_ptr<EnvEne> eneL;
     std::unique_ptr<EnvEne> eneR;
@@ -35,22 +35,17 @@ class EdgesInfinite {
     [[nodiscard]] bool   is_real() const;
     [[nodiscard]] bool   has_nan() const;
 
-    // This is a reference wrapper for an edge pair
-    template<typename env_type>
-    struct env_pair {
-        env_type &L;
-        env_type &R;
-        void      assert_validity() const;
-        //        env_pair(env_type &L_, env_type &R_) : L(L_), R(R_) {}
-    };
+    [[nodiscard]] env_pair<const EnvEne &> get_ene() const;
+    [[nodiscard]] env_pair<const EnvVar &> get_var() const;
+    [[nodiscard]] env_pair<EnvEne &>       get_ene();
+    [[nodiscard]] env_pair<EnvVar &>       get_var();
 
-    [[nodiscard]] env_pair<const EnvEne> get_ene() const;
-    [[nodiscard]] env_pair<const EnvVar> get_var() const;
-    [[nodiscard]] env_pair<EnvEne>       get_ene();
-    [[nodiscard]] env_pair<EnvVar>       get_var();
-
-    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3>> get_ene_blk() const;
-    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3>> get_var_blk() const;
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_ene_blk();
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_var_blk();
+    env_pair<const Eigen::Tensor<cx64, 3> &> get_env_ene_blk() const;
+    env_pair<const Eigen::Tensor<cx64, 3> &> get_env_var_blk() const;
+    env_pair<Eigen::Tensor<cx64, 3> &>       get_env_ene_blk();
+    env_pair<Eigen::Tensor<cx64, 3> &>       get_env_var_blk();
+    template<typename Scalar>
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>> get_env_ene_blk_as() const;
+    template<typename Scalar>
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>> get_env_var_blk_as() const;
 };

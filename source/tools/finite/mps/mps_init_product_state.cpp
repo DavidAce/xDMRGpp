@@ -425,7 +425,7 @@ void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite &sta
     if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     auto        spinor_up = qm::spin::half::get_spinor(axus, -1);
     auto        spinor_dn = qm::spin::half::get_spinor(axus, 1);
-    #pragma message "decide if -1 or 1 is up/down"
+    #pragma message "set_random_product_state_on_axis: decide if -1 or 1 is up/down"
     // using namespace qm::spin::half::tensor;
     // Eigen::Tensor<cx64, 3> spin_up = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
     // Eigen::Tensor<cx64, 3> spin_dn = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});

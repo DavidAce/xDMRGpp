@@ -100,7 +100,7 @@ Eigen::Tensor<cx64, 4> XXZ::get_mpo(cx64 energy_shift_per_site, std::optional<st
 
 {
     using namespace qm::spin::half::tensor;
-    if constexpr(settings::debug) tools::log->trace("mpo({}): building ising-majorana mpo", get_position());
+    if constexpr(settings::debug) tools::log->trace("mpo({}): building XXZ mpo", get_position());
     if(not all_mpo_parameters_have_been_set)
         throw except::runtime_error("mpo({}): can't build mpo: full lattice parameters haven't been set yet.", get_position());
 
@@ -159,7 +159,7 @@ void XXZ::set_averages(std::vector<TableMap> all_parameters, bool infinite) {
 }
 
 void XXZ::save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const {
-    if(not file.linkExists(hamiltonian_table_path)) file.createTable(h5tb.get_h5_type(), hamiltonian_table_path, "Ising-Majorana");
+    if(not file.linkExists(hamiltonian_table_path)) file.createTable(h5tb.get_h5_type(), hamiltonian_table_path, "XXZ");
     file.appendTableRecords(h5tb.param, hamiltonian_table_path);
 }
 

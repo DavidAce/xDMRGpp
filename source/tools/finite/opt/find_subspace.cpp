@@ -142,7 +142,7 @@ std::vector<opt_mps> subspace::find_subspace(const TensorsFinite &tensors, const
         if(trunc > 1e-12) tools::log->warn("truncating imag of eigvecs, sum: {}", trunc);
         eigvecs = eigvecs.real();
     }
-    const auto     &multisite_mps = state.get_multisite_mps();
+    const auto     &multisite_mps = state.get_multisite_mps<cx64>();
     const auto      multisite_vec = Eigen::Map<const Eigen::VectorXcd>(multisite_mps.data(), multisite_mps.size());
     auto            energy_shift  = model.get_energy_shift_mpo();
     Eigen::VectorXd overlaps      = (multisite_vec.adjoint() * eigvecs).cwiseAbs().real();
@@ -182,14 +182,12 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_part(const 
     auto &t_lu   = tid::get("lu_decomp");
 
     // Initial mps and a vector map
-    const auto                        &multisite_mps = tensors.state->get_multisite_mps();
+    const auto                        &multisite_mps = tensors.state->get_multisite_mps<cx64>();
     Eigen::Map<const Eigen::VectorXcd> multisite_vector(multisite_mps.data(), multisite_mps.size());
     const auto                         problem_size = multisite_mps.size();
 
     // Mutable initial mps vector used for initial guess in arpack
-    Eigen::Tensor<Scalar, 3> init;
-    if constexpr(std::is_same_v<Scalar, fp64>) init = tensors.state->get_multisite_mps().real();
-    if constexpr(std::is_same_v<Scalar, cx64>) init = tensors.state->get_multisite_mps();
+    Eigen::Tensor<Scalar, 3> init = tensors.state->get_multisite_mps<Scalar>();
 
     // Get the local effective Hamiltonian as a matrix
     const auto &effective_hamiltonian = tensors.get_effective_hamiltonian<Scalar>();
@@ -347,13 +345,11 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(cons
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>; // We may have real or complex eigenvectors
 
     // Initial mps and a vector map
-    const auto &initial_mps = tensors.state->get_multisite_mps();
+    const auto &initial_mps = tensors.state->get_multisite_mps<cx64>();
     const auto  initial_vec = Eigen::Map<const Eigen::VectorXcd>(initial_mps.data(), initial_mps.size());
 
     // Mutable initial mps vector used for initial guess
-    Eigen::Tensor<Scalar, 3> init;
-    if constexpr(std::is_same_v<Scalar, fp64>) init = tensors.state->get_multisite_mps().real();
-    if constexpr(std::is_same_v<Scalar, cx64>) init = tensors.state->get_multisite_mps();
+    Eigen::Tensor<Scalar, 3> init = tensors.state->get_multisite_mps<Scalar>();
 
     // Get the local effective Hamiltonian in mps/mpo form
     const auto &mpos          = tensors.get_model().get_mpo_active();
@@ -394,8 +390,8 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(cons
         config.primme_targetShifts = {};
     }
     // else {
-        // config.primme_preconditioner = subspace::preconditioner_jacobi<Scalar>;
-        // config.jcbMaxBlockSize       = 1; // meta.eigs_jcbMaxBlockSize;
+    // config.primme_preconditioner = subspace::preconditioner_jacobi<Scalar>;
+    // config.jcbMaxBlockSize       = 1; // meta.eigs_jcbMaxBlockSize;
     // }
 
     std::string reason = "exhausted";
@@ -524,7 +520,7 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_lapack(cons
 
     tools::log->debug("Finished eigensolver -- reason: Full diagonalization");
 
-    const auto &multisite_mps = tensors.state->get_multisite_mps();
+    const auto &multisite_mps = tensors.state->get_multisite_mps<cx64>();
     const auto  multisite_vec = Eigen::Map<const Eigen::VectorXcd>(multisite_mps.data(), multisite_mps.size());
 
     auto            eigvals  = eig::view::get_eigvals<double>(solver.result);
@@ -554,8 +550,8 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, co
             throw std::runtime_error("One eigvec is not a basis vector. When constructing a hamiltonian subspace matrix, make sure the candidates are all "
                                      "eigenvectors/basis vectors");
 
-    const auto &env1 = edges.get_multisite_env_ene_blk();
-    const auto &mpo1 = model.get_multisite_mpo();
+    const auto &env1 = edges.get_multisite_env_ene_blk_as<T>();
+    const auto &mpo1 = model.get_multisite_mpo<T>();
 
     tools::log->trace("Generating H² in a subspace of {} eigenvectors of H", eigvecs.size());
     long dim0   = mpo1.dimension(2);
@@ -563,28 +559,31 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, co
     long dim2   = env1.R.dimension(0);
     long eignum = safe_cast<long>(eigvecs.size()); // Number of eigenvectors
 
-    Eigen::Tensor<std::complex<double>, 0> H1_ij;
-    Eigen::Tensor<std::complex<double>, 3> H1_mps(dim0, dim1, dim2); // The local hamiltonian multiplied by mps at column j.
-    Eigen::MatrixXcd                       H1_sub(eignum, eignum);   // The local hamiltonian projected to the subspace (spanned by eigvecs)
+    Eigen::Tensor<T, 0> H1_ij;
+    Eigen::Tensor<T, 3> H1_mps(dim0, dim1, dim2); // The local hamiltonian multiplied by mps at column j.
+    MatrixType<T>       H1_sub(eignum, eignum);   // The local hamiltonian projected to the subspace (spanned by eigvecs)
     for(auto col = 0; col < eignum; col++) {
-        const auto &mps_j = std::next(eigvecs.begin(), col)->get_tensor();
+        const auto mps_j = std::next(eigvecs.begin(), col)->get_tensor_as<T>();
         tools::common::contraction::matrix_vector_product(H1_mps, mps_j, mpo1, env1.L, env1.R);
         auto &threads = tenx::threads::get();
         for(auto row = col; row < eignum; row++) {
-            const auto &mps_i           = std::next(eigvecs.begin(), row)->get_tensor();
+            const auto mps_i            = std::next(eigvecs.begin(), row)->get_tensor_as<T>();
             H1_ij.device(*threads->dev) = mps_i.conjugate().contract(H1_mps, tenx::idx({0, 1, 2}, {0, 1, 2}));
             H1_sub(row, col)            = H1_ij(0);
-            H1_sub(col, row)            = std::conj(H1_ij(0));
+            if constexpr(sfinae::is_std_complex_v<T>) {
+                H1_sub(col, row) = std::conj(H1_ij(0));
+            } else {
+                H1_sub(col, row) = H1_ij(0);
+            }
         }
     }
-    if constexpr(std::is_same_v<T, double>)
-        return H1_sub.real();
-    else
-        return H1_sub;
+    return H1_sub;
 }
 
 // Explicit instantiations
+template MatrixType<fp32> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs);
 template MatrixType<fp64> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs);
+template MatrixType<cx32> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs);
 template MatrixType<cx64> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs);
 
 template<typename T>
@@ -596,8 +595,8 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &m
             throw std::runtime_error("One eigvec is not a basis vector. When constructing a hamiltonian subspace matrix, make sure the candidates are all "
                                      "eigenvectors/basis vectors");
 
-    const auto &env2 = edges.get_multisite_env_var_blk();
-    const auto &mpo2 = model.get_multisite_mpo_squared();
+    const auto &env2 = edges.get_multisite_env_var_blk_as<T>();
+    const auto &mpo2 = model.get_multisite_mpo_squared<T>();
 
     tools::log->trace("Generating H² in a subspace of {} eigenvectors of H", eigvecs.size());
     long dim0   = mpo2.dimension(2);
@@ -605,28 +604,33 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &m
     long dim2   = env2.R.dimension(0);
     long eignum = safe_cast<long>(eigvecs.size()); // Number of eigenvectors
 
-    Eigen::Tensor<std::complex<double>, 0> H2_ij;
-    Eigen::Tensor<std::complex<double>, 3> H2_mps(dim0, dim1, dim2); // The local hamiltonian multiplied by mps at column j.
-    Eigen::MatrixXcd                       H2_sub(eignum, eignum);   // The local hamiltonian projected to the subspace (spanned by eigvecs)
+    Eigen::Tensor<T, 0> H2_ij;
+    Eigen::Tensor<T, 3> H2_mps(dim0, dim1, dim2); // The local hamiltonian multiplied by mps at column j.
+    MatrixType<T>       H2_sub(eignum, eignum);   // The local hamiltonian projected to the subspace (spanned by eigvecs)
     for(auto col = 0; col < eignum; col++) {
-        const auto &mps_j = std::next(eigvecs.begin(), col)->get_tensor();
+        const auto mps_j = std::next(eigvecs.begin(), col)->get_tensor_as<T>();
         tools::common::contraction::matrix_vector_product(H2_mps, mps_j, mpo2, env2.L, env2.R);
         auto &threads = tenx::threads::get();
         for(auto row = col; row < eignum; row++) {
-            const auto &mps_i           = std::next(eigvecs.begin(), row)->get_tensor();
+            const auto mps_i            = std::next(eigvecs.begin(), row)->get_tensor_as<T>();
             H2_ij.device(*threads->dev) = mps_i.conjugate().contract(H2_mps, tenx::idx({0, 1, 2}, {0, 1, 2}));
             H2_sub(row, col)            = H2_ij(0);
-            H2_sub(col, row)            = std::conj(H2_ij(0));
+            if constexpr(sfinae::is_std_complex_v<T>) {
+                H2_sub(col, row) = std::conj(H2_ij(0));
+            } else {
+                H2_sub(col, row) = H2_ij(0);
+            }
         }
     }
-    if constexpr(std::is_same_v<T, double>)
-        return H2_sub.real();
-    else
-        return H2_sub;
+    return H2_sub;
 }
 
 // Explicit instantiations
+template MatrixType<fp32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges,
+                                                                        const std::vector<opt_mps> &eigvecs);
 template MatrixType<fp64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges,
+                                                                        const std::vector<opt_mps> &eigvecs);
+template MatrixType<cx32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges,
                                                                         const std::vector<opt_mps> &eigvecs);
 template MatrixType<cx64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges,
                                                                         const std::vector<opt_mps> &eigvecs);

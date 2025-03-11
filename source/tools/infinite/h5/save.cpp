@@ -61,8 +61,8 @@ void tools::infinite::h5::save::state(h5pp::File &h5file, const StorageInfo &sin
 
 void tools::infinite::h5::save::edges(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite &edges) {
     auto        tic = tid::tic_token("edges");
-    const auto &ene = edges.get_ene_blk();
-    const auto &var = edges.get_var_blk();
+    const auto &ene = edges.get_env_ene_blk();
+    const auto &var = edges.get_env_var_blk();
     h5file.writeDataset(ene.L, fmt::format("{}/eneL", sinfo.get_mps_prefix()));
     h5file.writeDataset(ene.R, fmt::format("{}/eneR", sinfo.get_mps_prefix()));
     h5file.writeDataset(var.L, fmt::format("{}/varL", sinfo.get_mps_prefix()));

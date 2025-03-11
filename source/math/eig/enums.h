@@ -5,11 +5,11 @@ namespace eig {
     using size_type = long;
 
     // Enums
-    enum class Lib { ARPACK, PRIMME }; // Choose the underlying library
-    enum class Form { SYMM, NSYM };    // Symmetric or non-symmetric problems (complex symmetric are assumed Hermitian)
-    enum class Type { REAL, CPLX };    // Real or complex, i.e. double or std::complex<double> matrix
-    enum class Side { L, R, LR };      // Left, right or both eigenvectors (for nsym problems)
-    enum class Prob { STD, GEN };      // Standard or generalized eigenvalue problem
+    enum class Lib { ARPACK, PRIMME };          // Choose the underlying library
+    enum class Form { SYMM, NSYM };             // Symmetric or non-symmetric problems (complex symmetric are assumed Hermitian)
+    enum class Type { FP32, FP64, CX32, CX64 }; // Real or complex, 32 or 64 bit
+    enum class Side { L, R, LR };               // Left, right or both eigenvectors (for nsym problems)
+    enum class Prob { STD, GEN };               // Standard or generalized eigenvalue problem
     enum class Ritz {
         LA,
         SA,
@@ -124,8 +124,10 @@ namespace eig {
 
     constexpr std::string_view TypeToString(Type type) {
         switch(type) {
-            case Type::REAL: return "REAL";
-            case Type::CPLX: return "CPLX";
+            case Type::FP32: return "FP32";
+            case Type::FP64: return "FP64";
+            case Type::CX32: return "CX32";
+            case Type::CX64: return "CX64";
             default: throw std::logic_error("Not a valid eig::Type");
         }
     }

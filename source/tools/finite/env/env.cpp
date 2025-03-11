@@ -71,26 +71,60 @@ std::tuple<long, double, bool> get_optimal_eigenvalue(long numZeroEigenvalues, E
     return {optIdx, optVal, saturated};
 }
 
-template<typename T>
-Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> modified_gram_schmidt(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> V) {
+template<typename Scalar>
+std::pair<Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>, std::vector<long>>
+    modified_gram_schmidt(Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> Q) {
+    auto t_eigsol = tid::tic_scope("gramschmidt");
+
     // Orthonormalize with Modified Gram Schmidt
-    using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-    MatrixType Q     = MatrixType::Zero(V.rows(), V.cols());
-    MatrixType R     = MatrixType::Zero(V.cols(), V.cols());
-    for(long i = 0; i < V.cols(); ++i) {
-        Q.col(i) = V.col(i);
-        R(i, i)  = Q.col(i).norm();
-        if(std::abs(R(i, i)) < std::numeric_limits<fp64>::epsilon()) {
-            tools::log->error("Q.col({}) is a zero vector:\n Q: \n{}\n", i, linalg::matrix::to_string(Q.real(), 8));
-            continue;
+    using MatrixType  = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    auto nonOrthoCols = std::vector<long>();
+    auto validCols    = std::vector<long>();
+    validCols.reserve(Q.cols());
+    nonOrthoCols.reserve(Q.cols());
+
+    for(long i = 0; i < Q.cols(); ++i) {
+        auto norm = Q.col(i).norm();
+        if(std::abs(norm) < 1e2 * std::numeric_limits<fp64>::epsilon()) { continue; }
+        Q.col(i) /= norm;
+        for(long j = i + 1; j < Q.cols(); ++j) { Q.col(j) -= Q.col(i).dot(Q.col(j)) * Q.col(i); }
+    }
+    MatrixType     Qid             = MatrixType::Zero(Q.cols(), Q.cols());
+    constexpr auto max_ortho_error = 1e-14;
+    for(long j = 0; j < Qid.cols(); ++j) {
+        for(long i = 0; i <= j; ++i) {
+            Qid(i, j) = Q.col(i).dot(Q.col(j));
+            Qid(j, i) = Qid(i, j);
         }
-        Q.col(i) /= R(i, i);
-        for(long j = i + 1; j < V.cols(); ++j) {
-            R(i, j) = Q.col(i).dot(V.col(j));
-            V.col(j) -= Q.col(i) * R(i, j);
+        if(j == 0 and std::abs(Qid(j, j) - 1.0) > max_ortho_error) {
+            nonOrthoCols.emplace_back(j);
+        } else if(j > 0 and std::abs(Qid(j, j) - 1.0 + Qid.col(j).topRows(j).cwiseAbs().sum()) > max_ortho_error) {
+            nonOrthoCols.emplace_back(j);
+        }
+
+        if(j == 0 and std::abs(Qid(j, j) - 1.0) <= max_ortho_error) {
+            validCols.emplace_back(j);
+        } else if(j > 0 and std::abs(Qid(j, j) - 1.0 + Qid.col(j).topRows(j).cwiseAbs().sum()) <= max_ortho_error) {
+            validCols.emplace_back(j);
         }
     }
-    return Q;
+
+    if(!Qid(validCols, validCols).isIdentity(settings::precision::max_norm_error)) {
+        tools::log->info("Qid \n{}\n", linalg::matrix::to_string(Qid, 8));
+        tools::log->info("vc  {}", validCols);
+        tools::log->info("noc {}", nonOrthoCols);
+        throw except::runtime_error("Q has non orthonormal columns: \n{}\n"
+                                    " validCols   : {}\n"
+                                    " nonOrthoCols: {}",
+                                    linalg::matrix::to_string(Qid, 8), validCols, nonOrthoCols);
+    }
+
+    // Q(Eigen::all, nonOrthoCols).setZero();
+    Q.colwise().normalize();
+    for(long j = 0; j < Q.cols(); ++j) {
+        if(!Q.col(j).allFinite()) Q.col(j).setZero();
+    }
+    return {Q, nonOrthoCols};
 }
 
 template<typename T>
@@ -115,15 +149,13 @@ EnvExpansionResult tools::finite::env::get_optimally_mixed_block_1site(const std
     auto H2          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
 
     using MatrixType = typename MatVecMPOS<T>::MatrixType;
-    auto size        = H1.get_size();
-    auto V           = MatrixType(size, 3);
-    auto H1V         = MatrixType(size, 3);
-    auto H2V         = MatrixType(size, 3);
-    if constexpr(std::is_same_v<T, fp64>) {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites)).real();
-    } else {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites));
-    }
+    std::vector<long> nonOrthoCols;
+    auto              size = H1.get_size();
+    auto              V    = MatrixType(size, 3);
+    auto              H1V  = MatrixType(size, 3);
+    auto              H2V  = MatrixType(size, 3);
+    V.col(0)               = tenx::VectorCast(state.get_multisite_mps<T>(sites));
+
     // Determine whether we use a 2 or 3-dimensional krylov subspace
     // If H1_on we use {1, H¹ }|\psi>
     // If H2_on we use {1, H² }|\psi>
@@ -136,7 +168,7 @@ EnvExpansionResult tools::finite::env::get_optimally_mixed_block_1site(const std
     H2.MultAx(V.col(0).data(), V.col(2).data());
 
     // Orthonormalize with Modified Gram Schmidt
-    V = modified_gram_schmidt(V);
+    std::tie(V, nonOrthoCols) = modified_gram_schmidt(V);
     // V should now have orthonormal columns
 
     H1.MultAx(V.col(0).data(), H1V.col(0).data());
@@ -242,38 +274,28 @@ template EnvExpansionResult tools::finite::env::get_optimally_mixed_block_1site<
                                                                                       const ModelFinite &model, const EdgesFinite &edges,
                                                                                       EnvExpandMode envExpandMode);
 template<typename T>
-EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H1(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                              const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                              size_t maxiter) {
+void tools::finite::env::internal::get_optimally_mixed_block_H1(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
+                                                                const EdgesFinite &edges, OptRitz ritz, size_t maxiter, EnvExpansionResult &res) {
+    if constexpr(std::is_same_v<T, cx64>) {
+        if(state.is_real() and model.is_real() and edges.is_real()) {
+            return tools::finite::env::internal::get_optimally_mixed_block_H1<fp64>(sites, state, model, edges, ritz, maxiter, res);
+        }
+    }
+
     auto t_multax = tid::ur("multax");
     auto t_totals = tid::ur("totals");
     t_totals.tic();
-    assert_edges_ene(state, model, edges);
-    assert_edges_var(state, model, edges);
-    auto res         = EnvExpansionResult();
-    res.sites        = sites;
-    res.dims_old     = state.get_mps_dims(sites);
-    res.bond_old     = state.get_bond_dims(sites);
-    res.posL         = safe_cast<long>(sites.front());
-    res.posR         = safe_cast<long>(sites.back());
-    const auto &mpsL = state.get_mps_site(res.posL);
-    const auto &mpsR = state.get_mps_site(res.posR);
-    res.dimL_old     = mpsL.dimensions();
-    res.dimR_old     = mpsR.dimensions();
 
     auto H1 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
     auto H2 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
 
-    using MatrixType = typename MatVecMPOS<T>::MatrixType;
-    auto size        = H1.get_size();
-    auto V           = MatrixType(size, 3);
-    auto H1V         = MatrixType(size, 3);
-    auto H2V         = MatrixType(size, 3);
-    if constexpr(std::is_same_v<T, fp64>) {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites)).real();
-    } else {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites));
-    }
+    using MatrixType  = typename MatVecMPOS<T>::MatrixType;
+    auto nonOrthoCols = std::vector<long>();
+    auto size         = H1.get_size();
+    auto V            = MatrixType(size, 3);
+    auto H1V          = MatrixType(size, 3);
+    auto H2V          = MatrixType(size, 3);
+    V.col(0)          = tenx::VectorCast(state.get_multisite_mps<T>(sites));
 
     double optVal = std::numeric_limits<double>::quiet_NaN();
     double rnorm  = 1.0;
@@ -287,7 +309,8 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H1(co
         t_multax.toc();
 
         // Orthonormalize with Modified Gram Schmidt
-        V = modified_gram_schmidt(V);
+        std::tie(V, nonOrthoCols) = modified_gram_schmidt(V);
+
         // V should now have orthonormal vectors
         t_multax.tic();
         H1.MultAx(V.col(0).data(), H1V.col(0).data());
@@ -336,67 +359,58 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H1(co
     tools::log->debug("mixed state result: <H> = {:.16f} | sites {} (size {}) | rnorm {:.3e} | iters {} | t_multax {:.3e} s |  t_totals {:.3e} s", optVal,
                       sites, size, rnorm, iter, t_multax.get_time(), t_totals.get_time());
     res.mixed_blk = Eigen::TensorMap<Eigen::Tensor<T, 3>>(V.col(0).data(), H1.get_shape_mps()).template cast<cx64>();
-    return res;
 }
 
-template EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H1<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                             const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                             size_t maxiter);
-template EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H1<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                             const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                             size_t maxiter);
+template void tools::finite::env::internal::get_optimally_mixed_block_H1<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                               const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz, size_t maxiter,
+                                                                               EnvExpansionResult &res);
+template void tools::finite::env::internal::get_optimally_mixed_block_H1<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                               const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz, size_t maxiter,
+                                                                               EnvExpansionResult &res);
 
 template<typename T>
-EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H2(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                              const ModelFinite &model, const EdgesFinite &edges, [[maybe_unused]] OptRitz ritz,
-                                                                              size_t maxiter) {
-    auto t_multax = tid::ur("multax");
-    auto t_totals = tid::ur("totals");
-    t_totals.tic();
+void tools::finite::env::internal::get_optimally_mixed_block_H2(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
+                                                                const EdgesFinite &edges, [[maybe_unused]] OptRitz ritz, size_t maxiter,
+                                                                EnvExpansionResult &res) {
+    if constexpr(std::is_same_v<T, cx64>) {
+        if(state.is_real() and model.is_real() and edges.is_real()) {
+            return tools::finite::env::internal::get_optimally_mixed_block_H2<fp64>(sites, state, model, edges, ritz, maxiter, res);
+        }
+    }
+
+    auto t_totals = tid::tic_scope("totals");
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
-    auto res         = EnvExpansionResult();
-    res.sites        = sites;
-    res.dims_old     = state.get_mps_dims(sites);
-    res.bond_old     = state.get_bond_dims(sites);
-    res.posL         = safe_cast<long>(sites.front());
-    res.posR         = safe_cast<long>(sites.back());
-    const auto &mpsL = state.get_mps_site(res.posL);
-    const auto &mpsR = state.get_mps_site(res.posR);
-    res.dimL_old     = mpsL.dimensions();
-    res.dimR_old     = mpsR.dimensions();
 
-    auto H1          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
-    auto H2          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
-    using MatrixType = typename MatVecMPOS<T>::MatrixType;
-    auto size        = H1.get_size();
-    auto V           = MatrixType(size, 3);
-    auto H2V         = MatrixType(size, 3);
-    if constexpr(std::is_same_v<T, fp64>) {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites)).real();
-    } else {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites));
-    }
+    auto H1           = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
+    auto H2           = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
+    using MatrixType  = typename MatVecMPOS<T>::MatrixType;
+    auto nonOrthoCols = std::vector<long>();
+    auto size         = H1.get_size();
+    auto V            = MatrixType(size, 3);
+    auto H2V          = MatrixType(size, 3);
+    V.col(0)          = tenx::VectorCast(state.get_multisite_mps<T>(sites));
 
     double optVal = std::numeric_limits<double>::quiet_NaN();
     double rnorm  = 1.0;
     size_t iter   = 0;
 
     for(iter = 0; iter < maxiter; ++iter) {
-        t_multax.tic();
+        auto t_multax = tid::tic_scope("multax");
         // Define the krylov subspace v0,  H1v0, H2v0
         H1.MultAx(V.col(0).data(), V.col(1).data());
         H2.MultAx(V.col(0).data(), V.col(2).data());
         t_multax.toc();
 
         // Orthonormalize with Modified Gram Schmidt
-        V = modified_gram_schmidt(V);
+        std::tie(V, nonOrthoCols) = modified_gram_schmidt(V);
         // V should now have orthonormal vectors
         t_multax.tic();
         H2.MultAx(V.col(0).data(), H2V.col(0).data());
         H2.MultAx(V.col(1).data(), H2V.col(1).data());
         H2.MultAx(V.col(2).data(), H2V.col(2).data());
         t_multax.toc();
+        auto t_dotprod = tid::tic_scope("dotprod");
 
         Eigen::Matrix3cd K2;
         K2(0, 0) = V.col(0).dot(H2V.col(0));
@@ -406,46 +420,56 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H2(co
         K2(2, 1) = V.col(2).dot(H2V.col(1));
         K2(2, 2) = V.col(2).dot(H2V.col(2));
         K2       = K2.template selfadjointView<Eigen::Lower>();
+        t_dotprod.toc();
+        auto t_eigsol = tid::tic_scope("eigsol");
 
         auto solver = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3cd>(K2, Eigen::ComputeEigenvectors);
         auto evals  = solver.eigenvalues();
         auto evecs  = solver.eigenvectors();
+        t_eigsol.toc();
+        auto t_checks = tid::tic_scope("checks");
 
         // Eigenvalues are sorted in ascending order.
-        static constexpr auto eps         = std::numeric_limits<fp64>::epsilon();
-        auto                  tol         = std::clamp(std::pow(K2(0, 0).real(), 2.0), eps, 1e-10);
-        long                  numZeroRows = (K2.cwiseAbs().rowwise().maxCoeff().array() <= tol).count();
-        long                  optIdx      = 0;
-        if(numZeroRows > 0) {
-            for(long i = 0; i < 3; ++i) { tools::log->debug("V.col({}).norm() = {:.16f}", i, V.col(i).norm()); }
-            tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1)));
-            tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
-            tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
-            tools::log->debug("V: \n{}\n", linalg::matrix::to_string(V, 8));
-            tools::log->debug("K2: \n{}\n", linalg::matrix::to_string(K2, 8));
-            tools::log->debug("evals: \n{}\n", linalg::matrix::to_string(evals, 8));
-            tools::log->debug("evecs: \n{}\n", linalg::matrix::to_string(evecs, 8));
-            tools::log->debug("numZeroRows  {}", numZeroRows);
-            long                  maxEvecRow0Idx = 0;
-            [[maybe_unused]] auto maxEvecRow0Val =
-                evecs.row(0).cwiseAbs().maxCoeff(&maxEvecRow0Idx); // Select the column that modifies the current state the least.
-            optIdx = maxEvecRow0Idx;
-            tools::log->debug("optIdx {} -> {} ", optIdx, maxEvecRow0Idx);
+        long optIdx                = 0;
+        V                          = (V * evecs.real()).eval(); // Now V has three columns mixed according o evecs
+        Eigen::VectorXd mixedNorms = V.colwise().norm();        // New state norms after mixing cols of V according to cols of evecs
+        auto            mixedColOk = std::vector<long>();       // New states with acceptable norm and eigenvalue
+        mixedColOk.reserve(static_cast<size_t>(mixedNorms.size()));
+        for(long i = 0; i < mixedNorms.size(); ++i) {
+            if(std::abs(mixedNorms(i) - 1.0) > settings::precision::max_norm_error) continue;
+            if(evals(i) <= 0) continue;
+            mixedColOk.emplace_back(i);
         }
 
+        if(mixedColOk.empty()) {
+            tools::log->debug("K2                     : \n{}\n", linalg::matrix::to_string(K2, 8));
+            tools::log->debug("evals                  : \n{}\n", linalg::matrix::to_string(evals, 8));
+            tools::log->debug("evecs                  : \n{}\n", linalg::matrix::to_string(evecs, 8));
+            // tools::log->debug("Vnorms                 = {}", linalg::matrix::to_string(V.colwise().norm().transpose(), 16));
+            tools::log->debug("mixedNorms             = {}", linalg::matrix::to_string(mixedNorms.transpose(), 16));
+            tools::log->debug("mixedColOk             = {}", mixedColOk);
+            // tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1)));
+            // tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
+            // tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
+            tools::log->error("mixedColOk is empty");
+            break;
+        }
+
+        optIdx              = mixedColOk.front(); // The eigenvectors are sorted in increasing eigenvalues, so we just need to take the first.
         Eigen::Vector3d col = evecs.col(optIdx).real();
         res.alpha_mps       = col.coeff(0);
         res.alpha_h1v       = col.coeff(1);
         res.alpha_h2v       = col.coeff(2);
 
-        // Define new vectors based on the best eigencolumn
-        V.col(0) = (V * col).eval();
-        // tools::log->info("col {}: {}", optIdx, linalg::matrix::to_string(col.transpose(),8));
+        // Put the best column first (we discard the others)
+        if(optIdx != 0) V.col(0) = V.col(optIdx);
+
         // Check convergence
         auto oldVal = optVal;
         H2.MultAx(V.col(0).data(), H2V.col(0).data());
         optVal      = std::real(V.col(0).dot(H2V.col(0)));
         auto relval = std::abs((oldVal - optVal) / (0.5 * (optVal + oldVal)));
+
         if(relval < 1e-4) {
             tools::log->debug("saturated: no rel change {:.16f} -> {:.16f} | rel change {:.3e}", oldVal, optVal, relval);
             break;
@@ -455,60 +479,48 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H2(co
             tools::log->debug("saturated: rnorm {:.3e} < tol {:.3e}", rnorm, settings::precision::eigs_tol_min);
             break;
         }
-        if(numZeroRows > 0) {
-            tools::log->debug("saturated: V has zeroed rows");
+        if(mixedColOk.size() == 1) {
+            tools::log->debug("saturated: only one valid eigenvector");
             break;
         }
-        // tools::log->debug("mixed state result: <H²> = {:.16f} | sites {} (size {}) | rnorm {:.3e} | iters {} | t_multax {:.3e} s |  t_totals {:.3e} s",
-        // optVal, sites, size, rnorm, iter, t_multax.get_time(), t_totals.get_time());
     }
 
-    t_totals.toc();
-    tools::log->debug(
-        "mixed state result: <H²> = {:.16f} | α: {:.3e} {:.3e} {:.3e} | sites {} (size {}) | rnorm {:.3e} | iters {} | t_multax {:.3e} s |  t_totals {:.3e} s",
-        optVal, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, size, rnorm, iter, t_multax.get_time(), t_totals.get_time());
+    tools::log->debug("mixed state result: <H²> = {:.16f} | α: {:.3e} {:.3e} {:.3e} | sites {} (size {}) | norm {:.16f} | rnorm {:.3e} | iters {} | t_multax "
+                      "{:.3e} s |  t_totals {:.3e} s",
+                      optVal, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, size, V.col(0).norm(), rnorm, iter, tid::get("t_multax").get_time(),
+                      t_totals->get_time());
     res.mixed_blk = Eigen::TensorMap<Eigen::Tensor<T, 3>>(V.col(0).data(), H1.get_shape_mps()).template cast<cx64>();
-    return res;
+    t_totals.toc();
 }
 
-template EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H2<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                             const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                             size_t maxiter);
-template EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_H2<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                             const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                             size_t maxiter);
+template void tools::finite::env::internal::get_optimally_mixed_block_H2<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                               const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz, size_t maxiter,
+                                                                               EnvExpansionResult &res);
+template void tools::finite::env::internal::get_optimally_mixed_block_H2<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                               const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz, size_t maxiter,
+                                                                               EnvExpansionResult &res);
 template<typename T>
-EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_VarH(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                const ModelFinite &model, const EdgesFinite &edges,
-                                                                                [[maybe_unused]] OptRitz ritz, size_t maxiter) {
+void tools::finite::env::internal::get_optimally_mixed_block_VarH(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
+                                                                  const EdgesFinite &edges, [[maybe_unused]] OptRitz ritz, size_t maxiter,
+                                                                  EnvExpansionResult &res) {
+    if constexpr(std::is_same_v<T, cx64>) {
+        if(state.is_real() and model.is_real() and edges.is_real()) {
+            return tools::finite::env::internal::get_optimally_mixed_block_VarH<fp64>(sites, state, model, edges, ritz, maxiter, res);
+        }
+    }
     auto t_multax = tid::ur("multax");
     auto t_totals = tid::ur("totals");
     t_totals.tic();
-    assert_edges_ene(state, model, edges);
-    assert_edges_var(state, model, edges);
-    auto res         = EnvExpansionResult();
-    res.sites        = sites;
-    res.dims_old     = state.get_mps_dims(sites);
-    res.bond_old     = state.get_bond_dims(sites);
-    res.posL         = safe_cast<long>(sites.front());
-    res.posR         = safe_cast<long>(sites.back());
-    const auto &mpsL = state.get_mps_site(res.posL);
-    const auto &mpsR = state.get_mps_site(res.posR);
-    res.dimL_old     = mpsL.dimensions();
-    res.dimR_old     = mpsR.dimensions();
 
-    auto H1          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
-    auto H2          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
-    using MatrixType = typename MatVecMPOS<T>::MatrixType;
-    auto size        = H1.get_size();
-    auto V           = MatrixType(size, 3);
-    auto H1V         = MatrixType(size, 3);
-    auto H2V         = MatrixType(size, 3);
-    if constexpr(std::is_same_v<T, fp64>) {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites)).real();
-    } else {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites));
-    }
+    auto H1           = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
+    auto H2           = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
+    using MatrixType  = typename MatVecMPOS<T>::MatrixType;
+    auto nonOrthoCols = std::vector<long>();
+    auto size         = H1.get_size();
+    auto V            = MatrixType(size, 3);
+    auto H1V          = MatrixType(size, 3);
+    auto H2V          = MatrixType(size, 3);
+    V.col(0) = tenx::VectorCast(state.get_multisite_mps<T>(sites));
 
     double optVal = std::numeric_limits<double>::quiet_NaN();
     double rnorm  = 1.0;
@@ -522,7 +534,8 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_VarH(
         t_multax.toc();
 
         // Orthonormalize with Modified Gram Schmidt
-        V = modified_gram_schmidt(V);
+        std::tie(V, nonOrthoCols) = modified_gram_schmidt(V);
+
         // V should now have orthonormal columns
         H1.MultAx(V.col(0).data(), H1V.col(0).data());
         H1.MultAx(V.col(1).data(), H1V.col(1).data());
@@ -614,49 +627,38 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_VarH(
     tools::log->debug("mixed state result:  <H²>-<H>²= {:.16f} | sites {} (size {}) | rnorm {:.3e} | iters {} | t_multax {:.3e} s |  t_totals {:.3e} s", optVal,
                       sites, size, rnorm, iter, t_multax.get_time(), t_totals.get_time());
     res.mixed_blk = Eigen::TensorMap<Eigen::Tensor<T, 3>>(V.col(0).data(), H1.get_shape_mps()).template cast<cx64>();
-    return res;
 }
 
-template EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_VarH<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                               const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                               size_t maxiter);
-template EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_VarH<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                               const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                               size_t maxiter);
+template void tools::finite::env::internal::get_optimally_mixed_block_VarH<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                                 const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
+                                                                                 size_t maxiter, EnvExpansionResult &res);
+template void tools::finite::env::internal::get_optimally_mixed_block_VarH<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                                 const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
+                                                                                 size_t maxiter, EnvExpansionResult &res);
 
 template<typename T>
-EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_GsiH(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                size_t maxiter) {
+void tools::finite::env::internal::get_optimally_mixed_block_GsiH(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
+                                                                  const EdgesFinite &edges, OptRitz ritz, size_t maxiter, EnvExpansionResult &res) {
+    if constexpr(std::is_same_v<T, cx64>) {
+        if(state.is_real() and model.is_real() and edges.is_real()) {
+            return tools::finite::env::internal::get_optimally_mixed_block_GsiH<fp64>(sites, state, model, edges, ritz, maxiter, res);
+        }
+    }
+
     auto t_multax = tid::ur("multax");
     auto t_totals = tid::ur("totals");
     t_totals.tic();
-    assert_edges_ene(state, model, edges);
-    assert_edges_var(state, model, edges);
-    auto res         = EnvExpansionResult();
-    res.sites        = sites;
-    res.dims_old     = state.get_mps_dims(sites);
-    res.bond_old     = state.get_bond_dims(sites);
-    res.posL         = safe_cast<long>(sites.front());
-    res.posR         = safe_cast<long>(sites.back());
-    const auto &mpsL = state.get_mps_site(res.posL);
-    const auto &mpsR = state.get_mps_site(res.posR);
-    res.dimL_old     = mpsL.dimensions();
-    res.dimR_old     = mpsR.dimensions();
 
-    auto H1          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
-    auto H2          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
+    auto H1 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
+    auto H2 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
     // using VectorType = typename MatVecMPOS<T>::VectorType;
-    using MatrixType = typename MatVecMPOS<T>::MatrixType;
-    auto size        = H1.get_size();
-    auto V           = MatrixType(size, 3);
-    auto H1V         = MatrixType(size, 3);
-    auto H2V         = MatrixType(size, 3);
-    if constexpr(std::is_same_v<T, fp64>) {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites)).real();
-    } else {
-        V.col(0) = tenx::VectorCast(state.get_multisite_mps(sites));
-    }
+    using MatrixType  = typename MatVecMPOS<T>::MatrixType;
+    auto nonOrthoCols = std::vector<long>();
+    auto size         = H1.get_size();
+    auto V            = MatrixType(size, 3);
+    auto H1V          = MatrixType(size, 3);
+    auto H2V          = MatrixType(size, 3);
+    V.col(0) = tenx::VectorCast(state.get_multisite_mps<T>(sites));
 
     double optVal = std::numeric_limits<double>::quiet_NaN();
     double rnorm  = 1.0;
@@ -670,7 +672,7 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_GsiH(
         t_multax.toc();
 
         // Orthonormalize with Modified Gram Schmidt
-        V = modified_gram_schmidt(V);
+        std::tie(V, nonOrthoCols) = modified_gram_schmidt(V);
         // V should now have orthonormal vectors
         t_multax.tic();
         H1.MultAx(V.col(0).data(), H1V.col(0).data());
@@ -715,6 +717,7 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_GsiH(
             evals                               = solver.eigenvalues().real();
             evecs                               = solver.eigenvectors().real();
             std::tie(optIdx, optVal, saturated) = get_optimal_eigenvalue(numZeroRows, evals, optVal, ritz);
+            if(optIdx != 0) tools::log->debug("optIdx 0 -> {}", optIdx);
         } else {
             auto K3     = Eigen::Matrix3cd(K2 - K1 * K1);
             auto solver = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3cd>(K3, Eigen::ComputeEigenvectors);
@@ -782,52 +785,356 @@ EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_GsiH(
                       optVal, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, size, rnorm, iter, t_multax.get_time(), t_totals.get_time());
 
     res.mixed_blk = Eigen::TensorMap<Eigen::Tensor<T, 3>>(V.col(0).data(), H1.get_shape_mps()).template cast<cx64>();
-    return res;
 }
 
-template EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_GsiH<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                               const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                               size_t maxiter);
-template EnvExpansionResult tools::finite::env::internal::get_optimally_mixed_block_GsiH<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                               const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
-                                                                                               size_t maxiter);
+template void tools::finite::env::internal::get_optimally_mixed_block_GsiH<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                                 const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
+                                                                                 size_t maxiter, EnvExpansionResult &res);
+template void tools::finite::env::internal::get_optimally_mixed_block_GsiH<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                                 const ModelFinite &model, const EdgesFinite &edges, OptRitz ritz,
+                                                                                 size_t maxiter, EnvExpansionResult &res);
+
+template<typename T>
+void tools::finite::env::internal::get_optimally_mixed_block_any(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
+                                                                 const EdgesFinite &edges, OptAlgo algo, [[maybe_unused]] OptRitz ritz, size_t maxiter,
+                                                                 EnvExpansionResult &res) {
+    if constexpr(std::is_same_v<T, cx64>) {
+        if(state.is_real() and model.is_real() and edges.is_real()) {
+            return tools::finite::env::internal::get_optimally_mixed_block_any<fp64>(sites, state, model, edges, algo, ritz, maxiter, res);
+        }
+    }
+
+    auto t_totals = tid::tic_scope("totals");
+    auto t_multax = tid::tic_scope("multax");
+    t_multax.toc();
+    auto K1_on = has_any_flags(algo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::DMRG);
+    auto K2_on = has_any_flags(algo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::XDMRG);
+
+    MatVecMPOS<T> H1  = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
+    MatVecMPOS<T> H2  = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
+    using MatrixType  = typename MatVecMPOS<T>::MatrixType;
+    auto nonOrthoCols = std::vector<long>();
+
+    auto mps_size  = H1.get_size();
+    auto mps_shape = H1.get_shape_mps();
+
+    auto H1V = MatrixType();
+    auto H2V = MatrixType();
+    if(K1_on) H1V.resize(mps_size, 3);
+    if(K2_on) H2V.resize(mps_size, 3);
+
+    // Default solution
+    res.mixed_blk = state.get_multisite_mps<cx64>(sites);
+    res.alpha_mps = 1.0;
+    res.alpha_h1v = 0.0;
+    res.alpha_h2v = 0.0;
+
+    // Initialize Krylov vector 0
+    auto V = MatrixType(mps_size, 3);
+    if constexpr(std::is_same_v<T, fp64>) {
+        V.col(0) = tenx::VectorCast(res.mixed_blk).real();
+    } else {
+        V.col(0) = tenx::VectorCast(res.mixed_blk);
+    }
+
+    double optVal = std::numeric_limits<double>::quiet_NaN();
+    long   optIdx = 0;
+    double rnorm  = 1.0;
+    size_t iter   = 0;
+    size_t ngs    = 0;
+    for(iter = 0; iter < maxiter; ++iter) {
+        // Check convergence (residual norm)
+        // H2.MultAx(V.col(0).data(), H2V.col(0).data());
+        // optVal = std::real();
+
+        // Define the krylov subspace v0,  H1v0, H2v0
+        t_multax.tic();
+        H1.MultAx(V.col(0).data(), V.col(1).data());
+        H2.MultAx(V.col(0).data(), V.col(2).data());
+        t_multax.toc();
+        // tools::log->debug("V                      : \n{}\n", linalg::matrix::to_string(V, 8));
+
+        // Orthonormalize with Modified Gram Schmidt
+        for(size_t igs = 0; igs <= 2; ++igs) {
+            std::tie(V, nonOrthoCols) = modified_gram_schmidt(V);
+            ngs++;
+            // tools::log->debug("V                      : \n{}\n", linalg::matrix::to_string(V, 8));
+            // tools::log->debug("nonOrthoCols           = {}", nonOrthoCols);
+            // tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1)));
+            // tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
+            // tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
+            if(nonOrthoCols.empty()) break;
+        }
+
+        // V should now have orthonormal vectors
+        t_multax.tic();
+        if(K1_on) {
+            H1.MultAx(V.col(0).data(), H1V.col(0).data());
+            H1.MultAx(V.col(1).data(), H1V.col(1).data());
+            H1.MultAx(V.col(2).data(), H1V.col(2).data());
+        }
+        if(K2_on) {
+            H2.MultAx(V.col(0).data(), H2V.col(0).data());
+            H2.MultAx(V.col(1).data(), H2V.col(1).data());
+            H2.MultAx(V.col(2).data(), H2V.col(2).data());
+        }
+
+        if(algo == OptAlgo::DMRG)
+            rnorm = (H1V.col(0) - optVal * V.col(0)).template lpNorm<Eigen::Infinity>();
+        else if(algo == OptAlgo::GDMRG)
+            rnorm = (H1V.col(0) - optVal * H2V.col(0)).template lpNorm<Eigen::Infinity>();
+        else
+            rnorm = (H2V.col(0) - optVal * V.col(0)).template lpNorm<Eigen::Infinity>();
+
+        if(rnorm < settings::precision::eigs_tol_min) {
+            tools::log->debug("saturated: rnorm {:.3e} < tol {:.3e}", rnorm, settings::precision::eigs_tol_min);
+            break;
+        }
+
+        t_multax.toc();
+        auto t_dotprod = tid::tic_scope("dotprod");
+
+        Eigen::Matrix3cd K1 = Eigen::Matrix3cd::Zero();
+        if(K1_on) {
+            K1(0, 0) = V.col(0).dot(H1V.col(0));
+            K1(1, 0) = V.col(1).dot(H1V.col(0));
+            K1(2, 0) = V.col(2).dot(H1V.col(0));
+            K1(1, 1) = V.col(1).dot(H1V.col(1));
+            K1(2, 1) = V.col(2).dot(H1V.col(1));
+            K1(2, 2) = V.col(2).dot(H1V.col(2));
+            K1       = K1.template selfadjointView<Eigen::Lower>();
+        }
+
+        Eigen::Matrix3cd K2 = Eigen::Matrix3cd::Zero();
+        if(K2_on) {
+            // Use abs to avoid negative near-zero values
+            K2(0, 0) = std::abs(V.col(0).dot(H2V.col(0)));
+            K2(1, 0) = V.col(1).dot(H2V.col(0));
+            K2(2, 0) = V.col(2).dot(H2V.col(0));
+            K2(1, 1) = std::abs(V.col(1).dot(H2V.col(1)));
+            K2(2, 1) = V.col(2).dot(H2V.col(1));
+            K2(2, 2) = std::abs(V.col(2).dot(H2V.col(2)));
+            K2       = K2.template selfadjointView<Eigen::Lower>();
+        }
+
+        t_dotprod.toc();
+        auto             t_eigsol      = tid::tic_scope("eigsol");
+        auto             tol           = std::numeric_limits<fp64>::epsilon();
+        long             numZeroRowsK1 = (K1.cwiseAbs().rowwise().maxCoeff().array() <= tol).count();
+        long             numZeroRowsK2 = (K2.cwiseAbs().rowwise().maxCoeff().array() <= tol).count();
+        long             numZeroRows   = std::max({numZeroRowsK1, numZeroRowsK2});
+        Eigen::Vector3d  evals         = Eigen::Vector3d ::Zero();
+        Eigen::Matrix3cd evecs         = Eigen::Matrix3cd::Zero();
+        OptRitz          ritz_internal = ritz;
+        switch(algo) {
+            using enum OptAlgo;
+            case DMRG: {
+                auto solver = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3cd>(K1, Eigen::ComputeEigenvectors);
+                if(solver.info() == Eigen::ComputationInfo::Success) {
+                    evals = solver.eigenvalues();
+                    evecs = solver.eigenvectors();
+                } else {
+                    tools::log->info("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8));
+                    tools::log->warn("Diagonalization of K1 exited with info {}", static_cast<int>(solver.info()));
+                }
+
+                if(evals.hasNaN()) throw except::runtime_error("found nan eigenvalues");
+                break;
+            }
+            case DMRGX: [[fallthrough]];
+            case HYBRID_DMRGX: {
+                auto solver = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3cd>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
+                evals       = solver.eigenvalues();
+                evecs       = solver.eigenvectors();
+                break;
+            }
+            case XDMRG: {
+                auto solver = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3cd>(K2, Eigen::ComputeEigenvectors);
+                evals       = solver.eigenvalues();
+                evecs       = solver.eigenvectors();
+                break;
+            }
+            case GDMRG: {
+                if(nonOrthoCols.empty() and numZeroRows == 0) {
+                    auto solver = Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::Matrix3cd>(
+                        K1.template selfadjointView<Eigen::Lower>(), K2.template selfadjointView<Eigen::Lower>(), Eigen::ComputeEigenvectors | Eigen::Ax_lBx);
+                    evals = solver.eigenvalues().real();
+                    evecs = solver.eigenvectors().colwise().normalized();
+                } else {
+                    auto solver = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3cd>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
+                    evals       = solver.eigenvalues();
+                    evecs       = solver.eigenvectors();
+                    if(ritz == OptRitz::LM) ritz_internal = OptRitz::SM;
+                    if(ritz == OptRitz::LR) ritz_internal = OptRitz::SM;
+                    if(ritz == OptRitz::SM) ritz_internal = OptRitz::LM;
+                    if(ritz == OptRitz::SR) ritz_internal = OptRitz::LR;
+                }
+
+                break;
+            }
+        }
+        auto t_checks = tid::tic_scope("checks");
+
+        V                          = (V * evecs.real()).eval(); // Now V has three columns mixed according o evecs
+        Eigen::VectorXd mixedNorms = V.colwise().norm();        // New state norms after mixing cols of V according to cols of evecs
+        auto            mixedColOk = std::vector<long>();       // New states with acceptable norm and eigenvalue
+        mixedColOk.reserve(static_cast<size_t>(mixedNorms.size()));
+        for(long i = 0; i < mixedNorms.size(); ++i) {
+            if(std::abs(mixedNorms(i) - 1.0) > settings::precision::max_norm_error) continue;
+            // if(algo != OptAlgo::GDMRG and evals(i) <= 0) continue; // H2 and variance are positive definite, but the eigenvalues of GDMRG are not
+            // if(algo != OptAlgo::GDMRG and (evals(i) < -1e-15 or evals(i) == 0)) continue; // H2 and variance are positive definite, but the eigenvalues of
+            // GDMRG are not
+            mixedColOk.emplace_back(i);
+        }
+        if(mixedColOk.size() <= 1) {
+            tools::log->debug("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8));
+            tools::log->debug("K2                     : \n{}\n", linalg::matrix::to_string(K2, 8));
+            tools::log->debug("evals                  : \n{}\n", linalg::matrix::to_string(evals, 8));
+            tools::log->debug("evecs                  : \n{}\n", linalg::matrix::to_string(evecs, 8));
+            // tools::log->debug("Vnorms                 = {}", linalg::matrix::to_string(V.colwise().norm().transpose(), 16));
+            tools::log->debug("mixedNorms             = {}", linalg::matrix::to_string(mixedNorms.transpose(), 16));
+            tools::log->debug("mixedColOk             = {}", mixedColOk);
+            tools::log->debug("numZeroRowsK1          = {}", numZeroRowsK1);
+            tools::log->debug("numZeroRowsK2          = {}", numZeroRowsK2);
+            tools::log->debug("nonOrthoCols           = {}", nonOrthoCols);
+            tools::log->debug("ngramSchmidt           = {}", ngs);
+            if(algo == OptAlgo::GDMRG) {
+                H2.MultAx(V.col(0).data(), H2V.col(0).data());
+                H2.MultAx(V.col(1).data(), H2V.col(1).data());
+                H2.MultAx(V.col(2).data(), H2V.col(2).data());
+                tools::log->debug("V.col(0).dot(H2*V.col(1)) = {:.16f}", V.col(0).dot(H2V.col(1)));
+                tools::log->debug("V.col(0).dot(H2*V.col(2)) = {:.16f}", V.col(0).dot(H2V.col(2)));
+                tools::log->debug("V.col(1).dot(H2*V.col(2)) = {:.16f}", V.col(1).dot(H2V.col(2)));
+            } else {
+                tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1)));
+                tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
+                tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
+            }
+
+            if(mixedColOk.empty()) {
+                tools::log->debug("mixedColOk is empty");
+                break;
+            }
+        }
+        // Eigenvalues are sorted in ascending order.
+        long colIdx = 0;
+        switch(ritz_internal) {
+            case OptRitz::SR: {
+                evals(mixedColOk).minCoeff(&colIdx);
+                break;
+            }
+            case OptRitz::LR: {
+                evals(mixedColOk).maxCoeff(&colIdx);
+                break;
+            }
+            case OptRitz::SM: {
+                evals(mixedColOk).cwiseAbs().minCoeff(&colIdx);
+                break;
+            }
+            case OptRitz::LM: {
+                evals(mixedColOk).cwiseAbs().maxCoeff(&colIdx);
+                break;
+            }
+            case OptRitz::IS: [[fallthrough]];
+            case OptRitz::TE: [[fallthrough]];
+            case OptRitz::NONE: {
+                (evals(mixedColOk).array() - res.ene_old).cwiseAbs().minCoeff(&colIdx);
+            }
+        }
+        optIdx = mixedColOk[colIdx];
+
+        auto oldVal = optVal;
+        optVal      = evals(optIdx);
+        auto relval = std::abs((oldVal - optVal) / (0.5 * (optVal + oldVal)));
+
+        // Check convergence
+        if(std::abs(oldVal - optVal) < 1e-14) {
+            tools::log->debug("saturated: no change {:.16f} -> {:.16f}", oldVal, optVal);
+            break;
+        }
+        if(relval < 1e-12) {
+            tools::log->debug("saturated: no rel change {:.16f} -> {:.16f} | rel change {:.3e}", oldVal, optVal, relval);
+            break;
+        }
+
+        // If we make it here: update the solution
+        res.mixed_blk       = Eigen::TensorMap<Eigen::Tensor<T, 3>>(V.col(optIdx).data(), mps_shape).template cast<cx64>();
+        Eigen::Vector3d col = evecs.col(optIdx).real();
+        res.alpha_mps       = col.coeff(0);
+        res.alpha_h1v       = col.coeff(1);
+        res.alpha_h2v       = col.coeff(2);
+
+        if(mixedColOk.size() == 1) {
+            tools::log->debug("saturated: only one valid eigenvector");
+            break;
+        }
+
+        if(optIdx != 0) V.col(0) = V.col(optIdx); // Put the best column first (we discard the others)
+        if(iter + 1 < maxiter)
+            tools::log->debug(
+                "mixed state result: {:.16f} [{}] | α: {:.3e} {:.3e} {:.3e} | sites {} (size {}) | norm {:.16f} | rnorm {:.3e} | ngs {} | iters {} | "
+                "{:.3e} it/s |  t_totals {:.3e} s",
+                optVal, optIdx, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, mps_size, V.col(0).norm(), rnorm, ngs, iter,
+                t_multax->get_time() / t_totals->get_time(), t_totals->get_time());
+    }
+
+    tools::log->debug(
+        "mixed state result: {:.16f} [{}] | α: {:.3e} {:.3e} {:.3e} | sites {} (size {}) | norm {:.16f} | rnorm {:.3e} | ngs {} | iters {} | t_multax "
+        "{:.3e} s |  t_totals {:.3e} s",
+        optVal, optIdx, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, mps_size, V.col(0).norm(), rnorm, ngs, iter, t_multax->get_time(),
+        t_totals->get_time());
+    t_totals.toc();
+}
+
+template void tools::finite::env::internal::get_optimally_mixed_block_any<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                                const ModelFinite &model, const EdgesFinite &edges, OptAlgo algo, OptRitz ritz,
+                                                                                size_t maxiter, EnvExpansionResult &res);
+template void tools::finite::env::internal::get_optimally_mixed_block_any<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
+                                                                                const ModelFinite &model, const EdgesFinite &edges, OptAlgo algo, OptRitz ritz,
+                                                                                size_t maxiter, EnvExpansionResult &res);
 
 EnvExpansionResult tools::finite::env::get_optimally_mixed_block(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
                                                                  const EdgesFinite &edges, OptAlgo algo, OptRitz ritz, size_t maxiter) {
-    bool is_real = state.is_real() and model.is_real() and edges.is_real();
-    switch(algo) {
-        case OptAlgo::DMRG: {
-            if(is_real)
-                return internal::get_optimally_mixed_block_H1<fp64>(sites, state, model, edges, ritz, maxiter);
-            else
-                return internal::get_optimally_mixed_block_H1<cx64>(sites, state, model, edges, ritz, maxiter);
-        }
-        case OptAlgo::DMRGX: {
-            if(is_real)
-                return internal::get_optimally_mixed_block_VarH<fp64>(sites, state, model, edges, ritz, maxiter);
-            else
-                return internal::get_optimally_mixed_block_VarH<cx64>(sites, state, model, edges, ritz, maxiter);
-        }
-        case OptAlgo::HYBRID_DMRGX: {
-            if(is_real)
-                return internal::get_optimally_mixed_block_VarH<fp64>(sites, state, model, edges, ritz, maxiter);
-            else
-                return internal::get_optimally_mixed_block_VarH<cx64>(sites, state, model, edges, ritz, maxiter);
-        }
-        case OptAlgo::XDMRG: {
-            if(is_real)
-                return internal::get_optimally_mixed_block_H2<fp64>(sites, state, model, edges, ritz, maxiter);
-            else
-                return internal::get_optimally_mixed_block_H2<cx64>(sites, state, model, edges, ritz, maxiter);
-        }
-        case OptAlgo::GDMRG: {
-            if(is_real)
-                return internal::get_optimally_mixed_block_GsiH<fp64>(sites, state, model, edges, ritz, maxiter);
-            else
-                return internal::get_optimally_mixed_block_GsiH<cx64>(sites, state, model, edges, ritz, maxiter);
-        }
-        default: return {};
-    }
+    assert_edges_ene(state, model, edges);
+    assert_edges_var(state, model, edges);
+    auto res         = EnvExpansionResult();
+    res.sites        = sites;
+    res.dims_old     = state.get_mps_dims(sites);
+    res.bond_old     = state.get_bond_dims(sites);
+    res.posL         = safe_cast<long>(sites.front());
+    res.posR         = safe_cast<long>(sites.back());
+    const auto &mpsL = state.get_mps_site(res.posL);
+    const auto &mpsR = state.get_mps_site(res.posR);
+    res.dimL_old     = mpsL.dimensions();
+    res.dimR_old     = mpsR.dimensions();
+
+    // switch(algo) {
+    //     using namespace internal;
+    //     case OptAlgo::DMRG: {
+    //         get_optimally_mixed_block_H1<cx64>(sites, state, model, edges, ritz, maxiter, res);
+    //         break;
+    //     }
+    //     case OptAlgo::DMRGX: {
+    //         get_optimally_mixed_block_VarH<cx64>(sites, state, model, edges, ritz, maxiter, res);
+    //         break;
+    //     }
+    //     case OptAlgo::HYBRID_DMRGX: {
+    //         get_optimally_mixed_block_VarH<cx64>(sites, state, model, edges, ritz, maxiter, res);
+    //         break;
+    //     }
+    //     case OptAlgo::XDMRG: {
+    //         get_optimally_mixed_block_H2<cx64>(sites, state, model, edges, ritz, maxiter, res);
+    //         break;
+    //     }
+    //     case OptAlgo::GDMRG: {
+    //         get_optimally_mixed_block_GsiH<cx64>(sites, state, model, edges, ritz, maxiter, res);
+    //         break;
+    //     }
+    //     default: throw except::logic_error("get_optimally_mixed_block: algorithm not implemented: {}", enum2sv(algo));
+    // }
+    internal::get_optimally_mixed_block_any<cx64>(sites, state, model, edges, algo, ritz, maxiter, res);
+    // internal::get_optimally_mixed_block_any<cx64>(sites, state, model, edges, OptAlgo::XDMRG, OptRitz::SM, maxiter, res);
+    return res;
 }
 
 void merge_expansion_term_PR(const StateFinite &state, MpsSite &mpsL, const Eigen::Tensor<cx64, 3> &ML_PL, MpsSite &mpsR, const Eigen::Tensor<cx64, 3> &MR_PR,
@@ -899,12 +1206,12 @@ void merge_expansion_term_PR(const StateFinite &state, MpsSite &mpsL, const Eige
 
     {
         // Make mpsL normalized so that later checks can succeed
-        auto                   multisite_mpsL = state.get_multisite_mps({posL});
+        auto                   multisite_mpsL = state.get_multisite_mps<cx64>({posL});
         cx64                   norm_old       = tools::common::contraction::contract_mps_norm(multisite_mpsL);
         Eigen::Tensor<cx64, 3> M_tmp          = mpsL.get_M_bare() * mpsL.get_M_bare().constant(std::pow(norm_old, -0.5)); // Rescale
         mpsL.set_M(M_tmp);
         if constexpr(settings::debug_expansion) {
-            auto mpsL_final = state.get_multisite_mps({mpsL.get_position()});
+            auto mpsL_final = state.get_multisite_mps<cx64>({mpsL.get_position()});
             cx64 norm_new   = tools::common::contraction::contract_mps_norm(mpsL_final);
             tools::log->debug("Normalized expanded mps {}({}): {:.16f} -> {:.16f}", mpsL.get_label(), mpsL.get_position(), std::abs(norm_old),
                               std::abs(norm_new));
@@ -976,12 +1283,12 @@ void merge_expansion_term_PL(const StateFinite &state, MpsSite &mpsL, const Eige
 
     {
         // Make mpsR normalized so that later checks can succeed
-        auto                   multisite_mpsR = state.get_multisite_mps({posR});
+        auto                   multisite_mpsR = state.get_multisite_mps<cx64>({posR});
         cx64                   norm_old       = tools::common::contraction::contract_mps_norm(multisite_mpsR);
         Eigen::Tensor<cx64, 3> M_tmp          = mpsR.get_M_bare() * mpsR.get_M_bare().constant(std::pow(norm_old, -0.5)); // Rescale by the norm
         mpsR.set_M(M_tmp);
         if constexpr(settings::debug_expansion) {
-            auto mpsR_final = state.get_multisite_mps({mpsR.get_position()});
+            auto mpsR_final = state.get_multisite_mps<cx64>({mpsR.get_position()});
             cx64 norm_new   = tools::common::contraction::contract_mps_norm(mpsR_final);
             tools::log->debug("Normalized expanded mps {}({}): {:.16f} -> {:.16f}", mpsR.get_label(), mpsR.get_position(), std::abs(norm_old),
                               std::abs(norm_new));
@@ -1041,12 +1348,12 @@ EnvExpansionResult tools::finite::env::expand_environment_1site(StateFinite &sta
                                     model.active_sites, edges.active_sites);
     if(state.active_sites.empty()) throw except::logic_error("No active sites for environment expansion");
 
-    if(!has_flag(envExpandMode, EnvExpandMode::FORWARD) and !has_flag(envExpandMode, EnvExpandMode::BACKWARD)) envExpandMode |= EnvExpandMode::FORWARD;
+    if(!has_flag(envExpandMode, EnvExpandMode::FORE) and !has_flag(envExpandMode, EnvExpandMode::REAR)) envExpandMode |= EnvExpandMode::FORE;
     if(!has_flag(envExpandMode, EnvExpandMode::H1) and !has_flag(envExpandMode, EnvExpandMode::H2)) envExpandMode |= EnvExpandMode::H1 | EnvExpandMode::H2;
 
-    // Determine which bond to expand (FORWARD has preference if both are specified)
+    // Determine which bond to expand (FORE has preference if both are specified)
     std::vector<size_t> pos_expanded;
-    if(has_flag(envExpandMode, EnvExpandMode::FORWARD)) {
+    if(has_flag(envExpandMode, EnvExpandMode::FORE)) {
         if(state.get_direction() > 0) {
             auto pos = state.active_sites.back();
             if(pos == std::clamp<size_t>(pos, 0, state.get_length<size_t>() - 2)) pos_expanded = {pos, pos + 1};
@@ -1055,12 +1362,11 @@ EnvExpansionResult tools::finite::env::expand_environment_1site(StateFinite &sta
             auto pos = state.active_sites.front();
             if(pos == std::clamp<size_t>(pos, 1, state.get_length<size_t>() - 1)) pos_expanded = {pos - 1, pos};
         }
-    } else if(has_flag(envExpandMode, EnvExpandMode::BACKWARD)) {
+    } else if(has_flag(envExpandMode, EnvExpandMode::REAR)) {
         auto pos = state.get_position<size_t>();
         if(state.get_direction() > 0 and pos == std::clamp<size_t>(pos, 1, state.get_length<size_t>() - 1)) pos_expanded = {pos - 1, pos};
         if(state.get_direction() < 0 and pos == std::clamp<size_t>(pos, 0, state.get_length<size_t>() - 2)) pos_expanded = {pos, pos + 1};
     }
-
     if(pos_expanded.empty()) {
         tools::log->trace("No positions to expand: active sites {} | mode {}", state.active_sites, flag2str(envExpandMode));
         return {}; // No update
@@ -1096,7 +1402,7 @@ EnvExpansionResult tools::finite::env::expand_environment_1site(StateFinite &sta
     svd_cfg.rank_max         = std::min(bond_lim, svd_cfg.rank_max.value_or(bond_lim));
     svd::solver svd;
 
-    if(has_flag(envExpandMode, EnvExpandMode::FORWARD)) {
+    if(has_flag(envExpandMode, EnvExpandMode::FORE)) {
         if(state.get_direction() > 0) {
             // The expanded bond sits between mpsL and mpsR. When direction is left-to-right:
             // We have
@@ -1188,7 +1494,7 @@ EnvExpansionResult tools::finite::env::expand_environment_1site(StateFinite &sta
                               flag2str(envExpandMode), res.alpha_h1v, res.alpha_h2v, svd_cfg.truncation_limit.value(), svd_cfg.rank_max.value(), dimR_old[1],
                               ML_PL.dimension(2), mpsR.get_chiL());
         }
-    } else if(has_flag(envExpandMode, EnvExpandMode::BACKWARD)) {
+    } else if(has_flag(envExpandMode, EnvExpandMode::REAR)) {
         if(state.get_direction() > 0 and res.posL > 0) {
             // The expanded bond sits between mpsL and mpsR. When direction is left-to-right:
             //      * mpsL is "AC(i)" and will get moved into envL later
@@ -1299,30 +1605,88 @@ EnvExpansionResult tools::finite::env::expand_environment_nsite(StateFinite &sta
     size_t posR   = state.active_sites.back();
     size_t length = state.get_length<size_t>();
 
-    if(!has_flag(envExpandMode, EnvExpandMode::FORWARD) and !has_flag(envExpandMode, EnvExpandMode::BACKWARD)) envExpandMode |= EnvExpandMode::FORWARD;
+    if(!has_flag(envExpandMode, EnvExpandMode::FORE) and !has_flag(envExpandMode, EnvExpandMode::REAR)) envExpandMode |= EnvExpandMode::FORE;
 
     // Grow the posL and posR boundary until they cover the block size
-    while(posR - posL + 1 < blocksize) {
-        size_t posR_old = posR;
-        size_t posL_old = posL;
+    long poslL      = safe_cast<long>(posL);
+    long poslR      = safe_cast<long>(posR);
+    long lengthl    = safe_cast<long>(length);
+    long blocksizel = safe_cast<long>(blocksize);
+    if(has_flag(envExpandMode, EnvExpandMode::REAR | EnvExpandMode::FORE)) {
+        // Center the expansion block around the active sites
         if(state.get_direction() > 0) {
-            if(has_flag(envExpandMode, EnvExpandMode::FORWARD) and posR - posL + 1 < blocksize and posR + 1 < length) { posR++; }
-            if(has_flag(envExpandMode, EnvExpandMode::BACKWARD) and posR - posL + 1 < blocksize and posL > 0) { posL--; }
+            long poslC      = (posL + posR + 1l) / 2l;
+            long blockhalfl = (blocksizel) / 2l;
+            poslR           = std::clamp<long>(poslC + blockhalfl, poslR, lengthl - 1l);
+            poslL           = std::clamp<long>(poslR - (blocksizel - 1l), 0l, poslL);
         }
         if(state.get_direction() < 0) {
-            if(has_flag(envExpandMode, EnvExpandMode::BACKWARD) and posR - posL + 1 < blocksize and posR + 1 < length) { posR++; }
-            if(has_flag(envExpandMode, EnvExpandMode::FORWARD) and posR - posL + 1 < blocksize and posL > 0) { posL--; }
+            long poslC      = (posL + posR) / 2l;
+            long blockhalfl = (blocksizel) / 2l;
+            poslL           = std::clamp<long>(poslC - blockhalfl, 0l, poslL);
+            poslR           = std::clamp<long>(poslL + (blocksizel - 1l), poslR, lengthl - 1l);
         }
-        if(posR_old == posR and posL_old == posL) break; // No change
+    } else if(has_flag(envExpandMode, EnvExpandMode::FORE)) {
+        if(state.get_direction() > 0) poslR = std::clamp<long>(poslL + (blocksizel - 1l), poslL, lengthl - 1l);
+        if(state.get_direction() < 0) poslL = std::clamp<long>(poslR - (blocksizel - 1l), 0l, poslR);
+    } else if(has_flag(envExpandMode, EnvExpandMode::REAR)) {
+        if(state.get_direction() > 0) poslL = std::clamp<long>(poslR - (blocksizel - 1l), 0l, poslR);
+        if(state.get_direction() < 0) poslR = std::clamp<long>(poslL + (blocksizel - 1l), poslL, lengthl - 1l);
     }
+
+    posL = safe_cast<size_t>(poslL);
+    posR = safe_cast<size_t>(poslR);
+    if(posR - posL + 1 > blocksize) throw except::logic_error("error in block size selection | posL {} to posR {} != blocksize {}", posL, posR, blocksize);
+
+    // while(posR - posL + 1 < blocksize) {
+    //     size_t posR_old = posR;
+    //     size_t posL_old = posL;
+    //     if(state.get_direction() > 0) {
+    //         if(has_flag(envExpandMode, EnvExpandMode::FORE) and posR - posL + 1 < blocksize and posR + 1 < length) { posR++; }
+    //         if(has_flag(envExpandMode, EnvExpandMode::REAR) and posR - posL + 1 < blocksize and posL > 0) { posL--; }
+    //     }
+    //     if(state.get_direction() < 0) {
+    //         if(has_flag(envExpandMode, EnvExpandMode::REAR) and posR - posL + 1 < blocksize and posR + 1 < length) { posR++; }
+    //         if(has_flag(envExpandMode, EnvExpandMode::FORE) and posR - posL + 1 < blocksize and posL > 0) { posL--; }
+    //     }
     //
+    //     if(state.get_direction() > 0) {
+    //         if(has_flag(envExpandMode, EnvExpandMode::FORE) and posR - posL + 1 < blocksize and posR + 1 < length) { posR++; }
+    //         if(has_flag(envExpandMode, EnvExpandMode::REAR) and posR - posL + 1 < blocksize and posL > 0) { posL--; }
+    //     }
+    //     if(state.get_direction() < 0) {
+    //         if(has_flag(envExpandMode, EnvExpandMode::REAR) and posR - posL + 1 < blocksize and posR + 1 < length) { posR++; }
+    //         if(has_flag(envExpandMode, EnvExpandMode::FORE) and posR - posL + 1 < blocksize and posL > 0) { posL--; }
+    //     }
+    //     if(posR_old == posR and posL_old == posL) break; // No change
+    // }
+
+    // while(posR - posL + 1 < blocksize) {
+    //     size_t posR_old = posR;
+    //     size_t posL_old = posL;
+    //     if(state.get_direction() > 0) {
+    //         if(has_flag(envExpandMode, EnvExpandMode::FORE) and posR - posL + 1 < blocksize and posR + 1 < length) { posR++; }
+    //         if(has_flag(envExpandMode, EnvExpandMode::REAR) and posR - posL + 1 < blocksize and posL > 0) { posL--; }
+    //     }
+    //     if(state.get_direction() < 0) {
+    //         if(has_flag(envExpandMode, EnvExpandMode::REAR) and posR - posL + 1 < blocksize and posR + 1 < length) { posR++; }
+    //         if(has_flag(envExpandMode, EnvExpandMode::FORE) and posR - posL + 1 < blocksize and posL > 0) { posL--; }
+    //     }
+    //     if(posR_old == posR and posL_old == posL) break; // No change
+    // }
+
     // if(state.get_direction() > 0) posR = std::clamp(posL + (blocksize - 1), posR, state.get_length<size_t>() - 1);
     // if(state.get_direction() < 0) posL = std::clamp(posR - std::min((blocksize - 1), posR), 0ul, posL);
+
     auto pos_active_and_expanded = num::range<size_t>(posL, posR + 1);
 
-    // Define the left and right mps that will get modified
-    auto res = get_optimally_mixed_block(pos_active_and_expanded, state, model, edges, algo, ritz, settings::strategy::dmrg_env_expand_iter);
+    if(pos_active_and_expanded.size() < 2ul) {
+        // tools::log->warn("Expansion: need at least two sites, but pos_active_and_expanded = {}", pos_active_and_expanded);
+        return EnvExpansionResult();
+    }
 
+    // Define the left and right mps that will get modified
+    auto        res  = get_optimally_mixed_block(pos_active_and_expanded, state, model, edges, algo, ritz, settings::strategy::dmrg_env_expand_iter);
     const auto &mpsL = state.get_mps_site(res.posL);
     const auto &mpsR = state.get_mps_site(res.posR);
     res.ene_old      = tools::finite::measure::energy(state, model, edges);
@@ -1333,8 +1697,10 @@ EnvExpansionResult tools::finite::env::expand_environment_nsite(StateFinite &sta
                           mpsR.get_position(), res.alpha_h1v, res.alpha_h2v);
         return res;
     }
+
     tools::log->debug("Expanding {}({}) - {}({}) | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e}", mpsL.get_label(), mpsL.get_position(), mpsR.get_label(), mpsR.get_position(),
                       res.alpha_mps, res.alpha_h1v, res.alpha_h2v);
+
     mps::merge_multisite_mps(state, res.mixed_blk, pos_active_and_expanded, state.get_position<long>(), MergeEvent::EXP, svd_cfg);
 
     res.dims_new = state.get_mps_dims(pos_active_and_expanded);
@@ -1350,9 +1716,23 @@ EnvExpansionResult tools::finite::env::expand_environment_nsite(StateFinite &sta
 
     res.dimL_new = mpsL.dimensions();
     res.dimR_new = mpsR.dimensions();
-    res.ene_new  = tools::finite::measure::energy(state, model, edges);
-    res.var_new  = tools::finite::measure::energy_variance(state, model, edges);
-    res.ok       = true;
+    if(num::prod(res.dimL_new) == 0) {
+        tools::log->info("mpsL({}): {}", mpsL.get_position(), tenx::VectorMap(mpsL.get_M_bare()));
+        tools::log->info("mpsR({}): {}", mpsR.get_position(), tenx::VectorMap(mpsR.get_M_bare()));
+        tools::log->info("res     : {}", tenx::VectorMap(res.mixed_blk));
+        throw except::runtime_error("New dimL has a zero: {}", res.dimL_new);
+    }
+    if(num::prod(res.dimR_new) == 0) {
+        tools::log->info("mpsL({}): {}", mpsL.get_position(), tenx::VectorMap(mpsL.get_M_bare()));
+        tools::log->info("mpsR({}): {}", mpsR.get_position(), tenx::VectorMap(mpsR.get_M_bare()));
+        throw except::runtime_error("New dimR has a zero: {}", res.dimR_new);
+    }
+
+    res.ene_new = tools::finite::measure::energy(state, model, edges);
+    res.var_new = tools::finite::measure::energy_variance(state, model, edges);
+    if(std::isnan(res.ene_new)) throw except::runtime_error("res.ene_new is nan");
+    if(std::isnan(res.var_new)) throw except::runtime_error("res.var_new is nan");
+    res.ok = true;
     return res;
 }
 

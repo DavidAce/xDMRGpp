@@ -24,7 +24,7 @@ namespace tools::infinite::opt {
 
         auto        shape_mps = tensors.state->dimensions();
         const auto &mpo       = tensors.model->get_2site_mpo_AB();
-        const auto &env       = tensors.edges->get_ene_blk();
+        const auto &env       = tensors.edges->get_env_ene_blk();
 
         MatVecMPO<cx64> matrix(env.L, env.R, mpo);
         eig::solver     solver;

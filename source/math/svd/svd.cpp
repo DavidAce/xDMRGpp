@@ -205,15 +205,9 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     throw std::logic_error("Unrecognized svd library");
 }
 
-using fp64 = double;
-using cx64 = std::complex<double>;
-
-//! \relates svd::class_SVD
-//! \brief force instantiation of do_svd for type 'double'
+template std::tuple<svd::MatrixType<fp32>, svd::VectorType<fp32>, svd::MatrixType<fp32>> svd::solver::do_svd_ptr(const fp32 *, long, long, const svd::config &);
 template std::tuple<svd::MatrixType<fp64>, svd::VectorType<fp64>, svd::MatrixType<fp64>> svd::solver::do_svd_ptr(const fp64 *, long, long, const svd::config &);
-
-//! \relates svd::class_SVD
-//! \brief force instantiation of do_svd for type 'std::complex<double>'
+template std::tuple<svd::MatrixType<cx32>, svd::VectorType<cx32>, svd::MatrixType<cx32>> svd::solver::do_svd_ptr(const cx32 *, long, long, const svd::config &);
 template std::tuple<svd::MatrixType<cx64>, svd::VectorType<cx64>, svd::MatrixType<cx64>> svd::solver::do_svd_ptr(const cx64 *, long, long, const svd::config &);
 
 template<typename Scalar>
@@ -223,7 +217,7 @@ void svd::solver::print_matrix([[maybe_unused]] const Scalar *mat_ptr, [[maybe_u
     auto A = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>>(mat_ptr, rows, cols);
     log->warn("Matrix [{}] with dimensions {}x{}\n", tag, rows, cols);
     for(long r = 0; r < A.rows(); r++) {
-        if constexpr(std::is_same_v<Scalar, std::complex<double>>)
+        if constexpr(tenx::sfinae::is_std_complex_v<Scalar>)
             for(long c = 0; c < A.cols(); c++) fmt::print("({1:.{0}f},{2:+.{0}f}) ", dec, std::real(A(r, c)), std::imag(A(r, c)));
         else
             for(long c = 0; c < A.cols(); c++) fmt::print("{1:.{0}f} ", dec, A(r, c));
@@ -232,52 +226,58 @@ void svd::solver::print_matrix([[maybe_unused]] const Scalar *mat_ptr, [[maybe_u
 #endif
 }
 
+template void svd::solver::print_matrix<fp32>(const fp32 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
+template void svd::solver::print_matrix<fp64>(const fp64 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
+template void svd::solver::print_matrix<cx32>(const cx32 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
+template void svd::solver::print_matrix<cx64>(const cx64 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
+
 template<typename Scalar>
 void svd::solver::print_vector([[maybe_unused]] const Scalar *vec_ptr, [[maybe_unused]] long size, [[maybe_unused]] std::string_view tag,
                                [[maybe_unused]] long dec) const {
 #if !defined(NDEBUG)
     auto V = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(vec_ptr, size);
     log->warn("Vector [{}] with size {}\n", tag, size);
-    if constexpr(std::is_same_v<Scalar, std::complex<double>>)
+    if constexpr(tenx::sfinae::is_std_complex_v<Scalar>)
         for(long i = 0; i < V.size(); i++) fmt::print("({1:.{0}f},{2:+.{0}f})\n", dec, std::real(V[i]), std::imag(V[i]));
     else
         for(long i = 0; i < V.size(); i++) fmt::print("{1:.{0}f}\n", dec, V[i]);
 #endif
 }
 
-template void svd::solver::print_matrix<fp64>(const fp64 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
-
-template void svd::solver::print_matrix<cx64>(const cx64 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
-
+template void svd::solver::print_vector<fp32>(const fp32 *vec_ptr, long size, std::string_view tag, long dec) const;
 template void svd::solver::print_vector<fp64>(const fp64 *vec_ptr, long size, std::string_view tag, long dec) const;
-
+template void svd::solver::print_vector<cx32>(const cx32 *vec_ptr, long size, std::string_view tag, long dec) const;
 template void svd::solver::print_vector<cx64>(const cx64 *vec_ptr, long size, std::string_view tag, long dec) const;
 
 // template<typename Scalar>
-std::pair<long, double> svd::solver::get_rank_from_truncation_error(const VectorType<double> &S) const {
-    //        assert(std::abs(S.norm() - 1.0) < 1e-10); // make sure this is normalized
-    VectorType<double> truncation_errors(S.size() + 1);
-    for(long s = 0; s <= S.size(); s++) { truncation_errors[s] = S.bottomRows(S.size() - s).norm(); } // Last one should be zero, i.e. no truncation
-    auto rank_    = (truncation_errors.array() >= truncation_lim).count();
-    auto rank_lim = S.size();
-    if(rank_max > 0) rank_lim = std::min(S.size(), rank_max);
-    rank_ = std::min(rank_, rank_lim);
-    if(rank_min > 0) rank_ = std::max(rank_, std::min(S.size(),
-                                                      rank_min)); // Make sure we don't overtruncate in some cases (e.g. when stashing)
+// std::pair<long, fp64> svd::solver::get_rank_from_truncation_error(const VectorType<Scalar> &S) const {
+//     VectorType<fp64> truncation_errors(S.size() + 1);
+//     for(long s = 0; s <= S.size(); s++) { truncation_errors[s] = S.bottomRows(S.size() - s).norm(); } // Last one should be zero, i.e. no truncation
+//     auto rank_    = (truncation_errors.array() >= truncation_lim).count();
+//     auto rank_lim = S.size();
+//     if(rank_max > 0) rank_lim = std::min(S.size(), rank_max);
+//     rank_ = std::min(rank_, rank_lim);
+//     if(rank_min > 0) rank_ = std::max(rank_, std::min(S.size(),
+//                                                       rank_min)); // Make sure we don't overtruncate in some cases (e.g. when stashing)
+//
+//     //    tools::log->info("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.5e} | error {:8.5e}", S.size(), rank_, rank_lim,
+//     //                     truncation_lim, truncation_errors[rank_]);
+//     //    tools::log->info("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.5e} | error {:8.5e} truncation errors: {:8.5e}", S.size(), rank_,
+//     //    rank_lim,
+//     //                     truncation_lim, truncation_errors[rank_], fmt::join(truncation_errors, ", "));
+//     if(rank_ <= 0) {
+//         if(log)
+//             log->error("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.2e} | error {:8.2e} truncation errors: {:8.2e}", S.size(), rank_,
+//                        rank_lim, truncation_lim, truncation_errors[rank_], fmt::join(truncation_errors, ", "));
+//         throw std::logic_error("rank <= 0");
+//     }
+//     return {rank_, truncation_errors[rank_]};
+// }
 
-    //    tools::log->info("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.5e} | error {:8.5e}", S.size(), rank_, rank_lim,
-    //                     truncation_lim, truncation_errors[rank_]);
-    //    tools::log->info("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.5e} | error {:8.5e} truncation errors: {:8.5e}", S.size(), rank_,
-    //    rank_lim,
-    //                     truncation_lim, truncation_errors[rank_], fmt::join(truncation_errors, ", "));
-    if(rank_ <= 0) {
-        if(log)
-            log->error("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.2e} | error {:8.2e} truncation errors: {:8.2e}", S.size(), rank_,
-                       rank_lim, truncation_lim, truncation_errors[rank_], fmt::join(truncation_errors, ", "));
-        throw std::logic_error("rank <= 0");
-    }
-    return {rank_, truncation_errors[rank_]};
-}
+// template std::pair<long, fp64> svd::solver::get_rank_from_truncation_error(const VectorType<fp32> &S) const;
+// template std::pair<long, fp64> svd::solver::get_rank_from_truncation_error(const VectorType<fp64> &S) const;
+// template std::pair<long, fp64> svd::solver::get_rank_from_truncation_error(const VectorType<cx32> &S) const;
+// template std::pair<long, fp64> svd::solver::get_rank_from_truncation_error(const VectorType<cx64> &S) const;
 
 template<typename Scalar>
 auto dropfilter(svd::MatrixType<Scalar> &U, svd::VectorType<Scalar> &S, svd::MatrixType<Scalar> &V, double threshold, double min_log_drop_size) {
@@ -336,7 +336,7 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
      *
      *
      */
-
+    using Real                         = typename Eigen::NumTraits<Scalar>::Real;
     auto                     dim0      = mpo.dimension(2);
     auto                     dim1      = mpo.dimension(3);
     auto                     dim2      = mpo.dimension(0);
@@ -347,10 +347,11 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
     auto Smin                          = S.real().minCoeff();
     auto Smax                          = S.real().maxCoeff();
     // Stabilize by inserting avgS *  1/avgS
-    auto avgS = num::next_power_of_two<double>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
+    auto avgS = num::next_power_of_two<Real>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
     if(avgS > 1) {
         S /= avgS;
-        std::tie(rank, truncation_error) = get_rank_from_truncation_error(S.real().head(S.real().nonZeros()));
+        // std::tie(rank, truncation_error) = get_rank_from_truncation_error(S.head(S.nonZeros()));
+        std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
         U                                = U.leftCols(rank).eval();
         S                                = S.head(rank).eval();
         VT                               = VT.topRows(rank).eval();
@@ -367,8 +368,9 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
     /* clang-format on */
 }
 
+template std::tuple<Eigen::Tensor<fp32, 4>, Eigen::Tensor<fp32, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<fp32, 4> &mpo, const svd::config &svd_cfg);
 template std::tuple<Eigen::Tensor<fp64, 4>, Eigen::Tensor<fp64, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<fp64, 4> &mpo, const svd::config &svd_cfg);
-
+template std::tuple<Eigen::Tensor<cx32, 4>, Eigen::Tensor<cx32, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<cx32, 4> &mpo, const svd::config &svd_cfg);
 template std::tuple<Eigen::Tensor<cx64, 4>, Eigen::Tensor<cx64, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<cx64, 4> &mpo, const svd::config &svd_cfg);
 
 template<typename Scalar>
@@ -422,10 +424,11 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
     auto Smax = S.real().maxCoeff();
 
     // Stabilize by inserting avgS *  1/avgS
-    auto avgS = num::next_power_of_two<double>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
+    using RealScalar = RealType<Scalar>;
+    auto avgS        = num::next_power_of_two<RealScalar>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
     if(avgS > 1) {
         S /= avgS;
-        std::tie(rank, truncation_error) = get_rank_from_truncation_error(S.real().head(S.real().nonZeros()));
+        std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
         U                                = U.leftCols(rank).eval();
         S                                = S.head(rank).eval();
         VT                               = VT.topRows(rank).eval();
@@ -445,5 +448,6 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
 }
 
 template std::tuple<Eigen::Tensor<fp64, 2>, Eigen::Tensor<fp64, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<fp64, 4> &mpo, const svd::config &svd_cfg);
-
+template std::tuple<Eigen::Tensor<fp32, 2>, Eigen::Tensor<fp32, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<fp32, 4> &mpo, const svd::config &svd_cfg);
 template std::tuple<Eigen::Tensor<cx64, 2>, Eigen::Tensor<cx64, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<cx64, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<cx32, 2>, Eigen::Tensor<cx32, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<cx32, 4> &mpo, const svd::config &svd_cfg);

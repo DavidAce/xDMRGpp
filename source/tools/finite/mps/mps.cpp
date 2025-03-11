@@ -105,7 +105,7 @@ size_t tools::finite::mps::move_center_point(StateFinite &state, std::optional<s
         // Do the same with its truncation error
         Eigen::Tensor<cx64, 1> LC                  = mps.get_LC();
         double                 truncation_error_LC = mps.get_truncation_error_LC();
-        auto                   twosite_tensor      = state.get_multisite_mps({posL_ul, posR_ul});
+        auto                   twosite_tensor      = state.get_multisite_mps<cx64>({posL_ul, posR_ul});
         tools::finite::mps::merge_multisite_mps(state, twosite_tensor, {static_cast<size_t>(posL), static_cast<size_t>(posR)}, safe_cast<long>(posL),
                                                 MergeEvent::MOVE, svd_cfg, LogPolicy::SILENT);
         state.clear_cache();
@@ -550,7 +550,7 @@ void tools::finite::mps::apply_gate(StateFinite &state, const qm::Gate &gate, Ga
     }
 
     // Generate the mps object on which to apply the gate
-    auto mps = state.get_multisite_mps(gate.pos);
+    auto mps = state.get_multisite_mps<cx64>(gate.pos);
     /* Apply the gate
         1 --- [mps] --- 2
                 |
@@ -754,7 +754,7 @@ void tools::finite::mps::swap_sites(StateFinite &state, size_t posL, size_t posR
     auto           rsh3               = tenx::array3{dR * dL, chiL, chiR};
     auto           swapped_mps        = Eigen::Tensor<cx64, 3>(rsh3);
     auto          &threads            = tenx::threads::get();
-    swapped_mps.device(*threads->dev) = state.get_multisite_mps({posL, posR})
+    swapped_mps.device(*threads->dev) = state.get_multisite_mps<cx64>({posL, posR})
                                             .reshape(rsh4)
                                             .shuffle(shf4)  // swap
                                             .reshape(rsh3); // prepare for merge
@@ -867,7 +867,7 @@ void tools::finite::mps::apply_swap_gate(StateFinite &state, const qm::SwapGate 
     }
 
     // Generate the mps object on which to apply the gate
-    auto mps = state.get_multisite_mps(pos_idxs);
+    auto mps = state.get_multisite_mps<cx64>(pos_idxs);
 
     // Apply the gate
     Eigen::Tensor<cx64, 3> tmp(mps.dimensions());

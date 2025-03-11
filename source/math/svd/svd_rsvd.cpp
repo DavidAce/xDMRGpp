@@ -6,6 +6,7 @@
 #include "rsvd/RandomizedSvd.hpp"
 #include "tid/tid.h"
 #include <Eigen/Dense>
+#include <general/sfinae.h>
 
 /*! \brief Performs randomized SVD on a matrix
  */
@@ -18,11 +19,11 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     if(rows <= 0) throw except::runtime_error("SVD error: rows = {}", rows);
     if(cols <= 0) throw except::runtime_error("SVD error: cols = {}", cols);
     auto mat = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols);
-    if constexpr(std::is_same_v<Scalar, cx64>) {
+    if constexpr(tenx::sfinae::is_std_complex_v<Scalar>) {
         if(tenx::isReal(mat)) {
-            svd::MatrixType<fp64> matreal = mat.real();
-            auto [U, S, V]                = do_svd_rsvd(matreal.data(), rows, cols);
-            return std::make_tuple(U.cast<cx64>(), S.cast<cx64>(), V.cast<cx64>());
+            svd::MatrixType<RealType<Scalar>> matreal = mat.real();
+            auto [U, S, V]                            = do_svd_rsvd(matreal.data(), rows, cols);
+            return std::make_tuple(U.template cast<Scalar>(), S.template cast<Scalar>(), V.template cast<Scalar>());
         }
     }
 
@@ -30,7 +31,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     // These are more expensive debugging operations
     if(not mat.allFinite()) throw std::runtime_error("SVD error: matrix has inf's or nan's");
     if(mat.isZero(0)) throw std::runtime_error("SVD error: matrix is all zeros");
-    if(mat.isZero(1e-12)) log->warn("Lapacke SVD Warning\n\t Given matrix elements are all close to zero (prec 1e-12)");
+    if(mat.isZero()) log->warn("Lapacke SVD Warning\n\t Given matrix elements are all close to zero (prec 1e-12)");
 #endif
 
     // Randomized SVD
@@ -45,9 +46,8 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     // Run the svd
     SVD.compute(mat, rank_lim, 2, 2);
 
-    rank = SVD.singularValues().nonZeros();
     // Truncation error needs normalized singular values
-    std::tie(rank, truncation_error) = get_rank_from_truncation_error(SVD.singularValues().real().topRows(rank));
+    std::tie(rank, truncation_error) = get_rank_from_truncation_error(SVD.singularValues().col(0));
 
     if(rank == 0 or not SVD.matrixU().leftCols(rank).allFinite() or not SVD.singularValues().topRows(rank).allFinite() or
        not SVD.matrixV().leftCols(rank).allFinite()) {
@@ -68,13 +68,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     return std::make_tuple(SVD.matrixU().leftCols(rank), SVD.singularValues().topRows(rank), SVD.matrixV().leftCols(rank).adjoint());
 }
 
-using fp64 = double;
-using cx64 = std::complex<double>;
-
-//! \relates svd::class_SVD
-//! \brief force instantiation of do_svd for type 'double'
+template std::tuple<svd::MatrixType<fp32>, svd::VectorType<fp32>, svd::MatrixType<fp32>> svd::solver::do_svd_rsvd(const fp32 *, long, long) const;
 template std::tuple<svd::MatrixType<fp64>, svd::VectorType<fp64>, svd::MatrixType<fp64>> svd::solver::do_svd_rsvd(const fp64 *, long, long) const;
-
-//! \relates svd::class_SVD
-//! \brief force instantiation of do_svd for type 'std::complex<double>'
+template std::tuple<svd::MatrixType<cx32>, svd::VectorType<cx32>, svd::MatrixType<cx32>> svd::solver::do_svd_rsvd(const cx32 *, long, long) const;
 template std::tuple<svd::MatrixType<cx64>, svd::VectorType<cx64>, svd::MatrixType<cx64>> svd::solver::do_svd_rsvd(const cx64 *, long, long) const;

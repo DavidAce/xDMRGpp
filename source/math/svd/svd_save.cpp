@@ -33,8 +33,8 @@ void svd::solver::save_svd() {
     auto &smd = saveMetaData;
     if(smd.svd_save == save::NONE) return;
     if(not smd.svd_is_running) return;
-    auto directory = h5pp::fs::path(settings::storage::output_filepath).parent_path().string();
-    auto filepath  = fmt::format("{}/svd-save-{}.h5", directory, settings::input::seed);
+    auto directory  = h5pp::fs::path(settings::storage::output_filepath).parent_path().string();
+    auto filepath   = fmt::format("{}/svd-save-{}.h5", directory, settings::input::seed);
     auto file       = h5pp::File(filepath, h5pp::FilePermission::READWRITE);
     auto group_num  = 0;
     auto group_name = fmt::format("svd_{}", group_num);
@@ -42,27 +42,38 @@ void svd::solver::save_svd() {
         while(file.linkExists(group_name)) group_name = fmt::format("svd_{}", ++group_num);
     if(smd.svd_save == save::LAST) group_name = "svd-last";
     if(smd.svd_save == save::FAIL) group_name = "svd-fail";
-    using MatrixReal = svd::internal::SaveMetaData::MatrixReal;
-    using MatrixCplx = svd::internal::SaveMetaData::MatrixCplx;
-    if(auto *A = std::get_if<MatrixReal>(&smd.A); A != nullptr and A->size() != 0) {
-        file.writeDataset(*A, fmt::format("{}/A_real", group_name), H5D_layout_t::H5D_CHUNKED);
-    }
-    if(auto *A = std::get_if<MatrixCplx>(&smd.A); A != nullptr and A->size() != 0) {
-        file.writeDataset(*A, fmt::format("{}/A_cplx", group_name), H5D_layout_t::H5D_CHUNKED);
-    }
-    if(auto *U = std::get_if<MatrixReal>(&smd.U); U != nullptr and U->size() != 0) {
-        file.writeDataset(*U, fmt::format("{}/U_real", group_name), H5D_layout_t::H5D_CHUNKED);
-    }
-    if(auto *U = std::get_if<MatrixCplx>(&smd.U); U != nullptr and U->size() != 0) {
-        file.writeDataset(*U, fmt::format("{}/U_cplx", group_name), H5D_layout_t::H5D_CHUNKED);
-    }
-    if(smd.S.size() != 0) { file.writeDataset(smd.S, fmt::format("{}/S", group_name), H5D_layout_t::H5D_CHUNKED); }
-    if(auto *VT = std::get_if<MatrixReal>(&smd.VT); VT != nullptr and VT->size() != 0) {
-        file.writeDataset(*VT, fmt::format("{}/VT_real", group_name), H5D_layout_t::H5D_CHUNKED);
-    }
-    if(auto *VT = std::get_if<MatrixCplx>(&smd.VT); VT != nullptr and VT->size() != 0) {
-        file.writeDataset(*VT, fmt::format("{}/VT_cplx", group_name), H5D_layout_t::H5D_CHUNKED);
-    }
+    using VectorFp32 = svd::internal::SaveMetaData::VectorFp32;
+    using VectorFp64 = svd::internal::SaveMetaData::VectorFp64;
+    using MatrixFp32 = svd::internal::SaveMetaData::MatrixFp32;
+    using MatrixFp64 = svd::internal::SaveMetaData::MatrixFp64;
+    using MatrixCx32 = svd::internal::SaveMetaData::MatrixCx32;
+    using MatrixCx64 = svd::internal::SaveMetaData::MatrixCx64;
+    auto save_vector = [&](const auto &Vvar, std::string_view name) {
+        if(auto *V = std::get_if<VectorFp32>(&Vvar); V != nullptr and V->size() != 0) {
+            file.writeDataset(*V, fmt::format("{}/{}_fp32", group_name, name), H5D_layout_t::H5D_CHUNKED);
+        }
+        if(auto *V = std::get_if<VectorFp64>(&Vvar); V != nullptr and V->size() != 0) {
+            file.writeDataset(*V, fmt::format("{}/{}_fp64", group_name, name), H5D_layout_t::H5D_CHUNKED);
+        }
+    };
+    auto save_matrix = [&](const auto &Mvar, std::string_view name) {
+        if(auto *M = std::get_if<MatrixFp32>(&Mvar); M != nullptr and M->size() != 0) {
+            file.writeDataset(*M, fmt::format("{}/{}_fp32", group_name, name), H5D_layout_t::H5D_CHUNKED);
+        }
+        if(auto *M = std::get_if<MatrixFp64>(&Mvar); M != nullptr and M->size() != 0) {
+            file.writeDataset(*M, fmt::format("{}/{}_fp64", group_name, name), H5D_layout_t::H5D_CHUNKED);
+        }
+        if(auto *M = std::get_if<MatrixCx32>(&Mvar); M != nullptr and M->size() != 0) {
+            file.writeDataset(*M, fmt::format("{}/{}_cx32", group_name, name), H5D_layout_t::H5D_CHUNKED);
+        }
+        if(auto *M = std::get_if<MatrixCx64>(&Mvar); M != nullptr and M->size() != 0) {
+            file.writeDataset(*M, fmt::format("{}/{}_cx64", group_name, name), H5D_layout_t::H5D_CHUNKED);
+        }
+    };
+    save_matrix(smd.A, "A");
+    save_matrix(smd.U, "U");
+    save_vector(smd.S, "S");
+    save_matrix(smd.VT, "VT");
 
     file.writeAttribute(settings::input::seed, group_name, "seed");
     file.writeAttribute(smd.rank_max, group_name, "rank_max");
@@ -102,7 +113,7 @@ void svd::solver::save_svd() {
         file.writeAttribute(eigen_version, group_name, "Eigen Version");
     }
     smd = svd::internal::SaveMetaData{};
-//    if (group_num > 50) std::exit(0);
+    //    if (group_num > 50) std::exit(0);
 }
 
 template<typename Scalar>
@@ -111,10 +122,10 @@ void svd::solver::save_svd(const MatrixType<Scalar> &A, std::optional<svd::save>
     if(save_internal == save::NONE) return;
     if(save_internal == save::FAIL) return;
 
-    auto rows      = A.rows();
-    auto cols      = A.cols();
-    auto directory = h5pp::fs::path(settings::storage::output_filepath).parent_path().string();
-    auto filepath  = fmt::format("{}/svd-save-{}.h5", directory, settings::input::seed);
+    auto rows       = A.rows();
+    auto cols       = A.cols();
+    auto directory  = h5pp::fs::path(settings::storage::output_filepath).parent_path().string();
+    auto filepath   = fmt::format("{}/svd-save-{}.h5", directory, settings::input::seed);
     auto file       = h5pp::File(filepath, h5pp::FilePermission::READWRITE);
     auto group_num  = 0;
     auto group_name = fmt::format("svd_{}", group_num);
@@ -161,6 +172,11 @@ void svd::solver::save_svd(const MatrixType<Scalar> &A, std::optional<svd::save>
     }
 }
 
+template void svd::solver::save_svd(const MatrixType<fp32> &A, std::optional<svd::save> override) const;
+template void svd::solver::save_svd(const MatrixType<fp64> &A, std::optional<svd::save> override) const;
+template void svd::solver::save_svd(const MatrixType<cx32> &A, std::optional<svd::save> override) const;
+template void svd::solver::save_svd(const MatrixType<cx64> &A, std::optional<svd::save> override) const;
+
 template<typename Scalar>
 void svd::solver::save_svd(const MatrixType<Scalar> &U, const VectorType<Scalar> &S, const MatrixType<Scalar> &VT, int info) const {
     if(svd_save == save::NONE) return;
@@ -181,9 +197,7 @@ void svd::solver::save_svd(const MatrixType<Scalar> &U, const VectorType<Scalar>
     file.writeAttribute(info, group_name, "info");
 }
 
-using cx64 = std::complex<double>;
-using fp64 = double;
-template void svd::solver::save_svd(const MatrixType<fp64> &A, std::optional<svd::save> override) const;
-template void svd::solver::save_svd(const MatrixType<cx64> &A, std::optional<svd::save> override) const;
+template void svd::solver::save_svd(const MatrixType<fp32> &U, const VectorType<fp32> &S, const MatrixType<fp32> &VT, int info) const;
 template void svd::solver::save_svd(const MatrixType<fp64> &U, const VectorType<fp64> &S, const MatrixType<fp64> &VT, int info) const;
+template void svd::solver::save_svd(const MatrixType<cx32> &U, const VectorType<cx32> &S, const MatrixType<cx32> &VT, int info) const;
 template void svd::solver::save_svd(const MatrixType<cx64> &U, const VectorType<cx64> &S, const MatrixType<cx64> &VT, int info) const;

@@ -28,36 +28,38 @@ tools::finite::opt::opt_mps tools::finite::opt::get_opt_initial_mps(const Tensor
     initial_mps.set_name("initial_mps");
     initial_mps.set_sites(tensors.active_sites);
     initial_mps.set_length(tensors.get_length<size_t>());
-    initial_mps.set_tensor(tensors.get_multisite_mps());
+    initial_mps.set_tensor(tensors.get_multisite_mps<cx64>());
     initial_mps.set_energy(tools::finite::measure::energy(tensors));
     initial_mps.set_eshift(tools::finite::measure::energy_shift(tensors));
+    initial_mps.set_hsquared(std::real(tools::finite::measure::expval_hamiltonian_squared(tensors)));
     initial_mps.set_variance(tools::finite::measure::energy_variance(tensors));
+    initial_mps.set_rnorm_H1(tools::finite::measure::residual_norm_H1(tensors));
+    initial_mps.set_rnorm_H2(tools::finite::measure::residual_norm_H2(tensors));
     initial_mps.set_overlap(1.0);
 
     switch(meta.optAlgo) {
         case OptAlgo::DMRG:
         case OptAlgo::DMRGX:
         case OptAlgo::HYBRID_DMRGX: {
-            initial_mps.set_eigs_eigval(initial_mps.get_energy_shifted());
+            auto H1 = tools::finite::measure::expval_hamiltonian(tensors);
+            initial_mps.set_eigs_eigval(std::real(H1));
             break;
         }
         case OptAlgo::XDMRG: {
             // (H-Eshift)v =  <H²> v
-            auto h1 = initial_mps.get_energy();
-            auto h2 = initial_mps.get_variance() + h1 * h1;
-            initial_mps.set_eigs_eigval(h2);
+            auto H2 = tools::finite::measure::expval_hamiltonian_squared(tensors);
+            initial_mps.set_eigs_eigval(std::real(H2));
             break;
         }
         case OptAlgo::GDMRG: {
             // (H-Eshift)v =  <H¹>/<H²> (H-Eshift)²v
-            auto h1 = initial_mps.get_energy();
-            auto h2 = initial_mps.get_variance() + h1 * h1;
-            initial_mps.set_eigs_eigval(h1/h2);
+            auto H1 = tools::finite::measure::expval_hamiltonian(tensors);         // <H>
+            auto H2 = tools::finite::measure::expval_hamiltonian_squared(tensors); // <H²>
+            initial_mps.set_eigs_eigval(std::real(H1) / std::real(H2));
             break;
         }
     }
-    initial_mps.set_rnorm_H1(tools::finite::measure::residual_norm_H1(tensors));
-    initial_mps.set_rnorm_H2(tools::finite::measure::residual_norm_H2(tensors));
+
     initial_mps.validate_initial_mps();
     tensors.clear_cache();
     tensors.clear_measurements();
@@ -281,7 +283,7 @@ namespace tools::finite::opt::internal {
     }
 
     EigIdxComparator::EigIdxComparator(OptRitz ritz_, double shift_, double *data_, long size_) : ritz(ritz_), shift(shift_), eigvals(data_, size_) {}
-    bool              EigIdxComparator::operator()(long lidx, long ridx) {
+    bool EigIdxComparator::operator()(long lidx, long ridx) {
         auto lhs = eigvals[lidx];
         auto rhs = eigvals[ridx];
         switch(ritz) {

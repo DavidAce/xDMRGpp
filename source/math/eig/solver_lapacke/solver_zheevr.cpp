@@ -44,8 +44,8 @@ int eig::solver::zheevr(cx64 *matrix /*!< gets destroyed */, size_type L, char r
     std::vector<int> isuppz(static_cast<size_t>(2 * m_req));
     std::vector<int> ifail(static_cast<unsigned long>(L));
 
-    auto &eigvals = result.get_eigvals<Form::SYMM>();
-    auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::CPLX>();
+    auto &eigvals = result.get_eigvals<Form::SYMM, Type::CX64>();
+    auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::CX64>();
     eigvals.resize(static_cast<size_t>(ldz));
     if(config.compute_eigvecs == Vecs::ON)
         eigvecs.resize(safe_cast<size_t>(ldz * m_req)); // Docs claim ldz * m, but it segfaults when 'V' finds more than m eigvals
@@ -85,7 +85,7 @@ int eig::solver::zheevr(cx64 *matrix /*!< gets destroyed */, size_type L, char r
     result.meta.nev_converged  = m_found;
     result.meta.n              = L;
     result.meta.form           = Form::SYMM;
-    result.meta.type           = Type::CPLX;
+    result.meta.type           = Type::CX64;
     result.meta.time_prep      = std::chrono::duration<double>(t_prep - t_start).count();
     result.meta.time_total     = std::chrono::duration<double>(t_total - t_start).count();
     return info;

@@ -13,11 +13,11 @@ void tools::infinite::env::reset_edges(const StateInfinite &state, const ModelIn
 }
 
 void tools::infinite::env::enlarge_edges(const StateInfinite &state, const ModelInfinite &model, EdgesInfinite &edges) {
-    const auto &ene = edges.get_ene();
+    auto ene = edges.get_ene();
     ene.L           = ene.L.enlarge(state.get_mps_siteA(), model.get_mpo_siteA());
     ene.R           = ene.R.enlarge(state.get_mps_siteB(), model.get_mpo_siteB());
 
-    const auto &var = edges.get_var();
+    auto var = edges.get_var();
     var.L           = var.L.enlarge(state.get_mps_siteA(), model.get_mpo_siteA());
     var.R           = var.R.enlarge(state.get_mps_siteB(), model.get_mpo_siteB());
 }

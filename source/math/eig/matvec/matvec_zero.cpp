@@ -225,9 +225,9 @@ eig::Side MatVecZero<T>::get_side() const {
 template<typename T>
 eig::Type MatVecZero<T>::get_type() const {
     if constexpr(std::is_same_v<T, fp64>)
-        return eig::Type::REAL;
+        return eig::Type::FP64;
     else if constexpr(std::is_same_v<T, cx64>)
-        return eig::Type::CPLX;
+        return eig::Type::CX64;
     else
         throw std::runtime_error("Unsupported type");
 }
@@ -298,5 +298,5 @@ bool MatVecZero<T>::isReadyShift() const {
 }
 
 // Explicit instantiations
-template class MatVecZero<double>;
-template class MatVecZero<std::complex<double>>;
+template class MatVecZero<fp64>;
+template class MatVecZero<cx64>;

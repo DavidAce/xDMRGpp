@@ -16,16 +16,16 @@ template<typename Scalar>
 using VectorTypeT = Eigen::Matrix<Scalar, 1, Eigen::Dynamic>;
 
 namespace dense_lu {
-    std::optional<Eigen::PartialPivLU<MatrixType<double>>>               lu_real;
-    std::optional<Eigen::PartialPivLU<MatrixType<std::complex<double>>>> lu_cplx;
+    std::optional<Eigen::PartialPivLU<MatrixType<fp64>>>               lu_real;
+    std::optional<Eigen::PartialPivLU<MatrixType<cx64>>> lu_cplx;
     void                                                                 reset() {
         lu_real.reset();
         lu_cplx.reset();
     }
     template<typename Scalar>
     void init() {
-        if constexpr(std::is_same_v<Scalar, double>) { dense_lu::lu_real = Eigen::PartialPivLU<MatrixType<Scalar>>(); }
-        if constexpr(std::is_same_v<Scalar, std::complex<double>>) dense_lu::lu_cplx = Eigen::PartialPivLU<MatrixType<Scalar>>();
+        if constexpr(std::is_same_v<Scalar, fp64>) { dense_lu::lu_real = Eigen::PartialPivLU<MatrixType<Scalar>>(); }
+        if constexpr(std::is_same_v<Scalar, cx64>) dense_lu::lu_cplx = Eigen::PartialPivLU<MatrixType<Scalar>>();
     }
 
 }
@@ -76,15 +76,15 @@ void MatVecDense<Scalar>::MultOPv(Scalar *x_in_ptr, Scalar *x_out_ptr) {
         case eig::Side::R: {
             Eigen::Map<VectorType<Scalar>> x_in(x_in_ptr, L);
             Eigen::Map<VectorType<Scalar>> x_out(x_out_ptr, L);
-            if constexpr(std::is_same_v<Scalar, double>) x_out.noalias() = dense_lu::lu_real.value().solve(x_in);
-            if constexpr(std::is_same_v<Scalar, std::complex<double>>) x_out.noalias() = dense_lu::lu_cplx.value().solve(x_in);
+            if constexpr(std::is_same_v<Scalar, fp64>) x_out.noalias() = dense_lu::lu_real.value().solve(x_in);
+            if constexpr(std::is_same_v<Scalar, cx64>) x_out.noalias() = dense_lu::lu_cplx.value().solve(x_in);
             break;
         }
         case eig::Side::L: {
             Eigen::Map<VectorTypeT<Scalar>> x_in(x_in_ptr, L);
             Eigen::Map<VectorTypeT<Scalar>> x_out(x_out_ptr, L);
-            if constexpr(std::is_same_v<Scalar, double>) x_out.noalias() = x_in * dense_lu::lu_real.value().inverse();
-            if constexpr(std::is_same_v<Scalar, std::complex<double>>) x_out.noalias() = x_in * dense_lu::lu_cplx.value().inverse();
+            if constexpr(std::is_same_v<Scalar, fp64>) x_out.noalias() = x_in * dense_lu::lu_real.value().inverse();
+            if constexpr(std::is_same_v<Scalar, cx64>) x_out.noalias() = x_in * dense_lu::lu_cplx.value().inverse();
             break;
         }
         case eig::Side::LR: {
@@ -105,8 +105,8 @@ void MatVecDense<T>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSiz
                 T                             *x_out_ptr = static_cast<T *>(y) + *ldy * i;
                 Eigen::Map<VectorType<Scalar>> x_in(x_in_ptr, L);
                 Eigen::Map<VectorType<Scalar>> x_out(x_out_ptr, L);
-                if constexpr(std::is_same_v<Scalar, double>) x_out.noalias() = dense_lu::lu_real.value().solve(x_in);
-                if constexpr(std::is_same_v<Scalar, std::complex<double>>) x_out.noalias() = dense_lu::lu_cplx.value().solve(x_in);
+                if constexpr(std::is_same_v<Scalar, fp64>) x_out.noalias() = dense_lu::lu_real.value().solve(x_in);
+                if constexpr(std::is_same_v<Scalar, cx64>) x_out.noalias() = dense_lu::lu_cplx.value().solve(x_in);
                 num_op++;
             }
 
@@ -118,8 +118,8 @@ void MatVecDense<T>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSiz
                 T                             *x_out_ptr = static_cast<T *>(y) + *ldy * i;
                 Eigen::Map<VectorType<Scalar>> x_in(x_in_ptr, L);
                 Eigen::Map<VectorType<Scalar>> x_out(x_out_ptr, L);
-                if constexpr(std::is_same_v<Scalar, double>) x_out.noalias() = x_in * dense_lu::lu_real.value().inverse();
-                if constexpr(std::is_same_v<Scalar, std::complex<double>>) x_out.noalias() = x_in * dense_lu::lu_cplx.value().inverse();
+                if constexpr(std::is_same_v<Scalar, fp64>) x_out.noalias() = x_in * dense_lu::lu_real.value().inverse();
+                if constexpr(std::is_same_v<Scalar, cx64>) x_out.noalias() = x_in * dense_lu::lu_cplx.value().inverse();
                 num_op++;
             }
             break;
@@ -255,15 +255,14 @@ eig::Side MatVecDense<Scalar>::get_side() const {
 template<typename Scalar>
 eig::Type MatVecDense<Scalar>::get_type() const {
     if constexpr(std::is_same_v<Scalar, fp64>)
-        return eig::Type::REAL;
+        return eig::Type::FP64;
     else if constexpr(std::is_same_v<Scalar, cx64>)
-        return eig::Type::CPLX;
+        return eig::Type::CX64;
     else
         throw std::runtime_error("Unsupported type");
 }
 
-
 // Explicit instantiations
 
-template class MatVecDense<double>;
-template class MatVecDense<std::complex<double>>;
+template class MatVecDense<fp64>;
+template class MatVecDense<cx64>;

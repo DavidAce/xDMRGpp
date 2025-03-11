@@ -1,5 +1,6 @@
 #include "matvec_mpo.h"
 #include "../log.h"
+#include "debug/exceptions.h"
 #include "math/eig/solver.h"
 #include "math/svd.h"
 #include "math/tenx.h"
@@ -7,7 +8,6 @@
 #include "tools/common/contraction.h"
 #include <Eigen/Cholesky>
 #include <primme/primme.h>
-
 namespace eig {
 
 #ifdef NDEBUG
@@ -269,9 +269,9 @@ eig::Side MatVecMPO<T>::get_side() const {
 template<typename T>
 eig::Type MatVecMPO<T>::get_type() const {
     if constexpr(std::is_same_v<T, fp64>)
-        return eig::Type::REAL;
+        return eig::Type::FP64;
     else if constexpr(std::is_same_v<T, cx64>)
-        return eig::Type::CPLX;
+        return eig::Type::CX64;
     else
         throw std::runtime_error("Unsupported type");
 }
@@ -341,5 +341,5 @@ bool MatVecMPO<T>::isReadyShift() const {
 }
 
 // Explicit instantiations
-template class MatVecMPO<double>;
-template class MatVecMPO<std::complex<double>>;
+template class MatVecMPO<fp64>;
+template class MatVecMPO<cx64>;

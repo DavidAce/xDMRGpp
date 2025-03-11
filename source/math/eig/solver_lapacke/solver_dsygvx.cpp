@@ -42,8 +42,8 @@ int eig::solver::dsygvx(fp64 *matrixA, fp64 *matrixB, size_type L, char range, i
     std::vector<int> iwork(safe_cast<size_t>(L) * 5ul);
     std::vector<int> ifail(safe_cast<size_t>(L), 0);
 
-    auto &eigvals = result.get_eigvals<Form::SYMM>();
-    auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::REAL>();
+    auto &eigvals = result.get_eigvals<Form::SYMM, Type::FP64>();
+    auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::FP64>();
     eigvals.resize(safe_cast<size_t>(ldz));
     if(config.compute_eigvecs == Vecs::ON) {
         eigvecs.resize(static_cast<size_t>(ldz * m_req)); // Docs claim ldz * m, but it segfaults when 'V' finds more than m eigvals
@@ -84,7 +84,7 @@ int eig::solver::dsygvx(fp64 *matrixA, fp64 *matrixB, size_type L, char range, i
         result.meta.nev_converged  = m_found;
         result.meta.n              = L;
         result.meta.form           = Form::SYMM;
-        result.meta.type           = Type::REAL;
+        result.meta.type           = Type::FP64;
         result.meta.time_prep      = std::chrono::duration<double>(t_prep - t_start).count();
         result.meta.time_total     = std::chrono::duration<double>(t_total - t_start).count();
     } else {

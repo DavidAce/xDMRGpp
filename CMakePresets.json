@@ -1,8 +1,8 @@
 {
-  "version": 6,
+  "version": 10,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 28,
+    "minor": 31,
     "patch": 0
   },
   "configurePresets": [
@@ -461,7 +461,7 @@
     },
     {
       "name": "debug-asan-conan-flexiblas",
-      "configurePreset": "debug-conan-flexiblas"
+      "configurePreset": "debug-asan-conan-flexiblas"
     },
     {
       "name": "debug-cmake-flexiblas",

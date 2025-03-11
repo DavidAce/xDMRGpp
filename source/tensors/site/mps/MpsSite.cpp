@@ -11,6 +11,7 @@
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
 #include <fmt/ranges.h>
+#include <general/sfinae.h>
 #include <utility>
 
 namespace settings {
@@ -79,11 +80,11 @@ MpsSite::MpsSite(const Eigen::Tensor<fp64, 3> &M_, const std::optional<Eigen::Te
 // operator= and copy assignment constructor.
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
-MpsSite::~MpsSite()                                    = default; // default dtor
-MpsSite:: MpsSite(MpsSite &&other) noexcept            = default; // default move ctor
-MpsSite  &MpsSite::operator=(MpsSite &&other) noexcept = default; // default move assign
-MpsSite:: MpsSite(const MpsSite &other)                = default;
-MpsSite  &MpsSite::operator=(const MpsSite &other)     = default;
+MpsSite::~MpsSite()                                   = default; // default dtor
+MpsSite::MpsSite(MpsSite &&other) noexcept            = default; // default move ctor
+MpsSite &MpsSite::operator=(MpsSite &&other) noexcept = default; // default move assign
+MpsSite::MpsSite(const MpsSite &other)                = default;
+MpsSite &MpsSite::operator=(const MpsSite &other)     = default;
 
 bool MpsSite::isCenter() const { return LC.has_value(); }
 
@@ -199,9 +200,90 @@ Eigen::Tensor<cx64, 3> &MpsSite::get_M_bare() { return const_cast<Eigen::Tensor<
 Eigen::Tensor<cx64, 3> &MpsSite::get_M() { return const_cast<Eigen::Tensor<cx64, 3> &>(std::as_const(*this).get_M()); }
 Eigen::Tensor<cx64, 1> &MpsSite::get_L() { return const_cast<Eigen::Tensor<cx64, 1> &>(std::as_const(*this).get_L()); }
 Eigen::Tensor<cx64, 1> &MpsSite::get_LC() { return const_cast<Eigen::Tensor<cx64, 1> &>(std::as_const(*this).get_LC()); }
-double                  MpsSite::get_truncation_error() const { return truncation_error; }
-double                  MpsSite::get_truncation_error_LC() const { return truncation_error_LC; }
-std::string_view        MpsSite::get_label() const {
+
+template<typename T>
+Eigen::Tensor<T, 3> MpsSite::get_M_bare_as() const {
+    return tenx::asScalarType<T>(get_M_bare());
+    // if constexpr(std::is_same_v<T, fp32> or std::is_same_v<T, fp64>) {
+    //     assert(is_real());
+    //     return get_M_bare().real().template cast<T>();
+    // } else if constexpr(std::is_same_v<T, cx32>) {
+    //     return get_M_bare().template cast<T>();
+    // } else if constexpr(std::is_same_v<T, cx64>) {
+    //     return get_M_bare();
+    // }
+    // throw except::runtime_error("get_M_bare_as(): invalid type <{}>", sfinae::type_name<T>());
+}
+template Eigen::Tensor<fp32, 3> MpsSite::get_M_bare_as() const;
+template Eigen::Tensor<fp64, 3> MpsSite::get_M_bare_as() const;
+template Eigen::Tensor<cx32, 3> MpsSite::get_M_bare_as() const;
+template Eigen::Tensor<cx64, 3> MpsSite::get_M_bare_as() const;
+
+template<typename T>
+[[nodiscard]] Eigen::Tensor<T, 3> MpsSite::get_M_as() const {
+    if constexpr(std::is_same_v<T, fp32> or std::is_same_v<T, fp64>) {
+        assert(is_real());
+        return get_M().real().template cast<T>();
+    } else if constexpr(std::is_same_v<T, cx32>) {
+        return get_M().template cast<T>();
+
+    } else if constexpr(std::is_same_v<T, cx64>) {
+        return get_M();
+    }
+    throw except::runtime_error("get_M_as(): invalid type <{}>", sfinae::type_name<T>());
+}
+template Eigen::Tensor<fp32, 3> MpsSite::get_M_as() const;
+template Eigen::Tensor<fp64, 3> MpsSite::get_M_as() const;
+template Eigen::Tensor<cx32, 3> MpsSite::get_M_as() const;
+template Eigen::Tensor<cx64, 3> MpsSite::get_M_as() const;
+
+template<typename T>
+[[nodiscard]] Eigen::Tensor<T, 1> MpsSite::get_L_as() const {
+    if constexpr(std::is_same_v<T, fp32> or std::is_same_v<T, fp64>) {
+        assert(is_real());
+        return get_L().real().template cast<T>();
+    }
+    if constexpr(std::is_same_v<T, cx32>) {
+        Eigen::Tensor<T, 1> res = get_L().template cast<T>();
+        // auto               &L = get_L();
+        // Eigen::Tensor<T, 1> res(L.dimensions());
+        // res.real() = L.real().template cast<T>();
+        // res.imag() = L.imag().template cast<T>();
+        return res;
+    }
+    if constexpr(std::is_same_v<T, cx64>) { return get_L(); }
+    throw except::runtime_error("get_L_as(): invalid type <{}>", sfinae::type_name<T>());
+}
+template Eigen::Tensor<fp32, 1> MpsSite::get_L_as() const;
+template Eigen::Tensor<fp64, 1> MpsSite::get_L_as() const;
+template Eigen::Tensor<cx32, 1> MpsSite::get_L_as() const;
+template Eigen::Tensor<cx64, 1> MpsSite::get_L_as() const;
+
+template<typename T>
+[[nodiscard]] Eigen::Tensor<T, 1> MpsSite::get_LC_as() const {
+    if constexpr(std::is_same_v<T, fp32> or std::is_same_v<T, fp64>) {
+        assert(is_real());
+        return get_LC().real().template cast<T>();
+    }
+    if constexpr(std::is_same_v<T, cx32>) {
+        Eigen::Tensor<T, 1> res = get_LC().template cast<T>();
+        // auto               &get = get_LC();
+        // Eigen::Tensor<T, 1> res(get.dimensions());
+        // res.real() = get.real().template cast<T>();
+        // res.imag() = get.imag().template cast<T>();
+        return res;
+    }
+    if constexpr(std::is_same_v<T, cx64>) { return get_L(); }
+    throw except::runtime_error("get_LC_as(): invalid type <{}>", sfinae::type_name<T>());
+}
+template Eigen::Tensor<fp32, 1> MpsSite::get_LC_as() const;
+template Eigen::Tensor<fp64, 1> MpsSite::get_LC_as() const;
+template Eigen::Tensor<cx32, 1> MpsSite::get_LC_as() const;
+template Eigen::Tensor<cx64, 1> MpsSite::get_LC_as() const;
+
+double           MpsSite::get_truncation_error() const { return truncation_error; }
+double           MpsSite::get_truncation_error_LC() const { return truncation_error_LC; }
+std::string_view MpsSite::get_label() const {
     if(label.empty()) throw except::runtime_error("No label found at position {}", get_position());
     return label;
 }
@@ -264,17 +346,22 @@ void MpsSite::set_M(const T3 &M_) {
     } else
         throw std::runtime_error("MpsSite::set_M(const Eigen::Tensor<cx64, 3> &): Can't set M: Position hasn't been set yet");
 }
+template void MpsSite::set_M(const Eigen::Tensor<fp32, 3> &M_);
 template void MpsSite::set_M(const Eigen::Tensor<fp64, 3> &M_);
+template void MpsSite::set_M(const Eigen::Tensor<cx32, 3> &M_);
 template void MpsSite::set_M(const Eigen::Tensor<cx64, 3> &M_);
+template void MpsSite::set_M(const Eigen::TensorMap<Eigen::Tensor<fp32, 3>> &M_);
 template void MpsSite::set_M(const Eigen::TensorMap<Eigen::Tensor<fp64, 3>> &M_);
+template void MpsSite::set_M(const Eigen::TensorMap<Eigen::Tensor<cx32, 3>> &M_);
 template void MpsSite::set_M(const Eigen::TensorMap<Eigen::Tensor<cx64, 3>> &M_);
 
 template<typename T1>
 requires is_valid_tensor1<T1>
 void MpsSite::set_L(const T1 &L_, double error /* Negative is ignored */) {
     if constexpr(settings::debug) {
-        auto norm = tenx::VectorMap(L_).norm();
-        if(std::abs(norm - 1.0) > 1e-8) tools::log->warn("MpsSite::set_L(): Norm of L is too far from unity: {:.16f}", norm);
+        using RealScalar = typename Eigen::NumTraits<typename T1::Scalar>::Real;
+        auto norm        = tenx::VectorMap(L_).norm();
+        if(std::abs(norm - 1.0) > static_cast<RealScalar>(1e-8)) tools::log->warn("MpsSite::set_L(): Norm of L is too far from unity: {:.16f}", norm);
     }
 
     if(position) {
@@ -297,8 +384,9 @@ template<typename T1>
 requires is_valid_tensor1<T1>
 void MpsSite::set_LC(const T1 &LC_, double error /* Negative is ignored */) {
     if constexpr(settings::debug) {
-        auto norm = tenx::VectorMap(LC_).norm();
-        if(std::abs(norm - 1) > 1e-8) tools::log->warn("MpsSite::set_LC(): Norm of LC is too far from unity: {:.16f}", norm);
+        using RealScalar = typename Eigen::NumTraits<typename T1::Scalar>::Real;
+        auto norm        = tenx::VectorMap(LC_).norm();
+        if(std::abs(norm - 1) > static_cast<RealScalar>(1e-8)) tools::log->warn("MpsSite::set_LC(): Norm of LC is too far from unity: {:.16f}", norm);
         //            throw except::runtime_error(MpsSite::set_LC(): Can't set L: Norm of LC is too far from unity: {:.16f}", norm);
         if(position and position.value() == 0 and get_label() == "B") {
             throw except::logic_error("Only an A-site can become an AC site (not really true though");
@@ -313,9 +401,13 @@ void MpsSite::set_LC(const T1 &LC_, double error /* Negative is ignored */) {
     } else
         throw std::runtime_error("Can't set LC: Position hasn't been set yet");
 }
+template void MpsSite::set_LC(const Eigen::Tensor<fp32, 1> &LC_, double error);
 template void MpsSite::set_LC(const Eigen::Tensor<fp64, 1> &LC_, double error);
+template void MpsSite::set_LC(const Eigen::Tensor<cx32, 1> &LC_, double error);
 template void MpsSite::set_LC(const Eigen::Tensor<cx64, 1> &LC_, double error);
+template void MpsSite::set_LC(const Eigen::TensorMap<Eigen::Tensor<fp32, 1>> &LC_, double error);
 template void MpsSite::set_LC(const Eigen::TensorMap<Eigen::Tensor<fp64, 1>> &LC_, double error);
+template void MpsSite::set_LC(const Eigen::TensorMap<Eigen::Tensor<cx32, 1>> &LC_, double error);
 template void MpsSite::set_LC(const Eigen::TensorMap<Eigen::Tensor<cx64, 1>> &LC_, double error);
 
 // void MpsSite::set_LC(const Eigen::Tensor<fp64, 1> &LC_, double error) { set_LC(Eigen::Tensor<cx64, 1>(LC_.cast<cx64>()), error); }

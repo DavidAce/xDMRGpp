@@ -1,4 +1,5 @@
 #pragma once
+#include "config/enums.h"
 #include "math/float.h"
 #include "math/svd/config.h"
 #include <complex>
@@ -20,13 +21,27 @@ class EnvEne;
 class EnvVar;
 enum class RDM;
 
-enum class UseCache { TRUE, FALSE };
 struct InfoPolicy {
-    std::optional<double> bits_max_error = std::nullopt;   /*!< Positive for relative error = 1-bits_found/L, negative for absolute error = L-bits_found */
-    std::optional<size_t> eig_max_size   = std::nullopt;   /*!< Maximum matrix size to diagonalize (skip if larger). Recommend <= 8192 */
-    std::optional<double> svd_max_size   = std::nullopt;   /*!< Maximum matrix size for svd during swaps (skip if larger) Recommend <= 4096 */
-    std::optional<double> svd_trnc_lim   = std::nullopt;   /*!< Maximum discarded weight in the svd during swaps. Recommend <= 1e-6 */
-    UseCache              useCache       = UseCache::TRUE; /*!< Consider (and save) intermediate results in the state cache */
+    std::optional<double>      bits_max_error = std::nullopt; /*!< Positive for relative error = 1-bits_found/L, negative for absolute error = L-bits_found */
+    std::optional<size_t>      eig_max_size   = std::nullopt; /*!< Maximum matrix size to diagonalize (skip if larger). Recommend <= 8192 */
+    std::optional<double>      svd_max_size   = std::nullopt; /*!< Maximum matrix size for svd during swaps (skip if larger) Recommend <= 4096 */
+    std::optional<double>      svd_trnc_lim   = std::nullopt; /*!< Maximum discarded weight in the svd during swaps. Recommend <= 1e-6 */
+    std::optional<CachePolicy> cachePolicy    = std::nullopt; /*!< Read and/or write intermediate results into the state cache */
+    std::optional<Precision>   precision      = std::nullopt;
+};
+
+struct InfoAnalysis {
+    double          bits_found    = 0.0;              /*!< The number of bits found. If all goes well this is equal to L. */
+    double          icom          = 0.0;              /*!< information center of mass, aka "expected correlation length" or "xi", "<I^\ell>"  */
+    double          scale_bit_one = 0.0;              /*!< The minimum length scale to measure 1 bit (the first). */
+    double          scale_bit_two = 0.0;              /*!< The minimum length scale to measure 2 bits (the first two).  */
+    double          scale_bit_mid = 0.0;              /*!< The minimum length scale to measure L/2 bits. */
+    double          scale_bit_pen = 0.0;              /*!< The minimum length scale to measure L-1 bits (all but the last). */
+    double          scale_bit_all = 0.0;              /*!< The minimum length scale to measure L bits. */
+    InfoPolicy      ip            = {};               /*!< Settings used to calculate this info lattice */
+    Eigen::ArrayXd  info_per_scale;                   /*!< The information per scale "I^\ell" */
+    Eigen::ArrayXXd info_lattice;                     /*!< The information lattice "i^\ell_n" */
+    Eigen::ArrayXXd subsystem_entanglement_entropies; /*!< All the bipartite entanglement entropies (log2) */
 };
 
 namespace tools::finite::measure {
@@ -72,15 +87,17 @@ namespace tools::finite::measure {
     [[nodiscard]] extern std::vector<double> entanglement_entropies                     (const StateFinite & state);
     [[nodiscard]] extern double              entanglement_entropy_log2                  (const StateFinite & state, size_t nsites);
     [[nodiscard]] extern std::vector<double> entanglement_entropies_log2                (const StateFinite & state);
-    [[nodiscard]] extern double              subsystem_entanglement_entropy_log2        (const StateFinite & state, const std::vector<size_t> & sites, size_t eig_max_size, std::string_view side);
+    [[nodiscard]] extern double              subsystem_entanglement_entropy_log2        (const StateFinite & state, const std::vector<size_t> & sites, Precision prec, size_t eig_max_size, std::string_view side);
     [[nodiscard]] extern Eigen::ArrayXXd     subsystem_entanglement_entropies_log2      (const StateFinite & state, InfoPolicy ip = {});
     [[nodiscard]] extern Eigen::ArrayXXd     information_lattice                        (const Eigen::ArrayXXd & SEE);
     [[nodiscard]] extern Eigen::ArrayXXd     information_lattice                        (const StateFinite & state, InfoPolicy ip = {});
     [[nodiscard]] extern Eigen::ArrayXd      information_per_scale                      (const StateFinite & state, InfoPolicy ip = {});
     [[nodiscard]] extern Eigen::ArrayXd      information_per_scale                      (const Eigen::ArrayXXd & information_lattice);
+    [[nodiscard]] extern double              information_bit_scale                      (const Eigen::ArrayXd & information_per_scale, double bit);
     [[nodiscard]] extern double              information_center_of_mass                 (const Eigen::ArrayXXd & information_lattice);
     [[nodiscard]] extern double              information_center_of_mass                 (const Eigen::ArrayXd & information_per_scale);
     [[nodiscard]] extern double              information_center_of_mass                 (const StateFinite & state, InfoPolicy ip = {});
+    [[nodiscard]] extern InfoAnalysis        information_lattice_analysis               (const StateFinite & state, InfoPolicy ip = {});
     [[nodiscard]] extern double              information_xi_from_geometric_dist         (const StateFinite & state, InfoPolicy ip = {});
     [[nodiscard]] extern double              information_xi_from_avg_log_slope          (const StateFinite & state, InfoPolicy ip = {});
     [[nodiscard]] extern double              information_xi_from_exp_fit                (const StateFinite & state, InfoPolicy ip = {});

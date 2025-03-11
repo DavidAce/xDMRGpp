@@ -17,28 +17,45 @@ namespace eig {
         eig::settings                   config;
         eig::solution                   result;
         std::shared_ptr<spdlog::logger> log;
-                                        solver();
-                                        solver(const eig::settings &config);
-        void                            setLogLevel(size_t loglevel);
+        solver();
+        solver(const eig::settings &config);
+        void setLogLevel(size_t loglevel);
         template<typename Scalar>
         void subtract_phase(std::vector<Scalar> &eigvecs, size_type L, int nev);
 
         // Functions for full diagonalization of explicit matrix
+        int sgeev(fp32 *matrix, size_type L);
+        int sggev(fp32 *matrixA, fp32 *matrixB, size_type L);
+        int ssyevd(fp32 *matrix, size_type L);
+        int ssyevr(fp32 *matrix, size_type L, char range, int il, int iu, fp32 vl, fp32 vu);
+        int ssyevx(fp32 *matrix, size_type L, char range, int il, int iu, fp32 vl, fp32 vu);
+        int ssygvd(fp32 *matrixA, fp32 *matrixB, size_type L);
+        int ssygvx(fp32 *matrixA, fp32 *matrixB, size_type L, char range, int il, int iu, fp32 vl, fp32 vu);
+
+        int dgeev(fp64 *matrix, size_type L);
+        int dggev(fp64 *matrixA, fp64 *matrixB, size_type L);
         int dsyevd(fp64 *matrix, size_type L);
-        int dsyevr(fp64 *matrix, size_type L, char range, int il, int iu, double vl, double vu);
-        int dsyevx(fp64 *matrix, size_type L, char range, int il, int iu, double vl, double vu);
+        int dsyevr(fp64 *matrix, size_type L, char range, int il, int iu, fp64 vl, fp64 vu);
+        int dsyevx(fp64 *matrix, size_type L, char range, int il, int iu, fp64 vl, fp64 vu);
+        int dsygvd(fp64 *matrixA, fp64 *matrixB, size_type L);
+        int dsygvx(fp64 *matrixA, fp64 *matrixB, size_type L, char range, int il, int iu, fp64 vl, fp64 vu);
+
+        int cheev(cx32 *matrix, size_type L);
+        int cheevd(cx32 *matrix, size_type L);
+        int cheevr(cx32 *matrix, size_type L, char range, int il, int iu, fp32 vl, fp32 vu);
+        int cgeev(cx32 *matrix, size_type L);
+        int chegv(cx32 *matrixA, cx32 *matrixB, size_type L);
+        int chegvd(cx32 *matrixA, cx32 *matrixB, size_type L);
+        int chegvx(cx32 *matrixA, cx32 *matrixB, size_type L, char range, int il, int iu, fp32 vl, fp32 vu);
+        int cggev(cx32 *matrixA, cx32 *matrixB, size_type L);
+
         int zheev(cx64 *matrix, size_type L);
         int zheevd(cx64 *matrix, size_type L);
         int zheevr(cx64 *matrix, size_type L, char range, int il, int iu, double vl, double vu);
-        int dgeev(fp64 *matrix, size_type L);
         int zgeev(cx64 *matrix, size_type L);
-
-        int dsygvd(fp64 *matrixA, fp64 *matrixB, size_type L);
-        int dsygvx(fp64 *matrixA, fp64 *matrixB, size_type L, char range, int il, int iu, double vl, double vu);
         int zhegv(cx64 *matrixA, cx64 *matrixB, size_type L);
         int zhegvd(cx64 *matrixA, cx64 *matrixB, size_type L);
         int zhegvx(cx64 *matrixA, cx64 *matrixB, size_type L, char range, int il, int iu, double vl, double vu);
-        int dggev(fp64 *matrixA, fp64 *matrixB, size_type L);
         int zggev(cx64 *matrixA, cx64 *matrixB, size_type L);
 
         void eig_init(Form form, Type type, Vecs compute_eigvecs, Dephase remove_phase_);
@@ -57,7 +74,7 @@ namespace eig {
 
         // Functions for few eigensolutions
         template<typename Scalar>
-        void eigs_init(size_type L, int nev, int ncv, Ritz ritz = Ritz::LM, Form form = Form::SYMM, Type type = Type::REAL, Side side = Side::R,
+        void eigs_init(size_type L, int nev, int ncv, Ritz ritz = Ritz::LM, Form form = Form::SYMM, Type type = Type::FP64, Side side = Side::R,
                        std::optional<cx64> sigma = std::nullopt, Shinv shinv = Shinv::OFF, Storage storage = Storage::DENSE, Vecs compute_eigvecs_ = Vecs::OFF,
                        Dephase remove_phase_ = Dephase::OFF, Scalar *residual = nullptr, Lib lib = Lib::ARPACK);
 

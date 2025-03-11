@@ -76,7 +76,6 @@ class MatVecMPOS {
     Eigen::LLT<MatrixType>          llt;  // Stores the llt matrix factorization on shift-invert
     Eigen::PartialPivLU<MatrixType> lu;   // Stores the lu matrix factorization on shift-invert
 
-
     SparseType        sparseMatrix;
     VectorType        solverGuess;
     std::vector<long> get_k_smallest(const VectorType &vec, size_t k) const;
@@ -92,6 +91,9 @@ class MatVecMPOS {
     MatrixType get_diagonal_block(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A, const Eigen::Tensor<T, 3> &ENVL_A,
                                   const Eigen::Tensor<T, 3> &ENVR_A, const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
                                   const Eigen::Tensor<T, 3> &ENVR_B) const;
+    MatrixType get_diagonal_block_old(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A, const Eigen::Tensor<T, 3> &ENVL_A,
+                                      const Eigen::Tensor<T, 3> &ENVR_A, const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
+                                      const Eigen::Tensor<T, 3> &ENVR_B) const;
 
     // VectorType get_diagonal_old(long offset) const;
     VectorType get_row(long row_idx, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const;
@@ -123,7 +125,7 @@ class MatVecMPOS {
     [[nodiscard]] int rows() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
     [[nodiscard]] int cols() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
 
-    void FactorOP();                                    //  Factorizes (A-sigma*I) (or finds its diagonal elements)
+    void FactorOP();                      //  Factorizes (A-sigma*I) (or finds its diagonal elements)
     void MultOPv(T *mps_in_, T *mps_out); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
     void MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
     void MultAx(T *mps_in_, T *mps_out_); //  Computes the matrix-vector multiplication x_out <- A*x_in.

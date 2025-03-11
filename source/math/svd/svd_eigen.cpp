@@ -29,7 +29,7 @@ namespace svd {
 template<typename Scalar>
 std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Scalar>> svd::solver::do_svd_eigen(const Scalar *mat_ptr, long rows,
                                                                                                                 long cols) const {
-//    auto t_eigen = tid::tic_scope("eigen", tid::highest);
+    //    auto t_eigen = tid::tic_scope("eigen", tid::highest);
     log->trace("Starting SVD with Eigen");
     auto                                 minRC = std::min(rows, cols);
     Eigen::Map<const MatrixType<Scalar>> mat(mat_ptr, rows, cols);
@@ -41,7 +41,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         // These are more expensive debugging operations
         if(not mat.allFinite()) throw std::runtime_error("SVD error: matrix has inf's or nan's");
         if(mat.isZero(0)) throw std::runtime_error("SVD error: matrix is all zeros");
-        if(mat.isZero(1e-12)) log->warn("Lapacke SVD Warning\n\t Given matrix elements are all close to zero (prec 1e-12)");
+        if(mat.isZero()) log->warn("Lapacke SVD Warning\n\t Given matrix elements are all close to zero");
     }
     if(svd_save != svd::save::NONE) save_svd(MatrixType<Scalar>(mat));
     if(svd_save != svd::save::FAIL) saveMetaData.A = MatrixType<Scalar>(mat);
@@ -64,12 +64,12 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         // We only use Jacobi for precision. So we use all the precision we can get.
         log->debug("Running Eigen::JacobiSVD {}", svd_info);
         // Run the svd
-//        auto t_jcb = tid::tic_token(fmt::format("jcb{}", t_suffix), tid::highest);
+        //        auto t_jcb = tid::tic_token(fmt::format("jcb{}", t_suffix), tid::highest);
         SVD.compute(mat, Eigen::ComputeFullU | Eigen::ComputeFullV | Eigen::FullPivHouseholderQRPreconditioner);
     } else {
         log->debug("Running Eigen::BDCSVD {}", svd_info);
         // Run the svd
-//        auto t_bdc = tid::tic_token(fmt::format("bdc{}", t_suffix), tid::highest);
+        //        auto t_bdc = tid::tic_token(fmt::format("bdc{}", t_suffix), tid::highest);
         SVD.compute(mat, Eigen::ComputeThinU | Eigen::ComputeThinV);
     }
 
@@ -95,8 +95,8 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
             print_matrix(mat.data(), mat.rows(), mat.cols(), "A");
             log->critical("Eigen SVD error: matrix has inf's or nan's");
         }
-        if(mat.isZero(1e-12)) {
-            print_matrix(mat.data(), mat.rows(), mat.cols(),"A", 16);
+        if(mat.isZero()) {
+            print_matrix(mat.data(), mat.rows(), mat.cols(), "A", 16);
             log->critical("Eigen SVD error: matrix is all zeros");
         }
         if(not S_positive) {
@@ -130,11 +130,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     return std::make_tuple(SVD.matrixU().leftCols(rank), SVD.singularValues().head(rank), SVD.matrixV().leftCols(rank).adjoint());
 }
 
-//! \relates svd::class_SVD
-//! \brief force instantiation of do_svd for type 'double'
-template std::tuple<svd::MatrixType<double>, svd::VectorType<double>, svd::MatrixType<double>> svd::solver::do_svd_eigen(const double *, long, long) const;
-
-using cx64 = std::complex<double>;
-//! \relates svd::class_SVD
-//! \brief force instantiation of do_svd for type 'std::complex<double>'
+template std::tuple<svd::MatrixType<fp32>, svd::VectorType<fp32>, svd::MatrixType<fp32>> svd::solver::do_svd_eigen(const fp32 *, long, long) const;
+template std::tuple<svd::MatrixType<fp64>, svd::VectorType<fp64>, svd::MatrixType<fp64>> svd::solver::do_svd_eigen(const fp64 *, long, long) const;
+template std::tuple<svd::MatrixType<cx32>, svd::VectorType<cx32>, svd::MatrixType<cx32>> svd::solver::do_svd_eigen(const cx32 *, long, long) const;
 template std::tuple<svd::MatrixType<cx64>, svd::VectorType<cx64>, svd::MatrixType<cx64>> svd::solver::do_svd_eigen(const cx64 *, long, long) const;

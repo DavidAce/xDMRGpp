@@ -6,7 +6,7 @@
 void eig::settings::clear() { *this = settings(); }
 
 // eig::settings::~settings() {
-    // if(primme) { primme_free(&primme.value()); }
+// if(primme) { primme_free(&primme.value()); }
 // }
 
 std::string eig::settings::get_ritz_string() const {
@@ -20,14 +20,14 @@ void eig::settings::checkRitz()
 {
     std::string error_mesg;
     if(not ritz) throw except::runtime_error("Ritz has not been set");
-    if(type == Type::CPLX or form == Form::NSYM) {
+    if(type == Type::CX32 or type == Type::CX64 or form == Form::NSYM) {
         if(ritz.value() == Ritz::LA or ritz.value() == Ritz::SA or ritz.value() == Ritz::BE) {
             error_mesg.append("Invalid ritz for cx64 or nonsym problem: ").append(RitzToString(ritz.value()));
             if(ritz.value() == Ritz::LA) error_mesg.append(" | Suggested ritz: LR");
             if(ritz.value() == Ritz::SA) error_mesg.append(" | Suggested ritz: SR");
             if(ritz.value() == Ritz::BE) error_mesg.append(" | Suggested ritz: LM");
         }
-    } else if(type == Type::REAL and form == Form::SYMM) {
+    } else if((type == Type::FP32 or type == Type::FP64) and form == Form::SYMM) {
         if(ritz.value() == Ritz::LR or ritz.value() == Ritz::SR or ritz.value() == Ritz::LI or ritz.value() == Ritz::SI) {
             error_mesg.append("Invalid ritz for real and sym problem: ").append(RitzToString(ritz.value()));
             if(ritz.value() == Ritz::LR) error_mesg.append(" | Suggested ritz: LA");

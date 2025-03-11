@@ -118,10 +118,10 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     auto t_suffix = benchmark ? fmt::format("{}", num::next_multiple<int>(sizeS, 5)) : "";
 
     // Initialize containers
-    MatrixType<Scalar> U;
-    VectorType<double> S;
-    MatrixType<Scalar> V;
-    MatrixType<Scalar> VT;
+    MatrixType<Scalar>           U;
+    VectorType<RealType<Scalar>> S;
+    MatrixType<Scalar>           V;
+    MatrixType<Scalar>           VT;
     log->trace("Starting SVD with lapacke | rows {} | cols {}", rows, cols);
 
     int info   = 0;
@@ -144,7 +144,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     try {
         // Sanity checks
         if constexpr(!ndebug) { // We usually get a negative "info" value if there are nans anyway.
-            if(A.isZero(1e-16)) log->warn("Lapacke SVD: A is a zero matrix");
+            if(A.isZero()) log->warn("Lapacke SVD: A is a zero matrix");
             if(not A.allFinite()) {
                 print_matrix(A.data(), A.rows(), A.cols(), "A");
                 throw std::runtime_error("A has inf's or nan's");
@@ -152,10 +152,147 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         }
 
         using namespace svd::internal;
-        if constexpr(std::is_same<Scalar, double>::value) {
+        if constexpr(std::is_same<Scalar, fp32>::value) {
             //            auto t_svd = tid::tic_token(fmt::format("d{}{}", enum2sv(svd_rtn), t_suffix), tid::highest);
-            std::vector<int>    iwork;
-            std::vector<double> rwork;
+            std::vector<int>  iwork;
+            std::vector<fp32> rwork;
+            if constexpr(!ndebug)
+                log->debug("Running Lapacke s{} | truncation limit {:.4e} | switchsize bdc {} | size {}", enum2sv(svd_rtn), truncation_lim, switchsize_gesdd,
+                           sizeS);
+            switch(svd_rtn) {
+                case rtn::gesvd: {
+                    U.resize(rowsU, colsU);
+                    S.resize(sizeS);
+                    VT.resize(rowsVT, colsVT);
+                    rwork.resize(1ul);
+                    info = LAPACKE_sgesvd_work(LAPACK_COL_MAJOR, 'S', 'S', rowsA, colsA, A.data(), lda, S.data(), U.data(), ldu, VT.data(), ldvt, rwork.data(),
+                                               -1);
+                    if(info != 0) break;
+                    int lrwork = safe_cast<int>(rwork[0]);
+                    rwork.resize(safe_cast<size_t>(std::max(1, lrwork)));
+
+                    info = LAPACKE_sgesvd_work(LAPACK_COL_MAJOR, 'S', 'S', rowsA, colsA, A.data(), lda, S.data(), U.data(), ldu, VT.data(), ldvt, rwork.data(),
+                                               lrwork);
+                    break;
+                }
+                case rtn::gesvj: {
+                    // For this routine we need rows > cols
+                    S.resize(sizeS);
+                    V.resize(rowsV, colsV); // Local matrix gets transposed after computation
+
+                    int lrwork = std::max(6, rowsA + colsA);
+                    rwork.resize(safe_cast<size_t>(lrwork));
+                    info =
+                        LAPACKE_sgesvj_work(LAPACK_COL_MAJOR, 'G', 'U', 'V', rowsA, colsA, A.data(), lda, S.data(), ldv, V.data(), ldv, rwork.data(), lrwork);
+                    if(info < 0) throw except::runtime_error("Lapacke SVD sgesvj error: parameter {} is invalid", info);
+                    if(info > 0) throw except::runtime_error("Lapacke SVD sgesvj error: could not converge: info {}", info);
+                    U  = std::move(A);
+                    VT = V.adjoint();
+                    break;
+                }
+                case rtn::gejsv: {
+                    // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_ga8767bfcf983f8dc6ef2842029ab25599.html#ga8767bfcf983f8dc6ef2842029ab25599
+                    // For this routine we need rows > cols
+                    S.resize(sizeS);
+                    U.resize(rowsU, colsU);
+                    V.resize(rowsV, colsV); // Local matrix gets transposed after computation
+
+                    int lrwork = std::max(2 * rowsA + colsA, 6 * colsA + 2 * colsA * colsA);
+                    int liwork = std::max(3, rowsA + 3 * colsA);
+
+                    rwork.resize(safe_cast<size_t>(lrwork));
+                    iwork.resize(safe_cast<size_t>(liwork));
+
+                    info = LAPACKE_sgejsv_work(LAPACK_COL_MAJOR, 'F' /* 'R' may also work well */, 'U', 'V', 'N' /* 'R' kills small columns of A */,
+                                               'T' /* T/N:  T will transpose if faster. Ignored if A is rectangular */,
+                                               'N' /* P/N: P will use perturbation to drown denormalized numbers */, rowsA, colsA, A.data(), lda, S.data(),
+                                               U.data(), ldu, V.data(), ldv, rwork.data(), lrwork, iwork.data());
+                    if(info < 0) throw except::runtime_error("Lapacke SVD sgejsv error: parameter {} is invalid", info);
+                    if(info > 0) throw except::runtime_error("Lapacke SVD sgejsv error: could not converge: info {}", info);
+                    VT = V.adjoint();
+                    V.resize(0, 0);
+                    break;
+                }
+                case rtn::gesdd: {
+                    U.resize(rowsU, colsU);
+                    S.resize(sizeS);
+                    VT.resize(rowsVT, colsVT);
+
+                    int lrwork = std::max(1, mn * (6 + 4 * mn) + mx);
+                    int liwork = std::max(1, 8 * mn);
+                    rwork.resize(safe_cast<size_t>(lrwork));
+                    iwork.resize(safe_cast<size_t>(liwork));
+
+                    info = LAPACKE_sgesdd_work(LAPACK_COL_MAJOR, 'S', rowsA, colsA, A.data(), lda, S.data(), U.data(), ldu, VT.data(), ldvt, rwork.data(), -1,
+                                               iwork.data());
+                    if(info < 0) throw except::runtime_error("Lapacke SVD sgesdd error: parameter {} is invalid", info);
+                    if(info > 0) throw except::runtime_error("Lapacke SVD sgesdd error: could not converge: info {}", info);
+
+                    lrwork = safe_cast<int>(rwork[0]);
+                    rwork.resize(safe_cast<size_t>(std::max(1, lrwork)));
+
+                    //                    auto t_sdd = tid::tic_token(fmt::format("dgesdd{}", t_suffix), tid::highest);
+                    info = LAPACKE_sgesdd_work(LAPACK_COL_MAJOR, 'S', rowsA, colsA, A.data(), lda, S.data(), U.data(), ldu, VT.data(), ldvt, rwork.data(),
+                                               lrwork, iwork.data());
+                    if(info < 0) throw except::runtime_error("Lapacke SVD sgesdd error: parameter {} is invalid", info);
+                    if(info > 0) throw except::runtime_error("Lapacke SVD sgesdd error: could not converge: info {}", info);
+                    break;
+                }
+                case rtn::gesvdx: {
+                    U.resize(rowsU, colsU);
+                    S.resize(sizeS);
+                    VT.resize(rowsVT, colsVT);
+
+                    fp32 vl    = std::min<fp32>(1e-10f, static_cast<fp32>(truncation_lim) / 5.0f);
+                    fp32 vu    = std::max<fp32>(1e+10f, static_cast<fp32>(truncation_lim) / 5.0f);
+                    int  il    = 1;
+                    int  iu    = std::min<int>(sizeS, safe_cast<int>(rank_max));
+                    char range = rank_max < sizeS ? 'I' : 'V';
+
+                    if(svdx_select.has_value()) {
+                        if(std::holds_alternative<svdx_indices_t>(svdx_select.value())) {
+                            auto sel = std::get<svdx_indices_t>(svdx_select.value());
+                            iu       = std::min<int>(safe_cast<int>(sel.iu), safe_cast<int>(rank_max));
+                            il       = std::min<int>(safe_cast<int>(sel.il), safe_cast<int>(rank_max));
+                            range    = 'I';
+                        } else if(std::holds_alternative<svdx_values_t>(svdx_select.value())) {
+                            auto sel = std::get<svdx_values_t>(svdx_select.value());
+                            if(std::isfinite(sel.vl)) vl = static_cast<fp32>(sel.vl);
+                            if(std::isfinite(sel.vu)) vu = static_cast<fp32>(sel.vu);
+                            range = 'V';
+                        }
+                    }
+
+                    int ns     = 0;
+                    int lrwork = std::max(1, mn * 2 + mx);
+                    int liwork = std::max(1, 12 * mn);
+                    rwork.resize(safe_cast<size_t>(lrwork));
+                    iwork.resize(safe_cast<size_t>(liwork));
+
+                    info = LAPACKE_sgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', range, rowsA, colsA, A.data(), lda, vl, vu, il, iu, &ns, S.data(), U.data(), ldu,
+                                                VT.data(), ldvt, rwork.data(), -1, iwork.data());
+                    if(info != 0) break;
+
+                    lrwork = safe_cast<int>(std::real(rwork[0]));
+                    rwork.resize(safe_cast<size_t>(std::max(1, lrwork)));
+
+                    info = LAPACKE_sgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', 'V', rowsA, colsA, A.data(), lda, vl, vu, il, iu, &ns, S.data(), U.data(), ldu,
+                                                VT.data(), ldvt, rwork.data(), lrwork, iwork.data());
+
+                    // Select the computed region
+                    U  = U.leftCols(ns).eval();
+                    S  = S.head(ns).eval(); // Not all calls to do_svd need normalized S, so we do not normalize here!
+                    VT = VT.topRows(ns).eval();
+                    break;
+                }
+                default: throw std::logic_error("invalid case for enum svd::rtn");
+            }
+            if(info < 0) throw except::runtime_error("Lapacke SVD s{} error: parameter {} is invalid", enum2sv(svd_rtn), info);
+            if(info > 0) throw except::runtime_error("Lapacke SVD s{} error: could not converge: info {}", enum2sv(svd_rtn), info);
+        } else if constexpr(std::is_same<Scalar, fp64>::value) {
+            //            auto t_svd = tid::tic_token(fmt::format("d{}{}", enum2sv(svd_rtn), t_suffix), tid::highest);
+            std::vector<int>  iwork;
+            std::vector<fp64> rwork;
             if constexpr(!ndebug)
                 log->debug("Running Lapacke d{} | truncation limit {:.4e} | switchsize bdc {} | size {}", enum2sv(svd_rtn), truncation_lim, switchsize_gesdd,
                            sizeS);
@@ -289,11 +426,170 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
             }
             if(info < 0) throw except::runtime_error("Lapacke SVD d{} error: parameter {} is invalid", enum2sv(svd_rtn), info);
             if(info > 0) throw except::runtime_error("Lapacke SVD d{} error: could not converge: info {}", enum2sv(svd_rtn), info);
-        } else if constexpr(std::is_same<Scalar, std::complex<double>>::value) {
+        } else if constexpr(std::is_same<Scalar, cx32>::value) {
             //            auto t_svd = tid::tic_token(fmt::format("z{}{}", enum2sv(svd_rtn), t_suffix), tid::highest);
-            std::vector<int>                  iwork;
-            std::vector<std::complex<double>> cwork;
-            std::vector<double>               rwork;
+            std::vector<int>  iwork;
+            std::vector<cx32> cwork;
+            std::vector<fp32> rwork;
+            if constexpr(!ndebug)
+                log->debug("Running Lapacke c{} | truncation limit {:.4e} | switchsize bdc {} | size {}", enum2sv(svd_rtn), truncation_lim, switchsize_gesdd,
+                           sizeS);
+            switch(svd_rtn) {
+                case rtn::gesvd: {
+                    U.resize(rowsU, colsU);
+                    S.resize(sizeS);
+                    VT.resize(rowsVT, colsVT);
+
+                    int lcwork = 1;
+                    int lrwork = std::max(1, 5 * mn);
+                    cwork.resize(safe_cast<size_t>(lcwork));
+                    rwork.resize(safe_cast<size_t>(lrwork));
+
+                    info = LAPACKE_cgesvd_work(LAPACK_COL_MAJOR, 'S', 'S', rowsA, colsA, A.data(), lda, S.data(), U.data(), ldu, VT.data(), ldvt, cwork.data(),
+                                               -1, rwork.data());
+                    if(info != 0) break;
+                    lcwork = safe_cast<int>(std::real(cwork[0]));
+                    cwork.resize(safe_cast<size_t>(std::max(1, lcwork)));
+                    info = LAPACKE_cgesvd_work(LAPACK_COL_MAJOR, 'S', 'S', rowsA, colsA, A.data(), lda, S.data(), U.data(), ldu, VT.data(), ldvt, cwork.data(),
+                                               lcwork, rwork.data());
+                    break;
+                }
+                case rtn::gesvj: {
+                    S.resize(sizeS);
+                    V.resize(rowsV, colsV); // Local matrix gets transposed after computation
+
+                    cwork.resize(1);
+                    rwork.resize(6ul);
+
+                    info = LAPACKE_cgesvj_work(LAPACK_COL_MAJOR, 'G', 'U', 'V', rowsA, colsA, A.data(), lda, S.data(), ldv, V.data(), ldv, cwork.data(), -1,
+                                               rwork.data(), -1);
+                    if(info != 0) break;
+                    int lcwork = safe_cast<int>(std::real(cwork[0]));
+                    int lrwork = safe_cast<int>(rwork[0]);
+                    cwork.resize(safe_cast<size_t>(std::max(1, lcwork)));
+                    rwork.resize(safe_cast<size_t>(std::max(6, lrwork)));
+
+                    info = LAPACKE_cgesvj_work(LAPACK_COL_MAJOR, 'G', 'U', 'V', rowsA, colsA, A.data(), lda, S.data(), ldv, V.data(), ldv, cwork.data(), lcwork,
+                                               rwork.data(), lrwork);
+                    if(info != 0) break;
+                    U  = std::move(A);
+                    VT = V.adjoint();
+                    V.resize(0, 0);
+                    break;
+                }
+                case rtn::gejsv: {
+                    // http://www.netlib.org/lapack/explore-html/d1/d7e/group__double_g_esing_ga8767bfcf983f8dc6ef2842029ab25599.html#ga8767bfcf983f8dc6ef2842029ab25599
+                    // For this routine we need rows > cols
+                    S.resize(sizeS);
+                    U.resize(rowsU, colsU);
+                    V.resize(rowsV, colsV); // Local matrix gets transposed after computation
+                    cwork.resize(std::max(2ul, static_cast<size_t>(5 * rowsA + 2 * rowsA * rowsA)));
+                    rwork.resize(std::max(7ul, static_cast<size_t>(2 * colsA)));
+                    iwork.resize(std::max(4ul, static_cast<size_t>(2 * rowsA + colsA)));
+
+                    info = LAPACKE_cgejsv_work(LAPACK_COL_MAJOR, 'F' /* 'R' may also work well */, 'U', 'V', 'N' /* 'R' kills small columns of A */,
+                                               'T' /* T/N:  T will transpose if faster. Ignored if A is rectangular */,
+                                               'N' /* P/N: P will use perturbation to drown denormalized numbers */, rowsA, colsA, A.data(), lda, S.data(),
+                                               U.data(), ldu, V.data(), ldv, cwork.data(), -1, rwork.data(), -1, iwork.data());
+                    if(info != 0) break;
+
+                    int lcwork = safe_cast<int>(std::real(cwork[0]));
+                    int lrwork = safe_cast<int>(rwork[0]);
+                    int liwork = safe_cast<int>(iwork[0]);
+                    cwork.resize(safe_cast<size_t>(std::max(2, lcwork)));
+                    rwork.resize(safe_cast<size_t>(std::max(7, lrwork)));
+                    iwork.resize(safe_cast<size_t>(std::max({4, 2 * rowsA + colsA, liwork})));
+
+                    info = LAPACKE_cgejsv_work(LAPACK_COL_MAJOR, 'F' /* 'R' may also work well */, 'U', 'V', 'N' /* 'R' kills small columns of A */,
+                                               'T' /* T/N:  T will transpose if faster. Ignored if A is rectangular */,
+                                               'N' /* P/N: P will use perturbation to drown denormalized numbers */, rowsA, colsA, A.data(), lda, S.data(),
+                                               U.data(), ldu, V.data(), ldv, cwork.data(), lcwork, rwork.data(), lrwork, iwork.data());
+                    if(info != 0) break;
+                    VT = V.adjoint();
+                    V.resize(0, 0);
+                    break;
+                }
+                case rtn::gesdd: {
+                    U.resize(rowsU, colsU);
+                    S.resize(sizeS);
+                    VT.resize(rowsVT, colsVT);
+                    int lcwork = 1;
+                    int lrwork = std::max(1, mn * std::max(5 * mn + 7, 2 * mx + 2 * mn + 1));
+                    int liwork = std::max(1, 8 * mn);
+
+                    cwork.resize(static_cast<size_t>(lcwork));
+                    rwork.resize(static_cast<size_t>(lrwork));
+                    iwork.resize(static_cast<size_t>(liwork));
+                    info = LAPACKE_cgesdd_work(LAPACK_COL_MAJOR, 'S', rowsA, colsA, A.data(), lda, S.data(), U.data(), ldu, VT.data(), ldvt, cwork.data(), -1,
+                                               rwork.data(), iwork.data());
+                    if(info != 0) break;
+
+                    lcwork = safe_cast<int>(std::real(cwork[0]));
+                    cwork.resize(safe_cast<size_t>(std::max(1, lcwork)));
+
+                    info = LAPACKE_cgesdd_work(LAPACK_COL_MAJOR, 'S', rowsA, colsA, A.data(), lda, S.data(), U.data(), ldu, VT.data(), ldvt, cwork.data(),
+                                               lcwork, rwork.data(), iwork.data());
+                    break;
+                }
+                case rtn::gesvdx: {
+                    U.resize(rowsU, colsU);
+                    S.resize(sizeS);
+                    VT.resize(rowsVT, colsVT);
+
+                    fp32 vl    = std::min<fp32>(1e10f, static_cast<fp32>(truncation_lim) / 5.0f);
+                    fp32 vu    = std::max<fp32>(1e10f, static_cast<fp32>(truncation_lim) / 5.0f);
+                    int  il    = 1;
+                    int  iu    = std::min<int>(sizeS, safe_cast<int>(rank_max));
+                    char range = rank_max < sizeS ? 'I' : 'V';
+
+                    if(svdx_select.has_value()) {
+                        if(std::holds_alternative<svdx_indices_t>(svdx_select.value())) {
+                            auto sel = std::get<svdx_indices_t>(svdx_select.value());
+                            iu       = std::min<int>(safe_cast<int>(sel.iu), safe_cast<int>(rank_max));
+                            il       = std::min<int>(safe_cast<int>(sel.il), safe_cast<int>(rank_max));
+                            range    = 'I';
+                        } else if(std::holds_alternative<svdx_values_t>(svdx_select.value())) {
+                            auto sel = std::get<svdx_values_t>(svdx_select.value());
+                            if(std::isfinite(sel.vl)) vl = static_cast<fp32>(sel.vl);
+                            if(std::isfinite(sel.vu)) vu = static_cast<fp32>(sel.vu);
+                            range = 'V';
+                        }
+                    }
+                    int ns     = 0;
+                    int lcwork = std::max(1, mn * 2 + mx);
+                    int lrwork = mn * (mn * 2 + 15 * mn);
+                    int liwork = 12 * mn;
+
+                    cwork.resize(static_cast<size_t>(lcwork));
+                    rwork.resize(static_cast<size_t>(lrwork));
+                    iwork.resize(static_cast<size_t>(liwork));
+
+                    info = LAPACKE_cgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', range, rowsA, colsA, A.data(), lda, vl, vu, il, iu, &ns, S.data(), U.data(), ldu,
+                                                VT.data(), ldvt, cwork.data(), -1, rwork.data(), iwork.data());
+                    if(info != 0) break;
+
+                    lcwork = safe_cast<int>(std::real(cwork[0]));
+                    cwork.resize(safe_cast<size_t>(std::max(1, lcwork)));
+
+                    info = LAPACKE_cgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', 'V', rowsA, colsA, A.data(), lda, vl, vu, il, iu, &ns, S.data(), U.data(), ldu,
+                                                VT.data(), ldvt, cwork.data(), lcwork, rwork.data(), iwork.data());
+
+                    // Select the computed region
+                    U  = U.leftCols(ns).eval();
+                    S  = S.head(ns).eval(); // Not all calls to do_svd need normalized S, so we do not normalize here!
+                    VT = VT.topRows(ns).eval();
+                    break;
+                }
+                default: throw std::logic_error("invalid case for enum svd::rtn");
+            }
+            if(info < 0) throw except::runtime_error("c{} error: parameter {} is invalid", enum2sv(svd_rtn), info);
+            if(info > 0) throw except::runtime_error("c{} error: could not converge: info {}", enum2sv(svd_rtn), info);
+
+        } else if constexpr(std::is_same<Scalar, cx64>::value) {
+            //            auto t_svd = tid::tic_token(fmt::format("z{}{}", enum2sv(svd_rtn), t_suffix), tid::highest);
+            std::vector<int>  iwork;
+            std::vector<cx64> cwork;
+            std::vector<fp64> rwork;
             if constexpr(!ndebug)
                 log->debug("Running Lapacke z{} | truncation limit {:.4e} | switchsize bdc {} | size {}", enum2sv(svd_rtn), truncation_lim, switchsize_gesdd,
                            sizeS);
@@ -450,8 +746,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         }
 
         log->trace("Truncating singular values");
-        nonzeros                         = S.nonZeros();
-        std::tie(rank, truncation_error) = get_rank_from_truncation_error(S.head(nonzeros));
+        std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
         // Do the truncation
 
         U  = U.leftCols(rank).eval();
@@ -525,13 +820,8 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         );
     return std::make_tuple(U, S, VT);
 }
-using fp64 = double;
-using cx64 = std::complex<double>;
 
-//! \relates svd::class_SVD
-//! \brief force instantiation of do_svd_lapacke for type 'double'
+template std::tuple<svd::MatrixType<fp32>, svd::VectorType<fp32>, svd::MatrixType<fp32>> svd::solver::do_svd_lapacke(const fp32 *, long, long) const;
 template std::tuple<svd::MatrixType<fp64>, svd::VectorType<fp64>, svd::MatrixType<fp64>> svd::solver::do_svd_lapacke(const fp64 *, long, long) const;
-
-//! \relates svd::class_SVD
-//! \brief force instantiation of do_svd_lapacke for type 'std::complex<double>'
+template std::tuple<svd::MatrixType<cx32>, svd::VectorType<cx32>, svd::MatrixType<cx32>> svd::solver::do_svd_lapacke(const cx32 *, long, long) const;
 template std::tuple<svd::MatrixType<cx64>, svd::VectorType<cx64>, svd::MatrixType<cx64>> svd::solver::do_svd_lapacke(const cx64 *, long, long) const;

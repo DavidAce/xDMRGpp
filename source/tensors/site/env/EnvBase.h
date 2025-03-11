@@ -1,5 +1,6 @@
 #pragma once
 
+#include "math/float.h"
 #include "math/tenx/fwd_decl.h"
 #include <complex>
 #include <memory>
@@ -15,9 +16,6 @@ class MpoSite;
 
 class EnvBase {
     public:
-    using fp64 = double;
-    using cx64 = std::complex<fp64>;
-
     protected:
     void build_block(Eigen::Tensor<cx64, 3> &otherblock, const Eigen::Tensor<cx64, 3> &mps, const Eigen::Tensor<cx64, 4> &mpo);
     void enlarge(const Eigen::Tensor<cx64, 3> &mps, const Eigen::Tensor<cx64, 4> &mpo);
@@ -34,11 +32,11 @@ class EnvBase {
     mutable std::optional<std::size_t>      unique_id_env; // Unique identifiers of the neighboring site which are used to build this block
     // double                                  mixing_factor_alpha = 1e-5; // Used during environment (subspace) expansion
     public:
-             EnvBase();
-    ~        EnvBase();                           // Read comment on implementation
-             EnvBase(EnvBase &&other) noexcept;   // default move ctor
+    EnvBase();
+    ~EnvBase();                                   // Read comment on implementation
+    EnvBase(EnvBase &&other) noexcept;            // default move ctor
     EnvBase &operator=(EnvBase &&other) noexcept; // default move assign
-             EnvBase(const EnvBase &other);       // copy ctor
+    EnvBase(const EnvBase &other);                // copy ctor
     EnvBase &operator=(const EnvBase &other);     // copy assign
 
     explicit EnvBase(size_t position_, std::string side_, std::string tag_);
@@ -50,15 +48,18 @@ class EnvBase {
     void assert_block() const;
     void assert_validity() const;
     void assert_unique_id(const EnvBase &env, const MpsSite &mps, const MpoSite &mpo) const;
-
+    /* clang-format off */
     [[nodiscard]] const Eigen::Tensor<cx64, 3> &get_block() const;
     [[nodiscard]] Eigen::Tensor<cx64, 3>       &get_block();
-    [[nodiscard]] bool                          has_block() const;
-    [[nodiscard]] std::array<long, 3>           get_dims() const;
-    [[nodiscard]] bool                          is_real() const;
-    [[nodiscard]] bool                          has_nan() const;
-    [[nodiscard]] size_t                        get_position() const;
-    [[nodiscard]] size_t                        get_sites() const;
+    template<typename Scalar> [[nodiscard]] Eigen::Tensor<Scalar, 3> get_block_as() const;
+    /* clang-format on */
+    [[nodiscard]] bool                has_block() const;
+    [[nodiscard]] std::array<long, 3> dimensions() const;
+    [[nodiscard]] std::array<long, 3> get_dims() const;
+    [[nodiscard]] bool                is_real() const;
+    [[nodiscard]] bool                has_nan() const;
+    [[nodiscard]] size_t              get_position() const;
+    [[nodiscard]] size_t              get_sites() const;
 
     virtual void set_edge_dims(const MpsSite &MPS, const MpoSite &MPO) = 0;
 

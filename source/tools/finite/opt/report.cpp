@@ -48,7 +48,7 @@ void tools::finite::opt::reports::print_eigs_report(std::optional<size_t> max_en
         eigs_log.clear();
         return;
     }
-    tools::log->log(level, "{:<52} {:<7} {:<4} {:<4} {:<4} {:<4} {:<8} {:<22} {:<22} {:<10} {:<18} {:<18} {:<8} {:<8} {:<9} {:<5} {:<7} {:<7} {:<10} {:<10} {:<10}",
+    tools::log->log(level, "{:<36} {:<7} {:<4} {:<4} {:<4} {:<4} {:<8} {:<22} {:<22} {:<10} {:<22} {:<18} {:<18} {:<8} {:<8} {:<9} {:<5} {:<7} {:<7} {:<10} {:<10} {:<10}",
                       "Optimization report",
                       "size",
                       "ritz",
@@ -56,9 +56,10 @@ void tools::finite::opt::reports::print_eigs_report(std::optional<size_t> max_en
                       "nev",
                       "ncv",
                       "tol",
-                      "E",
+                      "⟨H⟩",
+                      "⟨H²⟩",
+                      "⟨H²⟩-⟨H⟩²", // Special characters are counted properly in fmt 1.7.0
                       "λ",
-                      "σ²H", // Special characters are counted properly in fmt 1.7.0
                       "overlap",
                       "norm",
                       "rnorm",
@@ -73,11 +74,13 @@ void tools::finite::opt::reports::print_eigs_report(std::optional<size_t> max_en
 
     for(const auto &[idx,entry] : iter::enumerate(eigs_log)){
         if(max_entries and max_entries.value() <= idx) break;
-        tools::log->log(level, "- {:<50} {:<7} {:<4} {:<4} {:<4} {:<4} {:<8.2e} {:<+22.15f} {:<+22.15f} {:<10.4e} {:<18.15f} {:<18.15f} {:<8.2e} {:<8.2e} {:<9.2e} {:<5} {:<7} {:<7} {:<10.2e} {:<10.2e} {:<10.2e}",
+        tools::log->log(level, "- {:<34} {:<7} {:<4} {:<4} {:<4} {:<4} {:<8.2e} {:<+22.15f} {:<+22.15f} {:<10.4e} {:<+22.15f} {:<18.15f} {:<18.15f} {:<8.2e} {:<8.2e} {:<9.2e} {:<5} {:<7} {:<7} {:<10.2e} {:<10.2e} {:<10.2e}",
                           entry.description,
                           entry.size, entry.ritz,entry.idx, entry.nev, entry.ncv, entry.tol,
-                          entry.energy,entry.eigval,
+                          entry.energy,
+                          entry.hsquared,
                           entry.variance,
+                          entry.eigval,
                           entry.overlap,entry.norm, entry.rnorm, entry.rnorm_H, entry.rnorm_H2,
                           entry.iter, entry.mv, entry.pc,
                           entry.time,
@@ -99,6 +102,6 @@ void tools::finite::opt::reports::eigs_add_entry(const opt_mps &mps, spdlog::lev
     if(level < tools::log->level()) return;
     std::string description = fmt::format("{:<24}", mps.get_name());
     eigs_log.push_back(eigs_entry{description, std::string(mps.get_eigs_ritz()), mps.get_tensor().size(), mps.get_eigs_idx(), mps.get_eigs_nev(),
-                                  mps.get_eigs_ncv(), mps.get_energy(), mps.get_eigs_eigval(), mps.get_variance(), mps.get_overlap(), mps.get_norm(),
+                                  mps.get_eigs_ncv(), mps.get_energy(), mps.get_hsquared(), mps.get_variance(), mps.get_eigs_eigval(), mps.get_overlap(), mps.get_norm(),
                                   mps.get_eigs_rnorm(), mps.get_rnorm_H(),mps.get_rnorm_H2(), mps.get_eigs_tol(), mps.get_grad_max(), mps.get_iter(), mps.get_mv(), mps.get_pc(), mps.get_time(), mps.get_time_mv(), mps.get_time_pc(), level});
 }

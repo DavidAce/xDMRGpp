@@ -4,13 +4,16 @@
 #include <complex>
 #include <Eigen/Core>
 #include <stdexcept>
+#include <stdfloat>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 // This header defines the floating point types used throughout this program
 
+using fp32 = float;
 using fp64 = double;
+using cx32 = std::complex<fp32>;
 using cx64 = std::complex<fp64>;
 
 #if defined(DMRG_USE_QUADMATH)
@@ -46,6 +49,7 @@ bool cmp_t(Lhs lhs, Rhs rhs) {
         return lhs == rhs;
 }
 
+
 // template<typename T>
 // auto abs_t(T val) -> fp128 {
 //     if constexpr(std::is_arithmetic_v<T>) return std::abs(val);
@@ -76,7 +80,7 @@ namespace Eigen {
     };
 
     template<>
-    struct NumTraits<cx128> : NumTraits<std::complex<double>> // permits to get the epsilon, dummy_precision, lowest, highest functions
+    struct NumTraits<cx128> : NumTraits<cx64> // permits to get the epsilon, dummy_precision, lowest, highest functions
     {
         typedef fp128 Real;
         typedef fp128 NonInteger;

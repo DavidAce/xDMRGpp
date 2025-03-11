@@ -18,12 +18,12 @@ template<typename T>
 using VectorTypeT = Eigen::Matrix<T, 1, Eigen::Dynamic, Eigen::RowMajor>;
 
 namespace sparse_lu {
-    std::optional<Eigen::SparseMatrix<double>>                             A_real_sparse  = std::nullopt;
-    std::optional<Eigen::SparseMatrix<std::complex<double>>>               A_cplx_sparse  = std::nullopt;
-    std::optional<Eigen::SparseLU<SparseMatrixType<double>>>               lu_real_sparse = {};
-    std::optional<Eigen::SparseLU<SparseMatrixType<std::complex<double>>>> lu_cplx_sparse = {};
-    std::optional<Eigen::PartialPivLU<MatrixType<double>>>                 lu_real_dense  = std::nullopt;
-    std::optional<Eigen::PartialPivLU<MatrixType<std::complex<double>>>>   lu_cplx_dense  = std::nullopt;
+    std::optional<Eigen::SparseMatrix<fp64>>                             A_real_sparse  = std::nullopt;
+    std::optional<Eigen::SparseMatrix<cx64>>               A_cplx_sparse  = std::nullopt;
+    std::optional<Eigen::SparseLU<SparseMatrixType<fp64>>>               lu_real_sparse = {};
+    std::optional<Eigen::SparseLU<SparseMatrixType<cx64>>> lu_cplx_sparse = {};
+    std::optional<Eigen::PartialPivLU<MatrixType<fp64>>>                 lu_real_dense  = std::nullopt;
+    std::optional<Eigen::PartialPivLU<MatrixType<cx64>>>   lu_cplx_dense  = std::nullopt;
 
     void reset() {
         A_real_sparse.reset();
@@ -51,11 +51,11 @@ MatVecSparse<Scalar, sparseLU>::MatVecSparse(const Scalar *A_, long L_, bool cop
 
     if constexpr(sparseLU) {
         Eigen::Map<const MatrixType<Scalar>> A_matrix(A_ptr, L, L);
-        if constexpr(std::is_same_v<Scalar, double>) {
+        if constexpr(std::is_same_v<Scalar, fp64>) {
             sparse_lu::A_real_sparse = A_matrix.sparseView();
             sparse_lu::A_real_sparse.value().makeCompressed();
         }
-        if constexpr(std::is_same_v<Scalar, std::complex<double>>) {
+        if constexpr(std::is_same_v<Scalar, cx64>) {
             sparse_lu::A_cplx_sparse = A_matrix.sparseView();
             sparse_lu::A_cplx_sparse.value().makeCompressed();
         }
@@ -83,17 +83,17 @@ void MatVecSparse<Scalar, sparseLU>::FactorOP()
     Eigen::Map<const MatrixType<Scalar>> A_matrix(A_ptr, L, L);
 
     // Real
-    if constexpr(std::is_same_v<Scalar, double> and not sparseLU) {
+    if constexpr(std::is_same_v<Scalar, fp64> and not sparseLU) {
         sparse_lu::lu_real_dense = Eigen::PartialPivLU<MatrixType<Scalar>>();
         sparse_lu::lu_real_dense.value().compute(A_matrix);
     }
-    if constexpr(std::is_same_v<Scalar, double> and sparseLU) { sparse_lu::lu_real_sparse.value().compute(sparse_lu::A_real_sparse.value()); }
+    if constexpr(std::is_same_v<Scalar, fp64> and sparseLU) { sparse_lu::lu_real_sparse.value().compute(sparse_lu::A_real_sparse.value()); }
     // Complex
-    if constexpr(std::is_same_v<Scalar, std::complex<double>> and not sparseLU) {
+    if constexpr(std::is_same_v<Scalar, cx64> and not sparseLU) {
         sparse_lu::lu_cplx_dense = Eigen::PartialPivLU<MatrixType<Scalar>>();
         sparse_lu::lu_cplx_dense.value().compute(A_matrix);
     }
-    if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU) { sparse_lu::lu_cplx_sparse.value().compute(sparse_lu::A_cplx_sparse.value()); }
+    if constexpr(std::is_same_v<Scalar, cx64> and sparseLU) { sparse_lu::lu_cplx_sparse.value().compute(sparse_lu::A_cplx_sparse.value()); }
 
     readyFactorOp = true;
 }
@@ -107,20 +107,20 @@ void MatVecSparse<Scalar, sparseLU>::MultOPv(Scalar *x_in_ptr, Scalar *x_out_ptr
 
     switch(side) {
         case eig::Side::R: {
-            if constexpr(std::is_same_v<Scalar, double> and not sparseLU)
+            if constexpr(std::is_same_v<Scalar, fp64> and not sparseLU)
                 x_out.noalias() = sparse_lu::lu_real_dense.value().solve(x_in);
-            else if constexpr(std::is_same_v<Scalar, std::complex<double>> and not sparseLU)
+            else if constexpr(std::is_same_v<Scalar, cx64> and not sparseLU)
                 x_out.noalias() = sparse_lu::lu_cplx_dense.value().solve(x_in);
-            else if constexpr(std::is_same_v<Scalar, double> and sparseLU)
+            else if constexpr(std::is_same_v<Scalar, fp64> and sparseLU)
                 x_out.noalias() = sparse_lu::lu_real_sparse.value().solve(x_in);
-            else if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU)
+            else if constexpr(std::is_same_v<Scalar, cx64> and sparseLU)
                 x_out.noalias() = sparse_lu::lu_cplx_sparse.value().solve(x_in);
             break;
         }
         case eig::Side::L: {
-            if constexpr(std::is_same_v<Scalar, double> and not sparseLU)
+            if constexpr(std::is_same_v<Scalar, fp64> and not sparseLU)
                 x_out.noalias() = x_in * sparse_lu::lu_real_dense.value().inverse();
-            else if constexpr(std::is_same_v<Scalar, std::complex<double>> and not sparseLU)
+            else if constexpr(std::is_same_v<Scalar, cx64> and not sparseLU)
                 x_out.noalias() = x_in * sparse_lu::lu_cplx_dense.value().inverse();
             else { throw std::runtime_error("Left sided sparse shift invert hasn't been implemented yet"); }
             break;
@@ -144,13 +144,13 @@ void MatVecSparse<Scalar, sparseLU>::MultOPv(void *x, int *ldx, void *y, int *ld
                 Scalar                *x_out_ptr = static_cast<Scalar *>(y) + *ldy * i;
                 Eigen::Map<VectorType> x_in(x_in_ptr, L);
                 Eigen::Map<VectorType> x_out(x_out_ptr, L);
-                if constexpr(std::is_same_v<Scalar, double> and not sparseLU)
+                if constexpr(std::is_same_v<Scalar, fp64> and not sparseLU)
                     x_out.noalias() = sparse_lu::lu_real_dense.value().solve(x_in);
-                else if constexpr(std::is_same_v<Scalar, std::complex<double>> and not sparseLU)
+                else if constexpr(std::is_same_v<Scalar, cx64> and not sparseLU)
                     x_out.noalias() = sparse_lu::lu_cplx_dense.value().solve(x_in);
-                else if constexpr(std::is_same_v<Scalar, double> and sparseLU)
+                else if constexpr(std::is_same_v<Scalar, fp64> and sparseLU)
                     x_out.noalias() = sparse_lu::lu_real_sparse.value().solve(x_in);
-                else if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU)
+                else if constexpr(std::is_same_v<Scalar, cx64> and sparseLU)
                     x_out.noalias() = sparse_lu::lu_cplx_sparse.value().solve(x_in);
                 num_op++;
             }
@@ -162,9 +162,9 @@ void MatVecSparse<Scalar, sparseLU>::MultOPv(void *x, int *ldx, void *y, int *ld
                 Scalar                *x_out_ptr = static_cast<Scalar *>(y) + *ldy * i;
                 Eigen::Map<VectorType> x_in(x_in_ptr, L);
                 Eigen::Map<VectorType> x_out(x_out_ptr, L);
-                if constexpr(std::is_same_v<Scalar, double> and not sparseLU)
+                if constexpr(std::is_same_v<Scalar, fp64> and not sparseLU)
                     x_out.noalias() = x_in * sparse_lu::lu_real_dense.value().inverse();
-                else if constexpr(std::is_same_v<Scalar, std::complex<double>> and not sparseLU)
+                else if constexpr(std::is_same_v<Scalar, cx64> and not sparseLU)
                     x_out.noalias() = x_in * sparse_lu::lu_cplx_dense.value().inverse();
                 else { throw std::runtime_error("Left sided sparse shift invert hasn't been implemented yet"); }
                 num_op++;
@@ -190,9 +190,9 @@ void MatVecSparse<Scalar, sparseLU>::MultAx(Scalar *x_in, Scalar *x_out) {
                     Eigen::Map<VectorType> x_vec_out(x_out, L);
                     if constexpr(not sparseLU)
                         x_vec_out.noalias() = A_matrix * x_vec_in;
-                    else if constexpr(std::is_same_v<Scalar, double> and sparseLU)
+                    else if constexpr(std::is_same_v<Scalar, fp64> and sparseLU)
                         x_vec_out.noalias() = sparse_lu::A_real_sparse.value() * x_vec_in;
-                    else if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU)
+                    else if constexpr(std::is_same_v<Scalar, cx64> and sparseLU)
                         x_vec_out.noalias() = sparse_lu::A_cplx_sparse.value() * x_vec_in;
                     break;
                 }
@@ -202,9 +202,9 @@ void MatVecSparse<Scalar, sparseLU>::MultAx(Scalar *x_in, Scalar *x_out) {
                     Eigen::Map<VectorTypeT> x_vec_out(x_out, L);
                     if constexpr(not sparseLU)
                         x_vec_out.noalias() = x_vec_in * A_matrix;
-                    else if constexpr(std::is_same_v<Scalar, double> and sparseLU)
+                    else if constexpr(std::is_same_v<Scalar, fp64> and sparseLU)
                         x_vec_out.noalias() = x_vec_in * sparse_lu::A_real_sparse.value();
-                    else if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU)
+                    else if constexpr(std::is_same_v<Scalar, cx64> and sparseLU)
                         x_vec_out.noalias() = x_vec_in * sparse_lu::A_cplx_sparse.value();
                     break;
                 }
@@ -218,9 +218,9 @@ void MatVecSparse<Scalar, sparseLU>::MultAx(Scalar *x_in, Scalar *x_out) {
             Eigen::Map<VectorType> x_vec_in(x_in, L);
             Eigen::Map<VectorType> x_vec_out(x_out, L);
             if constexpr(not sparseLU) x_vec_out.noalias() = A_matrix.template selfadjointView<Eigen::Upper>() * x_vec_in;
-            if constexpr(std::is_same_v<Scalar, double> and sparseLU)
+            if constexpr(std::is_same_v<Scalar, fp64> and sparseLU)
                 x_vec_out.noalias() = sparse_lu::A_real_sparse.value().template selfadjointView<Eigen::Upper>() * x_vec_in;
-            if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU)
+            if constexpr(std::is_same_v<Scalar, cx64> and sparseLU)
                 x_vec_out.noalias() = sparse_lu::A_cplx_sparse.value().template selfadjointView<Eigen::Upper>() * x_vec_in;
             break;
         }
@@ -244,9 +244,9 @@ void MatVecSparse<T, sparseLU>::MultAx(void *x, int *ldx, void *y, int *ldy, int
                         Eigen::Map<VectorType> x_vec_out(x_out, L);
                         if constexpr(not sparseLU)
                             x_vec_out.noalias() = A_matrix * x_vec_in;
-                        else if constexpr(std::is_same_v<Scalar, double> and sparseLU)
+                        else if constexpr(std::is_same_v<Scalar, fp64> and sparseLU)
                             x_vec_out.noalias() = sparse_lu::A_real_sparse.value() * x_vec_in;
-                        else if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU)
+                        else if constexpr(std::is_same_v<Scalar, cx64> and sparseLU)
                             x_vec_out.noalias() = sparse_lu::A_cplx_sparse.value() * x_vec_in;
                         num_mv++;
                     }
@@ -261,9 +261,9 @@ void MatVecSparse<T, sparseLU>::MultAx(void *x, int *ldx, void *y, int *ldy, int
                         Eigen::Map<VectorTypeT> x_vec_out(x_out, L);
                         if constexpr(not sparseLU)
                             x_vec_out.noalias() = x_vec_in * A_matrix;
-                        else if constexpr(std::is_same_v<Scalar, double> and sparseLU)
+                        else if constexpr(std::is_same_v<Scalar, fp64> and sparseLU)
                             x_vec_out.noalias() = x_vec_in * sparse_lu::A_real_sparse.value();
-                        else if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU)
+                        else if constexpr(std::is_same_v<Scalar, cx64> and sparseLU)
                             x_vec_out.noalias() = x_vec_in * sparse_lu::A_cplx_sparse.value();
                         num_mv++;
                     }
@@ -282,9 +282,9 @@ void MatVecSparse<T, sparseLU>::MultAx(void *x, int *ldx, void *y, int *ldy, int
                 Eigen::Map<VectorType> x_vec_in(x_in, L);
                 Eigen::Map<VectorType> x_vec_out(x_out, L);
                 if constexpr(not sparseLU) x_vec_out.noalias() = A_matrix.template selfadjointView<Eigen::Upper>() * x_vec_in;
-                if constexpr(std::is_same_v<Scalar, double> and sparseLU)
+                if constexpr(std::is_same_v<Scalar, fp64> and sparseLU)
                     x_vec_out.noalias() = sparse_lu::A_real_sparse.value().template selfadjointView<Eigen::Upper>() * x_vec_in;
-                if constexpr(std::is_same_v<Scalar, std::complex<double>> and sparseLU)
+                if constexpr(std::is_same_v<Scalar, cx64> and sparseLU)
                     x_vec_out.noalias() = sparse_lu::A_cplx_sparse.value().template selfadjointView<Eigen::Upper>() * x_vec_in;
                 num_mv++;
             }
@@ -348,15 +348,15 @@ eig::Side MatVecSparse<Scalar, sparseLU>::get_side() const {
 template<typename Scalar, bool sparseLU>
 eig::Type MatVecSparse<Scalar, sparseLU>::get_type() const {
     if constexpr(std::is_same_v<Scalar, fp64>)
-        return eig::Type::REAL;
+        return eig::Type::FP64;
     else if constexpr(std::is_same_v<Scalar, cx64>)
-        return eig::Type::CPLX;
+        return eig::Type::CX64;
     else
         throw std::runtime_error("Unsupported type");
 }
 
 // Explicit instantiations
-template class MatVecSparse<double, true>;
-template class MatVecSparse<double, false>;
-template class MatVecSparse<std::complex<double>, true>;
-template class MatVecSparse<std::complex<double>, false>;
+template class MatVecSparse<fp64, true>;
+template class MatVecSparse<fp64, false>;
+template class MatVecSparse<cx64, true>;
+template class MatVecSparse<cx64, false>;

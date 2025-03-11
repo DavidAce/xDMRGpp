@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/enums.h"
+#include "math/float.h"
 #include "math/svd/config.h"
 #include "measure/MeasurementsTensorsFinite.h"
 #include "tensors/site/env/EnvPair.h"
@@ -17,17 +18,22 @@ struct EnvExpansionResult;
 
 class TensorsFinite {
     private:
-    using cx64 = std::complex<double>;
-    using fp64 = double;
+    template<typename T>
     struct Cache {
-        std::optional<std::vector<size_t>>    cached_sites_hamiltonian           = std::nullopt;
-        std::optional<std::vector<size_t>>    cached_sites_hamiltonian_squared   = std::nullopt;
-        std::optional<Eigen::Tensor<cx64, 2>> effective_hamiltonian_cplx         = std::nullopt;
-        std::optional<Eigen::Tensor<cx64, 2>> effective_hamiltonian_squared_cplx = std::nullopt;
-        std::optional<Eigen::Tensor<fp64, 2>> effective_hamiltonian_real         = std::nullopt;
-        std::optional<Eigen::Tensor<fp64, 2>> effective_hamiltonian_squared_real = std::nullopt;
+        std::optional<std::vector<size_t>> cached_sites_hamiltonian         = std::nullopt;
+        std::optional<std::vector<size_t>> cached_sites_hamiltonian_squared = std::nullopt;
+        std::optional<Eigen::Tensor<T, 2>> effective_hamiltonian            = std::nullopt;
+        std::optional<Eigen::Tensor<T, 2>> effective_hamiltonian_squared    = std::nullopt;
     };
-    mutable Cache cache;
+
+    mutable Cache<fp32> cache_fp32;
+    mutable Cache<fp64> cache_fp64;
+    mutable Cache<cx32> cache_cx32;
+    mutable Cache<cx64> cache_cx64;
+    template<typename T>
+    Cache<T> &get_cache();
+    template<typename T>
+    Cache<T> &get_cache() const;
 
     public:
     std::unique_ptr<StateFinite> state;
@@ -44,13 +50,13 @@ class TensorsFinite {
     //  - Activate sites
     //  - Manage caches
 
-                   TensorsFinite();
-    ~              TensorsFinite();                           // Read comment on implementation
-                   TensorsFinite(TensorsFinite &&other);      // default move ctor
-    TensorsFinite &operator=(TensorsFinite &&other);          // default move assign
-                   TensorsFinite(const TensorsFinite &other); // copy ctor
-    TensorsFinite &operator=(const TensorsFinite &other);     // copy assign
-                   TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position);
+    TensorsFinite();
+    ~TensorsFinite();                                     // Read comment on implementation
+    TensorsFinite(TensorsFinite &&other);                 // default move ctor
+    TensorsFinite &operator=(TensorsFinite &&other);      // default move assign
+    TensorsFinite(const TensorsFinite &other);            // copy ctor
+    TensorsFinite &operator=(const TensorsFinite &other); // copy assign
+    TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position);
 
     StateFinite       &get_state();
     ModelFinite       &get_model();
@@ -64,12 +70,14 @@ class TensorsFinite {
     void initialize_state(ResetReason reason, StateInit state_init, StateInitType state_type, std::string_view axis, bool use_eigenspinors, long bond_lim,
                           std::string &pattern);
     void normalize_state(std::optional<svd::config> svd_cfg = std::nullopt, NormPolicy policy = NormPolicy::IFNEEDED);
-    [[nodiscard]] const Eigen::Tensor<cx64, 3>            &get_multisite_mps() const;
-    [[nodiscard]] const Eigen::Tensor<cx64, 4>            &get_multisite_mpo() const;
-    [[nodiscard]] const Eigen::Tensor<cx64, 4>            &get_multisite_mpo_squared() const;
-    [[nodiscard]] env_pair<const Eigen::Tensor<cx64, 3> &> get_multisite_env_ene_blk() const;
-    [[nodiscard]] env_pair<const Eigen::Tensor<cx64, 3> &> get_multisite_env_var_blk() const;
     /* clang-format off */
+    template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 3>            &get_multisite_mps() const;
+    template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 4>            &get_multisite_mpo() const;
+    template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 4>            &get_multisite_mpo_squared() const;
+    [[nodiscard]]                           env_pair<const Eigen::Tensor<cx64, 3> &>   get_multisite_env_ene_blk() const;
+    [[nodiscard]]                           env_pair<const Eigen::Tensor<cx64, 3> &>   get_multisite_env_var_blk() const;
+    template<typename Scalar> [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>> get_multisite_env_ene_blk_as() const;
+    template<typename Scalar> [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>> get_multisite_env_var_blk_as() const;
     template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 2> &get_effective_hamiltonian() const;
     template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 2> &get_effective_hamiltonian_squared() const;
     /* clang-format on */

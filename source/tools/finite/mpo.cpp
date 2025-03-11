@@ -23,6 +23,7 @@
 #include "config/debug.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
+#include "io/fmt_custom.h"
 #include "math/float.h"
 #include "math/svd.h"
 #include "mpo.h"
@@ -166,7 +167,7 @@ std::vector<Eigen::Tensor<cx64, 4>> tools::finite::mpo::get_mpos_with_edges(cons
 }
 
 std::vector<Eigen::Tensor<cx128, 4>> tools::finite::mpo::get_mpos_with_edges_t(const std::vector<Eigen::Tensor<cx128, 4>> &mpos,
-                                                                                const Eigen::Tensor<cx128, 1> &Ledge, const Eigen::Tensor<cx128, 1> &Redge) {
+                                                                               const Eigen::Tensor<cx128, 1> &Ledge, const Eigen::Tensor<cx128, 1> &Redge) {
     auto  mpos_with_edge = mpos;
     auto &threads        = tenx::threads::get();
 

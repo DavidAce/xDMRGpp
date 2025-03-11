@@ -4,20 +4,28 @@ namespace eig {
     template<typename Scalar, Side side>
     std::vector<Scalar> &solution::get_eigvecs() const {
         static_assert(side != Side::LR and "Cannot get both L/R eigvecs simultaneusly");
-        if constexpr(std::is_same_v<Scalar, fp64>) {
-            build_eigvecs_real();
-            if constexpr(side == Side::R) return eigvecsR_real;
-            if constexpr(side == Side::L) return eigvecsL_real;
-            //            if constexpr(side == Side::LR) return std::pair(eigvecsL_real, eigvecsR_real);
-        }
-        if constexpr(std::is_same_v<Scalar, cx64>) {
-            build_eigvecs_cplx();
-            if constexpr(side == Side::R) return eigvecsR_cplx;
-            if constexpr(side == Side::L) return eigvecsL_cplx;
-            //            if constexpr(side == Side::LR) return std::pair(eigvecsL_cplx, eigvecsR_cplx);
+        if constexpr(std::is_same_v<Scalar, fp32>) {
+            build_eigvecs_fp32();
+            if constexpr(side == Side::R) return eigvecsR_real_fp32;
+            if constexpr(side == Side::L) return eigvecsL_real_fp32;
+        } else if constexpr(std::is_same_v<Scalar, fp64>) {
+            build_eigvecs_fp64();
+            if constexpr(side == Side::R) return eigvecsR_real_fp64;
+            if constexpr(side == Side::L) return eigvecsL_real_fp64;
+        } else if constexpr(std::is_same_v<Scalar, cx32>) {
+            build_eigvecs_cx32();
+            if constexpr(side == Side::R) return eigvecsR_cx32;
+            if constexpr(side == Side::L) return eigvecsL_cx32;
+        } else if constexpr(std::is_same_v<Scalar, cx64>) {
+            build_eigvecs_cx64();
+            if constexpr(side == Side::R) return eigvecsR_cx64;
+            if constexpr(side == Side::L) return eigvecsL_cx64;
         }
     }
-
+    template std::vector<fp32> &solution::get_eigvecs<fp32, Side::L>() const;
+    template std::vector<cx32> &solution::get_eigvecs<cx32, Side::L>() const;
+    template std::vector<fp32> &solution::get_eigvecs<fp32, Side::R>() const;
+    template std::vector<cx32> &solution::get_eigvecs<cx32, Side::R>() const;
     template std::vector<fp64> &solution::get_eigvecs<fp64, Side::L>() const;
     template std::vector<cx64> &solution::get_eigvecs<cx64, Side::L>() const;
     template std::vector<fp64> &solution::get_eigvecs<fp64, Side::R>() const;
@@ -34,9 +42,18 @@ namespace eig {
 
     template<typename Scalar, Form form, Side side>
     std::vector<Scalar> &solution::get_eigvecs() const {
-        if constexpr(std::is_same<fp64, Scalar>::value) return get_eigvecs<form, Type::REAL, side>();
-        if constexpr(std::is_same<cx64, Scalar>::value) return get_eigvecs<form, Type::CPLX, side>();
+        if constexpr(std::is_same<fp32, Scalar>::value) return get_eigvecs<form, Type::FP32, side>();
+        if constexpr(std::is_same<fp64, Scalar>::value) return get_eigvecs<form, Type::FP64, side>();
+        if constexpr(std::is_same<cx32, Scalar>::value) return get_eigvecs<form, Type::CX32, side>();
+        if constexpr(std::is_same<cx64, Scalar>::value) return get_eigvecs<form, Type::CX64, side>();
     }
+
+    template std::vector<fp32> &solution::get_eigvecs<fp32, Form::SYMM, Side::L>() const;
+    template std::vector<fp32> &solution::get_eigvecs<fp32, Form::SYMM, Side::R>() const;
+    template std::vector<cx32> &solution::get_eigvecs<cx32, Form::SYMM, Side::L>() const;
+    template std::vector<cx32> &solution::get_eigvecs<cx32, Form::SYMM, Side::R>() const;
+    template std::vector<cx32> &solution::get_eigvecs<cx32, Form::NSYM, Side::L>() const;
+    template std::vector<cx32> &solution::get_eigvecs<cx32, Form::NSYM, Side::R>() const;
     template std::vector<fp64> &solution::get_eigvecs<fp64, Form::SYMM, Side::L>() const;
     template std::vector<fp64> &solution::get_eigvecs<fp64, Form::SYMM, Side::R>() const;
     template std::vector<cx64> &solution::get_eigvecs<cx64, Form::SYMM, Side::L>() const;
@@ -46,119 +63,213 @@ namespace eig {
 
     template<typename Scalar>
     std::vector<Scalar> &solution::get_eigvals() const {
-        if constexpr(std::is_same_v<Scalar, fp64>) {
-            build_eigvals_real();
-            return eigvals_real;
-        }
-        if constexpr(std::is_same_v<Scalar, cx64>) {
-            build_eigvals_cplx();
-            return eigvals_cplx;
+        if constexpr(std::is_same_v<Scalar, fp32>) {
+            build_eigvals_fp32();
+            return eigvals_real_fp32;
+        } else if constexpr(std::is_same_v<Scalar, fp64>) {
+            build_eigvals_fp64();
+            return eigvals_real_fp64;
+        } else if constexpr(std::is_same_v<Scalar, cx32>) {
+            build_eigvals_cx32();
+            return eigvals_cx32;
+        } else if constexpr(std::is_same_v<Scalar, cx64>) {
+            build_eigvals_cx64();
+            return eigvals_cx64;
         }
     }
 
+    template std::vector<fp32> &solution::get_eigvals<fp32>() const;
     template std::vector<fp64> &solution::get_eigvals<fp64>() const;
+    template std::vector<cx32> &solution::get_eigvals<cx32>() const;
     template std::vector<cx64> &solution::get_eigvals<cx64>() const;
 
     const std::vector<double> &solution::get_resnorms() const { return meta.residual_norms; }
 
     void solution::reset() {
-        eigvals_real.clear();
-        eigvals_imag.clear();
-        eigvals_cplx.clear();
-        eigvecsR_real.clear();
-        eigvecsR_imag.clear();
-        eigvecsL_real.clear();
-        eigvecsL_imag.clear();
-        eigvecsR_cplx.clear();
-        eigvecsL_cplx.clear();
+        eigvals_real_fp32.clear();
+        eigvals_imag_fp32.clear();
+        eigvals_cx32.clear();
+        eigvecsR_real_fp32.clear();
+        eigvecsR_imag_fp32.clear();
+        eigvecsL_real_fp32.clear();
+        eigvecsL_imag_fp32.clear();
+        eigvecsR_cx32.clear();
+        eigvecsL_cx32.clear();
+
+        eigvals_real_fp64.clear();
+        eigvals_imag_fp64.clear();
+        eigvals_cx64.clear();
+        eigvecsR_real_fp64.clear();
+        eigvecsR_imag_fp64.clear();
+        eigvecsL_real_fp64.clear();
+        eigvecsL_imag_fp64.clear();
+        eigvecsR_cx64.clear();
+        eigvecsL_cx64.clear();
         meta = Meta();
     }
 
-    bool solution::eigvecs_are_real() const { return meta.form == Form::SYMM and meta.type == Type::REAL; }
+    bool solution::eigvecs_are_real() const { return meta.form == Form::SYMM and (meta.type == Type::FP32 or meta.type == Type::FP64); }
 
     bool solution::eigvals_are_real() const { return meta.form == Form::SYMM; }
 
-    std::type_index solution::get_eigvecs_type() const {
-        if(eigvecs_are_real())
-            return typeid(fp64);
-        else
-            return typeid(cx64);
-    }
+    // std::type_index solution::get_eigvecs_type() const {
+    //     if(eigvecs_are_real())
+    //         return typeid(fp64);
+    //     else
+    //         return typeid(cx64);
+    // }
 
-    void solution::build_eigvecs_cplx() const {
-        bool build_eigvecsR_cplx = eigvecsR_cplx.empty() and (not eigvecsR_real.empty() or not eigvecsR_imag.empty());
-        bool build_eigvecsL_cplx = eigvecsL_cplx.empty() and (not eigvecsL_real.empty() or not eigvecsL_imag.empty());
+    void solution::build_eigvecs_cx32() const {
+        bool build_eigvecsR_cplx = eigvecsR_cx32.empty() and (not eigvecsR_real_fp32.empty() or not eigvecsR_imag_fp32.empty());
+        bool build_eigvecsL_cplx = eigvecsL_cx32.empty() and (not eigvecsL_real_fp32.empty() or not eigvecsL_imag_fp32.empty());
 
         if(build_eigvecsR_cplx) {
-            eigvecsR_cplx.resize(std::max(eigvecsR_real.size(), eigvecsR_imag.size()));
-            for(size_t i = 0; i < eigvecsR_cplx.size(); i++) {
-                if(not eigvecsR_real.empty() and not eigvecsR_imag.empty() and i < eigvecsR_real.size() and i < eigvecsR_imag.size())
-                    eigvecsR_cplx[i] = std::complex<double>(eigvecsR_real[i], eigvecsR_imag[i]);
-                else if(not eigvecsR_real.empty() and i < eigvecsR_real.size())
-                    eigvecsR_cplx[i] = std::complex<double>(eigvecsR_real[i], 0.0);
-                else if(not eigvecsR_imag.empty() and i < eigvecsR_imag.size())
-                    eigvecsR_cplx[i] = std::complex<double>(0.0, eigvecsR_imag[i]);
+            eigvecsR_cx32.resize(std::max(eigvecsR_real_fp32.size(), eigvecsR_imag_fp32.size()));
+            for(size_t i = 0; i < eigvecsR_cx32.size(); i++) {
+                if(not eigvecsR_real_fp32.empty() and not eigvecsR_imag_fp32.empty() and i < eigvecsR_real_fp32.size() and i < eigvecsR_imag_fp32.size())
+                    eigvecsR_cx32[i] = cx32(eigvecsR_real_fp32[i], eigvecsR_imag_fp32[i]);
+                else if(not eigvecsR_real_fp32.empty() and i < eigvecsR_real_fp32.size())
+                    eigvecsR_cx32[i] = cx32(eigvecsR_real_fp32[i], 0.0);
+                else if(not eigvecsR_imag_fp32.empty() and i < eigvecsR_imag_fp32.size())
+                    eigvecsR_cx32[i] = cx32(0.0, eigvecsR_imag_fp32[i]);
             }
-            eigvecsR_real.clear();
-            eigvecsR_imag.clear();
+            eigvecsR_real_fp32.clear();
+            eigvecsR_imag_fp32.clear();
         }
         if(build_eigvecsL_cplx) {
-            eigvecsL_cplx.resize(std::max(eigvecsL_real.size(), eigvecsL_imag.size()));
-            for(size_t i = 0; i < eigvecsL_cplx.size(); i++) {
-                if(not eigvecsL_real.empty() and not eigvecsL_imag.empty() and i < eigvecsL_real.size() and i < eigvecsL_imag.size())
-                    eigvecsL_cplx[i] = std::complex<double>(eigvecsL_real[i], eigvecsL_imag[i]);
-                else if(not eigvecsL_real.empty() and i < eigvecsL_real.size())
-                    eigvecsL_cplx[i] = std::complex<double>(eigvecsL_real[i], 0.0);
-                else if(not eigvecsL_imag.empty() and i < eigvecsL_imag.size())
-                    eigvecsL_cplx[i] = std::complex<double>(0.0, eigvecsL_imag[i]);
+            eigvecsL_cx32.resize(std::max(eigvecsL_real_fp32.size(), eigvecsL_imag_fp32.size()));
+            for(size_t i = 0; i < eigvecsL_cx32.size(); i++) {
+                if(not eigvecsL_real_fp32.empty() and not eigvecsL_imag_fp32.empty() and i < eigvecsL_real_fp32.size() and i < eigvecsL_imag_fp32.size())
+                    eigvecsL_cx32[i] = cx32(eigvecsL_real_fp32[i], eigvecsL_imag_fp32[i]);
+                else if(not eigvecsL_real_fp32.empty() and i < eigvecsL_real_fp32.size())
+                    eigvecsL_cx32[i] = cx32(eigvecsL_real_fp32[i], 0.0);
+                else if(not eigvecsL_imag_fp32.empty() and i < eigvecsL_imag_fp32.size())
+                    eigvecsL_cx32[i] = cx32(0.0, eigvecsL_imag_fp32[i]);
             }
-            eigvecsL_real.clear();
-            eigvecsL_imag.clear();
+            eigvecsL_real_fp32.clear();
+            eigvecsL_imag_fp32.clear();
         }
     }
 
-    void solution::build_eigvecs_real() const {
-        bool build_eigvecsR_real = eigvecsR_real.empty() and not eigvecsR_cplx.empty();
-        bool build_eigvecsL_real = eigvecsL_real.empty() and not eigvecsL_cplx.empty();
+    void solution::build_eigvecs_fp32() const {
+        bool build_eigvecsR_real = eigvecsR_real_fp32.empty() and not eigvecsR_cx32.empty();
+        bool build_eigvecsL_real = eigvecsL_real_fp32.empty() and not eigvecsL_cx32.empty();
 
         if(build_eigvecsR_real) {
-            eigvecsR_real.resize(eigvecsR_cplx.size());
-            for(size_t i = 0; i < eigvecsR_real.size(); i++) {
-                if(std::imag(eigvecsR_cplx[i]) > 1e-12) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
-                eigvecsR_real[i] = std::real(eigvecsR_cplx[i]);
+            eigvecsR_real_fp32.resize(eigvecsR_cx32.size());
+            for(size_t i = 0; i < eigvecsR_real_fp32.size(); i++) {
+                if(std::imag(eigvecsR_cx32[i]) > 1e-12f) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
+                eigvecsR_real_fp32[i] = std::real(eigvecsR_cx32[i]);
             }
-            eigvecsR_cplx.clear();
+            eigvecsR_cx32.clear();
         }
         if(build_eigvecsL_real) {
-            eigvecsL_real.resize(eigvecsL_cplx.size());
-            for(size_t i = 0; i < eigvecsL_real.size(); i++) {
-                if(std::imag(eigvecsL_cplx[i]) > 1e-12) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
-                eigvecsL_real[i] = std::real(eigvecsL_cplx[i]);
+            eigvecsL_real_fp32.resize(eigvecsL_cx32.size());
+            for(size_t i = 0; i < eigvecsL_real_fp32.size(); i++) {
+                if(std::imag(eigvecsL_cx32[i]) > 1e-12f) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
+                eigvecsL_real_fp32[i] = std::real(eigvecsL_cx32[i]);
             }
-            eigvecsL_cplx.clear();
+            eigvecsL_cx32.clear();
         }
     }
 
-    void solution::build_eigvals_cplx() const {
-        bool build_cplx = eigvals_cplx.empty() and not eigvals_imag.empty() and eigvals_real.size() == eigvals_imag.size();
+    void solution::build_eigvals_cx32() const {
+        bool build_cplx = eigvals_cx32.empty() and not eigvals_imag_fp32.empty() and eigvals_real_fp32.size() == eigvals_imag_fp32.size();
         if(build_cplx) {
-            eigvals_cplx.resize(eigvals_real.size());
-            for(size_t i = 0; i < eigvals_real.size(); i++) eigvals_cplx[i] = std::complex<double>(eigvals_real[i], eigvals_imag[i]);
-            eigvals_real.clear();
-            eigvals_imag.clear();
+            eigvals_cx32.resize(eigvals_real_fp32.size());
+            for(size_t i = 0; i < eigvals_real_fp32.size(); i++) eigvals_cx32[i] = std::complex<double>(eigvals_real_fp32[i], eigvals_imag_fp32[i]);
+            eigvals_real_fp32.clear();
+            eigvals_imag_fp32.clear();
         }
     }
 
-    void solution::build_eigvals_real() const {
-        bool build_real = (eigvals_real.empty() or eigvals_imag.empty()) and not eigvals_cplx.empty();
+    void solution::build_eigvals_fp32() const {
+        bool build_real = (eigvals_real_fp32.empty() or eigvals_imag_fp32.empty()) and not eigvals_cx32.empty();
         if(build_real) {
-            eigvals_real.resize(eigvals_cplx.size());
-            eigvals_imag.resize(eigvals_cplx.size());
-            for(size_t i = 0; i < eigvals_cplx.size(); i++) {
-                eigvals_real[i] = std::real(eigvals_cplx[i]);
-                eigvals_imag[i] = std::imag(eigvals_cplx[i]);
+            eigvals_real_fp32.resize(eigvals_cx32.size());
+            eigvals_imag_fp32.resize(eigvals_cx32.size());
+            for(size_t i = 0; i < eigvals_cx32.size(); i++) {
+                eigvals_real_fp32[i] = std::real(eigvals_cx32[i]);
+                eigvals_imag_fp32[i] = std::imag(eigvals_cx32[i]);
             }
-            eigvals_cplx.clear();
+            eigvals_cx32.clear();
+        }
+    }
+
+    void solution::build_eigvecs_cx64() const {
+        bool build_eigvecsR_cplx = eigvecsR_cx64.empty() and (not eigvecsR_real_fp64.empty() or not eigvecsR_imag_fp64.empty());
+        bool build_eigvecsL_cplx = eigvecsL_cx64.empty() and (not eigvecsL_real_fp64.empty() or not eigvecsL_imag_fp64.empty());
+
+        if(build_eigvecsR_cplx) {
+            eigvecsR_cx64.resize(std::max(eigvecsR_real_fp64.size(), eigvecsR_imag_fp64.size()));
+            for(size_t i = 0; i < eigvecsR_cx64.size(); i++) {
+                if(not eigvecsR_real_fp64.empty() and not eigvecsR_imag_fp64.empty() and i < eigvecsR_real_fp64.size() and i < eigvecsR_imag_fp64.size())
+                    eigvecsR_cx64[i] = cx64(eigvecsR_real_fp64[i], eigvecsR_imag_fp64[i]);
+                else if(not eigvecsR_real_fp64.empty() and i < eigvecsR_real_fp64.size())
+                    eigvecsR_cx64[i] = cx64(eigvecsR_real_fp64[i], 0.0);
+                else if(not eigvecsR_imag_fp64.empty() and i < eigvecsR_imag_fp64.size())
+                    eigvecsR_cx64[i] = cx64(0.0, eigvecsR_imag_fp64[i]);
+            }
+            eigvecsR_real_fp64.clear();
+            eigvecsR_imag_fp64.clear();
+        }
+        if(build_eigvecsL_cplx) {
+            eigvecsL_cx64.resize(std::max(eigvecsL_real_fp64.size(), eigvecsL_imag_fp64.size()));
+            for(size_t i = 0; i < eigvecsL_cx64.size(); i++) {
+                if(not eigvecsL_real_fp64.empty() and not eigvecsL_imag_fp64.empty() and i < eigvecsL_real_fp64.size() and i < eigvecsL_imag_fp64.size())
+                    eigvecsL_cx64[i] = cx64(eigvecsL_real_fp64[i], eigvecsL_imag_fp64[i]);
+                else if(not eigvecsL_real_fp64.empty() and i < eigvecsL_real_fp64.size())
+                    eigvecsL_cx64[i] = cx64(eigvecsL_real_fp64[i], 0.0);
+                else if(not eigvecsL_imag_fp64.empty() and i < eigvecsL_imag_fp64.size())
+                    eigvecsL_cx64[i] = cx64(0.0, eigvecsL_imag_fp64[i]);
+            }
+            eigvecsL_real_fp64.clear();
+            eigvecsL_imag_fp64.clear();
+        }
+    }
+
+    void solution::build_eigvecs_fp64() const {
+        bool build_eigvecsR_real = eigvecsR_real_fp64.empty() and not eigvecsR_cx64.empty();
+        bool build_eigvecsL_real = eigvecsL_real_fp64.empty() and not eigvecsL_cx64.empty();
+
+        if(build_eigvecsR_real) {
+            eigvecsR_real_fp64.resize(eigvecsR_cx64.size());
+            for(size_t i = 0; i < eigvecsR_real_fp64.size(); i++) {
+                if(std::imag(eigvecsR_cx64[i]) > 1e-12) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
+                eigvecsR_real_fp64[i] = std::real(eigvecsR_cx64[i]);
+            }
+            eigvecsR_cx64.clear();
+        }
+        if(build_eigvecsL_real) {
+            eigvecsL_real_fp64.resize(eigvecsL_cx64.size());
+            for(size_t i = 0; i < eigvecsL_real_fp64.size(); i++) {
+                if(std::imag(eigvecsL_cx64[i]) > 1e-12) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
+                eigvecsL_real_fp64[i] = std::real(eigvecsL_cx64[i]);
+            }
+            eigvecsL_cx64.clear();
+        }
+    }
+
+    void solution::build_eigvals_cx64() const {
+        bool build_cplx = eigvals_cx64.empty() and not eigvals_imag_fp64.empty() and eigvals_real_fp64.size() == eigvals_imag_fp64.size();
+        if(build_cplx) {
+            eigvals_cx64.resize(eigvals_real_fp64.size());
+            for(size_t i = 0; i < eigvals_real_fp64.size(); i++) eigvals_cx64[i] = cx64(eigvals_real_fp64[i], eigvals_imag_fp64[i]);
+            eigvals_real_fp64.clear();
+            eigvals_imag_fp64.clear();
+        }
+    }
+
+    void solution::build_eigvals_fp64() const {
+        bool build_real = (eigvals_real_fp64.empty() or eigvals_imag_fp64.empty()) and not eigvals_cx64.empty();
+        if(build_real) {
+            eigvals_real_fp64.resize(eigvals_cx64.size());
+            eigvals_imag_fp64.resize(eigvals_cx64.size());
+            for(size_t i = 0; i < eigvals_cx64.size(); i++) {
+                eigvals_real_fp64[i] = std::real(eigvals_cx64[i]);
+                eigvals_imag_fp64[i] = std::imag(eigvals_cx64[i]);
+            }
+            eigvals_cx64.clear();
         }
     }
 }

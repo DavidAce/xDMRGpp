@@ -5,6 +5,7 @@
 #include "debug/exceptions.h"
 #include "debug/info.h"
 #include "general/iter.h"
+#include "general/sfinae.h"
 #include "math/cast.h"
 #include "math/num.h"
 #include "math/stat.h"
@@ -34,14 +35,17 @@ StateFinite::StateFinite() = default; // Can't initialize lists since we don't k
 // operator= and copy assignment constructor.
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
-StateFinite::~StateFinite() noexcept                               = default; // default dtor
-StateFinite:: StateFinite(StateFinite &&other) noexcept            = default; // default move ctor
-StateFinite  &StateFinite::operator=(StateFinite &&other) noexcept = default; // default move assign
+StateFinite::~StateFinite() noexcept                              = default; // default dtor
+StateFinite::StateFinite(StateFinite &&other) noexcept            = default; // default move ctor
+StateFinite &StateFinite::operator=(StateFinite &&other) noexcept = default; // default move assign
 
 /* clang-format off */
 StateFinite::StateFinite(const StateFinite &other):
     direction(other.direction),
-    cache(other.cache),
+    cache_fp32(other.cache_fp32),
+    cache_fp64(other.cache_fp64),
+    cache_cx32(other.cache_cx32),
+    cache_cx64(other.cache_cx64),
     tag_normalized_sites(other.tag_normalized_sites),
     name(other.name),
     algo(other.algo),
@@ -59,7 +63,10 @@ StateFinite &StateFinite::operator=(const StateFinite &other) {
     // check for self-assignment
     if(this != &other) {
         direction            = other.direction;
-        cache                = other.cache;
+        cache_fp32           = other.cache_fp32;
+        cache_fp64           = other.cache_fp64;
+        cache_cx32           = other.cache_cx32;
+        cache_cx64           = other.cache_cx64;
         tag_normalized_sites = other.tag_normalized_sites;
         name                 = other.name;
         algo                 = other.algo;
@@ -100,6 +107,31 @@ void StateFinite::initialize(AlgorithmType algo_type, size_t model_size, long po
     if(get_position<long>() != position) throw except::logic_error("Initialized state at the wrong position");
     tag_normalized_sites = std::vector<bool>(model_size, false);
 }
+
+template<typename T>
+StateFinite::Cache<T> &StateFinite::get_cache() const {
+    static_assert(sfinae::is_any_v<T, fp32, fp64, cx32, cx64>);
+    /* clang-format off */
+         if constexpr(std::is_same_v<T, fp32>) { return cache_fp32; }
+    else if constexpr(std::is_same_v<T, fp64>) { return cache_fp64; }
+    else if constexpr(std::is_same_v<T, cx32>) { return cache_cx32; }
+    else if constexpr(std::is_same_v<T, cx64>) { return cache_cx64; }
+    else throw std::logic_error("unrecognized cache type T");
+    /* clang-format on */
+}
+template StateFinite::Cache<fp32> &StateFinite::get_cache() const;
+template StateFinite::Cache<fp64> &StateFinite::get_cache() const;
+template StateFinite::Cache<cx32> &StateFinite::get_cache() const;
+template StateFinite::Cache<cx64> &StateFinite::get_cache() const;
+
+// template<typename T>
+// StateFinite::Cache<T> &StateFinite::get_cache() {
+//     return const_cast<Cache &>(std::as_const(*this).get_cache<T>());
+// }
+// template StateFinite::Cache<fp32> &StateFinite::get_cache();
+// template StateFinite::Cache<fp64> &StateFinite::get_cache();
+// template StateFinite::Cache<cx32> &StateFinite::get_cache();
+// template StateFinite::Cache<cx64> &StateFinite::get_cache();
 
 void             StateFinite::set_name(std::string_view statename) { name = statename; }
 std::string_view StateFinite::get_name() const { return name; }
@@ -431,145 +463,90 @@ std::vector<std::array<long, 3>> StateFinite::get_mps_dims_active() const { retu
 template<typename Scalar>
 Eigen::Tensor<Scalar, 3> StateFinite::get_multisite_mps(const std::vector<size_t> &sites, bool use_cache) const {
     if(sites.empty()) throw except::runtime_error("No active sites on which to build a multisite mps tensor");
-    if constexpr(std::is_same_v<Scalar, cx64>) {
-        if(sites == active_sites and cache.multisite_mps) { return cache.multisite_mps.value(); }
-        auto                   t_mps  = tid::tic_scope("gen_mps", tid::level::highest);
-        auto                   length = get_length<size_t>();
-        Eigen::Tensor<cx64, 3> multisite_mps;
-        Eigen::Tensor<cx64, 3> temp;
-        for(auto &site : sites) {
-            const auto mps_key = use_cache ? generate_cache_key(sites, site, "l2r") : "";
-            const auto mps_cch = use_cache ? get_mps_in_cache<cx64>(mps_key) : std::nullopt;
-            if(mps_cch.has_value()) {
-                if constexpr(settings::debug_cache) tools::log->trace("multisite_mps: cache_hit: {}", mps_key);
-                multisite_mps = mps_cch->get();
-            } else {
-                const auto &mps       = get_mps_site(site);
-                auto        M         = mps.get_M();
-                bool        prepend_L = mps.get_label() == "B" and site > 0 and site == sites.front();
-                bool        append_L  = mps.get_label() == "A" and site + 1 < length and site == sites.back();
-                if(prepend_L) {
-                    // In this case all sites are "B" and we need to prepend the "L" from the site on the left to make a normalized multisite mps
-                    const auto &mps_left = get_mps_site(site - 1);
-                    const auto &L        = mps_left.isCenter() ? mps_left.get_LC() : mps_left.get_L();
-                    if(L.dimension(0) != M.dimension(1))
-                        throw except::logic_error("get_multisite_mps<cx64>({}): mismatching dimensions: L (left) {} | M {}", sites, L.dimensions(),
-                                                  M.dimensions());
-                    M = tools::common::contraction::contract_bnd_mps_temp(L, M, temp);
-                }
-                if(append_L) {
-                    // In this case all sites are "A" and we need to append the "L" from the site on the right to make a normalized multisite mps
-                    const auto &mps_right = get_mps_site(site + 1);
-                    const auto &L         = mps_right.get_L();
-                    if(L.dimension(0) != M.dimension(2))
-                        throw except::logic_error("get_multisite_mps<cx64>({}): mismatching dimensions: M {} | L (right) {}", sites, M.dimensions(),
-                                                  L.dimensions());
-                    M = tools::common::contraction::contract_mps_bnd_temp(M, L, temp);
-                }
+    using T                    = Scalar;
+    auto                t_mps  = tid::tic_scope("gen_mps", tid::level::highest);
+    auto                length = get_length<size_t>();
+    Eigen::Tensor<T, 3> multisite_mps;
+    Eigen::Tensor<T, 3> temp;
+    for(auto &site : sites) {
+        const auto mps_key = use_cache ? generate_cache_key(sites, site, "l2r") : "";
+        const auto mps_cch = use_cache ? get_cached_mps<T>(mps_key) : std::nullopt;
+        if(mps_cch.has_value()) {
+            if constexpr(settings::debug_cache) tools::log->trace("multisite_mps: cache_hit: {}", mps_key);
+            multisite_mps = mps_cch->get();
+        } else {
+            const auto &mps       = get_mps_site(site);
+            auto        M         = mps.get_M_as<T>();
+            bool        prepend_L = mps.get_label() == "B" and site > 0 and site == sites.front();
+            bool        append_L  = mps.get_label() == "A" and site + 1 < length and site == sites.back();
+            if(prepend_L) {
+                // In this case all sites are "B" and we need to prepend the "L" from the site on the left to make a normalized multisite mps
+                if constexpr(settings::debug_state) tools::log->trace("Prepending L to B site {}", site);
+                auto        t_prepend = tid::tic_scope("prepend", tid::level::higher);
+                const auto &mps_left  = get_mps_site(site - 1);
+                const auto  L         = mps_left.isCenter() ? mps_left.get_LC_as<T>() : mps_left.get_L_as<T>();
+                if(L.dimension(0) != M.dimension(1))
+                    throw except::logic_error("get_multisite_mps<{}>: mismatching dimensions: L (left) {} | M {}", sfinae::type_name<T>(), L.dimensions(),
+                                              M.dimensions());
+                M = tools::common::contraction::contract_bnd_mps_temp(L, M, temp);
+            }
+            if(append_L) {
+                // In this case all sites are "A" and we need to append the "L" from the site on the right to make a normalized multisite mps
+                if constexpr(settings::debug_state) tools::log->trace("Appending L to A site {}", site);
+                auto        t_append  = tid::tic_scope("append", tid::level::higher);
+                const auto &mps_right = get_mps_site(site + 1);
+                const auto  L         = mps_right.get_L_as<T>();
+                if(L.dimension(0) != M.dimension(2))
+                    throw except::logic_error("get_multisite_mps<{}>: mismatching dimensions: M {} | L (right) {}", sfinae::type_name<T>(), M.dimensions(),
+                                              L.dimensions());
+                M = tools::common::contraction::contract_mps_bnd_temp(M, L, temp);
+            }
 
-                if(&site == &sites.front()) { // First site
-                    multisite_mps = std::move(M);
-                } else { // Next sites
-                    multisite_mps = tools::common::contraction::contract_mps_mps_temp(multisite_mps, M, temp);
-                }
+            if(&site == &sites.front()) { // First site
+                multisite_mps = std::move(M);
+            } else { // Next sites
+                multisite_mps = tools::common::contraction::contract_mps_mps_temp(multisite_mps, M, temp);
+            }
 
-                if(use_cache and not append_L) {
-                    // If it is the last site, we may have closed off by appending L
-                    cache.mps_cplx.emplace_back(std::make_pair(mps_key, multisite_mps)); // We know it is not present already
-                    shrink_cache();
-                }
+            if(use_cache and not append_L) {
+                // If it is the last site, we may have closed off by appending L
+                get_cache<T>().mps.emplace_back(std::make_pair(mps_key, multisite_mps)); // We know it is not present already
+                shrink_cache();
             }
         }
-        if constexpr(settings::debug) {
-            // Check the norm of the tensor on debug builds
-            auto t_dbg = tid::tic_scope("debug");
-            cx64 norm  = tools::common::contraction::contract_mps_norm(multisite_mps);
-            if constexpr(settings::debug_state) tools::log->trace("get_multisite_mps({}): norm ⟨ψ|ψ⟩ = {:.16f}", sites, norm);
-            if(std::abs(norm - 1.0) > settings::precision::max_norm_error) {
-                tools::log->warn("get_multisite_mps<cx64>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > max_norm_error {:.2e}", sites, std::abs(norm - 1.0),
-                                 settings::precision::max_norm_error);
-                //                throw except::runtime_error("get_multisite_mps<cx64>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > max_norm_error {:.2e}", sites,
-                //                std::abs(norm - 1),
-                //                                            settings::precision::max_norm_error);
-            }
-        }
-        return multisite_mps;
-    } else if constexpr(std::is_same_v<Scalar, fp64>) {
-        auto t_mps = tid::tic_scope("gen_mps", tid::level::highest);
-        // auto                   csites = std::vector<size_t>{}; // Keeps track of the contracted sites
-        auto                   length = get_length<size_t>();
-        Eigen::Tensor<fp64, 3> multisite_mps;
-        Eigen::Tensor<fp64, 3> temp;
-        for(auto &site : sites) {
-            const auto mps_key = use_cache ? generate_cache_key(sites, site, "l2r") : "";
-            const auto mps_cch = use_cache ? get_mps_in_cache<fp64>(mps_key) : std::nullopt;
-            if(mps_cch.has_value()) {
-                if constexpr(settings::debug_cache) tools::log->trace("multisite_mps: cache_hit: {}", mps_key);
-                multisite_mps = mps_cch->get();
-            } else {
-                const auto &mps       = get_mps_site(site);
-                auto        M         = Eigen::Tensor<fp64, 3>(mps.get_M().real());
-                bool        prepend_L = mps.get_label() == "B" and site > 0 and site == sites.front();
-                bool        append_L  = mps.get_label() == "A" and site + 1 < length and site == sites.back();
-                if(prepend_L) {
-                    // In this case all sites are "B" and we need to prepend the "L" from the site on the left to make a normalized multisite mps
-                    if constexpr(settings::debug_state) tools::log->trace("Prepending L to B site {}", site);
-                    auto        t_prepend = tid::tic_scope("prepend", tid::level::higher);
-                    const auto &mps_left  = get_mps_site(site - 1);
-                    const auto  L         = Eigen::Tensor<fp64, 1>(mps_left.isCenter() ? mps_left.get_LC().real() : mps_left.get_L().real());
-                    if(L.dimension(0) != M.dimension(1))
-                        throw except::logic_error("get_multisite_mps<fp64>: mismatching dimensions: L (left) {} | M {}", L.dimensions(), M.dimensions());
-                    M = tools::common::contraction::contract_bnd_mps_temp(L, M, temp);
-                }
-                if(append_L) {
-                    // In this case all sites are "A" and we need to append the "L" from the site on the right to make a normalized multisite mps
-                    if constexpr(settings::debug_state) tools::log->trace("Appending L to A site {}", site);
-                    auto        t_append  = tid::tic_scope("append", tid::level::higher);
-                    const auto &mps_right = get_mps_site(site + 1);
-                    const auto &L         = Eigen::Tensor<fp64, 1>(mps_right.get_L().real());
-                    if(L.dimension(0) != M.dimension(2))
-                        throw except::logic_error("get_multisite_mps<fp64>: mismatching dimensions: M {} | L (right) {}", M.dimensions(), L.dimensions());
-                    M = tools::common::contraction::contract_mps_bnd_temp(M, L, temp);
-                }
-
-                if(&site == &sites.front()) { // First site
-                    multisite_mps = std::move(M);
-                } else { // Next sites
-                    multisite_mps = tools::common::contraction::contract_mps_mps_temp(multisite_mps, M, temp);
-                }
-
-                if(use_cache and not append_L) {
-                    // If it is the last site, we may have closed off by appending L
-                    cache.mps_real.emplace_back(std::make_pair(mps_key, multisite_mps)); // We know it is not present already
-                    shrink_cache();
-                }
-            }
-        }
-        if constexpr(settings::debug) {
-            // Check the norm of the tensor on debug builds
-            auto   t_dbg = tid::tic_scope("debug");
-            double norm  = tools::common::contraction::contract_mps_norm(multisite_mps);
-            if constexpr(settings::debug_state) tools::log->trace("get_multisite_mps({}): norm ⟨ψ|ψ⟩ = {:.16f}", sites, norm);
-            if(std::abs(norm - 1) > settings::precision::max_norm_error) {
-                tools::log->warn("get_multisite_mps<fp64>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > max_norm_error {:.2e}", sites, std::abs(norm - 1),
-                                 settings::precision::max_norm_error);
-                //                throw except::runtime_error("get_multisite_mps<fp64>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > max_norm_error {:.2e}", sites,
-                //                std::abs(norm - 1),
-                //                                            settings::precision::max_norm_error);
-            }
-        }
-        return multisite_mps;
     }
+    if constexpr(settings::debug) {
+        // Check the norm of the tensor on debug builds
+        auto   t_dbg = tid::tic_scope("debug");
+        double norm  = std::abs(tools::common::contraction::contract_mps_norm(multisite_mps));
+        if constexpr(settings::debug_state) tools::log->trace("get_multisite_mps<{}>({}): norm ⟨ψ|ψ⟩ = {:.16f}", sfinae::type_name<T>(), sites, norm);
+        if(std::abs(norm - 1) > settings::precision::max_norm_error) {
+            tools::log->warn("get_multisite_mps<{}>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > max_norm_error {:.2e}", sfinae::type_name<T>(), sites,
+                             std::abs(norm - 1), settings::precision::max_norm_error);
+            //                throw except::runtime_error("get_multisite_mps<fp64>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > max_norm_error {:.2e}", sites,
+            //                std::abs(norm - 1),
+            //                                            settings::precision::max_norm_error);
+        }
+    }
+    return multisite_mps;
+    // }
 }
 
+template Eigen::Tensor<fp32, 3> StateFinite::get_multisite_mps<fp32>(const std::vector<size_t> &sites, bool use_cache) const;
 template Eigen::Tensor<fp64, 3> StateFinite::get_multisite_mps<fp64>(const std::vector<size_t> &sites, bool use_cache) const;
+template Eigen::Tensor<cx32, 3> StateFinite::get_multisite_mps<cx32>(const std::vector<size_t> &sites, bool use_cache) const;
 template Eigen::Tensor<cx64, 3> StateFinite::get_multisite_mps<cx64>(const std::vector<size_t> &sites, bool use_cache) const;
 
-const Eigen::Tensor<cx64, 3> &StateFinite::get_multisite_mps() const {
-    if(cache.multisite_mps) return cache.multisite_mps.value();
-    cache.multisite_mps = get_multisite_mps(active_sites);
-    return cache.multisite_mps.value();
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 3> &StateFinite::get_multisite_mps() const {
+    if(get_cache<Scalar>().multisite_mps.has_value()) return get_cache<Scalar>().multisite_mps.value();
+    get_cache<Scalar>().multisite_mps = get_multisite_mps<Scalar>(active_sites);
+    return get_cache<Scalar>().multisite_mps.value();
 }
+template const Eigen::Tensor<fp32, 3> &StateFinite::get_multisite_mps<fp32>() const;
+template const Eigen::Tensor<fp64, 3> &StateFinite::get_multisite_mps<fp64>() const;
+template const Eigen::Tensor<cx32, 3> &StateFinite::get_multisite_mps<cx32>() const;
+template const Eigen::Tensor<cx64, 3> &StateFinite::get_multisite_mps<cx64>() const;
 
 template<typename Scalar>
 Eigen::Tensor<Scalar, 2> StateFinite::get_reduced_density_matrix(const std::vector<size_t> &sites) const {
@@ -612,25 +589,17 @@ Eigen::Tensor<Scalar, 2> StateFinite::get_reduced_density_matrix(const std::vect
                     // Could be an A, AC or B. Either way we need the first site to include the left schmidt values
                     // If it is the only site, we also need it to include the right schmidt values.
                     bool use_multisite = mps.get_label() == "B" or sites.size() == 1;
-                    if constexpr(std::is_same_v<Scalar, fp64>) {
-                        M = use_multisite ? get_multisite_mps({i}, true).real() : mps.get_M().real();
-                    } else {
-                        M = use_multisite ? get_multisite_mps({i}, true) : mps.get_M();
-                    }
-                    auto dim = M.dimensions();
+                    M                  = use_multisite ? get_multisite_mps<Scalar>({i}, true) : mps.get_M_as<Scalar>();
+                    auto dim           = M.dimensions();
                     rho_temp.resize(std::array{dim[0], dim[0], dim[2], dim[2]});
                     rho_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({1}, {1})).shuffle(std::array{0, 2, 1, 3});
                 } else {
                     // This site could be A, AC or B. Only A lacks schmidt values on the right, so we use multisite when the last site is A.
                     bool use_multisite = i == sites.back() and mps.get_label() == "A";
-                    if constexpr(std::is_same_v<Scalar, fp64>) {
-                        M = use_multisite ? get_multisite_mps({i}, true).real() : mps.get_M().real();
-                    } else {
-                        M = use_multisite ? get_multisite_mps({i}, true) : mps.get_M();
-                    }
-                    auto mps_dim  = M.dimensions();
-                    auto rho_dim  = rho_temp.dimensions();
-                    bool do_trace = std::find(sites.begin(), sites.end(), i) == sites.end();
+                    M                  = use_multisite ? get_multisite_mps<Scalar>({i}, true) : mps.get_M_as<Scalar>();
+                    auto mps_dim       = M.dimensions();
+                    auto rho_dim       = rho_temp.dimensions();
+                    bool do_trace      = std::find(sites.begin(), sites.end(), i) == sites.end();
                     if(do_trace) {
                         auto new_dim = std::array{rho_dim[0], rho_dim[1], mps_dim[2], mps_dim[2]};
                         rho_temp2.resize(new_dim);
@@ -646,7 +615,7 @@ Eigen::Tensor<Scalar, 2> StateFinite::get_reduced_density_matrix(const std::vect
                     rho_temp = std::move(rho_temp2);
                     if constexpr(settings::debug_cache) {
                         if(debug::mem_hwm_in_mb() > 10000) {
-                            for(const auto &elem : cache.mps_real) tools::log->info("from left: cache memory > 10000 MB: {}", elem.first);
+                            for(const auto &elem : get_cache<Scalar>().mps) tools::log->info("from left: cache memory > 10000 MB: {}", elem.first);
                             // throw except::runtime_error("Exceeded 5G high water mark after rho l2r site {} | sites", i, cites);
                         }
                     }
@@ -661,25 +630,17 @@ Eigen::Tensor<Scalar, 2> StateFinite::get_reduced_density_matrix(const std::vect
                     // Could be an A, AC or B. Either way we need the last site to include the right schmidt values
                     // If it is the only site, we also need it to include the left schmidt values.
                     bool use_multisite = mps.get_label() == "A" or sites.size() == 1;
-                    if constexpr(std::is_same_v<Scalar, fp64>) {
-                        M = use_multisite ? get_multisite_mps({i}, true).real() : mps.get_M().real();
-                    } else {
-                        M = use_multisite ? get_multisite_mps({i}, true) : mps.get_M();
-                    }
-                    auto dim = M.dimensions();
+                    M                  = use_multisite ? get_multisite_mps<Scalar>({i}, true) : mps.template get_M_as<Scalar>();
+                    auto dim           = M.dimensions();
                     rho_temp.resize(std::array{dim[0], dim[0], dim[1], dim[1]});
                     rho_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({2}, {2})).shuffle(std::array{0, 2, 1, 3});
                 } else {
                     // This site could be A, AC or B. Only B lacks schmidt values on the left, so we use multisite when the first site is B.
                     bool use_multisite = i == sites.front() and mps.get_label() == "B";
-                    if constexpr(std::is_same_v<Scalar, fp64>) {
-                        M = use_multisite ? get_multisite_mps({i}, true).real() : mps.get_M().real();
-                    } else {
-                        M = use_multisite ? get_multisite_mps({i}, true) : mps.get_M();
-                    }
-                    auto mps_dim  = M.dimensions();
-                    auto rho_dim  = rho_temp.dimensions();
-                    bool do_trace = std::find(sites.begin(), sites.end(), i) == sites.end();
+                    M                  = use_multisite ? get_multisite_mps<Scalar>({i}, true) : mps.template get_M_as<Scalar>();
+                    auto mps_dim       = M.dimensions();
+                    auto rho_dim       = rho_temp.dimensions();
+                    bool do_trace      = std::find(sites.begin(), sites.end(), i) == sites.end();
                     if(do_trace) {
                         auto new_dim = std::array{rho_dim[0], rho_dim[1], mps_dim[1], mps_dim[1]};
                         rho_temp2.resize(new_dim);
@@ -695,7 +656,7 @@ Eigen::Tensor<Scalar, 2> StateFinite::get_reduced_density_matrix(const std::vect
                     rho_temp = std::move(rho_temp2);
                     if constexpr(settings::debug_cache) {
                         if(debug::mem_hwm_in_mb() > 10000) {
-                            for(const auto &elem : cache.mps_real) tools::log->info("from right: cache memory > 10000 MB: {}", elem.first);
+                            for(const auto &elem : get_cache<Scalar>().mps) tools::log->info("from right: cache memory > 10000 MB: {}", elem.first);
                             // throw except::runtime_error("Exceeded 5G high water mark after rho r2l site {} | sites", i, cites);
                         }
                     }
@@ -706,7 +667,9 @@ Eigen::Tensor<Scalar, 2> StateFinite::get_reduced_density_matrix(const std::vect
     }
 }
 
+template Eigen::Tensor<fp32, 2> StateFinite::get_reduced_density_matrix<fp32>(const std::vector<size_t> &sites) const;
 template Eigen::Tensor<fp64, 2> StateFinite::get_reduced_density_matrix<fp64>(const std::vector<size_t> &sites) const;
+template Eigen::Tensor<cx32, 2> StateFinite::get_reduced_density_matrix<cx32>(const std::vector<size_t> &sites) const;
 template Eigen::Tensor<cx64, 2> StateFinite::get_reduced_density_matrix<cx64>(const std::vector<size_t> &sites) const;
 
 template<typename Scalar>
@@ -731,7 +694,7 @@ std::array<double, 3> StateFinite::get_reduced_density_matrix_cost(const std::ve
         ops_t2b = spindim * spindim * static_cast<double>(max_chi * min_chi * min_chi + min_chi); // This is the last step, but we will add earlier steps below.
         for(const auto &[i, pos] : iter::enumerate(sites)) {
             auto key = generate_cache_key(sites, pos, "l2r");
-            if(has_mps_in_cache<Scalar>(key)) continue;
+            if(has_cached_mps<Scalar>(key)) continue;
             // bonds[i] is always a bond directly to the right of pos, except for the last pos, where we use chiR instead
             if(i == 0) { // It will append either chiL or chiR, but we take the worst case scenario here
                 if(sites.size() == 1) { ops_t2b += static_cast<double>(2l * chiL * chiR * std::max(chiL, chiR)); }
@@ -823,6 +786,10 @@ std::array<double, 3> StateFinite::get_reduced_density_matrix_cost(const std::ve
     }
     return std::array{ops_t2b + mem_t2b, ops_l2r + mem_l2r, ops_r2l + mem_r2l};
 }
+template std::array<double, 3> StateFinite::get_reduced_density_matrix_cost<fp32>(const std::vector<size_t> &sites) const;
+template std::array<double, 3> StateFinite::get_reduced_density_matrix_cost<fp64>(const std::vector<size_t> &sites) const;
+template std::array<double, 3> StateFinite::get_reduced_density_matrix_cost<cx32>(const std::vector<size_t> &sites) const;
+template std::array<double, 3> StateFinite::get_reduced_density_matrix_cost<cx64>(const std::vector<size_t> &sites) const;
 
 std::string StateFinite::generate_cache_key(const std::vector<size_t> &sites, const size_t pos, std::string_view side) const {
     if(sites.empty()) return {};
@@ -866,21 +833,11 @@ std::string StateFinite::generate_cache_key(const std::vector<size_t> &sites, co
 template<typename Scalar>
 StateFinite::optional_tensor4ref<Scalar> StateFinite::load_trf_from_cache(const std::string &key) const {
     if(key.empty()) return {};
-    if constexpr(std::is_same_v<Scalar, fp64>) {
-        // auto it = cache.trf_real.find(key);
-        auto it = std::find_if(cache.trf_real.begin(), cache.trf_real.end(), [&key](const auto &elem) -> bool { return elem.first == key; });
-        if(it != cache.trf_real.end()) {
-            if constexpr(settings::debug_cache) tools::log->trace("load_trf_from_cache: cache_hit: {} | {} | {}", key, it->second.dimensions());
-            return std::cref(it->second);
-        }
-    }
-    if constexpr(std::is_same_v<Scalar, cx64>) {
-        // auto it = cache.trf_cplx.find(key);
-        auto it = std::find_if(cache.trf_cplx.begin(), cache.trf_cplx.end(), [&key](const auto &elem) -> bool { return elem.first == key; });
-        if(it != cache.trf_cplx.end()) {
-            if constexpr(settings::debug_cache) tools::log->trace("load_trf_from_cache: cache_hit: {} | {} | {}", key, it->second.dimensions());
-            return std::cref(it->second);
-        }
+    auto it = std::find_if(get_cache<Scalar>.trf.begin(), get_cache<Scalar>.trf.end(), [&key](const auto &elem) -> bool { return elem.first == key; });
+    if(it != get_cache<Scalar>.trf.end()) {
+        if constexpr(settings::debug_cache)
+            tools::log->trace("load_trf_from_cache<{}>: cache_hit: {} | {} | {}", sfinae::type_name<Scalar>(), key, it->second.dimensions());
+        return std::cref(it->second);
     }
     return std::nullopt;
 }
@@ -897,26 +854,14 @@ StateFinite::optional_tensor4ref<Scalar> StateFinite::load_trf_from_cache(const 
 template<typename Scalar>
 void StateFinite::save_trf_into_cache(const Eigen::Tensor<Scalar, 4> &trf, const std::string &key) const {
     if(key.empty()) return;
-    if constexpr(std::is_same_v<Scalar, fp64>) {
-        auto it = std::find_if(cache.trf_real.rbegin(), cache.trf_real.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
-        if constexpr(settings::debug_cache) {
-            // if(!cache.trf_real.contains(key)) tools::log->trace("save_trf_into_cache: key: {} | {}", key, trf.dimensions());
-            if(it == cache.trf_real.rend()) tools::log->trace("save_trf_into_cache: key: {} | {}", key, trf.dimensions());
-        }
-        // cache.trf_real[key] = trf;
-        if(it == cache.trf_real.rend()) cache.trf_real.emplace_back(std::make_pair(key, trf));
-        shrink_cache();
+    auto it = std::find_if(get_cache<Scalar>().trf.rbegin(), get_cache<Scalar>().trf.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
+    if constexpr(settings::debug_cache) {
+        // if(!cache.trf_real.contains(key)) tools::log->trace("save_trf_into_cache: key: {} | {}", key, trf.dimensions());
+        if(it == get_cache<Scalar>().trf.rend()) tools::log->trace("save_trf_into_cache<{}>: key: {} | {}", sfinae::type_name<Scalar>(), key, trf.dimensions());
     }
-    if constexpr(std::is_same_v<Scalar, cx64>) {
-        auto it = std::find_if(cache.trf_cplx.rbegin(), cache.trf_cplx.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
-        if constexpr(settings::debug_cache) {
-            // if(!cache.trf_cplx.contains(key)) tools::log->trace("save_trf_into_cache: key: {} | {}", key, trf.dimensions());
-            if(it == cache.trf_cplx.rend()) tools::log->trace("save_trf_into_cache: key: {} | {}", key, trf.dimensions());
-        }
-        // cache.trf_cplx[key] = trf;
-        if(it == cache.trf_cplx.rend()) cache.trf_cplx.emplace_back(std::make_pair(key, trf));
-        shrink_cache();
-    }
+    // cache.trf_real[key] = trf;
+    if(it == get_cache<Scalar>().trf.rend()) get_cache<Scalar>().trf.emplace_back(std::make_pair(key, trf));
+    shrink_cache();
 }
 
 template<typename Scalar>
@@ -940,35 +885,20 @@ std::optional<StateFinite::TrfCacheEntry<Scalar>> StateFinite::get_optimal_trf_f
             auto key        = generate_cache_key(sites, posR, "l2r");
             auto nremaining = sites.back() - posR;
             auto ncontained = sites.size() - nremaining;
-            if constexpr(std::is_same_v<Scalar, fp64>) {
-                // if(auto it = cache.trf_real.find(key); it != cache.trf_real.end()) {
-                auto it = std::find_if(cache.trf_real.rbegin(), cache.trf_real.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
-                if(it != cache.trf_real.rend()) {
-                    if constexpr(settings::debug_cache) tools::log->trace("get_optimal_trf_from_cache: cache hit: pos {} | {} | sites {}", posR, side, sites);
-                    cacheEntry = TrfCacheEntry<Scalar>{.pos        = posR,
-                                                       .side       = "l2r",
-                                                       .key        = key,
-                                                       .ncontained = ncontained,
-                                                       .nremaining = nremaining,
-                                                       .cost       = std::numeric_limits<double>::quiet_NaN(),
-                                                       .trf        = std::cref(it->second)};
-                    break;
-                }
-            }
-            if constexpr(std::is_same_v<Scalar, cx64>) {
-                // if(auto it = cache.trf_cplx.find(key); it != cache.trf_cplx.end()) {
-                auto it = std::find_if(cache.trf_cplx.rbegin(), cache.trf_cplx.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
-                if(it != cache.trf_cplx.rend()) {
-                    if constexpr(settings::debug_cache) tools::log->trace("get_optimal_trf_from_cache: cache hit: pos {} | {} | sites {}", posR, side, sites);
-                    cacheEntry = TrfCacheEntry<Scalar>{.pos        = posR,
-                                                       .side       = "l2r",
-                                                       .key        = key,
-                                                       .ncontained = ncontained,
-                                                       .nremaining = nremaining,
-                                                       .cost       = std::numeric_limits<double>::quiet_NaN(),
-                                                       .trf        = std::cref(it->second)};
-                    break;
-                }
+            // if(auto it = cache.trf_real.find(key); it != cache.trf_real.end()) {
+            auto it =
+                std::find_if(get_cache<Scalar>().trf.rbegin(), get_cache<Scalar>().trf.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
+            if(it != get_cache<Scalar>().trf.rend()) {
+                if constexpr(settings::debug_cache)
+                    tools::log->trace("get_optimal_trf_from_cache<{}>: cache hit: pos {} | {} | sites {}", sfinae::type_name<Scalar>(), posR, side, sites);
+                cacheEntry = TrfCacheEntry<Scalar>{.pos        = posR,
+                                                   .side       = "l2r",
+                                                   .key        = key,
+                                                   .ncontained = ncontained,
+                                                   .nremaining = nremaining,
+                                                   .cost       = std::numeric_limits<double>::quiet_NaN(),
+                                                   .trf        = std::cref(it->second)};
+                break;
             }
         }
     }
@@ -977,35 +907,20 @@ std::optional<StateFinite::TrfCacheEntry<Scalar>> StateFinite::get_optimal_trf_f
             auto key        = generate_cache_key(sites, posL, "r2l");
             auto ncontained = sites.back() - posL + 1;
             auto nremaining = sites.size() - ncontained;
-            if constexpr(std::is_same_v<Scalar, fp64>) {
-                // if(auto it = cache.trf_real.find(key); it != cache.trf_real.end()) {
-                auto it = std::find_if(cache.trf_real.rbegin(), cache.trf_real.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
-                if(it != cache.trf_real.rend()) {
-                    if constexpr(settings::debug_cache) tools::log->trace("get_optimal_trf_from_cache: cache hit: pos {} | {} | sites {}", posL, side, sites);
-                    cacheEntry = TrfCacheEntry<Scalar>{.pos        = posL,
-                                                       .side       = "r2l",
-                                                       .key        = key,
-                                                       .ncontained = ncontained,
-                                                       .nremaining = nremaining,
-                                                       .cost       = std::numeric_limits<double>::quiet_NaN(),
-                                                       .trf        = std::cref(it->second)};
-                    break;
-                }
-            }
-            if constexpr(std::is_same_v<Scalar, cx64>) {
-                // if(auto it = cache.trf_cplx.find(key); it != cache.trf_cplx.end()) {
-                auto it = std::find_if(cache.trf_cplx.rbegin(), cache.trf_cplx.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
-                if(it != cache.trf_cplx.rend()) {
-                    if constexpr(settings::debug_cache) tools::log->trace("get_optimal_trf_from_cache: cache hit: pos {} | {} | sites {}", posL, side, sites);
-                    cacheEntry = TrfCacheEntry<Scalar>{.pos        = posL,
-                                                       .side       = "r2l",
-                                                       .key        = key,
-                                                       .ncontained = ncontained,
-                                                       .nremaining = nremaining,
-                                                       .cost       = std::numeric_limits<double>::quiet_NaN(),
-                                                       .trf        = std::cref(it->second)};
-                    break;
-                }
+            // if(auto it = cache.trf_real.find(key); it != cache.trf_real.end()) {
+            auto it =
+                std::find_if(get_cache<Scalar>().trf.rbegin(), get_cache<Scalar>().trf.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
+            if(it != get_cache<Scalar>().trf.rend()) {
+                if constexpr(settings::debug_cache)
+                    tools::log->trace("get_optimal_trf_from_cache<{}>: cache hit: pos {} | {} | sites {}", sfinae::type_name<Scalar>(), posL, side, sites);
+                cacheEntry = TrfCacheEntry<Scalar>{.pos        = posL,
+                                                   .side       = "r2l",
+                                                   .key        = key,
+                                                   .ncontained = ncontained,
+                                                   .nremaining = nremaining,
+                                                   .cost       = std::numeric_limits<double>::quiet_NaN(),
+                                                   .trf        = std::cref(it->second)};
+                break;
             }
         }
     }
@@ -1044,35 +959,20 @@ std::optional<StateFinite::TrfCacheEntry<Scalar>> StateFinite::get_optimal_trf_f
 }
 
 template<typename Scalar>
-StateFinite::optional_tensor3ref<Scalar> StateFinite::get_mps_in_cache(const std::string &key) const {
-    if constexpr(std::is_same_v<Scalar, fp64>) {
-        auto it = std::find_if(cache.mps_real.begin(), cache.mps_real.end(), [&](const auto &elem) -> bool { return elem.first == key; });
-        if(it != cache.mps_real.end()) return std::cref(it->second);
-    }
-    if constexpr(std::is_same_v<Scalar, cx64>) {
-        auto it = std::find_if(cache.mps_cplx.begin(), cache.mps_cplx.end(), [&](const auto &elem) -> bool { return elem.first == key; });
-        if(it != cache.mps_cplx.end()) return std::cref(it->second);
-    }
+StateFinite::optional_tensor3ref<Scalar> StateFinite::get_cached_mps(const std::string &key) const {
+    auto &cache = get_cache<Scalar>();
+    auto  it    = std::find_if(cache.mps.begin(), cache.mps.end(), [&](const auto &elem) -> bool { return elem.first == key; });
+    if(it != cache.mps.end()) return std::cref(it->second);
     return std::nullopt;
 }
 
 template<typename Scalar>
-bool StateFinite::has_mps_in_cache(const std::string &key) const {
-    if constexpr(std::is_same_v<Scalar, fp64>) {
-        auto it = std::find_if(cache.mps_real.rbegin(), cache.mps_real.rend(), [&](const auto &elem) -> bool { return elem.first == key; });
-        if constexpr(settings::debug_cache)
-            if(it != cache.mps_real.rend()) tools::log->trace("multisite_mps: cache_hit: {}", key);
-        return it != cache.mps_real.rend();
-    }
-    if constexpr(std::is_same_v<Scalar, cx64>) {
-        auto it = std::find_if(cache.mps_cplx.rbegin(), cache.mps_cplx.rend(), [&](const auto &elem) -> bool { return elem.first == key; });
-        if constexpr(settings::debug_cache)
-            if(it != cache.mps_cplx.rend()) tools::log->trace("multisite_mps: cache_hit: {}", key);
-        return it != cache.mps_cplx.rend();
-    }
-    // if constexpr(std::is_same_v<Scalar, fp64>) { return cache.mps_real.find(key) != cache.mps_real.end(); }
-    // if constexpr(std::is_same_v<Scalar, cx64>) { return cache.mps_cplx.find(key) != cache.mps_cplx.end(); }
-    return false;
+bool StateFinite::has_cached_mps(const std::string &key) const {
+    auto &cache = get_cache<Scalar>();
+    auto  it    = std::find_if(cache.mps.rbegin(), cache.mps.rend(), [&](const auto &elem) -> bool { return elem.first == key; });
+    if constexpr(settings::debug_cache)
+        if(it != cache.mps.rend()) tools::log->trace("multisite_mps: cache_hit: {}", key);
+    return it != cache.mps.rend();
 }
 
 template<typename Scalar>
@@ -1121,25 +1021,17 @@ Eigen::Tensor<Scalar, 2> StateFinite::get_transfer_matrix(const std::vector<size
                     // Could be an A, AC or B. Either way we need the first site to include the left schmidt values
                     // If it is the only site, we also need it to include the right schmidt values.
                     bool use_multisite = mps.get_label() == "B" or sites.size() == 1;
-                    if constexpr(std::is_same_v<Scalar, fp64>) {
-                        M = use_multisite ? get_multisite_mps({i}).real() : mps.get_M().real();
-                    } else {
-                        M = use_multisite ? get_multisite_mps({i}) : mps.get_M();
-                    }
-                    auto dim = M.dimensions();
+                    M                  = use_multisite ? get_multisite_mps<Scalar>({i}) : mps.template get_M_as<Scalar>();
+                    auto dim           = M.dimensions();
                     trf_temp.resize(std::array{dim[1], dim[1], dim[2], dim[2]});
                     trf_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).shuffle(std::array{0, 2, 1, 3});
                 } else {
                     // This site could be A, AC or B. Only A lacks schmidt values on the right, so we use multisite when the last site is A.
                     bool use_multisite = i == sites.back() and mps.get_label() == "A";
-                    if constexpr(std::is_same_v<Scalar, fp64>) {
-                        M = use_multisite ? get_multisite_mps({i}).real() : mps.get_M().real();
-                    } else {
-                        M = use_multisite ? get_multisite_mps({i}) : mps.get_M();
-                    }
-                    auto mps_dim = M.dimensions();
-                    auto trf_dim = trf_temp.dimensions();
-                    auto new_dim = std::array{trf_dim[0], trf_dim[1], mps_dim[2], mps_dim[2]};
+                    M                  = use_multisite ? get_multisite_mps<Scalar>({i}) : mps.template get_M_as<Scalar>();
+                    auto mps_dim       = M.dimensions();
+                    auto trf_dim       = trf_temp.dimensions();
+                    auto new_dim       = std::array{trf_dim[0], trf_dim[1], mps_dim[2], mps_dim[2]};
                     trf_tmp4.resize(new_dim);
                     trf_tmp4.device(*threads->dev) = trf_temp.contract(M.conjugate(), tenx::idx({2}, {1})).contract(M, tenx::idx({2, 3}, {1, 0}));
                     trf_temp                       = std::move(trf_tmp4);
@@ -1158,12 +1050,8 @@ Eigen::Tensor<Scalar, 2> StateFinite::get_transfer_matrix(const std::vector<size
                     // Could be an A, AC or B. Either way we need the last site to include the right schmidt values
                     // If it is the only site, we also need it to include the left schmidt values.
                     bool use_multisite = mps.get_label() == "A" or sites.size() == 1;
-                    if constexpr(std::is_same_v<Scalar, fp64>) {
-                        M = use_multisite ? get_multisite_mps({i}).real() : mps.get_M().real();
-                    } else {
-                        M = use_multisite ? get_multisite_mps({i}) : mps.get_M();
-                    }
-                    auto dim = M.dimensions();
+                    M                  = use_multisite ? get_multisite_mps<Scalar>({i}) : mps.template get_M_as<Scalar>();
+                    auto dim           = M.dimensions();
                     trf_temp.resize(std::array{dim[1], dim[1], dim[2], dim[2]});
                     trf_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).shuffle(std::array{0, 2, 1, 3});
 
@@ -1174,15 +1062,11 @@ Eigen::Tensor<Scalar, 2> StateFinite::get_transfer_matrix(const std::vector<size
                 } else {
                     // This site could be A, AC or B. Only B lacks schmidt values on the left, so we use multisite when the first site is B.
                     bool use_multisite = i == sites.front() and mps.get_label() == "B";
-                    if constexpr(std::is_same_v<Scalar, fp64>) {
-                        M = use_multisite ? get_multisite_mps({i}).real() : mps.get_M().real();
-                    } else {
-                        M = use_multisite ? get_multisite_mps({i}) : mps.get_M();
-                    }
-                    auto mps_dim = M.dimensions();
-                    auto trf_dim = trf_temp.dimensions();
-                    auto tm5_dim = std::array{mps_dim[0], mps_dim[1], trf_dim[0], trf_dim[2], trf_dim[3]};
-                    auto new_dim = std::array{mps_dim[1], mps_dim[1], trf_dim[2], trf_dim[3]};
+                    M                  = use_multisite ? get_multisite_mps<Scalar>({i}) : mps.template get_M_as<Scalar>();
+                    auto mps_dim       = M.dimensions();
+                    auto trf_dim       = trf_temp.dimensions();
+                    auto tm5_dim       = std::array{mps_dim[0], mps_dim[1], trf_dim[0], trf_dim[2], trf_dim[3]};
+                    auto new_dim       = std::array{mps_dim[1], mps_dim[1], trf_dim[2], trf_dim[3]};
                     trf_tmp5.resize(tm5_dim);
                     trf_tmp5.device(*threads->dev) = M.contract(trf_temp, tenx::idx({2}, {1}));
                     trf_temp.resize(new_dim);
@@ -1268,7 +1152,7 @@ std::array<double, 2> StateFinite::get_transfer_matrix_costs(const std::vector<s
         static_cast<double>(chiL * chiR * chiL * chiR); // This is the number of elements in the last object we will compare with earlier steps below.
     for(size_t i = 0; i < sites.size(); ++i) {
         auto key = generate_cache_key(sites, sites.front() + i, "l2r");
-        if(has_mps_in_cache<Scalar>(key)) continue;
+        if(has_cached_mps<Scalar>(key)) continue;
         if(i == 0 and sites.size() == 1) { // It will append either chiL or chiR but we take the worst case scenario here
             ops_t2b += static_cast<double>(2l * chiL * chiR * std::max(chiL, chiR));
             mem_t2b = std::max(mem_t2b, static_cast<double>(2l * chiL * chiR));
@@ -1298,25 +1182,37 @@ std::array<double, 2> StateFinite::get_transfer_matrix_costs(const std::vector<s
     }
 }
 
+template Eigen::Tensor<fp32, 2> StateFinite::get_transfer_matrix<fp32>(const std::vector<size_t> &sites, std::string_view side) const;
 template Eigen::Tensor<fp64, 2> StateFinite::get_transfer_matrix<fp64>(const std::vector<size_t> &sites, std::string_view side) const;
+template Eigen::Tensor<cx32, 2> StateFinite::get_transfer_matrix<cx32>(const std::vector<size_t> &sites, std::string_view side) const;
 template Eigen::Tensor<cx64, 2> StateFinite::get_transfer_matrix<cx64>(const std::vector<size_t> &sites, std::string_view side) const;
 
 double StateFinite::get_trf_cache_gbts() const {
-    double size_trf_real = 0, size_trf_cplx = 0;
-    for(const auto &elem : cache.trf_real) size_trf_real += static_cast<double>(elem.second.size());
-    size_trf_real *= 8.0 / std::pow(1024.0, 3.0);
-    for(const auto &elem : cache.trf_cplx) size_trf_cplx += static_cast<double>(elem.second.size());
-    size_trf_cplx *= 16.0 / std::pow(1024.0, 3.0);
-    return size_trf_real + size_trf_cplx;
+    double size_fp32 = 0, size_fp64 = 0, size_cx32 = 0, size_cx64 = 0;
+    for(const auto &elem : get_cache<fp32>().trf) size_fp32 += static_cast<double>(elem.second.size());
+    for(const auto &elem : get_cache<fp64>().trf) size_fp64 += static_cast<double>(elem.second.size());
+    for(const auto &elem : get_cache<cx32>().trf) size_cx32 += static_cast<double>(elem.second.size());
+    for(const auto &elem : get_cache<cx64>().trf) size_cx64 += static_cast<double>(elem.second.size());
+
+    size_fp32 *= 4.0 / std::pow(1024.0, 3.0);
+    size_fp64 *= 8.0 / std::pow(1024.0, 3.0);
+    size_cx32 *= 8.0 / std::pow(1024.0, 3.0);
+    size_cx64 *= 16.0 / std::pow(1024.0, 3.0);
+    return size_fp32 + size_fp64 + size_cx32 + size_cx64;
 }
 
 double StateFinite::get_mps_cache_gbts() const {
-    double size_mps_real = 0.0, size_mps_cplx = 0.0;
-    for(const auto &elem : cache.mps_real) size_mps_real += static_cast<double>(elem.second.size());
-    size_mps_real *= 8.0 / std::pow(1024.0, 3.0);
-    for(const auto &elem : cache.mps_cplx) size_mps_cplx += static_cast<double>(elem.second.size());
-    size_mps_cplx *= 16.0 / std::pow(1024.0, 3.0);
-    return size_mps_cplx + size_mps_real;
+    double size_fp32 = 0, size_fp64 = 0, size_cx32 = 0, size_cx64 = 0;
+    for(const auto &elem : get_cache<fp32>().mps) size_fp32 += static_cast<double>(elem.second.size());
+    for(const auto &elem : get_cache<fp64>().mps) size_fp64 += static_cast<double>(elem.second.size());
+    for(const auto &elem : get_cache<cx32>().mps) size_cx32 += static_cast<double>(elem.second.size());
+    for(const auto &elem : get_cache<cx64>().mps) size_cx64 += static_cast<double>(elem.second.size());
+
+    size_fp32 *= 4.0 / std::pow(1024.0, 3.0);
+    size_fp64 *= 8.0 / std::pow(1024.0, 3.0);
+    size_cx32 *= 8.0 / std::pow(1024.0, 3.0);
+    size_cx64 *= 16.0 / std::pow(1024.0, 3.0);
+    return size_fp32 + size_fp64 + size_cx32 + size_cx64;
 }
 
 std::array<double, 2> StateFinite::get_cache_sizes() const { return {get_mps_cache_gbts(), get_trf_cache_gbts()}; }
@@ -1409,39 +1305,35 @@ void StateFinite::clear_measurements(LogPolicy logPolicy) const {
 
 void StateFinite::clear_cache(LogPolicy logPolicy) const {
     if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) { tools::log->trace("Clearing state cache"); }
-    cache = Cache();
+    cache_fp32 = Cache<fp32>();
+    cache_fp64 = Cache<fp64>();
+    cache_cx32 = Cache<cx32>();
+    cache_cx64 = Cache<cx64>();
 }
 
 void StateFinite::shrink_cache() const {
-    while(cache.mps_real.size() > max_mps_cache_size) cache.mps_real.pop_front();
-    while(cache.mps_cplx.size() > max_mps_cache_size) cache.mps_cplx.pop_front();
-    while(cache.trf_real.size() > max_trf_cache_size) cache.trf_real.pop_front();
-    while(cache.trf_cplx.size() > max_trf_cache_size) cache.trf_cplx.pop_front();
+    while(cache_fp32.mps.size() > max_mps_cache_size) cache_fp32.mps.pop_front();
+    while(cache_fp64.mps.size() > max_mps_cache_size) cache_fp64.mps.pop_front();
+    while(cache_cx32.mps.size() > max_mps_cache_size) cache_cx32.mps.pop_front();
+    while(cache_cx64.mps.size() > max_mps_cache_size) cache_cx64.mps.pop_front();
+    while(cache_fp32.trf.size() > max_trf_cache_size) cache_fp32.trf.pop_front();
+    while(cache_fp64.trf.size() > max_trf_cache_size) cache_fp64.trf.pop_front();
+    while(cache_cx32.trf.size() > max_trf_cache_size) cache_cx32.trf.pop_front();
+    while(cache_cx64.trf.size() > max_trf_cache_size) cache_cx64.trf.pop_front();
+
     while(get_mps_cache_gbts() + get_trf_cache_gbts() > std::max(0.0, settings::precision::max_cache_gbts)) {
-        if(!cache.mps_real.empty()) {
-            if constexpr(settings::debug_cache)
-                tools::log->trace("shrink_cache: deleting mps due to cache limit ({} GB): {}", settings::precision::max_cache_gbts,
-                                  cache.mps_real.front().first);
-            cache.mps_real.pop_front();
-        }
-        if(!cache.mps_cplx.empty()) {
-            if constexpr(settings::debug_cache)
-                tools::log->trace("shrink_cache: deleting mps due to cache limit ({} GB): {}", settings::precision::max_cache_gbts,
-                                  cache.mps_cplx.front().first);
-            cache.mps_cplx.pop_front();
-        }
-        if(!cache.trf_real.empty()) {
-            if constexpr(settings::debug_cache)
-                tools::log->trace("shrink_cache: deleting trf due to cache limit ({} GB): {}", settings::precision::max_cache_gbts,
-                                  cache.trf_real.front().first);
-            cache.trf_real.pop_front();
-        }
-        if(!cache.trf_cplx.empty()) {
-            if constexpr(settings::debug_cache)
-                tools::log->trace("shrink_cache: deleting trf due to cache limit ({} GB): {}", settings::precision::max_cache_gbts,
-                                  cache.trf_cplx.front().first);
-            cache.trf_cplx.pop_front();
-        }
+        /* clang-format off */
+        using namespace settings;
+        using namespace settings::precision;
+        if(!cache_fp32.mps.empty()) {cache_fp32.mps.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del mps: {}", max_cache_gbts, cache_fp32.mps.front().first);}
+        if(!cache_fp64.mps.empty()) {cache_fp64.mps.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del mps: {}", max_cache_gbts, cache_fp64.mps.front().first);}
+        if(!cache_cx32.mps.empty()) {cache_cx32.mps.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del mps: {}", max_cache_gbts, cache_cx32.mps.front().first);}
+        if(!cache_cx64.mps.empty()) {cache_cx64.mps.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del mps: {}", max_cache_gbts, cache_cx64.mps.front().first);}
+        if(!cache_fp32.trf.empty()) {cache_fp32.trf.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del trf: {}", max_cache_gbts, cache_fp32.trf.front().first);}
+        if(!cache_fp64.trf.empty()) {cache_fp64.trf.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del trf: {}", max_cache_gbts, cache_fp64.trf.front().first);}
+        if(!cache_cx32.trf.empty()) {cache_cx32.trf.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del trf: {}", max_cache_gbts, cache_cx32.trf.front().first);}
+        if(!cache_cx64.trf.empty()) {cache_cx64.trf.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del trf: {}", max_cache_gbts, cache_cx64.trf.front().first);}
+        /* clang-format on */
     }
 }
 

@@ -102,7 +102,7 @@ std::string h5tb_ising_majorana::fmt_value(std::string_view p) const {
         if(p == "J_rand")           return fmt::format("{:<8.2e}" , param.J_rand);
         if(p == "h_rand")           return fmt::format("{:<8.2e}" , param.h_rand);
         if(p == "spin_dim")         return fmt::format("{:>8}"    , param.spin_dim);
-        // if(p == "distribution")     return fmt::format("{:<12}"   , param.distribution);
+        if(p == "distribution")     return fmt::format("{:<12}"   , static_cast<std::string_view>(param.distribution));
     /* clang-format on */
     throw except::runtime_error("Unrecognized parameter: {}", p);
 }

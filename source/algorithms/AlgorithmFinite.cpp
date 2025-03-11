@@ -202,7 +202,6 @@ void AlgorithmFinite::run_postprocessing() {
 
 int AlgorithmFinite::get_eigs_iter_max() const {
     using namespace settings::precision;
-    if(settings::strategy::etol_decrease_when != UpdatePolicy::NEVER) return safe_cast<int>(eigs_iter_max);
     auto iter_min = std::min(safe_cast<double>(eigs_iter_min), safe_cast<double>(eigs_iter_max));
     auto iter_max = std::max(safe_cast<double>(eigs_iter_min), safe_cast<double>(eigs_iter_max));
     if(eigs_iter_gain_policy == GainPolicy::NEVER) return safe_cast<int>(iter_min);
@@ -230,7 +229,6 @@ int AlgorithmFinite::get_eigs_iter_max() const {
 AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
     tools::log->trace("get_opt_meta: configuring optimization step");
     OptMeta m1;
-    m1.label = "opt meta";
 
     // The first decision is easy. Real or complex optimization
     if(tensors.is_real()) m1.optType = OptType::REAL;
@@ -249,9 +247,10 @@ AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
     m1.max_sites    = m1.min_sites;
     m1.subspace_tol = settings::precision::target_subspace_error;
     // m1.primme_projection = "primme_proj_refined"; // converges as [refined < harmonic < RR] (in iterations) (sometimes by a lot) with ~1-10% more time
-    // m1.primme_method = "PRIMME_DYNAMIC";
-    m1.primme_method = "PRIMME_GD_Olsen_plusK"; // PRIMME_GD_Olsen_plusK is fastest when using a preconditioner, since it uses the least matvecs
-    m1.eigs_nev      = settings::precision::eigs_nev_min;
+    // m1.primme_method = "PRIMME_DYNAMIC";  // PRIMME_GD_Olsen_plusK is fastest when using a large jcb preconditioner, since it uses the least matvecs
+    m1.primme_method = "PRIMME_GD_Olsen_plusK"; // PRIMME_GD_Olsen_plusK is fastest when using a large jcb preconditioner, since it uses the least matvecs
+    // m1.primme_method = "PRIMME_JD_Olsen_plusK"; // PRIMME_GD_Olsen_plusK is fastest when using a large jcb preconditioner, since it uses the least matvecs
+    m1.eigs_nev = settings::precision::eigs_nev_min;
     if(status.algorithm_has_stuck_for > 0) {
         m1.eigs_nev = std::clamp(static_cast<int>(1 + status.algorithm_has_stuck_for), settings::precision::eigs_nev_min, settings::precision::eigs_nev_max);
     }
@@ -275,6 +274,14 @@ AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
         }
         target_tol  = std::clamp(target_tol, settings::precision::eigs_tol_min, settings::precision::eigs_tol_max);
         m1.eigs_tol = target_tol;
+    } else {
+        if(m1.optAlgo == OptAlgo::GDMRG) {
+            // GDMRG seems happy with higher tol
+            // target_tol = std::sqrt(target_tol);
+            double target_tol = std::max({dmrg_eigs_tol, std::sqrt(settings::precision::eigs_tol_min), 1e-8});
+            target_tol        = std::clamp(target_tol, settings::precision::eigs_tol_min, settings::precision::eigs_tol_max);
+            m1.eigs_tol       = target_tol;
+        }
     }
 
     // Set up the subspace (environment) expansion
@@ -293,7 +300,7 @@ AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
         m1.eigs_tol = std::clamp(tol, settings::precision::eigs_tol_min, settings::precision::eigs_tol_max);
         // if(m1.optAlgo == OptAlgo::GDMRG) m1.eigs_tol = std::sqrt(settings::precision::eigs_tol_min);
     } else {
-        m1.max_sites = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::OPT) ? safe_cast<size_t>(dmrg_blocksize) : m1.min_sites;
+        m1.max_sites = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_UPDATE) ? safe_cast<size_t>(dmrg_blocksize) : m1.min_sites;
     }
 
     // Set up the problem size here
@@ -316,6 +323,7 @@ AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
 
     // Do eig instead of eigs when it's cheap (e.g. near the edges or early in the simulation)
     m1.optSolver = m1.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
+    m1.label     = enum2sv(m1.optAlgo);
 
     m1.validate();
 
@@ -328,21 +336,20 @@ void AlgorithmFinite::expand_environment(EnvExpandMode envexpMode, OptAlgo algo,
     // alpha = alpha.value_or(status.env_expansion_alpha);
     // if(alpha.value() <= 0) return;
     if(not svd_cfg.has_value()) {
-        // auto bond_lim = has_flag(envexpMode, EnvExpandMode::FORWARD) ? status.bond_lim * 10 / 9 : status.bond_lim;
-        // auto trnc_lim = has_flag(envexpMode, EnvExpandMode::FORWARD) ? status.trnc_lim * 0.5 : status.trnc_lim;
-        auto bond_lim = has_flag(envexpMode, EnvExpandMode::FORWARD) ? status.bond_lim : status.bond_lim;
-        auto trnc_lim = has_flag(envexpMode, EnvExpandMode::FORWARD) ? status.trnc_lim : status.trnc_lim;
+        // auto bond_lim = has_flag(envexpMode, EnvExpandMode::FORE) ? status.bond_lim * 10 / 9 : status.bond_lim;
+        // auto trnc_lim = has_flag(envexpMode, EnvExpandMode::FORE) ? status.trnc_lim * 0.5 : status.trnc_lim;
+        auto bond_lim = has_flag(envexpMode, EnvExpandMode::FORE) ? status.bond_lim : status.bond_lim;
+        auto trnc_lim = has_flag(envexpMode, EnvExpandMode::FORE) ? status.trnc_lim : status.trnc_lim;
         svd_cfg       = svd::config(bond_lim, trnc_lim);
     }
-    auto expand_blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::EXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
+    auto expand_blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_ENVEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
     auto res              = tensors.expand_environment(envexpMode, algo, ritz, expand_blocksize, svd_cfg.value());
     if(not res.ok) {
         tools::log->debug("Expansion canceled");
         return;
     }
-    tools::log->debug("Expanded environment {} | bond {} {} | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f}",
-                      flag2str(envexpMode), res.posL, res.posR, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, res.var_old, res.var_new, res.ene_old,
-                      res.ene_new);
+    tools::log->info("Expanded environment {} | block [{}-{}] | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f}",
+                     flag2str(envexpMode), res.posL, res.posR, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, res.var_old, res.var_new, res.ene_old, res.ene_new);
     using namespace settings::strategy;
     status.env_expansion_alpha = !std::isnan(res.alpha_h1v) ? res.alpha_h1v : res.alpha_h2v;
 }
@@ -417,6 +424,14 @@ void AlgorithmFinite::move_center_point(std::optional<long> num_moves) {
 void AlgorithmFinite::set_energy_shift_mpo() {
     if(not settings::precision::use_energy_shifted_mpo) return;
     if(not tensors.position_is_inward_edge()) return;
+    auto threshold = std::min(1e-14, settings::precision::variance_convergence_threshold);
+    if(var_latest < std::min(1e-14, settings::precision::variance_convergence_threshold)) {
+        // No need to improve precision further.
+        // The quotient <H-eshift>/<(H-eshift)²> risks being imprecise when both numerator and denominator ar close to zero.
+        // In the worst case, (H-eshift)² ceases to be positive definite.
+        tools::log->debug("Skipped the MPO energy shift because the variance ({:.3e}) is already below the threshold {:.3e}", var_latest, threshold);
+        return;
+    }
     auto energy_shift = tools::finite::measure::energy(tensors);
     tensors.set_energy_shift_mpo(energy_shift); // Avoid catastrophic cancellation by shifting energy on each mpo by E/L
 }
@@ -508,15 +523,16 @@ void AlgorithmFinite::update_precision_limit(std::optional<double> energy_upper_
     // Hamiltonian couplings and fields.
     if(not energy_upper_bound) energy_upper_bound = tensors.model->get_energy_upper_bound();
     double max_eigval = std::abs(energy_upper_bound.value());
-    switch(settings::xdmrg::algo) {
-        case OptAlgo::HYBRID_DMRGX:
-        case OptAlgo::XDMRG:
-        case OptAlgo::GDMRG: {
-            // Estimate the largest eigenvalue of H²
-            max_eigval = std::pow(energy_upper_bound.value(), 2);
-        }
-        default: break;
-    }
+    // switch(settings::xdmrg::algo) {
+    //     case OptAlgo::DMRG: // TODO: Should this one be here?
+    //     case OptAlgo::HYBRID_DMRGX:
+    //     case OptAlgo::XDMRG:
+    //     case OptAlgo::GDMRG: {
+    //         // Estimate the largest eigenvalue of H²
+    //         // max_eigval = std::pow(energy_upper_bound.value(), 2);
+    //     }
+    //     default: break;
+    // }
     double digits10                   = std::numeric_limits<double>::digits10;
     double eigval_exp                 = std::max(0.0, std::log10(max_eigval));
     double max_digits                 = std::max(0.0, digits10 - eigval_exp);
@@ -729,14 +745,14 @@ void AlgorithmFinite::update_dmrg_blocksize() {
         }
         return;
     }
-    if(has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::FIN_BOND) and !status.bond_limit_has_reached_max) {
+    if(has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::IF_FIN_BOND) and !status.bond_limit_has_reached_max) {
         dmrg_blocksize = safe_cast<size_t>(settings::strategy::dmrg_min_blocksize);
         if(old_bsize != dmrg_blocksize) {
             tools::log->info("Updated blocksize {} -> {} | policy: {}", old_bsize, dmrg_blocksize, flag2str(settings::strategy::dmrg_blocksize_policy));
         }
         return;
     }
-    if(has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::FIN_TRNC) and !status.trnc_limit_has_reached_min) {
+    if(has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::IF_FIN_TRNC) and !status.trnc_limit_has_reached_min) {
         dmrg_blocksize = safe_cast<size_t>(settings::strategy::dmrg_min_blocksize);
         if(old_bsize != dmrg_blocksize) {
             tools::log->info("Updated blocksize {} -> {} | policy: {}", old_bsize, dmrg_blocksize, flag2str(settings::strategy::dmrg_blocksize_policy));
@@ -748,18 +764,18 @@ void AlgorithmFinite::update_dmrg_blocksize() {
     using namespace settings::strategy;
     tools::log->trace("Updating blocksize | policy: {}", flag2str(dmrg_blocksize_policy));
     bool has_converged = status.algorithm_converged_for > 0 or var_latest <= settings::precision::variance_convergence_threshold;
-    bool has_sat_ent   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::SAT_ENT) and status.entanglement_saturated_for > 0 and not has_converged;
-    bool has_sat_icom  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::SAT_ICOM) and infocom_saturated_for > 0 and not has_converged;
-    bool has_sat_var   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::SAT_VAR) and status.variance_mpo_saturated_for > 0 and not has_converged;
-    bool has_sat_algo  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::SAT_ALGO) and status.algorithm_saturated_for > 0 and not has_converged;
-    bool has_stk_algo  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::STK_ALGO) and status.algorithm_has_stuck_for > 0 and not has_converged;
+    bool has_sat_ent   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_ENT) and status.entanglement_saturated_for > 0 and not has_converged;
+    bool has_sat_icom  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_INFO) and infocom_saturated_for > 0 and not has_converged;
+    bool has_sat_var   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_VAR) and status.variance_mpo_saturated_for > 0 and not has_converged;
+    bool has_sat_algo  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_ALGO) and status.algorithm_saturated_for > 0 and not has_converged;
+    bool has_stk_algo  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_STK_ALGO) and status.algorithm_has_stuck_for > 0 and not has_converged;
     // bool has_saturated = has_flag(dmrg_blocksize_policy, BlockSizePolicy::SATURATED) and status.algorithm_saturated_for > 0 and not has_converged;
     // bool has_got_stuck = has_flag(dmrg_blocksize_policy, BlockSizePolicy::STUCK) and status.algorithm_has_stuck_for > 0 and not has_converged;
-    bool has_no_status = !has_flag(dmrg_blocksize_policy, BlockSizePolicy::SAT_ENT) and  //
-                         !has_flag(dmrg_blocksize_policy, BlockSizePolicy::SAT_ICOM) and //
-                         !has_flag(dmrg_blocksize_policy, BlockSizePolicy::SAT_VAR) and  //
-                         !has_flag(dmrg_blocksize_policy, BlockSizePolicy::SAT_ALGO) and //
-                         !has_flag(dmrg_blocksize_policy, BlockSizePolicy::STK_ALGO);
+    bool has_no_status = !has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_ENT) and  //
+                         !has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_INFO) and //
+                         !has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_VAR) and  //
+                         !has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_ALGO) and //
+                         !has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_STK_ALGO);
     bool has_to_adjust = has_sat_ent or has_sat_icom or has_sat_var or has_sat_algo or has_stk_algo or has_no_status;
 
     BlockSizePolicy choice = BlockSizePolicy::MIN;
@@ -767,11 +783,11 @@ void AlgorithmFinite::update_dmrg_blocksize() {
     if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM)) choice = BlockSizePolicy::ICOM;
 
     BlockSizePolicy reasons = BlockSizePolicy::MIN;
-    if(has_sat_ent) reasons |= BlockSizePolicy::SAT_ENT;
-    if(has_sat_icom) reasons |= BlockSizePolicy::SAT_ICOM;
-    if(has_sat_var) reasons |= BlockSizePolicy::SAT_VAR;
-    if(has_sat_algo) reasons |= BlockSizePolicy::SAT_ALGO;
-    if(has_stk_algo) reasons |= BlockSizePolicy::STK_ALGO;
+    if(has_sat_ent) reasons |= BlockSizePolicy::IF_SAT_ENT;
+    if(has_sat_icom) reasons |= BlockSizePolicy::IF_SAT_INFO;
+    if(has_sat_var) reasons |= BlockSizePolicy::IF_SAT_VAR;
+    if(has_sat_algo) reasons |= BlockSizePolicy::IF_SAT_ALGO;
+    if(has_stk_algo) reasons |= BlockSizePolicy::IF_STK_ALGO;
 
     std::string msg;
     if(choice == BlockSizePolicy::MAX and has_to_adjust) {
@@ -780,23 +796,37 @@ void AlgorithmFinite::update_dmrg_blocksize() {
         return;
     }
 
-    bool has_icom      = has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM);
-    bool has_icomplus1 = has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOMPLUS1);
-    bool has_icom150   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM150);
-    bool has_icom200   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM200);
-    if((has_icom or has_icomplus1 or has_icom150 or has_icom200) and has_to_adjust) {
+    bool needs_info =
+        has_any_flags(dmrg_blocksize_policy, BlockSizePolicy::ICOM, BlockSizePolicy::ICOMPLUS1, BlockSizePolicy::ICOM150, BlockSizePolicy::ICOM200,
+                      BlockSizePolicy::BIT_ONE, BlockSizePolicy::BIT_TWO, BlockSizePolicy::BIT_MID, BlockSizePolicy::BIT_PEN, BlockSizePolicy::BIT_ALL
+
+        );
+    if(needs_info and has_to_adjust) {
         /*! Update the number of sites used in dmrg updates.
          *  We try to match the blocksize to the "information center of mass", obtained from the information lattice.
          *  This should be a good blocksize to the correlations that exist in the state.
          */
-        auto        ip        = InfoPolicy{.bits_max_error = -0.5, .eig_max_size = 3200, .svd_max_size = 1024, .svd_trnc_lim = std::max(status.trnc_lim, 1e-6)};
-        double      icom      = tools::finite::measure::information_center_of_mass(*tensors.state, ip);
+        auto        ip        = InfoPolicy{.bits_max_error = -0.5,
+                                           .eig_max_size   = 3200,
+                                           .svd_max_size   = 1024,
+                                           .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
+                                           .precision      = Precision::SINGLE,
+                                           .cachePolicy    = CachePolicy::READ};
+        auto        ia        = tools::finite::measure::information_lattice_analysis(*tensors.state, ip);
+        double      icom      = ia.icom;
         double      blocksize = std::max(1.0, icom);
         std::string tag;
         /* clang-format off */
-        if(has_icomplus1) {blocksize += 1;  tag = "+1";  }
-        if(has_icom150)   {blocksize *= 1.50;  tag = " x 1.5";  }
-        if(has_icom200)   {blocksize *= 2.00;  tag = " x 2.0";  }
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM)) { blocksize = std::max(1.0, icom); tag = "";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOMPLUS1)) { blocksize = std::max(1.0, icom+1); tag = "+1";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM150)) { blocksize = std::max(1.0, icom*1.50); tag =" x 1.5";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM200)) { blocksize = std::max(1.0, icom*2.00) ; tag =" x 2.0";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::BIT_ONE)) { blocksize = std::max(1.0, ia.scale_bit_one + 1.0); tag = "(BIT_ONE)";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::BIT_TWO)) { blocksize = std::max(1.0, ia.scale_bit_two + 1.0); tag = "(BIT_TWO)";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::BIT_MID)) { blocksize = std::max(1.0, ia.scale_bit_mid + 1.0); tag = "(BIT_MID)";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::BIT_PEN)) { blocksize = std::max(1.0, ia.scale_bit_pen + 1.0); tag = "(BIT_PEN)";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::BIT_ALL)) { blocksize = std::max(1.0, ia.scale_bit_all + 1.0); tag = "(BIT_ALL)";}
+
         /* clang-format on */
 
         blocksize = std::ceil(blocksize);
@@ -1075,7 +1105,8 @@ void AlgorithmFinite::try_projection(std::optional<std::string> target_axis) {
                                  energy_new, variance_old, variance_new, fmt::join(spincomp_old, ", "), fmt::join(spincomp_new, ", "));
                 if(tools::log->level() <= spdlog::level::debug)
                     for(const auto &[i, e] : iter::enumerate(entropies_old)) {
-                        tools::log->debug("entropy [{:>2}] = {:>8.6f} --> {:>8.6f} | change {:8.5e}", i, e, entropies_new[i], entropies_new[i] - e);
+                        tools::log->debug("entropy [{:>2}] = {:>8.6f} --> {:>8.6f} | change {:8.5e}", static_cast<long>(i), e, entropies_new[i],
+                                          entropies_new[i] - e);
                     }
                 if(target_axis.value() == settings::strategy::target_axis) projected_iter = status.iter;
                 write_to_file(StorageEvent::PROJECTION, CopyPolicy::OFF);
@@ -1090,7 +1121,21 @@ void AlgorithmFinite::set_parity_shift_mpo(std::optional<std::string> target_axi
     target_axis = target_axis.value_or(settings::strategy::target_axis);
     // If ritz == SR we shift the spectrum of the non-targeted sector UP in energy.
     // If ritz == LR we shift the spectrum of the non-targetd sector DOWN in energy
-    tensors.set_parity_shift_mpo(settings::get_ritz(status.algo_type), target_axis.value());
+    OptAlgo algo = OptAlgo::DMRG;
+    OptRitz ritz = OptRitz::NONE;
+    if(status.algo_type == AlgorithmType::xDMRG) {
+        if(status.iter >= settings::strategy::iter_max_warmup) {
+            algo = settings::xdmrg::algo;
+            ritz = settings::xdmrg::ritz;
+        } else {
+            algo = settings::xdmrg::algo_warmup;
+            ritz = settings::xdmrg::ritz_warmup;
+        }
+    } else {
+        ritz = settings::get_ritz(status.algo_type);
+    }
+    if(algo == OptAlgo::GDMRG) ritz = OptRitz::NONE; // Unset parity shift: GDMRG does not support it for single-layer MPO
+    tensors.set_parity_shift_mpo(ritz, target_axis.value());
 }
 
 void AlgorithmFinite::set_parity_shift_mpo_squared(std::optional<std::string> target_axis) {
@@ -1118,13 +1163,23 @@ void AlgorithmFinite::check_convergence() {
     if(variance_enabled) num_enabled++;
     if(entropy_enabled) num_enabled++;
     if(infocom_enabled) num_enabled++;
-    int  variance_saturated = variance_enabled and status.variance_mpo_saturated_for > 1;
-    int  entropy_saturated  = entropy_enabled and status.entanglement_saturated_for > 1;
-    int  infocom_saturated  = infocom_enabled and infocom_saturated_for > 1;
-    int  all_saturated      = variance_saturated + entropy_saturated + infocom_saturated >= num_enabled;
-    bool max_saturated      = sum_saturated_for > settings::strategy::iter_max_saturated * safe_cast<size_t>(num_enabled);
+    int    variance_saturated = variance_enabled and status.variance_mpo_saturated_for > 1;
+    int    entropy_saturated  = entropy_enabled and status.entanglement_saturated_for > 1;
+    int    infocom_saturated  = infocom_enabled and infocom_saturated_for > 1;
+    int    all_saturated      = variance_saturated + entropy_saturated + infocom_saturated >= num_enabled;
+    bool   max_saturated      = sum_saturated_for > settings::strategy::iter_max_saturated * safe_cast<size_t>(num_enabled);
+    size_t min_saturated_for  = std::min<size_t>({
+        variance_enabled ? status.variance_mpo_saturated_for : sum_saturated_for,
+        entropy_enabled ? status.entanglement_saturated_for : sum_saturated_for,
+        infocom_enabled ? infocom_saturated_for : sum_saturated_for,
+     });
+
     if(all_saturated or max_saturated) {
-        status.algorithm_saturated_for++;
+        if(status.algorithm_saturated_for > min_saturated_for) {
+            status.algorithm_saturated_for--;
+        } else if(status.algorithm_saturated_for <= min_saturated_for) {
+            status.algorithm_saturated_for++;
+        }
     } else {
         status.algorithm_saturated_for = 0;
     }
@@ -1139,10 +1194,15 @@ void AlgorithmFinite::check_convergence() {
         status.algorithm_converged_for = 0;
 
     // Determine if the algorithm is stuck
-    if(all_saturated and status.algorithm_saturated_for > 1 and status.algorithm_converged_for == 0)
-        status.algorithm_has_stuck_for++;
-    else
+    if(all_saturated and status.algorithm_saturated_for > 1 and status.algorithm_converged_for == 0) {
+        if(status.algorithm_has_stuck_for > status.algorithm_saturated_for) {
+            status.algorithm_has_stuck_for--;
+        } else if(status.algorithm_has_stuck_for <= status.algorithm_saturated_for) {
+            status.algorithm_has_stuck_for++;
+        }
+    } else {
         status.algorithm_has_stuck_for = 0;
+    }
 
     if(status.iter < settings::strategy::iter_max_warmup) {
         status.algorithm_saturated_for = 0;
@@ -1172,13 +1232,17 @@ AlgorithmFinite::log_entry::log_entry(const AlgorithmStatus &s, const TensorsFin
     energy    = status.algo_type == AlgorithmType::fLBIT ? 0.0 : tools::finite::measure::energy(t);
     variance  = status.algo_type == AlgorithmType::fLBIT ? 0.0 : tools::finite::measure::energy_variance(t);
     entropies = tools::finite::measure::entanglement_entropies(*t.state);
+    time      = status.wall_time;
     auto ip   = InfoPolicy{.bits_max_error = -0.5,
                            .eig_max_size   = 3200,
                            .svd_max_size   = 1024,
                            .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
-                           .useCache       = UseCache::TRUE};
-    icom      = status.algo_type == AlgorithmType::fLBIT ? 0.0 : tools::finite::measure::information_center_of_mass(*t.state, ip);
-    time      = status.wall_time;
+                           .precision      = Precision::SINGLE,
+                           .cachePolicy    = CachePolicy::READ};
+    icom      = 0.0;
+    if(settings::precision::infocom_saturation_sensitivity > 0.0 and status.algo_type != AlgorithmType::fLBIT) {
+        icom = tools::finite::measure::information_center_of_mass(*t.state, ip);
+    }
 }
 
 void AlgorithmFinite::check_convergence_variance(std::optional<double> threshold, std::optional<double> saturation_sensitivity) {
@@ -1186,7 +1250,7 @@ void AlgorithmFinite::check_convergence_variance(std::optional<double> threshold
     if(not saturation_sensitivity) saturation_sensitivity = settings::precision::variance_saturation_sensitivity;
     if(saturation_sensitivity <= 0) return;
     if(not threshold) {
-        if(status.algorithm_has_stuck_for > 0)
+        if(status.variance_mpo_saturated_for > 0)
             threshold = std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
         else
             threshold = std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);

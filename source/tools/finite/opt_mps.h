@@ -17,6 +17,7 @@ namespace tools::finite::opt {
         std::optional<double>                 eshift         = std::nullopt; /*!< current energy shift in the energy MPOs: eshift  */
         std::optional<double>                 energy_shifted = std::nullopt; /*!< <H-eshift>  */
         std::optional<double>                 energy         = std::nullopt; /*!< Energy: eigenvalue of H: (E - eshift) + eshift   */
+        std::optional<double>                 hsquared       = std::nullopt; /*!< Variance: H²-E² = <(H-eshift)²> - <H-eshift>² */
         std::optional<double>                 variance       = std::nullopt; /*!< Variance: H²-E² = <(H-eshift)²> - <H-eshift>² */
         std::optional<double>                 rnorm_H        = std::nullopt; /*!< Residual norm: H|ψ⟩-E|ψ⟩ */
         std::optional<double>                 rnorm_H2       = std::nullopt; /*!< Residual norm: H²|ψ⟩-E²|ψ⟩ */
@@ -63,11 +64,13 @@ namespace tools::finite::opt {
                 double overlap_, size_t length, size_t iter_, size_t counter_, size_t time_);
         // Constructor used for initial state
         opt_mps(std::string_view name_, const Eigen::Tensor<cx64, 3> &tensor_, const std::vector<size_t> &sites_, double energy_, double variance_,
-              double overlap_, size_t length);
+                double overlap_, size_t length);
 
-        [[nodiscard]] bool                               is_initialized() const;
-        [[nodiscard]] std::string_view                   get_name() const;
-        [[nodiscard]] const Eigen::Tensor<cx64, 3>      &get_tensor() const;
+        [[nodiscard]] bool                          is_initialized() const;
+        [[nodiscard]] std::string_view              get_name() const;
+        [[nodiscard]] const Eigen::Tensor<cx64, 3> &get_tensor() const;
+        template<typename T>
+        [[nodiscard]] Eigen::Tensor<T, 3>                get_tensor_as() const;
         [[nodiscard]] const Eigen::Tensor<cx64, 2>      &get_bond() const;
         [[nodiscard]] Eigen::Map<const Eigen::VectorXcd> get_vector() const;
         [[nodiscard]] Eigen::Map<const Eigen::VectorXd>  get_vector_cplx_as_2xreal() const;
@@ -84,6 +87,7 @@ namespace tools::finite::opt {
         [[nodiscard]] double                     get_eshift() const;
         [[nodiscard]] double                     get_energy_per_site() const;
         [[nodiscard]] double                     get_energy_shifted() const;
+        [[nodiscard]] double                     get_hsquared() const;
         [[nodiscard]] double                     get_variance() const;
         [[nodiscard]] double                     get_rnorm_H() const;
         [[nodiscard]] double                     get_rnorm_H2() const;
@@ -128,6 +132,7 @@ namespace tools::finite::opt {
         void set_eshift(double energy_shift_);
         void set_energy(double energy_);
         void set_energy_per_site(double energy_per_site_);
+        void set_hsquared(double hsquared_);
         void set_variance(double variance_);
         void set_rnorm_H1(const double rnorm_);
         void set_rnorm_H2(const double rnorm_);

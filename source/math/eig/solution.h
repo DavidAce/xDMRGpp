@@ -17,20 +17,37 @@ namespace eig {
         friend class solver_arpack;
 
         private:
-        mutable std::vector<fp64> eigvals_real;
-        mutable std::vector<fp64> eigvals_imag;
-        mutable std::vector<cx64> eigvals_cplx;
-        mutable std::vector<fp64> eigvecsR_real;
-        mutable std::vector<fp64> eigvecsR_imag;
-        mutable std::vector<fp64> eigvecsL_real;
-        mutable std::vector<fp64> eigvecsL_imag;
-        mutable std::vector<cx64> eigvecsR_cplx;
-        mutable std::vector<cx64> eigvecsL_cplx;
+        mutable std::vector<fp32> eigvals_real_fp32;
+        mutable std::vector<fp32> eigvals_imag_fp32;
+        mutable std::vector<cx32> eigvals_cx32;
 
-        void build_eigvecs_cplx() const;
-        void build_eigvecs_real() const;
-        void build_eigvals_cplx() const;
-        void build_eigvals_real() const;
+        mutable std::vector<fp64> eigvals_real_fp64;
+        mutable std::vector<fp64> eigvals_imag_fp64;
+        mutable std::vector<cx64> eigvals_cx64;
+
+        mutable std::vector<fp32> eigvecsR_real_fp32;
+        mutable std::vector<fp32> eigvecsR_imag_fp32;
+        mutable std::vector<fp32> eigvecsL_real_fp32;
+        mutable std::vector<fp32> eigvecsL_imag_fp32;
+        mutable std::vector<cx32> eigvecsR_cx32;
+        mutable std::vector<cx32> eigvecsL_cx32;
+
+        mutable std::vector<fp64> eigvecsR_real_fp64;
+        mutable std::vector<fp64> eigvecsR_imag_fp64;
+        mutable std::vector<fp64> eigvecsL_real_fp64;
+        mutable std::vector<fp64> eigvecsL_imag_fp64;
+        mutable std::vector<cx64> eigvecsR_cx64;
+        mutable std::vector<cx64> eigvecsL_cx64;
+
+        void build_eigvecs_cx32() const;
+        void build_eigvecs_fp32() const;
+        void build_eigvals_cx32() const;
+        void build_eigvals_fp32() const;
+
+        void build_eigvecs_cx64() const;
+        void build_eigvecs_fp64() const;
+        void build_eigvals_cx64() const;
+        void build_eigvals_fp64() const;
 
         struct Meta {
             eig::size_type rows           = 0;
@@ -85,13 +102,21 @@ namespace eig {
         template<typename Scalar>
         std::vector<Scalar> &get_eigvecs(Side side = Side::R) const;
 
-        template<Form form, Type type = Type::CPLX, Side side = Side::R>
+        template<Form form, Type type = Type::CX64, Side side = Side::R>
         auto &get_eigvecs() const {
-            if constexpr(type == Type::REAL) {
+            if constexpr(type == Type::FP32) {
+                if constexpr(form == Form::SYMM) return get_eigvecs<fp32, side>();
+                if constexpr(form == Form::NSYM) return get_eigvecs<cx32, side>();
+            }
+            if constexpr(type == Type::FP64) {
                 if constexpr(form == Form::SYMM) return get_eigvecs<fp64, side>();
                 if constexpr(form == Form::NSYM) return get_eigvecs<cx64, side>();
             }
-            if constexpr(type == Type::CPLX) {
+            if constexpr(type == Type::CX32) {
+                if constexpr(form == Form::SYMM) return get_eigvecs<cx32, side>();
+                if constexpr(form == Form::NSYM) return get_eigvecs<cx32, side>();
+            }
+            if constexpr(type == Type::CX64) {
                 if constexpr(form == Form::SYMM) return get_eigvecs<cx64, side>();
                 if constexpr(form == Form::NSYM) return get_eigvecs<cx64, side>();
             }
@@ -108,10 +133,16 @@ namespace eig {
         template<typename Scalar>
         std::vector<Scalar> &get_eigvals() const;
 
-        template<Form form = Form::SYMM>
+        template<Form form = Form::SYMM, Type type = Type::CX64>
         auto &get_eigvals() const {
-            if constexpr(form == Form::SYMM) { return get_eigvals<fp64>(); }
-            if constexpr(form == Form::NSYM) { return get_eigvals<cx64>(); }
+            if constexpr(form == Form::SYMM) {
+                if constexpr(type == Type::FP32 or type == Type::CX32) return get_eigvals<fp32>();
+                if constexpr(type == Type::FP64 or type == Type::CX64) return get_eigvals<fp64>();
+            }
+            if constexpr(form == Form::NSYM) {
+                if constexpr(type == Type::FP32 or type == Type::CX32) return get_eigvals<cx32>();
+                if constexpr(type == Type::FP64 or type == Type::CX64) return get_eigvals<cx64>();
+            }
         }
 
         const std::vector<double> &get_resnorms() const;

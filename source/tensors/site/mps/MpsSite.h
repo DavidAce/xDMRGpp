@@ -5,22 +5,13 @@
 #include <optional>
 #include <unsupported/Eigen/CXX11/Tensor>
 
+template<typename T>
+concept is_valid_tensor3 = std::is_base_of_v<Eigen::TensorBase<T, Eigen::ReadOnlyAccessors>, T> && //
+                           T::NumIndices == 3;
 
 template<typename T>
-concept is_valid_tensor3 = std::is_same_v<T, Eigen::Tensor<cx64, 3>> ||                   //
-                           std::is_same_v<T, Eigen::Tensor<fp64, 3>> ||                   //
-                           std::is_same_v<T, Eigen::TensorMap<Eigen::Tensor<cx64, 3>>> || //
-                           std::is_same_v<T, Eigen::TensorMap<Eigen::Tensor<fp64, 3>>>;   //
-//                                std::is_same_v<T, Eigen::TensorMap<const Eigen::Tensor<cx64, 3>>> || //
-//                                std::is_same_v<T, Eigen::TensorMap<const Eigen::Tensor<fp64, 3>>>;
-
-template<typename T>
-concept is_valid_tensor1 = std::is_same_v<T, Eigen::Tensor<cx64, 1>> ||                   //
-                           std::is_same_v<T, Eigen::Tensor<fp64, 1>> ||                   //
-                           std::is_same_v<T, Eigen::TensorMap<Eigen::Tensor<cx64, 1>>> || //
-                           std::is_same_v<T, Eigen::TensorMap<Eigen::Tensor<fp64, 1>>>;   //||       //
-//                           std::is_same_v<T, Eigen::TensorMap<const Eigen::Tensor<cx64, 1>>> || //
-//                           std::is_same_v<T, Eigen::TensorMap<const Eigen::Tensor<fp64, 1>>>;
+concept is_valid_tensor1 = std::is_base_of_v<Eigen::TensorBase<T, Eigen::ReadOnlyAccessors>, T> && //
+                           T::NumIndices == 1;
 
 class MpsSite {
     public:
@@ -45,6 +36,7 @@ class MpsSite {
     ~MpsSite(); // Read comment on implementation
     explicit MpsSite(const Eigen::Tensor<cx64, 3> &M_, const std::optional<Eigen::Tensor<cx64, 1>> &L_, size_t pos, double error, std::string_view label_);
     explicit MpsSite(const Eigen::Tensor<fp64, 3> &M_, const std::optional<Eigen::Tensor<fp64, 1>> &L_, size_t pos, double error, std::string_view label_);
+
     template<typename T3, typename T1>
     requires is_valid_tensor3<T3> && is_valid_tensor1<T1>
     MpsSite(const T3 &M_, const T1 &L_, size_t pos, double error, std::string_view label_);
@@ -76,14 +68,22 @@ class MpsSite {
     [[nodiscard]] Eigen::Tensor<cx64, 3>       &get_M();
     [[nodiscard]] Eigen::Tensor<cx64, 1>       &get_L();
     [[nodiscard]] Eigen::Tensor<cx64, 1>       &get_LC();
-    [[nodiscard]] double                        get_truncation_error() const;
-    [[nodiscard]] double                        get_truncation_error_LC() const;
-    [[nodiscard]] std::string_view              get_label() const;
-    [[nodiscard]] std::string                   get_tag() const;
-    [[nodiscard]] std::tuple<long, long, long>  get_dims() const;
-    [[nodiscard]] long                          spin_dim() const;
-    [[nodiscard]] long                          get_chiL() const;
-    [[nodiscard]] long                          get_chiR() const;
+
+    /* clang-format off */
+    template<typename T> [[nodiscard]] Eigen::Tensor<T, 3> get_M_bare_as() const;
+    template<typename T> [[nodiscard]] Eigen::Tensor<T, 3> get_M_as() const;
+    template<typename T> [[nodiscard]] Eigen::Tensor<T, 1> get_L_as() const;
+    template<typename T> [[nodiscard]] Eigen::Tensor<T, 1> get_LC_as() const;
+    /* clang-format on */
+
+    [[nodiscard]] double                       get_truncation_error() const;
+    [[nodiscard]] double                       get_truncation_error_LC() const;
+    [[nodiscard]] std::string_view             get_label() const;
+    [[nodiscard]] std::string                  get_tag() const;
+    [[nodiscard]] std::tuple<long, long, long> get_dims() const;
+    [[nodiscard]] long                         spin_dim() const;
+    [[nodiscard]] long                         get_chiL() const;
+    [[nodiscard]] long                         get_chiR() const;
 
     template<typename T = size_t>
     [[nodiscard]] T get_position() const;

@@ -1,7 +1,9 @@
 #include "EdgesInfinite.h"
 #include "debug/exceptions.h"
 #include "math/num.h"
+#include "math/tenx.h"
 #include "tensors/site/env/EnvEne.h"
+#include "tensors/site/env/EnvPair.h"
 #include "tensors/site/env/EnvVar.h"
 #include "tools/common/log.h"
 
@@ -17,8 +19,8 @@ EdgesInfinite::EdgesInfinite()
 // operator= and copy assignment constructor.
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
-EdgesInfinite::~EdgesInfinite()                     = default;            // default dtor
-EdgesInfinite::EdgesInfinite(EdgesInfinite &&other) = default;            // default move ctor
+EdgesInfinite::~EdgesInfinite()                                = default; // default dtor
+EdgesInfinite::EdgesInfinite(EdgesInfinite &&other)            = default; // default move ctor
 EdgesInfinite &EdgesInfinite::operator=(EdgesInfinite &&other) = default; // default move assign
 EdgesInfinite::EdgesInfinite(const EdgesInfinite &other)
     : eneL(std::make_unique<EnvEne>(*other.eneL)), eneR(std::make_unique<EnvEne>(*other.eneR)), varL(std::make_unique<EnvVar>(*other.varL)),
@@ -55,14 +57,6 @@ template<typename T>
 struct has_validity<T, std::void_t<decltype(std::declval<T>().assertValidity())>> : public std::true_type {};
 template<typename T>
 inline constexpr bool has_validity_v = has_validity<T>::value;
-
-template<typename env_type>
-void EdgesInfinite::env_pair<env_type>::assert_validity() const {
-    if constexpr(has_validity_v<env_type>) {
-        L.assert_validity();
-        R.assert_validity();
-    }
-}
 
 size_t EdgesInfinite::get_length() const {
     if(not num::all_equal(eneL->get_sites(), eneR->get_sites(), varL->get_sites(), varR->get_sites()))
@@ -102,12 +96,31 @@ void EdgesInfinite::assert_validity() const {
 }
 /* clang-format on */
 
-EdgesInfinite::env_pair<const EnvEne> EdgesInfinite::get_ene() const { return {*eneL, *eneR}; }
-EdgesInfinite::env_pair<const EnvVar> EdgesInfinite::get_var() const { return {*varL, *varR}; }
-EdgesInfinite::env_pair<EnvEne>       EdgesInfinite::get_ene() { return {*eneL, *eneR}; }
-EdgesInfinite::env_pair<EnvVar>       EdgesInfinite::get_var() { return {*varL, *varR}; }
+env_pair<const EnvEne &> EdgesInfinite::get_ene() const { return {*eneL, *eneR}; }
+env_pair<const EnvVar &> EdgesInfinite::get_var() const { return {*varL, *varR}; }
+env_pair<EnvEne &>       EdgesInfinite::get_ene() { return {*eneL, *eneR}; }
+env_pair<EnvVar &>       EdgesInfinite::get_var() { return {*varL, *varR}; }
 
-EdgesInfinite::env_pair<const Eigen::Tensor<EdgesInfinite::Scalar, 3>> EdgesInfinite::get_ene_blk() const { return {eneL->get_block(), eneR->get_block()}; }
-EdgesInfinite::env_pair<const Eigen::Tensor<EdgesInfinite::Scalar, 3>> EdgesInfinite::get_var_blk() const { return {varL->get_block(), varR->get_block()}; }
-EdgesInfinite::env_pair<Eigen::Tensor<EdgesInfinite::Scalar, 3>>       EdgesInfinite::get_ene_blk() { return {eneL->get_block(), eneR->get_block()}; }
-EdgesInfinite::env_pair<Eigen::Tensor<EdgesInfinite::Scalar, 3>>       EdgesInfinite::get_var_blk() { return {varL->get_block(), varR->get_block()}; }
+env_pair<const Eigen::Tensor<cx64, 3> &> EdgesInfinite::get_env_ene_blk() const { return {eneL->get_block(), eneR->get_block()}; }
+env_pair<const Eigen::Tensor<cx64, 3> &> EdgesInfinite::get_env_var_blk() const { return {varL->get_block(), varR->get_block()}; }
+env_pair<Eigen::Tensor<cx64, 3> &>       EdgesInfinite::get_env_ene_blk() { return {eneL->get_block(), eneR->get_block()}; }
+env_pair<Eigen::Tensor<cx64, 3> &>       EdgesInfinite::get_env_var_blk() { return {varL->get_block(), varR->get_block()}; }
+
+template<typename Scalar>
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesInfinite::get_env_ene_blk_as() const {
+    return {eneL->get_block_as<Scalar>(), eneR->get_block_as<Scalar>()};
+}
+template env_pair<Eigen::Tensor<fp32, 3>> EdgesInfinite::get_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<fp64, 3>> EdgesInfinite::get_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<cx32, 3>> EdgesInfinite::get_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<cx64, 3>> EdgesInfinite::get_env_ene_blk_as() const;
+
+template<typename Scalar>
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesInfinite::get_env_var_blk_as() const {
+    return {varL->get_block_as<Scalar>(), varR->get_block_as<Scalar>()};
+}
+
+template env_pair<Eigen::Tensor<fp32, 3>> EdgesInfinite::get_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<fp64, 3>> EdgesInfinite::get_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<cx32, 3>> EdgesInfinite::get_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<cx64, 3>> EdgesInfinite::get_env_var_blk_as() const;

@@ -34,6 +34,7 @@ namespace tools::finite::opt {
             if(y == nullptr) return;
             if(primme == nullptr) return;
             const auto H_ptr      = static_cast<MatVecMPOS<Scalar> *>(primme->matrix);
+            auto       t_precond  = tid::tic_scope(fmt::format("precFsJcb-{}", H_ptr->get_jcbMaxBlockSize()));
             H_ptr->preconditioner = eig::Preconditioner::JACOBI;
             H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
         }
@@ -154,8 +155,8 @@ namespace tools::finite::opt {
 
         template<typename Scalar>
         double get_largest_eigenvalue_hamiltonian_squared(const TensorsFinite &tensors) {
-            const auto &env2                = tensors.get_multisite_env_var_blk();
-            auto        hamiltonian_squared = MatVecMPO<Scalar>(env2.L, env2.R, tensors.get_multisite_mpo_squared());
+            auto env2                = tensors.edges->get_multisite_env_var_blk_as<Scalar>();
+            auto hamiltonian_squared = MatVecMPO<Scalar>(env2.L, env2.R, tensors.get_multisite_mpo_squared<Scalar>());
             tools::log->trace("Finding largest-magnitude eigenvalue");
             eig::solver solver; // Define a solver just to find the maximum eigenvalue
             solver.config.tol             = settings::precision::eigs_tol_min;
@@ -302,6 +303,8 @@ namespace tools::finite::opt {
         }
         cfg.primme_preconditioner = folded_spectrum::preconditioner_jacobi<Scalar>;
         cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
+
+        cfg.primme_maxBlockSize = 16;
 
         const auto &mpos                  = tensors.get_model().get_mpo_active();
         const auto &envv                  = tensors.get_edges().get_var_active();

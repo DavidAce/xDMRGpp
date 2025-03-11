@@ -25,14 +25,14 @@ void tools::infinite::print::dimensions(const TensorsInfinite &tensors) {
     }
 
     if(tensors.edges) {
-        const auto &envl = tensors.edges->get_ene().L.get_block().dimensions();
-        const auto &envr = tensors.edges->get_ene().R.get_block().dimensions();
+        const auto &envl = tensors.edges->get_ene().L.dimensions();
+        const auto &envr = tensors.edges->get_ene().R.dimensions();
         strA             = fmt::format("ENV [{:>3} {:>3} {:>2}] ", envl[0], envl[1], envl[2]);
         strB             = fmt::format("ENV [{:>3} {:>3} {:>2}] ", envr[0], envr[1], envr[2]);
     }
     if(tensors.model) {
-        const auto &mpoa = tensors.model->get_mpo_siteA().MPO().dimensions();
-        const auto &mpob = tensors.model->get_mpo_siteB().MPO().dimensions();
+        const auto &mpoa = tensors.model->get_mpo_siteA().dimensions();
+        const auto &mpob = tensors.model->get_mpo_siteB().dimensions();
         strA             = fmt::format("MPO [{:>1} {:>1} {:>1} {:>1}] ", mpoa[0], mpoa[1], mpoa[2], mpoa[3]);
         strB             = fmt::format("MPO [{:>1} {:>1} {:>1} {:>1}] ", mpob[0], mpob[1], mpob[2], mpob[3]);
     }

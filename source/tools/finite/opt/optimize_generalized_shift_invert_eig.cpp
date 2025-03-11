@@ -3,6 +3,7 @@
 #include "debug/exceptions.h"
 #include "math/eig.h"
 #include "math/num.h"
+#include "math/linalg.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
@@ -11,7 +12,9 @@
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
+#include <Eigen/Eigenvalues>
 #include <queue>
+
 namespace tools::finite::opt::internal {
     template<typename VecType>
     std::vector<long> get_k_largest(const VecType &vec, size_t k) {
@@ -56,7 +59,7 @@ namespace tools::finite::opt::internal {
     template<typename Scalar>
     void optimize_generalized_shift_invert_eig_executor(const TensorsFinite &tensors, const opt_mps &initial_mps, std::vector<opt_mps> &results,
                                                         OptMeta &meta) {
-        // Solve the generalized problem Hx=(1/E)H²x
+        // Solve the generalized problem Hx=aH²x,  where a ~ <H>/<H^2>
 
         if(meta.optRitz == OptRitz::NONE) return;
         eig::solver solver;
@@ -95,6 +98,26 @@ namespace tools::finite::opt::internal {
             }
 
             case OptRitz::LM: {
+
+                // auto L = matrixA.dimension(0);
+                // if(L < 64) {
+                //     auto A = Eigen::Map<Eigen::Matrix<Scalar,Eigen::Dynamic,Eigen::Dynamic>>(matrixA.data(), L, L);
+                //     auto B = Eigen::Map<Eigen::Matrix<Scalar,Eigen::Dynamic,Eigen::Dynamic>>(matrixB.data(), L, L);
+                //     auto solverA = Eigen::SelfAdjointEigenSolver<Eigen::Matrix<Scalar,Eigen::Dynamic,Eigen::Dynamic>>(A);
+                //     auto solverB = Eigen::SelfAdjointEigenSolver<Eigen::Matrix<Scalar,Eigen::Dynamic,Eigen::Dynamic>>(B);
+                //     auto solverAB = Eigen::GeneralizedEigenSolver<Eigen::Matrix<fp64,Eigen::Dynamic,Eigen::Dynamic>>(A.real(), B.real());
+                //     Eigen::VectorXd evalsA = solverA.eigenvalues().real();
+                //     Eigen::VectorXd evalsB = solverB.eigenvalues().real();
+                //     Eigen::VectorXcd alphas = solverAB.alphas();
+                //     Eigen::VectorXd betas = solverAB.betas();
+                //     tools::log->info("A:\n{}\n", linalg::matrix::to_string(evalsA, 8));
+                //     tools::log->info("B:\n{}\n", linalg::matrix::to_string(evalsB, 8));
+                //     for(long i = 0; i < L; i++) {
+                //         auto quot = alphas[i]/betas[i];
+                //         tools::log->info("{:4}: alpha {:.16f}{:+.16f}i beta {:.16f}  alpha/beta {:.16f}{:+.16f}i", i, alphas[i].real(), alphas[i].imag(), betas[i], quot.real(), quot.imag());
+                //     }
+                // }
+
                 solver.eig(matrixA.data(), matrixB.data(), matrixA.dimension(0));
                 // Determine the nev largest eigenvalues
                 auto eigvals = eig::view::get_eigvals<fp64>(solver.result, false);

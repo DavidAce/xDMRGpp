@@ -18,7 +18,7 @@ namespace tools::finite::opt::reports {
         std::string               description;
         std::string               ritz;
         long                      size, idx, nev, ncv;
-        double                    energy, eigval, variance, overlap, norm, rnorm, rnorm_H, rnorm_H2, tol, grad;
+        double                    energy, hsquared, variance, eigval, overlap, norm, rnorm, rnorm_H, rnorm_H2, tol, grad;
         size_t                    iter, mv, pc;
         double                    time, time_mv, time_pc;
         spdlog::level::level_enum level = spdlog::level::debug;

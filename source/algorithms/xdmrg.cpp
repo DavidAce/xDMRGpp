@@ -228,8 +228,8 @@ void xdmrg::run_preprocessing() {
         auto svd_solver = svd::solver();
         auto L          = tensors.get_length<long>();
         auto sites      = num::range<size_t>(0, L);
-        auto ham1       = tensors.model->get_multisite_ham(sites);
-        auto ham2       = tensors.model->get_multisite_ham_squared(sites);
+        auto ham1       = tensors.model->get_multisite_ham<cx64>(sites);
+        auto ham2       = tensors.model->get_multisite_ham_squared<cx64>(sites);
         auto norm_est   = tensors.model->get_energy_upper_bound();
         // auto        ham1i      = svd_solver.pseudo_inverse(ham1_);
         eig::solver solver1, solver2;
@@ -303,37 +303,38 @@ void xdmrg::run_algorithm() {
 
     while(true) {
         tools::log->trace("Starting step {}, iter {}, pos {}, dir {}", status.step, status.iter, status.position, status.direction);
+        // Apply end-of-half-sweep actions
+        // Updating bond dimension must go first since it decides based on truncation error, but a projection+normalize resets truncation.
+        update_bond_dimension_limit();   // Updates the bond dimension if the state precision is being limited by bond dimension
+        update_truncation_error_limit(); // Updates the truncation error limit if the state is being truncated
+        update_eigs_tolerance();         // Updates the tolerance on the iterative eigensolver
+        update_dmrg_blocksize();         // Updates the number sites used in dmrg steps using the information typical scale
+        set_energy_shift_mpo();          // Shifts the energy H -> H-<E> by subtracting E/L on each MPO.
+        set_parity_shift_mpo();          // Shifts the energy spectrum of states with opposite parity away from the current energy.
+        set_parity_shift_mpo_squared();  // Shifts the energy-squared spectrum of states with opposite parity up by 1 (makes sense with ritz == SM)
+        rebuild_tensors();               // Rebuilds mpos (and compresses them) and edges, only if they were modified.
+        try_projection();                // Tries to project the state to the nearest global spin parity sector along settings::strategy::target_axis
+
+        // Perform the step
         update_state();
         print_status();
+
         check_convergence();
         write_to_file();
 
-        tools::log->trace("Finished step {}, iter {}, pos {}, dir {}", status.step, status.iter, status.position, status.direction);
+        tools::log->trace("Finished iter {}, step {}, pos {}, dir {}", status.iter, status.step, status.position, status.direction);
 
         // It's important not to perform the last move, so we break now: that last state would not get optimized
         if(status.algo_stop != AlgorithmStop::NONE) break;
 
         // Prepare for next step
 
-        // Updating bond dimension must go first since it decides based on truncation error, but a projection+normalize resets truncation.
-        update_bond_dimension_limit();   // Updates the bond dimension if the state precision is being limited by bond dimension
-        update_truncation_error_limit(); // Updates the truncation error limit if the state is being truncated
-        update_eigs_tolerance();         // Updates the tolerance on the iterative eigensolver
-        update_dmrg_blocksize();         // Updates the number sites used in dmrg steps using the information typical scale
-        try_projection();                // Tries to project the state to the nearest global spin parity sector along settings::strategy::target_axis
         // try_moving_sites(); // Tries to overcome an entanglement barrier by moving sites around the lattice, to optimize non-nearest neighbors
-        // expand_environment(EnvExpandMode::VAR , EnvExpandSide::BACKWARD);
+        // expand_environment(EnvExpandMode::VAR , EnvExpandSide::REAR);
 
         move_center_point(); // Moves the center point AC to the next site and increments status.iter and status.step
         status.wall_time = tid::get_unscoped("t_tot").get_time();
         status.algo_time = t_run->get_time();
-
-        if(tensors.get_position<long>() == tensors.get_length<long>()/2-1) {
-            auto chosen_sites = num::range<size_t>(tensors.get_position<size_t>(), tensors.get_position<size_t>()+2);
-            tensors.activate_sites(chosen_sites);
-            Eigen::Tensor<fp64,3> mmps = tensors.get_multisite_mps().real();
-            write_to_file(mmps, "mmps", StorageEvent::NONE);
-        }
     }
     tools::log->info("Finished {} simulation of state [{}] -- stop reason: {}", status.algo_type_sv(), tensors.state->get_name(), status.algo_stop_sv());
     status.algorithm_has_finished = true;
@@ -498,19 +499,18 @@ void xdmrg::set_energy_shift_mpo() {
     // we get the subtraction of two very small terms since E-E_shf should be small.
 
     if(not tensors.position_is_inward_edge()) return;
-    tensors.set_energy_shift_mpo(status.energy_tgt);
-    tensors.rebuild_mpo();          // The shift clears our squared mpo's. So we have to rebuild them.
-    tensors.rebuild_mpo_squared();  // The shift clears our squared mpo's. So we have to rebuild them.
-    tensors.compress_mpo_squared(); // Compress the mpo's if compression is enabled
-    tensors.rebuild_edges();        // The shift modified all our mpo's. So we have to rebuild all the edges.
-    if constexpr(settings::debug) tensors.assert_validity();
-    if(std::abs(tensors.model->get_energy_shift_mpo() - status.energy_tgt) > 1e-15)
-        throw except::runtime_error("Energy shift mismatch: {:.16f} != {:.16f}", tensors.model->get_energy_shift_mpo(), status.energy_tgt);
+    if(var_latest < std::min(1e-14, settings::precision::variance_convergence_threshold))
+        // No need to improve precision further.
+        // The quotient <H-eshift>/<(H-eshift)²> risks being imprecise when both numerator and denominator ar close to zero.
+        return;
+    auto energy_shift = status.energy_tgt;
+    if(settings::precision::use_energy_shifted_mpo) { energy_shift = tools::finite::measure::energy(tensors); }
+    tensors.set_energy_shift_mpo(energy_shift);
+    if(std::abs(tensors.model->get_energy_shift_mpo() - energy_shift) > 10 * std::numeric_limits<double>::epsilon())
+        throw except::runtime_error("Energy shift mismatch: {:.16f} != {:.16f}", tensors.model->get_energy_shift_mpo(), energy_shift);
 }
 
 void xdmrg::update_time_step() {
     tools::log->trace("Updating time step");
     status.delta_t = std::complex<double>(1e-6, 0);
 }
-
-

@@ -31,23 +31,18 @@ class TensorsFinite;
 
 class StateFinite {
     private:
+    template<typename T>
     struct Cache {
-        std::optional<Eigen::Tensor<cx64, 3>>                      multisite_mps = std::nullopt;
-        std::deque<std::pair<std::string, Eigen::Tensor<fp64, 3>>> mps_real      = {};
-        std::deque<std::pair<std::string, Eigen::Tensor<cx64, 3>>> mps_cplx      = {};
-        // std::unordered_map<std::string, Eigen::Tensor<fp64, 3>>    mps_real      = {};
-        // std::unordered_map<std::string, Eigen::Tensor<cx64, 3>>    mps_cplx      = {};
-        std::deque<std::pair<std::string, Eigen::Tensor<fp64, 4>>> trf_real = {};
-        std::deque<std::pair<std::string, Eigen::Tensor<cx64, 4>>> trf_cplx = {};
-        // std::unordered_map<std::string, Eigen::Tensor<fp64, 4>> trf_real      = {};
-        // std::unordered_map<std::string, Eigen::Tensor<cx64, 4>> trf_cplx      = {};
-        std::unordered_map<std::string, Eigen::Tensor<cx64, 4>> temporary_rho = {};
+        std::optional<Eigen::Tensor<T, 3>>                      multisite_mps = std::nullopt;
+        std::deque<std::pair<std::string, Eigen::Tensor<T, 3>>> mps           = {};
+        std::deque<std::pair<std::string, Eigen::Tensor<T, 4>>> trf           = {};
+        std::unordered_map<std::string, Eigen::Tensor<T, 4>>    temporary_rho = {};
     };
     enum class FindStaleKeys { OFF, ON };
 
-    template<typename Scalar>
+    template<typename T>
     struct TrfCacheEntry {
-        using trfref    = std::reference_wrapper<const Eigen::Tensor<Scalar, 4>>;
+        using trfref    = std::reference_wrapper<const Eigen::Tensor<T, 4>>;
         size_t      pos = -1ul;
         std::string side;
         std::string key;
@@ -57,10 +52,17 @@ class StateFinite {
         trfref      trf;
         // std::vector<std::string> stale_keys; // Can be used to erase older cache entries
     };
-    static constexpr size_t   max_mps_cache_size = 20; // Max mps cache size in units of elements
-    static constexpr size_t   max_trf_cache_size = 20; // Max transfer matrix cache size in units of elements
-    int                       direction          = 1;
-    mutable Cache             cache;
+    static constexpr size_t max_mps_cache_size = 20; // Max mps cache size in units of elements
+    static constexpr size_t max_trf_cache_size = 20; // Max transfer matrix cache size in units of elements
+    int                     direction          = 1;
+    mutable Cache<fp32>     cache_fp32;
+    mutable Cache<fp64>     cache_fp64;
+    mutable Cache<cx32>     cache_cx32;
+    mutable Cache<cx64>     cache_cx64;
+    template<typename T>
+    Cache<T> &get_cache();
+    template<typename T>
+    Cache<T>                 &get_cache() const;
     mutable std::vector<bool> tag_normalized_sites;
     std::string               name;
     AlgorithmType             algo = AlgorithmType::ANY;
@@ -83,9 +85,9 @@ class StateFinite {
     template<typename Scalar>
     std::optional<TrfCacheEntry<Scalar>> get_optimal_trf_from_cache(const std::vector<size_t> &sites) const;
     template<typename Scalar>
-    optional_tensor3ref<Scalar> get_mps_in_cache(const std::string &key) const;
+    optional_tensor3ref<Scalar> get_cached_mps(const std::string &key) const;
     template<typename Scalar>
-    bool        has_mps_in_cache(const std::string &key) const;
+    bool        has_cached_mps(const std::string &key) const;
     std::string generate_cache_key(const std::vector<size_t> &sites, const size_t pos, std::string_view side) const;
     template<typename Scalar>
     double get_transfer_matrix_cost(const std::vector<size_t> &sites, std::string_view side, const std::optional<TrfCacheEntry<Scalar>> &trf_cache) const;
@@ -97,14 +99,14 @@ class StateFinite {
     size_t popcount = -1ul; /*!< Number of 1's or particles in the product state pattern. Used in the fLBIT algorithm, which conserves the particle number. */
 
     public:
-                 StateFinite();
-    ~            StateFinite() noexcept;                    // Read comment on implementation
-                 StateFinite(StateFinite &&other) noexcept; // default move ctor
-    StateFinite &operator=(StateFinite &&other) noexcept;   // default move assign
-                 StateFinite(const StateFinite &other);     // copy ctor
-    StateFinite &operator=(const StateFinite &other);       // copy assign
-                 StateFinite(AlgorithmType algo_type, size_t model_size, long position, long spin_dim = 2);
-    void         initialize(AlgorithmType algo_type, size_t model_size, long position, long spin_dim = 2);
+    StateFinite();
+    ~StateFinite() noexcept;                              // Read comment on implementation
+    StateFinite(StateFinite &&other) noexcept;            // default move ctor
+    StateFinite &operator=(StateFinite &&other) noexcept; // default move assign
+    StateFinite(const StateFinite &other);                // copy ctor
+    StateFinite &operator=(const StateFinite &other);     // copy assign
+    StateFinite(AlgorithmType algo_type, size_t model_size, long position, long spin_dim = 2);
+    void initialize(AlgorithmType algo_type, size_t model_size, long position, long spin_dim = 2);
 
     void                           set_name(std::string_view statename);
     [[nodiscard]] std::string_view get_name() const;
@@ -176,9 +178,10 @@ class StateFinite {
     long                             get_spin_dim() const;
     std::vector<std::array<long, 3>> get_mps_dims(const std::vector<size_t> &sites) const;
     std::vector<std::array<long, 3>> get_mps_dims_active() const;
-    template<typename Scalar = cx64>
-    Eigen::Tensor<Scalar, 3>      get_multisite_mps(const std::vector<size_t> &sites, bool use_cache = false) const;
-    const Eigen::Tensor<cx64, 3> &get_multisite_mps() const;
+    template<typename Scalar>
+    Eigen::Tensor<Scalar, 3> get_multisite_mps(const std::vector<size_t> &sites, bool use_cache = false) const;
+    template<typename Scalar>
+    const Eigen::Tensor<Scalar, 3> &get_multisite_mps() const;
     template<typename Scalar>
     Eigen::Tensor<Scalar, 2> get_reduced_density_matrix(const std::vector<size_t> &sites) const;
     template<typename Scalar>

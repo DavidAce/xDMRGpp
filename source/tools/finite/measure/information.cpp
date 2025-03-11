@@ -131,8 +131,8 @@ std::vector<double> tools::finite::measure::entanglement_entropies_log2(const St
     return entanglement_entropies;
 }
 
-double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite &state, const std::vector<size_t> &sites, size_t eig_max_size = -1ul,
-                                                                   std::string_view side = "") {
+double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite &state, const std::vector<size_t> &sites, Precision prec,
+                                                                   size_t eig_max_size = -1ul, std::string_view side = "") {
     if(sites.empty()) return 0;
     bool sites_is_contiguous = sites == num::range<size_t>(sites.front(), sites.back() + 1);
     if(not sites_is_contiguous) { throw except::logic_error("sites are not contiguous: {}", sites); }
@@ -159,9 +159,23 @@ double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFi
     auto eig_sizes = std::array{eig_size_rho, eig_size_cmp, eig_size_trf};
     // auto eig_costs = std::array{eig_cost_rho, eig_cost_cmp, eig_cost_trf};
 
-    auto mat_costs_rho = is_real ? state.get_reduced_density_matrix_cost<fp64>(sites) : state.get_reduced_density_matrix_cost<cx64>(sites);
-    auto mat_costs_cmp = is_real ? state.get_reduced_density_matrix_cost<fp64>(cites) : state.get_reduced_density_matrix_cost<cx64>(cites);
-    auto mat_costs_trf = is_real ? state.get_transfer_matrix_costs<fp64>(sites, side) : state.get_transfer_matrix_costs<cx64>(sites, side);
+    std::array<double, 3> mat_costs_rho = {};
+    std::array<double, 3> mat_costs_cmp = {};
+    std::array<double, 2> mat_costs_trf = {};
+    switch(prec) {
+        case Precision::SINGLE: {
+            mat_costs_rho = is_real ? state.get_reduced_density_matrix_cost<fp32>(sites) : state.get_reduced_density_matrix_cost<cx32>(sites);
+            mat_costs_cmp = is_real ? state.get_reduced_density_matrix_cost<fp32>(cites) : state.get_reduced_density_matrix_cost<cx32>(cites);
+            mat_costs_trf = is_real ? state.get_transfer_matrix_costs<fp32>(sites, side) : state.get_transfer_matrix_costs<cx32>(sites, side);
+            break;
+        }
+        case Precision::DOUBLE: {
+            mat_costs_rho = is_real ? state.get_reduced_density_matrix_cost<fp64>(sites) : state.get_reduced_density_matrix_cost<cx64>(sites);
+            mat_costs_cmp = is_real ? state.get_reduced_density_matrix_cost<fp64>(cites) : state.get_reduced_density_matrix_cost<cx64>(cites);
+            mat_costs_trf = is_real ? state.get_transfer_matrix_costs<fp64>(sites, side) : state.get_transfer_matrix_costs<cx64>(sites, side);
+            break;
+        }
+    }
 
     auto min_cost_rho_idx = std::distance(mat_costs_rho.begin(), std::min_element(mat_costs_rho.begin(), mat_costs_rho.end()));
     auto min_cost_cmp_idx = std::distance(mat_costs_cmp.begin(), std::min_element(mat_costs_cmp.begin(), mat_costs_cmp.end()));
@@ -194,40 +208,77 @@ double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFi
     auto                  evs      = Eigen::ArrayXd(); // Eigenvalues
     [[maybe_unused]] auto mat_time = 0.0;
     [[maybe_unused]] auto eig_time = 0.0;
-    if(is_real) {
-        Eigen::Tensor<fp64, 2> mat;
-        if(min_cost_idx == 0) {
-            mat      = state.get_reduced_density_matrix<fp64>(sites);
-            mat_time = tid::get("rho").get_last_interval();
-            // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after rho");
-        } else if(min_cost_idx == 1) {
-            mat      = state.get_reduced_density_matrix<fp64>(cites);
-            mat_time = tid::get("rho").get_last_interval();
-            // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after cmp");
-        } else if(min_cost_idx == 2) {
-            mat      = state.get_transfer_matrix<fp64>(sites, side);
-            mat_time = tid::get("trf").get_last_interval();
-            // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after trf");
+    switch(prec) {
+        case Precision::SINGLE: {
+            if(is_real) {
+                Eigen::Tensor<fp32, 2> mat;
+                if(min_cost_idx == 0) {
+                    mat      = state.get_reduced_density_matrix<fp32>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                } else if(min_cost_idx == 1) {
+                    mat      = state.get_reduced_density_matrix<fp32>(cites);
+                    mat_time = tid::get("rho").get_last_interval();
+                } else if(min_cost_idx == 2) {
+                    mat      = state.get_transfer_matrix<fp32>(sites, side);
+                    mat_time = tid::get("trf").get_last_interval();
+                }
+                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
+                evs = eig::view::get_eigvals<fp32>(solver.result).cast<fp64>(); // Eigenvalues
+            } else {
+                Eigen::Tensor<cx32, 2> mat;
+                if(min_cost_idx == 0) {
+                    mat      = state.get_reduced_density_matrix<cx32>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                } else if(min_cost_idx == 1) {
+                    mat      = state.get_reduced_density_matrix<cx32>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                } else if(min_cost_idx == 2) {
+                    mat      = state.get_transfer_matrix<cx32>(sites, side);
+                    mat_time = tid::get("trf").get_last_interval();
+                }
+                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
+                evs = eig::view::get_eigvals<fp32>(solver.result).cast<fp64>(); // Eigenvalues
+            }
+            break;
         }
-        solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-        evs = eig::view::get_eigvals<fp64>(solver.result); // Eigenvalues
-    } else {
-        Eigen::Tensor<cx64, 2> mat;
-        if(min_cost_idx == 0) {
-            mat      = state.get_reduced_density_matrix<cx64>(sites);
-            mat_time = tid::get("rho").get_last_interval();
-        } else if(min_cost_idx == 1) {
-            mat      = state.get_reduced_density_matrix<cx64>(sites);
-            mat_time = tid::get("rho").get_last_interval();
-        } else if(min_cost_idx == 2) {
-            mat      = state.get_transfer_matrix<cx64>(sites, side);
-            mat_time = tid::get("trf").get_last_interval();
+        case Precision::DOUBLE: {
+            if(is_real) {
+                Eigen::Tensor<fp64, 2> mat;
+                if(min_cost_idx == 0) {
+                    mat      = state.get_reduced_density_matrix<fp64>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                    // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after rho");
+                } else if(min_cost_idx == 1) {
+                    mat      = state.get_reduced_density_matrix<fp64>(cites);
+                    mat_time = tid::get("rho").get_last_interval();
+                    // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after cmp");
+                } else if(min_cost_idx == 2) {
+                    mat      = state.get_transfer_matrix<fp64>(sites, side);
+                    mat_time = tid::get("trf").get_last_interval();
+                }
+                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
+                evs = eig::view::get_eigvals<fp64>(solver.result); // Eigenvalues
+            } else {
+                Eigen::Tensor<cx64, 2> mat;
+                if(min_cost_idx == 0) {
+                    mat      = state.get_reduced_density_matrix<cx64>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                } else if(min_cost_idx == 1) {
+                    mat      = state.get_reduced_density_matrix<cx64>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                } else if(min_cost_idx == 2) {
+                    mat      = state.get_transfer_matrix<cx64>(sites, side);
+                    mat_time = tid::get("trf").get_last_interval();
+                }
+                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
+                evs = eig::view::get_eigvals<fp64>(solver.result); // Eigenvalues
+            }
+            break;
         }
-        solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-        evs = eig::view::get_eigvals<fp64>(solver.result); // Eigenvalues
     }
-    eig_time                         = solver.result.meta.time_total;
-    double entanglement_entropy_log2 = 0;
+
+    eig_time                       = solver.result.meta.time_total;
+    fp64 entanglement_entropy_log2 = 0;
     for(const auto &e : evs) {
         if(e > 0) entanglement_entropy_log2 += -e * std::log2(e); // We use log base 2 for information
     }
@@ -319,14 +370,17 @@ SeeProgress check_see_progress(const Eigen::ArrayXXd &see, LogPolicy log_policy 
  *  - use a positive value to indicate relative error
  *  - use a negative value to indicate absolute error (i.e. how many missing bits you can accept)
  */
+
 Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite &state, InfoPolicy ip) {
-    if(ip.useCache == UseCache::TRUE and state.measurements.subsystem_entanglement_entropies.has_value())
+    if(has_flag(ip.cachePolicy, CachePolicy::READ) and state.measurements.subsystem_entanglement_entropies.has_value())
         return state.measurements.subsystem_entanglement_entropies.value();
     auto t_see        = tid::tic_scope("see", tid::level::normal);
     ip.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err);
     ip.eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size);
     ip.svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim);
     ip.svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim);
+    ip.precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision);
+    ip.cachePolicy    = ip.cachePolicy.value_or(settings::storage::dataset::subsystem_entanglement_entropies::cache);
     auto length       = state.get_length<size_t>();
     auto state_temp   = state;
     auto sites_temp   = num::range<size_t>(0, length);
@@ -343,8 +397,8 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
     finite::mps::normalize_state(state_temp, svd_cfg, NormPolicy::ALWAYS);
 
     // finite::mps::move_center_point_to_pos_dir(state_temp, 0, 1, ip.svd_cfg);
-    tools::log->info("subsystem_entanglement_entropies_log2: calculating | max bit err {:.2e} | max size eig {} svd {} trnc {:.2e}", ip.bits_max_error.value(),
-                     ip.eig_max_size.value(), ip.svd_max_size.value(), ip.svd_trnc_lim.value());
+    tools::log->info("subsystem_entanglement_entropies_log2: calculating | max bit err {:.2e} | max size eig {} svd {} trnc {:.2e} | prec {}",
+                     ip.bits_max_error.value(), ip.eig_max_size.value(), ip.svd_max_size.value(), ip.svd_trnc_lim.value(), enum2sv(ip.precision));
 
     constexpr auto  nan = std::numeric_limits<double>::quiet_NaN();
     auto            len = state_temp.get_length<long>();
@@ -367,7 +421,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
         for(const auto &subsystem : subsystemsL) {
             auto off          = safe_cast<long>(subsystem.front());
             auto ext          = safe_cast<long>(subsystem.size());
-            see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_temp, subsystem, ip.eig_max_size.value(), "left");
+            see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_temp, subsystem, ip.precision.value(), ip.eig_max_size.value(), "left");
             if(!std::isnan(see(ext - 1, off)) and see(ext - 1, off) < -1e-8) throw except::runtime_error("Negative entropy: {:.16f}", see(ext - 1, off));
             if(posL != safe_cast<size_t>(off) or &subsystem == &subsystemsL.back()) {
                 check_see_progress(see, LogPolicy::DEBUG);
@@ -380,7 +434,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
         for(const auto &subsystem : subsystemsR) {
             auto off          = safe_cast<long>(subsystem.front());
             auto ext          = safe_cast<long>(subsystem.size());
-            see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_temp, subsystem, ip.eig_max_size.value(), "right");
+            see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_temp, subsystem, ip.precision.value(), ip.eig_max_size.value(), "right");
             if(!std::isnan(see(ext - 1, off)) and see(ext - 1, off) < -1e-8) throw except::runtime_error("Negative entropy: {:.16f}", see(ext - 1, off));
             if(posR != subsystem.back() or &subsystem == &subsystemsR.back()) {
                 check_see_progress(see, LogPolicy::DEBUG);
@@ -453,7 +507,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
                                               sites_l2r, subsystem);
 
                 // Now we can read off the missing entropy
-                see(ext - 1, safe_cast<long>(posL)) = subsystem_entanglement_entropy_log2(state_l2r, num::range<size_t>(0, ext), -1ul, "");
+                see(ext - 1, safe_cast<long>(posL)) = subsystem_entanglement_entropy_log2(state_l2r, num::range<size_t>(0, ext), ip.precision.value(), -1ul, "");
             }
             subsystemsL.pop_front();
             tools::log->info("swap l2r subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, posL,
@@ -486,9 +540,9 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
             long nswap             = len - safe_cast<long>(posR) - 1l;
             bool subsystem_success = true;
             for(const auto &[idx, pos] : iter::enumerate_reverse(subsystem)) {
-                size_t rdx = subsystem.size() - idx - 1ul; // 0,1,2... subsystem.size()-1
-                size_t rof = safe_cast<size_t>(len) - rdx - 1ul;              // L-1, L-2, L-3...,  Index of pos starting from the right edge
-                if(sites_r2l[rof] == pos) continue;    // The site is already in place
+                size_t rdx = subsystem.size() - idx - 1ul;       // 0,1,2... subsystem.size()-1
+                size_t rof = safe_cast<size_t>(len) - rdx - 1ul; // L-1, L-2, L-3...,  Index of pos starting from the right edge
+                if(sites_r2l[rof] == pos) continue;              // The site is already in place
                 for(long i = safe_cast<long>(pos); i < safe_cast<long>(pos) + nswap; ++i) {
                     // Make sure that the swap problem size is smaller than the highest.
                     // If the swap needs to truncate the state, we get an uncontrolled error in the information lattice.
@@ -520,7 +574,8 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
                                               "\t subsystem: {::2}",
                                               sites_r2l, subsystem);
                 // Now we can read off the missing entropy
-                see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_r2l, num::range<size_t>(length - safe_cast<size_t>(ext), length), -1ul, "");
+                see(ext - 1, off) =
+                    subsystem_entanglement_entropy_log2(state_r2l, num::range<size_t>(length - safe_cast<size_t>(ext), length), ip.precision.value(), -1ul, "");
             }
             subsystemsR.pop_front();
             tools::log->info("swap r2l subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, off,
@@ -533,7 +588,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
         // loop_counter++;
     }
 
-    if(ip.useCache == UseCache::TRUE) {
+    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) {
         state.measurements.see_time                         = t_see->get_last_interval();
         state.measurements.subsystem_entanglement_entropies = see;
     }
@@ -560,23 +615,34 @@ Eigen::ArrayXXd tools::finite::measure::information_lattice(const Eigen::ArrayXX
 }
 
 Eigen::ArrayXXd tools::finite::measure::information_lattice(const StateFinite &state, InfoPolicy ip) {
-    if(ip.useCache == UseCache::TRUE and state.measurements.information_lattice.has_value()) return state.measurements.information_lattice.value();
+    if(has_flag(ip.cachePolicy, CachePolicy::READ) and state.measurements.information_lattice.has_value())
+        return state.measurements.information_lattice.value();
     auto SEE         = subsystem_entanglement_entropies_log2(state, ip);
     auto infolattice = information_lattice(SEE);
-    if(ip.useCache == UseCache::TRUE) state.measurements.information_lattice = infolattice;
+    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_lattice = infolattice;
     return infolattice;
 }
+
 Eigen::ArrayXd tools::finite::measure::information_per_scale(const Eigen::ArrayXXd &information_lattice) {
     return information_lattice.isNaN().select(0.0, information_lattice).rowwise().sum(); // Does not have NaN
 }
 
 Eigen::ArrayXd tools::finite::measure::information_per_scale(const StateFinite &state, InfoPolicy ip) {
-    if(ip.useCache == UseCache::TRUE and state.measurements.information_per_scale.has_value()) return state.measurements.information_per_scale.value();
+    if(has_flag(ip.cachePolicy, CachePolicy::READ) and state.measurements.information_per_scale.has_value())
+        return state.measurements.information_per_scale.value();
     auto           infolattice    = information_lattice(state, ip); // May have NaN
     Eigen::ArrayXd info_per_scale = information_per_scale(infolattice);
-    if(ip.useCache == UseCache::TRUE) state.measurements.information_per_scale = info_per_scale;
+    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_per_scale = info_per_scale;
     // tools::log->info("info per scale: {::.3e}", state.measurements.information_per_scale.value());
     return info_per_scale;
+}
+
+double tools::finite::measure::information_bit_scale(const Eigen::ArrayXd &information_per_scale, double bit) {
+    double idx = 0;
+    for(idx = 0; idx < information_per_scale.size(); ++idx) {
+        if(information_per_scale.topRows(idx + 1).sum() > bit) return idx;
+    }
+    return idx;
 }
 
 /*! For masses m_i at coordinates x_i, the center of mass is defined as
@@ -609,6 +675,35 @@ double tools::finite::measure::information_center_of_mass(const Eigen::ArrayXd &
  */
 double tools::finite::measure::information_center_of_mass(const StateFinite &state, InfoPolicy ip) {
     return information_center_of_mass(information_lattice(state, ip));
+}
+
+InfoAnalysis tools::finite::measure::information_lattice_analysis(const StateFinite &state, InfoPolicy ip) {
+    InfoAnalysis info_analysis                     = {};
+    info_analysis.ip                               = ip;
+    info_analysis.subsystem_entanglement_entropies = subsystem_entanglement_entropies_log2(state, ip);
+
+    info_analysis.info_lattice = information_lattice(info_analysis.subsystem_entanglement_entropies);
+    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_lattice = info_analysis.info_lattice;
+
+    info_analysis.info_per_scale = information_per_scale(info_analysis.info_lattice);
+    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_per_scale = info_analysis.info_per_scale;
+
+    info_analysis.icom = information_center_of_mass(info_analysis.info_per_scale);
+    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_center_of_mass = info_analysis.icom;
+
+    info_analysis.bits_found    = info_analysis.info_per_scale.sum();
+    info_analysis.scale_bit_one = information_bit_scale(info_analysis.info_per_scale, 1);
+    info_analysis.scale_bit_two = information_bit_scale(info_analysis.info_per_scale, 2);
+    info_analysis.scale_bit_mid = information_bit_scale(info_analysis.info_per_scale, state.get_length<double>() / 2.0);
+    info_analysis.scale_bit_pen = information_bit_scale(info_analysis.info_per_scale, state.get_length<double>() - 1.0);
+    info_analysis.scale_bit_all = information_bit_scale(info_analysis.info_per_scale, state.get_length<double>());
+
+    tools::log->debug("scale_bit_one : {:.16f}", info_analysis.scale_bit_one);
+    tools::log->debug("scale_bit_two : {:.16f}", info_analysis.scale_bit_two);
+    tools::log->debug("scale_bit_mid : {:.16f}", info_analysis.scale_bit_mid);
+    tools::log->debug("scale_bit_pen : {:.16f}", info_analysis.scale_bit_pen);
+    tools::log->debug("scale_bit_all : {:.16f}", info_analysis.scale_bit_all);
+    return info_analysis;
 }
 
 /*! Calculates xi from the expectation value of the geometric distribution, such that p = 1-exp(-1/xi) */

@@ -16,8 +16,8 @@ void tools::finite::print::dimensions(const TensorsFinite &tensors) {
         if(pos == tensors.get_position()) tag = "<---- Position A";
         if(pos == tensors.get_position() + 1) tag = "<---- Position B";
         const auto &mps  = tensors.state->get_mps_site(pos).dimensions();
-        const auto &envl = tensors.edges->get_env_ene(pos).L.get_block().dimensions();
-        const auto &envr = tensors.edges->get_env_ene(pos).R.get_block().dimensions();
+        const auto &envl = tensors.edges->get_env_ene(pos).L.dimensions();
+        const auto &envr = tensors.edges->get_env_ene(pos).R.dimensions();
         const auto &mpo  = tensors.model->get_mpo(pos).MPO().dimensions();
         tools::log->info("Pos {:2}: ENVL [{:>3} {:>3} {:>2}] MPS [{:>2} {:>3} {:>3}] MPO [{:>1} {:>1} {:>1} {:>1}] ENVR [{:>3} {:>3} {:>2}] {}", pos, envl[0],
                          envl[1], envl[2], mps[0], mps[1], mps[2], mpo[0], mpo[1], mpo[2], mpo[3], envr[0], envr[1], envr[2], tag);

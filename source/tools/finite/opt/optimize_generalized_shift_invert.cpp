@@ -38,6 +38,7 @@ namespace tools::finite::opt {
             if(y == nullptr) return;
             if(primme == nullptr) return;
             const auto H_ptr      = static_cast<MatVecMPOS<Scalar> *>(primme->matrix);
+            auto       t_precond  = tid::tic_scope(fmt::format("precGsiJcb-{}", H_ptr->get_jcbMaxBlockSize()));
             H_ptr->preconditioner = eig::Preconditioner::JACOBI;
             H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
         }
@@ -119,9 +120,11 @@ namespace tools::finite::opt {
                     "optimize_generalized_shift_invert_eigs: sigma shift is not supported: subtract the sigma/L at the global mpo level instead");
         }
 
-        tools::log->debug("eigs_generalized_shift_invert_executor: Solving [Hx=λH²x] {} {} | shifts {} | maxIter {} | tol {:.2e} | init on | size {} | mps {} | jcb {}",
-                          eig::LibToString(solver.config.lib), eig::RitzToString(solver.config.ritz), solver.config.primme_targetShifts,
-                          solver.config.maxIter.value(), solver.config.tol.value(), hamiltonian_squared.rows(), hamiltonian_squared.get_shape_mps(), solver.config.jcbMaxBlockSize);
+        tools::log->debug(
+            "eigs_generalized_shift_invert_executor: Solving [Hx=λH²x] {} {} | mmin {} mmax {} | shifts {} | maxIter {} | tol {:.2e} | size {} = {} | jcb {}",
+            eig::RitzToString(solver.config.ritz), eig::MethodToString(solver.config.primme_method), solver.config.primme_minRestartSize,
+            solver.config.primme_maxBlockSize, solver.config.primme_targetShifts, solver.config.maxIter.value(), solver.config.tol.value(),
+            hamiltonian_squared.get_shape_mps(), hamiltonian_squared.rows(), solver.config.jcbMaxBlockSize);
 
         auto init = gsi::get_initial_guess_mps<Scalar>(initial_mps, results, solver.config.maxNev.value()); // Init holds the data in memory for this scope
         for(auto &i : init) solver.config.initial_guess.push_back({i.mps.data(), i.idx});
@@ -162,18 +165,20 @@ namespace tools::finite::opt {
 
         cfg.primme_massMatrixMatvec = gsi::massMatrixMatvec<Scalar>;
         cfg.primme_projection       = meta.primme_projection.value_or("primme_proj_RR");
-        //cfg.primme_targetShifts.clear();
-        cfg.primme_targetShifts = {meta.eigv_target.value_or(0.0)};
+        // cfg.primme_projection       = meta.primme_projection.value_or("primme_proj_default");
+        // #pragma message "revert primme method"
+        // cfg.primme_method           = eig::PrimmeMethod::PRIMME_DYNAMIC;
+        // cfg.primme_targetShifts.clear();
+        cfg.primme_targetShifts   = {meta.eigv_target.value_or(0.0)};
         cfg.primme_preconditioner = gsi::preconditioner_jacobi<Scalar>;
         cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
-
 
         // Overrides from default
         const auto &mpos                = tensors.get_model().get_mpo_active();
         const auto &enve                = tensors.get_edges().get_ene_active();
         const auto &envv                = tensors.get_edges().get_var_active();
         auto        hamiltonian_squared = MatVecMPOS<Scalar>(mpos, enve, envv);
-        hamiltonian_squared.factorization=eig::Factorization::LLT;
+        hamiltonian_squared.factorization = eig::Factorization::LLT;
         eigs_generalized_shift_invert_executor(solver, hamiltonian_squared, tensors, initial_mps, results, meta);
     }
 

@@ -1,4 +1,8 @@
 #pragma once
+#include "debug/exceptions.h"
+#include <fmt/ranges.h>
+// #include <fmt/std.h>
+#include <algorithm>
 #include <array>
 #include <numeric>
 #include <stdexcept>
@@ -46,23 +50,33 @@ enum class MergeEvent {
     EXP,  /*!< Subspace expansion (aka perurbation, noise, enrichment) to increase the bond dimension */
 };
 
+/*! \brief Policy to determine the number of sites (the block size) involved in either
+ *  a dmrg update (optimization) step, and/or an environment expansion step.
+ *  We can either use a fixed number or use one of the information lattice metrics, and enable the increased
+ *  block size conditionally if the algorithm has entered a special status.
+ */
 enum class BlockSizePolicy {
-    MIN       = 0,             /*!< Set the block size to dmrg_max_blocksize on special status (set by additional bitflags) */
-    MAX       = 1,             /*!< Set the block size to dmrg_max_blocksize on special status (set by additional bitflags) */
-    ICOM      = 2,             /*!< Set the block size to the ceil of "information_center_of_mass" on special status (set by additional bitflags) */
-    ICOMPLUS1 = 4,             /*!< Set the block size to the ceil of "information_center_of_mass + 1" on special status (set by additional bitflags) */
-    ICOM150   = 8,             /*!< Set the block size to the ceil of "information_center_of_mass + 1" on special status (set by additional bitflags) */
-    ICOM200   = 16,            /*!< Set the block size to the ceil of "information_center_of_mass + 1" on special status (set by additional bitflags) */
-    SAT_ENT   = 32,            /*!< Set the block size when the entanglement entropy has saturated */
-    SAT_ICOM  = 64,            /*!< Set the block size when the information center of mass has saturated */
-    SAT_VAR   = 128,           /*!< Set the block size when the energy variance has saturated */
-    SAT_ALGO  = 256,           /*!< Set the block size when the algorithm status == saturated (implies all saturations) */
-    STK_ALGO  = 512,           /*!< Set the block size when the algorithm status == stuck ( */
-    FIN_BOND  = 1024,          /*!< Require that the bond dimension has reached its final (maximum) value before increasing the block size */
-    FIN_TRNC  = 2048,          /*!< Require that the truncation error has reached its final (minimum) value before increasing the block size   */
-    EXP       = 4096,          /*!< Use the enlarged blocksize during environment expansion  */
-    OPT       = 8192,          /*!< Use the enlarged blocksize during the optimization step */
-    DEFAULT   = ICOM150 | EXP, /*!< The default choice usually works well */
+    MIN         = 0,                   /*!< Block size = settings::strategy::dmrg_min_blocksize */
+    MAX         = 1 << 0,              /*!< Block size = settings::strategy::dmrg_max_blocksize */
+    ICOM        = 1 << 1,              /*!< Block size = ceil of "information_center_of_mass"*/
+    ICOMPLUS1   = 1 << 2,              /*!< Block size = ceil of "information_center_of_mass + 1.00" */
+    ICOM150     = 1 << 3,              /*!< Block size = ceil of "information_center_of_mass * 1.50" */
+    ICOM200     = 1 << 4,              /*!< Block size = ceil of "information_center_of_mass * 2.00" */
+    BIT_ONE     = 1 << 5,              /*!< Block size = scale to find at least one bit in the information lattice.*/
+    BIT_TWO     = 1 << 6,              /*!< Block size = scale to find at least two bits in the information lattice.*/
+    BIT_MID     = 1 << 7,              /*!< Block size = scale to find L/2 bits in the information lattice. */
+    BIT_PEN     = 1 << 8,              /*!< Block size = scale to find L-1 (up to PENultimate) bits in the information lattice. */
+    BIT_ALL     = 1 << 9,              /*!< Block size = scale to find L (all) bits in the information lattice. */
+    IF_SAT_ENT  = 1 << 10,             /*!< Set the block size if the entanglement entropy has saturated */
+    IF_SAT_INFO = 1 << 11,             /*!< Set the block size if the information center of mass has saturated */
+    IF_SAT_VAR  = 1 << 12,             /*!< Set the block size if the energy variance has saturated */
+    IF_SAT_ALGO = 1 << 13,             /*!< Set the block size if the algorithm status == saturated (implies all other saturations) */
+    IF_STK_ALGO = 1 << 14,             /*!< Set the block size if the algorithm status == stuck ( */
+    IF_FIN_BOND = 1 << 15,             /*!< Require that the bond dimension has reached its final (maximum) value before increasing the block size */
+    IF_FIN_TRNC = 1 << 16,             /*!< Require that the truncation error has reached its final (minimum) value before increasing the block size   */
+    ON_ENVEXP   = 1 << 17,             /*!< Enable the selected blocksize during environment expansion (otherwise default to dmrg_min_blocksize)  */
+    ON_UPDATE   = 1 << 18,             /*!< Enable the selected blocksize during the dmrg update step (otherwise default to dmrg_min_blocksize) */
+    DEFAULT     = BIT_ONE | ON_ENVEXP, /*!< The default choice usually works well */
     allow_bitops
 };
 
@@ -180,6 +194,16 @@ enum class ProjectionPolicy {
     allow_bitops
 };
 
+enum class CachePolicy {
+    NONE  = 0, /*!< Do not use cache   */
+    READ  = 1, /*!< Read only  */
+    WRITE = 2, /*!< Write only  */
+    allow_bitops
+};
+
+/*! Used to calculate the information lattice */
+enum class Precision { SINGLE, DOUBLE };
+
 /*! The reason that we are invoking a storage call */
 enum class StorageEvent : int {
     NONE        = 0,    /*!< No event */
@@ -222,14 +246,14 @@ enum class CopyPolicy { FORCE, TRY, OFF };
 enum class ResetReason { INIT, FIND_WINDOW, SATURATED, NEW_STATE, BOND_UPDATE };
 
 enum class EnvExpandMode : int {
-    NONE     = 0,  /*!< No environment expansion */
-    H1       = 1,  /*!< environment expansion using H (valid with SSITE, ignored otherwise) */
-    H2       = 2,  /*!< environment expansion using H²  (valid with SSITE, ignored otherwise)  */
-    SSITE    = 4,  /*!< strictly single site expansion */
-    NSITE    = 8,  /*!< nsite expansion (given by the local info scale "icom") */
-    BACKWARD = 16, /*!< Expand the trailing environment as in the original DMRG3S algorithm */
-    FORWARD  = 32, /*!< Expand the forward environment before optimization */
-    DEFAULT  = H1 | H2 | NSITE | FORWARD,
+    NONE    = 0,  /*!< No environment expansion */
+    H1      = 1,  /*!< environment expansion using H (valid with SSITE, ignored otherwise) */
+    H2      = 2,  /*!< environment expansion using H²  (valid with SSITE, ignored otherwise)  */
+    SSITE   = 4,  /*!< strictly single site expansion */
+    NSITE   = 8,  /*!< nsite expansion (given by the local info scale "icom") */
+    REAR    = 16, /*!< Expand the rear environment as in the original DMRG3S algorithm */
+    FORE    = 32, /*!< Expand the fore environment before optimization */
+    DEFAULT = H1 | H2 | NSITE | REAR | FORE,
     allow_bitops
 };
 
@@ -429,6 +453,12 @@ inline bool has_flag(E target, E check) noexcept {
     return (static_cast<U>(target) & static_cast<U>(check)) == static_cast<U>(check);
 }
 
+template<typename E>
+inline bool has_flag(std::optional<E> target, E check) noexcept {
+    if(!target.has_value()) return false;
+    return has_flag(target.value(), check);
+}
+
 template<typename E, typename... Args>
 requires std::conjunction_v<std::is_same<E, Args>...>
 bool has_any_flags(E target, Args &&...check) {
@@ -468,7 +498,7 @@ std::vector<std::string_view> enum2sv(const std::vector<T> &items) noexcept {
 template<typename T>
 std::string flag2str(const T &item) noexcept {
     static_assert(enum_sfinae::is_any_v<T, OptExit, OptWhen, GainPolicy, StoragePolicy, BlockSizePolicy, UpdatePolicy, SaturationPolicy, ProjectionPolicy,
-                                        EnvExpandMode>);
+                                        CachePolicy, EnvExpandMode>);
 
     std::vector<std::string> v;
     if constexpr(std::is_same_v<T, OptExit>) {
@@ -514,25 +544,31 @@ std::string flag2str(const T &item) noexcept {
         if(has_flag(item, BlockSizePolicy::ICOMPLUS1)) v.emplace_back("ICOMPLUS1");
         if(has_flag(item, BlockSizePolicy::ICOM150)) v.emplace_back("ICOM150");
         if(has_flag(item, BlockSizePolicy::ICOM200)) v.emplace_back("ICOM200");
-        if(has_flag(item, BlockSizePolicy::SAT_ENT)) v.emplace_back("SAT_ENT");
-        if(has_flag(item, BlockSizePolicy::SAT_ICOM)) v.emplace_back("SAT_ICOM");
-        if(has_flag(item, BlockSizePolicy::SAT_VAR)) v.emplace_back("SAT_VAR");
-        if(has_flag(item, BlockSizePolicy::SAT_ALGO)) v.emplace_back("SAT_ALGO");
-        if(has_flag(item, BlockSizePolicy::STK_ALGO)) v.emplace_back("STK_ALGO");
-        if(has_flag(item, BlockSizePolicy::FIN_BOND)) v.emplace_back("FIN_BOND");
-        if(has_flag(item, BlockSizePolicy::FIN_TRNC)) v.emplace_back("FIN_TRNC");
-        if(has_flag(item, BlockSizePolicy::EXP)) v.emplace_back("EXP");
-        if(has_flag(item, BlockSizePolicy::OPT)) v.emplace_back("OPT");
+        if(has_flag(item, BlockSizePolicy::BIT_ONE)) v.emplace_back("BIT_ONE");
+        if(has_flag(item, BlockSizePolicy::BIT_TWO)) v.emplace_back("BIT_TWO");
+        if(has_flag(item, BlockSizePolicy::BIT_MID)) v.emplace_back("BIT_MID");
+        if(has_flag(item, BlockSizePolicy::BIT_PEN)) v.emplace_back("BIT_PEN");
+        if(has_flag(item, BlockSizePolicy::BIT_ALL)) v.emplace_back("BIT_ALL");
+        if(has_flag(item, BlockSizePolicy::IF_SAT_ENT)) v.emplace_back("IF_SAT_ENT");
+        if(has_flag(item, BlockSizePolicy::IF_SAT_INFO)) v.emplace_back("IF_SAT_INFO");
+        if(has_flag(item, BlockSizePolicy::IF_SAT_VAR)) v.emplace_back("IF_SAT_VAR");
+        if(has_flag(item, BlockSizePolicy::IF_SAT_ALGO)) v.emplace_back("IF_SAT_ALGO");
+        if(has_flag(item, BlockSizePolicy::IF_STK_ALGO)) v.emplace_back("IF_STK_ALGO");
+        if(has_flag(item, BlockSizePolicy::IF_FIN_BOND)) v.emplace_back("IF_FIN_BOND");
+        if(has_flag(item, BlockSizePolicy::IF_FIN_TRNC)) v.emplace_back("IF_FIN_TRNC");
+        if(has_flag(item, BlockSizePolicy::ON_ENVEXP)) v.emplace_back("ON_ENVEXP");
+        if(has_flag(item, BlockSizePolicy::ON_UPDATE)) v.emplace_back("ON_UPDATE");
         if(has_flag(item, BlockSizePolicy::DEFAULT)) v.emplace_back("DEFAULT");
         if(v.empty()) return "MIN";
     }
     if constexpr(std::is_same_v<T, UpdatePolicy>) {
         if(has_flag(item, UpdatePolicy::WARMUP)) v.emplace_back("WARMUP");
-        if(has_flag(item, UpdatePolicy::HALFSWEEP)) v.emplace_back("ITERATION");
+        if(has_flag(item, UpdatePolicy::HALFSWEEP)) v.emplace_back("HALFSWEEP");
         if(has_flag(item, UpdatePolicy::FULLSWEEP)) v.emplace_back("FULLSWEEP");
         if(has_flag(item, UpdatePolicy::TRUNCATED)) v.emplace_back("TRUNCATED");
-        if(has_flag(item, UpdatePolicy::SAT_ALGO)) v.emplace_back("SATURATED");
-        if(has_flag(item, UpdatePolicy::STK_ALGO)) v.emplace_back("STUCK");
+        if(has_flag(item, UpdatePolicy::SAT_VAR)) v.emplace_back("SAT_VAR");
+        if(has_flag(item, UpdatePolicy::SAT_ALGO)) v.emplace_back("SAT_ALGO");
+        if(has_flag(item, UpdatePolicy::STK_ALGO)) v.emplace_back("STK_ALGO");
         if(v.empty()) return "NEVER";
     }
     if constexpr(std::is_same_v<T, SaturationPolicy>) {
@@ -556,13 +592,18 @@ std::string flag2str(const T &item) noexcept {
         if(has_flag(item, ProjectionPolicy::FORCE)) v.emplace_back("FORCE");
         if(v.empty()) return "NEVER";
     }
+    if constexpr(std::is_same_v<T, CachePolicy>) {
+        if(has_flag(item, CachePolicy::READ)) v.emplace_back("READ");
+        if(has_flag(item, CachePolicy::WRITE)) v.emplace_back("WRITE");
+        if(v.empty()) return "NONE";
+    }
     if constexpr(std::is_same_v<T, EnvExpandMode>) {
         if(has_flag(item, EnvExpandMode::H1)) v.emplace_back("H1");
         if(has_flag(item, EnvExpandMode::H2)) v.emplace_back("H2");
         if(has_flag(item, EnvExpandMode::SSITE)) v.emplace_back("SSITE");
         if(has_flag(item, EnvExpandMode::NSITE)) v.emplace_back("NSITE");
-        if(has_flag(item, EnvExpandMode::BACKWARD)) v.emplace_back("BACKWARD");
-        if(has_flag(item, EnvExpandMode::FORWARD)) v.emplace_back("FORWARD");
+        if(has_flag(item, EnvExpandMode::REAR)) v.emplace_back("REAR");
+        if(has_flag(item, EnvExpandMode::FORE)) v.emplace_back("FORE");
         if(has_flag(item, EnvExpandMode::DEFAULT)) v.emplace_back("DEFAULT");
         if(v.empty()) return "NONE";
     }
@@ -600,6 +641,8 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         CircuitOp,
         LbitCircuitGateMatrixKind,
         LbitCircuitGateWeightKind,
+        ProjectionPolicy,
+        CachePolicy,
         ModelType,
         EdgeStatus,
         TimeScale,
@@ -656,15 +699,20 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         case BlockSizePolicy::ICOMPLUS1 :                        return "ICOMPLUS1";
         case BlockSizePolicy::ICOM150 :                          return "ICOM150";
         case BlockSizePolicy::ICOM200 :                          return "ICOM200";
-        case BlockSizePolicy::SAT_ENT :                          return "SAT_ENT";
-        case BlockSizePolicy::SAT_ICOM :                         return "SAT_ICOM";
-        case BlockSizePolicy::SAT_VAR :                          return "SAT_VAR";
-        case BlockSizePolicy::SAT_ALGO:                          return "SAT_ALGO";
-        case BlockSizePolicy::STK_ALGO:                          return "STK_ALGO";
-        case BlockSizePolicy::FIN_BOND:                          return "FIN_BOND";
-        case BlockSizePolicy::FIN_TRNC:                          return "FIN_TRNC";
-        case BlockSizePolicy::EXP:                               return "EXP";
-        case BlockSizePolicy::OPT:                               return "OPT";
+        case BlockSizePolicy::BIT_ONE :                          return "BIT_ONE";
+        case BlockSizePolicy::BIT_TWO :                          return "BIT_TWO";
+        case BlockSizePolicy::BIT_MID :                          return "BIT_MID";
+        case BlockSizePolicy::BIT_PEN:                           return "BIT_PEN";
+        case BlockSizePolicy::BIT_ALL:                           return "BIT_ALL";
+        case BlockSizePolicy::IF_SAT_ENT:                        return "IF_SAT_ENT";
+        case BlockSizePolicy::IF_SAT_INFO:                       return "IF_SAT_INFO";
+        case BlockSizePolicy::IF_SAT_VAR:                        return "IF_SAT_VAR";
+        case BlockSizePolicy::IF_SAT_ALGO:                       return "IF_SAT_ALGO";
+        case BlockSizePolicy::IF_STK_ALGO:                       return "IF_STK_ALGO";
+        case BlockSizePolicy::IF_FIN_BOND:                       return "IF_FIN_BOND";
+        case BlockSizePolicy::IF_FIN_TRNC:                       return "IF_FIN_TRNC";
+        case BlockSizePolicy::ON_ENVEXP:                         return "ON_ENVEXP";
+        case BlockSizePolicy::ON_UPDATE:                         return "ON_UPDATE";
         case BlockSizePolicy::DEFAULT:                           return "DEFAULT";
         default: return "BlockSizePolicy::BITFLAG";
     }
@@ -673,7 +721,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == OptRitz::LR)                                  return "LR";
         if(item == OptRitz::LM)                                  return "LM";
         if(item == OptRitz::SM)                                  return "SM";
-        if(item == OptRitz::SM)                                  return "SM";
+        if(item == OptRitz::SR)                                  return "SR";
         if(item == OptRitz::IS)                                  return "IS";
         if(item == OptRitz::TE)                                  return "TE";
     }
@@ -685,11 +733,12 @@ constexpr std::string_view enum2sv(const T item) noexcept {
     if constexpr(std::is_same_v<T, UpdatePolicy>) {
         if(item == UpdatePolicy::NEVER)                          return "NEVER";
         if(item == UpdatePolicy::WARMUP)                         return "WARMUP";
-        if(item == UpdatePolicy::HALFSWEEP)                      return "ITERATION";
+        if(item == UpdatePolicy::HALFSWEEP)                      return "HALFSWEEP";
         if(item == UpdatePolicy::FULLSWEEP)                      return "FULLSWEEP";
         if(item == UpdatePolicy::TRUNCATED)                      return "TRUNCATED";
-        if(item == UpdatePolicy::SAT_ALGO)                       return "SATURATED";
-        if(item == UpdatePolicy::STK_ALGO)                       return "STUCK";
+        if(item == UpdatePolicy::SAT_VAR)                        return "SAT_VAR";
+        if(item == UpdatePolicy::SAT_ALGO)                       return "SAT_ALGO";
+        if(item == UpdatePolicy::STK_ALGO)                       return "STK_ALGO";
     }
     if constexpr(std::is_same_v<T, SaturationPolicy>) {
         if(item == SaturationPolicy::val)                        return "val";
@@ -738,6 +787,11 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == ProjectionPolicy::FORCE)                             return "FORCE";
         if(item == ProjectionPolicy::DEFAULT)                           return "DEFAULT";
     }
+    if constexpr(std::is_same_v<T, CachePolicy>) {
+        if(item == CachePolicy::NONE)                                   return "NONE";
+        if(item == CachePolicy::READ)                                   return "READ";
+        if(item == CachePolicy::WRITE)                                  return "WRITE";
+    }
     if constexpr(std::is_same_v<T, ModelType>) {
         if(item == ModelType::ising_tf_rf)                              return "ising_tf_rf";
         if(item == ModelType::ising_sdual)                              return "ising_sdual";
@@ -783,8 +837,8 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == EnvExpandMode::H2)                                   return "H2";
         if(item == EnvExpandMode::SSITE)                                return "SSITE";
         if(item == EnvExpandMode::NSITE)                                return "NSITE";
-        if(item == EnvExpandMode::BACKWARD)                             return "BACKWARD";
-        if(item == EnvExpandMode::FORWARD)                              return "FORWARD";
+        if(item == EnvExpandMode::REAR)                                 return "REAR";
+        if(item == EnvExpandMode::FORE)                                 return "FORE";
         if(item == EnvExpandMode::DEFAULT)                              return "DEFAULT";
     }
     if constexpr(std::is_same_v<T, NormPolicy>) {
@@ -988,7 +1042,10 @@ constexpr std::string_view enum2sv(const T item) noexcept {
 }
 
 
-
+inline void check_item_is_valid(std::string_view enum_name,  std::string_view item,  const std::initializer_list<std::string_view> & keys) {
+    bool has_key = std::any_of(keys.begin(), keys.end(), [&item](auto key)->bool{ return item.find(key) != std::string_view::npos ; });
+    if(!has_key) throw except::runtime_error("sv2enum: {}:[{}] not recognized.\nUse any of [{}]", enum_name, item, keys);
+}
 
 template<typename T>
 constexpr auto sv2enum(std::string_view item) {
@@ -1009,6 +1066,7 @@ constexpr auto sv2enum(std::string_view item) {
         LbitCircuitGateMatrixKind,
         LbitCircuitGateWeightKind,
         ProjectionPolicy,
+        CachePolicy,
         ModelType,
         EdgeStatus,
         TimeScale,
@@ -1040,6 +1098,7 @@ constexpr auto sv2enum(std::string_view item) {
 
 
     if constexpr(std::is_same_v<T, AlgorithmType>) {
+        check_item_is_valid("AlgorithmType", item, {"iDMRG", "fDMRG", "fLBIT", "xDMRG", "iTEBD", "ANY"});
         if(item == "iDMRG")                                 return AlgorithmType::iDMRG;
         if(item == "fDMRG")                                 return AlgorithmType::fDMRG;
         if(item == "fLBIT")                                 return AlgorithmType::fLBIT;
@@ -1048,35 +1107,43 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "ANY")                                   return AlgorithmType::ANY;
     }
     if constexpr(std::is_same_v<T, MpoCompress>){
+        check_item_is_valid("MpoCompress", item, {"NONE", "SVD", "DPL"});
         if(item == "NONE")                                  return  MpoCompress::NONE;
         if(item == "SVD")                                   return  MpoCompress::SVD;
         if(item == "DPL")                                   return  MpoCompress::DPL;
     }
     if constexpr(std::is_same_v<T, MposWithEdges>){
+        check_item_is_valid("MposWithEdges", item, {"OFF", "ON"});
         if(item == "OFF")                                   return MposWithEdges::OFF;
         if(item == "ON")                                    return MposWithEdges::ON;
     }
     if constexpr(std::is_same_v<T, BlockSizePolicy>) {
+        check_item_is_valid("BlockSizePolicy", item, {"MIN", "MAX", "ICOM", "ICOMPLUS1", "ICOM150", "ICOM200", "BIT_ONE", "BIT_TWO", "BIT_MID", "BIT_PEN", "BIT_ALL", "IF_SAT_ENT", "IF_SAT_INFO", "IF_SAT_VAR", "IF_SAT_ALGO", "IF_STK_ALGO", "IF_FIN_BOND", "IF_FIN_TRNC", "ON_ENVEXP", "ON_UPDATE", "DEFAULT"});
         auto policy = BlockSizePolicy::MIN;
-        if(item.find("MAX")         != std::string_view::npos)  policy |= BlockSizePolicy::MAX;
-        if(item.find("ICOM")        != std::string_view::npos)  policy |= BlockSizePolicy::ICOM;
-        if(item.find("ICOMPLUS1")   != std::string_view::npos)  policy |= BlockSizePolicy::ICOMPLUS1;
-        if(item.find("ICOM150")     != std::string_view::npos)  policy |= BlockSizePolicy::ICOM150;
-        if(item.find("ICOM200")     != std::string_view::npos)  policy |= BlockSizePolicy::ICOM200;
-        if(item.find("SAT_ENT")     != std::string_view::npos)  policy |= BlockSizePolicy::SAT_ENT;
-        if(item.find("SAT_ICOM")    != std::string_view::npos)  policy |= BlockSizePolicy::SAT_ICOM;
-        if(item.find("SAT_VAR")     != std::string_view::npos)  policy |= BlockSizePolicy::SAT_VAR;
-        if(item.find("SAT_ALGO")    != std::string_view::npos)  policy |= BlockSizePolicy::SAT_ALGO;
-        if(item.find("STK_ALGO")    != std::string_view::npos)  policy |= BlockSizePolicy::STK_ALGO;
-        if(item.find("FIN_BOND")    != std::string_view::npos)  policy |= BlockSizePolicy::FIN_BOND;
-        if(item.find("FIN_TRNC")    != std::string_view::npos)  policy |= BlockSizePolicy::FIN_TRNC;
-        if(item.find("OPT")         != std::string_view::npos)  policy |= BlockSizePolicy::OPT;
-        if(item.find("EXP")         != std::string_view::npos)  policy |= BlockSizePolicy::EXP;
-        if(item.find("DEFAULT")     != std::string_view::npos)  policy |= BlockSizePolicy::DEFAULT;
+        if(item.find("MAX")           != std::string_view::npos)  policy |= BlockSizePolicy::MAX;
+        if(item.find("ICOM")          != std::string_view::npos)  policy |= BlockSizePolicy::ICOM;
+        if(item.find("ICOMPLUS1")     != std::string_view::npos)  policy |= BlockSizePolicy::ICOMPLUS1;
+        if(item.find("ICOM150")       != std::string_view::npos)  policy |= BlockSizePolicy::ICOM150;
+        if(item.find("ICOM200")       != std::string_view::npos)  policy |= BlockSizePolicy::ICOM200;
+        if(item.find("BIT_ONE")       != std::string_view::npos)  policy |= BlockSizePolicy::BIT_ONE;
+        if(item.find("BIT_TWO")       != std::string_view::npos)  policy |= BlockSizePolicy::BIT_TWO;
+        if(item.find("BIT_MID")       != std::string_view::npos)  policy |= BlockSizePolicy::BIT_MID;
+        if(item.find("BIT_PEN")       != std::string_view::npos)  policy |= BlockSizePolicy::BIT_PEN;
+        if(item.find("BIT_ALL")       != std::string_view::npos)  policy |= BlockSizePolicy::BIT_ALL;
+        if(item.find("IF_SAT_ENT")    != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_ENT;
+        if(item.find("IF_SAT_INFO")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_INFO;
+        if(item.find("IF_SAT_VAR")    != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_VAR;
+        if(item.find("IF_SAT_ALGO")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_ALGO;
+        if(item.find("IF_STK_ALGO")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_STK_ALGO;
+        if(item.find("IF_FIN_BOND")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_FIN_BOND;
+        if(item.find("IF_FIN_TRNC")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_FIN_TRNC;
+        if(item.find("ON_ENVEXP")     != std::string_view::npos)  policy |= BlockSizePolicy::ON_ENVEXP;
+        if(item.find("ON_UPDATE")     != std::string_view::npos)  policy |= BlockSizePolicy::ON_UPDATE;
+        if(item.find("DEFAULT")       != std::string_view::npos)  policy |= BlockSizePolicy::DEFAULT;
         return policy;
-
     }
     if constexpr(std::is_same_v<T,GainPolicy>){
+        check_item_is_valid("GainPolicy", item, {"NEVER", "HALFSWEEP", "FULLSWEEP", "SAT_VAR", "SAT_ALGO", "STK_ALGO", "FIN_BOND", "FIN_TRNC"});
         auto policy = GainPolicy::NEVER;
         if(item.find("HALFSWEEP")   != std::string_view::npos) policy |= GainPolicy::HALFSWEEP;
         if(item.find("FULLSWEEP")   != std::string_view::npos) policy |= GainPolicy::FULLSWEEP;
@@ -1090,6 +1157,7 @@ constexpr auto sv2enum(std::string_view item) {
         return policy;
     }
     if constexpr(std::is_same_v<T, OptRitz>) {
+        check_item_is_valid("OptRitz", item, {"NONE", "LR", "LM", "SR", "SM", "IS", "TE"});
         if(item == "NONE")                                  return OptRitz::NONE;
         if(item == "LR")                                    return OptRitz::LR;
         if(item == "LM")                                    return OptRitz::LM;
@@ -1099,21 +1167,25 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "TE")                                    return OptRitz::TE;
     }
     if constexpr(std::is_same_v<T, SVDLibrary>) {
+        check_item_is_valid("SVDLibrary", item, {"EIGEN", "LAPACKE", "RSVD"});
         if(item == "EIGEN")                                 return SVDLibrary::EIGEN;
         if(item == "LAPACKE")                               return SVDLibrary::LAPACKE;
         if(item == "RSVD")                                  return SVDLibrary::RSVD;
     }
     if constexpr(std::is_same_v<T, UpdatePolicy>) {
+        check_item_is_valid("UpdatePolicy", item, {"NEVER","WARMUP","HALFSWEEP","FULLSWEEP", "TRUNCATED", "SAT_VAR", "SAT_ALGO", "STK_ALGO"});
         auto policy = UpdatePolicy::NEVER;
         if(item.find("WARMUP")     != std::string_view::npos) policy |= UpdatePolicy::WARMUP;
-        if(item.find("ITERATION")  != std::string_view::npos) policy |= UpdatePolicy::HALFSWEEP;
+        if(item.find("HALFSWEEP")  != std::string_view::npos) policy |= UpdatePolicy::HALFSWEEP;
         if(item.find("FULLSWEEP")  != std::string_view::npos) policy |= UpdatePolicy::FULLSWEEP;
         if(item.find("TRUNCATED")  != std::string_view::npos) policy |= UpdatePolicy::TRUNCATED;
-        if(item.find("SATURATED")  != std::string_view::npos) policy |= UpdatePolicy::SAT_ALGO;
-        if(item.find("STUCK")      != std::string_view::npos) policy |= UpdatePolicy::STK_ALGO;
+        if(item.find("SAT_VAR")    != std::string_view::npos) policy |= UpdatePolicy::SAT_VAR;
+        if(item.find("SAT_ALGO")   != std::string_view::npos) policy |= UpdatePolicy::SAT_ALGO;
+        if(item.find("STK_ALGO")   != std::string_view::npos) policy |= UpdatePolicy::STK_ALGO;
         return policy;
     }
     if constexpr(std::is_same_v<T, SaturationPolicy>) {
+        check_item_is_valid("SaturationPolicy", item, {"val", "avg", "med", "mov", "min", "max", "mid", "dif", "log"});
         auto policy = SaturationPolicy::val;
         if(item.find("val")  != std::string_view::npos) policy |= SaturationPolicy::val;
         if(item.find("avg")  != std::string_view::npos) policy |= SaturationPolicy::avg;
@@ -1171,6 +1243,12 @@ constexpr auto sv2enum(std::string_view item) {
         if(item.find("DEFAULT")     != std::string_view::npos) policy |= ProjectionPolicy::DEFAULT;
         return policy;
     }
+    if constexpr(std::is_same_v<T, CachePolicy>) {
+        auto policy = CachePolicy::NONE;
+        if(item.find("READ")        != std::string_view::npos) policy |= CachePolicy::READ;
+        if(item.find("WRITE")       != std::string_view::npos) policy |= CachePolicy::WRITE;
+        return policy;
+    }
     if constexpr(std::is_same_v<T, EdgeStatus>) {
         if(item == "STALE")                                 return EdgeStatus::STALE ;
         if(item == "FRESH")                                 return EdgeStatus::FRESH ;
@@ -1209,8 +1287,8 @@ constexpr auto sv2enum(std::string_view item) {
         if(item.find("H2")       != std::string_view::npos) policy |= EnvExpandMode::H2;
         if(item.find("SSITE")    != std::string_view::npos) policy |= EnvExpandMode::SSITE;
         if(item.find("NSITE")    != std::string_view::npos) policy |= EnvExpandMode::NSITE;
-        if(item.find("BACKWARD") != std::string_view::npos) policy |= EnvExpandMode::BACKWARD;
-        if(item.find("FORWARD")  != std::string_view::npos) policy |= EnvExpandMode::FORWARD;
+        if(item.find("REAR")     != std::string_view::npos) policy |= EnvExpandMode::REAR;
+        if(item.find("FORE")  != std::string_view::npos) policy |= EnvExpandMode::FORE;
         if(item.find("DEFAULT")  != std::string_view::npos) policy |= EnvExpandMode::DEFAULT;
         return policy;
     }

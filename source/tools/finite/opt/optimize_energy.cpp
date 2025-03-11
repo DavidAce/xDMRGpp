@@ -36,6 +36,7 @@ namespace tools::finite::opt {
         if(x == nullptr) return;
         if(y == nullptr) return;
         if(primme == nullptr) return;
+        auto t_precond = tid::tic_scope("prec_jcb");
         const auto H_ptr      = static_cast<MatVecMPOS<Scalar> *>(primme->matrix);
         H_ptr->preconditioner = eig::Preconditioner::JACOBI;
         H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);

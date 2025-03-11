@@ -51,6 +51,15 @@ namespace tenx {
     template<Eigen::Index rank>
     using array = std::array<Eigen::Index, rank>;
 
+    template<typename Scalar>
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    template<typename Derived>
+    using epsilon_t = RealScalar<typename Derived::Scalar>;
+    template<typename Derived>
+    constexpr auto epsilon() {
+        return std::numeric_limits<epsilon_t<Derived>>::epsilon();
+    }
+
     using array8 = array<8>;
     using array7 = array<7>;
     using array6 = array<6>;
@@ -180,7 +189,7 @@ namespace tenx {
         return asDiagonalInversed(extractDiagonal(tensor));
     }
     template<typename Scalar>
-    bool isDiagonal(const Eigen::Tensor<Scalar, 2> &tensor, double threshold = std::numeric_limits<double>::epsilon()) {
+    bool isDiagonal(const Eigen::Tensor<Scalar, 2> &tensor, RealScalar<Scalar> threshold = Eigen::NumTraits<Scalar>::dummy_precision()) {
         if(tensor.dimension(0) != tensor.dimension(1)) return false;
         for(long col = 0; col < tensor.dimension(1); ++col) {
             for(long row = 0; row < tensor.dimension(0); ++row) {
@@ -517,51 +526,51 @@ namespace tenx {
     }
 
     template<typename Derived>
-    bool isReal(const Eigen::EigenBase<Derived> &obj, double threshold = std::numeric_limits<double>::epsilon()) {
+    bool isReal(const Eigen::EigenBase<Derived> &obj, epsilon_t<Derived> threshold = epsilon<Derived>()) {
         using Scalar     = typename Derived::Scalar;
         using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
         if constexpr(sfinae::is_std_complex_v<Scalar> and std::is_arithmetic_v<RealScalar>) {
             auto imag_sum = obj.derived().imag().cwiseAbs().sum();
-            threshold *= std::max<double>(1.0, static_cast<double>(obj.derived().size()));
+            threshold *= std::max(static_cast<RealScalar>(1.0), static_cast<RealScalar>(obj.derived().size()));
             //            if(imag_sum >= threshold) {
             //                std::printf("thr*size : %.20f imag_sum : %.20f | isreal %d \n", threshold, imag_sum, imag_sum < threshold);
             //            }
             return imag_sum < threshold;
-
         } else {
             return true;
         }
     }
 
-    template<typename Scalar, auto rank>
-    bool isReal(const Eigen::Tensor<Scalar, rank> &tensor, double threshold = std::numeric_limits<double>::epsilon()) {
+    template<typename T>
+    bool isReal(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, epsilon_t<T> threshold = Eigen::NumTraits<typename T::Scalar>::dummy_precision()) {
+        auto tensor      = tenx::asEval(expr);
+        using Scalar     = typename decltype(tensor)::Scalar;
         using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
         if constexpr(sfinae::is_std_complex_v<Scalar> and std::is_arithmetic_v<RealScalar>) {
             auto vector   = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(tensor.data(), tensor.size());
             auto imag_sum = vector.imag().cwiseAbs().sum();
-            threshold *= std::max<double>(1.0, static_cast<double>(vector.size()));
-            return static_cast<double>(imag_sum) < threshold;
+            threshold *= std::max(static_cast<RealScalar>(1.0), static_cast<RealScalar>(vector.size()));
+            return static_cast<RealScalar>(imag_sum) < threshold;
         } else {
             return true;
         }
     }
 
     template<typename Scalar, auto rank>
-    bool isZero(const Eigen::Tensor<Scalar, rank> &tensor, double threshold = std::numeric_limits<double>::epsilon()) {
+    bool isZero(const Eigen::Tensor<Scalar, rank> &tensor, RealScalar<Scalar> threshold = Eigen::NumTraits<Scalar>::dummy_precision()) {
         Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>> vector(tensor.data(), tensor.size());
-        using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
-        return vector.isZero(static_cast<RealScalar>(threshold));
+        return vector.isZero(threshold);
     }
 
     template<typename Scalar>
-    bool isIdentity(const Eigen::Tensor<Scalar, 2> &tensor, double threshold = std::numeric_limits<double>::epsilon()) {
+    bool isIdentity(const Eigen::Tensor<Scalar, 2> &tensor, RealScalar<Scalar> threshold = Eigen::NumTraits<Scalar>::dummy_precision()) {
         Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>> matrix(tensor.data(), tensor.dimension(0), tensor.dimension(1));
         using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
         return matrix.isIdentity(static_cast<RealScalar>(threshold));
     }
 
     template<typename T>
-    auto isIdentity(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, double threshold = std::numeric_limits<double>::epsilon()) {
+    auto isIdentity(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, RealScalar<T> threshold = Eigen::NumTraits<T>::dummy_precision()) {
         auto tensor         = tenx::asEval(expr);
         using Scalar        = typename decltype(tensor)::Scalar;
         using DimType       = typename decltype(tensor)::Dimensions;
@@ -645,6 +654,24 @@ namespace tenx {
         return static_cast<double>((matrix.derived().array() != 0.0).count()) / static_cast<double>(matrix.derived().size());
     }
 
+    template<typename Scalar, typename T>
+    auto asScalarType(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr) {
+        auto tensor              = tenx::asEval(expr);
+        using OldScalar          = typename decltype(tensor)::Scalar;
+        using DimType            = typename decltype(tensor)::Dimensions;
+        constexpr bool cx2fp     = sfinae::is_std_complex_v<OldScalar> and !sfinae::is_std_complex_v<Scalar>;
+        constexpr auto rank      = Eigen::internal::array_size<DimType>::value;
+        auto           tensorMap = Eigen::TensorMap<const Eigen::Tensor<OldScalar, rank>>(tensor.data(), tensor.dimensions());
+        if constexpr(std::is_same_v<Scalar, OldScalar>) {
+            return tensorMap;
+        } else if constexpr(cx2fp) {
+            assert(tenx::isReal(tensorMap));
+            return Eigen::Tensor<Scalar, rank>(tensorMap.real().template cast<Scalar>());
+        } else {
+            return Eigen::Tensor<Scalar, rank>(tensorMap.template cast<Scalar>());
+        }
+    }
+
     //******************************//
     // BLAS operations with tensors //
     //******************************//
@@ -673,33 +700,26 @@ namespace tenx {
          *        |                |                  |                |                  |    |                  |    |
          *        3                3                  2                3                  2    5                  4    5
          */
-        using cx64    = Scalar;
-        using fp64    = typename cx64::value_type; // We assume cx64 is std::complex<>
+        if constexpr(sfinae::is_std_complex_v<Scalar>) {
+            if(isReal(rhs1) and isReal(rhs2)) {
+                // We get a speedup by multiplying reals instead of complex
+                using TensorValueType = Eigen::Tensor<typename Scalar::value_type, 4>;
+                return gemm_mpo(TensorValueType(rhs1.real()), TensorValueType(rhs2.real())).template cast<Scalar>();
+            }
+        }
         auto dim6     = array6{rhs1.dimension(0), rhs1.dimension(2), rhs1.dimension(3), rhs2.dimension(1), rhs2.dimension(2), rhs2.dimension(3)};
         auto dim_lhsA = array4{rhs1.dimension(0), rhs1.dimension(2) * rhs1.dimension(3), rhs2.dimension(1), rhs2.dimension(2) * rhs2.dimension(3)};
         auto dim_lhsB = array4{rhs1.dimension(0), rhs2.dimension(1), rhs1.dimension(2) * rhs2.dimension(2), rhs1.dimension(3) * rhs2.dimension(3)};
         auto dim_rhs1 = rhs1.dimensions();
         auto dim_rhs2 = rhs2.dimensions();
         auto shf6     = tenx::array6{0, 3, 1, 4, 2, 5};
-        if(isReal(rhs1) and isReal(rhs2)) {
-            // We get a speedup by multiplying reals instead of complex
-            Eigen::Tensor<fp64, 4> lhs_real(dim_lhsA);
-            Eigen::Tensor<fp64, 4> rhs1_real = rhs1.real().shuffle(array4{0, 2, 3, 1}); // Prepare for gemm
-            Eigen::Tensor<fp64, 4> rhs2_real = rhs2.real();
-            auto                   lhs_map   = Eigen::Map<MatrixType<fp64>>(lhs_real.data(), dim_lhsA[0] * dim_lhsA[1], dim_lhsA[2] * dim_lhsA[3]);
-            auto                   rhs1_map  = MatrixMap(rhs1_real, dim_rhs1[0] * dim_rhs1[2] * dim_rhs1[3], dim_rhs1[1]);
-            auto                   rhs2_map  = MatrixMap(rhs2_real, dim_rhs2[0], dim_rhs2[1] * dim_rhs2[2] * dim_rhs2[3]);
-            lhs_map.noalias()                = rhs1_map * rhs2_map; // Calls BLAS GEMM
-            return lhs_real.reshape(dim6).shuffle(shf6).reshape(dim_lhsB).template cast<cx64>();
-        } else {
-            Eigen::Tensor<cx64, 4> lhs(dim_lhsA);
-            Eigen::Tensor<cx64, 4> rhs1_shf4 = rhs1.shuffle(array4{0, 2, 3, 1}); // Prepare for gemm
-            auto                   lhs_map   = Eigen::Map<MatrixType<cx64>>(lhs.data(), dim_lhsA[0] * dim_lhsA[1], dim_lhsA[2] * dim_lhsA[3]);
-            auto                   rhs1_map  = MatrixMap(rhs1_shf4, dim_rhs1[0] * dim_rhs1[2] * dim_rhs1[3], dim_rhs1[1]);
-            auto                   rhs2_map  = MatrixMap(rhs2, dim_rhs2[0], dim_rhs2[1] * dim_rhs2[2] * dim_rhs2[3]);
-            lhs_map.noalias()                = rhs1_map * rhs2_map; // Calls BLAS GEMM
-            return lhs.reshape(dim6).shuffle(shf6).reshape(dim_lhsB);
-        }
+        Eigen::Tensor<Scalar, 4> lhs(dim_lhsA);
+        Eigen::Tensor<Scalar, 4> rhs1_shf4 = rhs1.shuffle(array4{0, 2, 3, 1}); // Prepare for gemm
+        auto                     lhs_map   = Eigen::Map<MatrixType<Scalar>>(lhs.data(), dim_lhsA[0] * dim_lhsA[1], dim_lhsA[2] * dim_lhsA[3]);
+        auto                     rhs1_map  = MatrixMap(rhs1_shf4, dim_rhs1[0] * dim_rhs1[2] * dim_rhs1[3], dim_rhs1[1]);
+        auto                     rhs2_map  = MatrixMap(rhs2, dim_rhs2[0], dim_rhs2[1] * dim_rhs2[2] * dim_rhs2[3]);
+        lhs_map.noalias()                  = rhs1_map * rhs2_map; // Calls BLAS GEMM
+        return lhs.reshape(dim6).shuffle(shf6).reshape(dim_lhsB);
     }
 }
 /*clang-format on */

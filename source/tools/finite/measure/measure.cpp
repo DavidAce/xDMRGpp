@@ -428,8 +428,8 @@ double tools::finite::measure::energy_minus_energy_shift(const StateFinite &stat
     if constexpr(settings::debug) tools::log->trace("Measuring energy: sites {}", state.active_sites);
     auto e_minus_ered = expval_hamiltonian(state, model, edges);
     if constexpr(settings::debug_expval) {
-        const auto &multisite_mps = state.get_multisite_mps();
-        const auto &multisite_mpo = model.get_multisite_mpo();
+        const auto &multisite_mps = state.get_multisite_mps<cx64>();
+        const auto &multisite_mpo = model.get_multisite_mpo<cx64>();
         const auto &multisite_env = edges.get_multisite_env_ene_blk();
         auto        edbg          = tools::common::contraction::expectation_value(multisite_mps, multisite_mpo, multisite_env.L, multisite_env.R);
         tools::log->trace("e_minus_ered: {:.16f}{:+.16f}i", e_minus_ered.real(), e_minus_ered.imag());
@@ -464,7 +464,7 @@ double tools::finite::measure::energy_minus_energy_shift(const Eigen::Tensor<cx6
     auto e_minus_ered = cx64(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
     if(model.active_sites.size() <= 3) {
         // Contract directly
-        const auto &mpo = model.get_multisite_mpo();
+        const auto &mpo = model.get_multisite_mpo<cx64>();
         const auto &env = edges.get_multisite_env_ene_blk();
         if constexpr(settings::debug_expval)
             tools::log->trace("Measuring energy: multisite_mps dims {} | model sites {} dims {} | edges sites {} dims [L{} R{}]", multisite_mps.dimensions(),
@@ -492,7 +492,7 @@ double tools::finite::measure::energy_minus_energy_shift(const Eigen::Tensor<cx6
                           model.get_energy_shift_mpo(), tenx::norm(multisite_mps));
         e_minus_ered = tools::finite::measure::expectation_value(multisite_mps, mpos, envs, svd_cfg);
         if constexpr(settings::debug_expval) {
-            const auto &mpo  = model.get_multisite_mpo();
+            const auto &mpo  = model.get_multisite_mpo<cx64>();
             const auto &env  = edges.get_multisite_env_ene_blk();
             const auto  edbg = tools::common::contraction::expectation_value(multisite_mps, mpo, env.L, env.R);
             tools::log->trace("e_minus_ered: {:.16f}{:+.16f}i", e_minus_ered.real(), e_minus_ered.imag());
@@ -604,7 +604,7 @@ double tools::finite::measure::energy_variance(const Eigen::Tensor<cx64, 3> &mul
     cx64 H2 = cx64(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
     if(model.active_sites.size() <= 3) {
         // Direct contraction
-        const auto &mpo2 = model.get_multisite_mpo_squared();
+        const auto &mpo2 = model.get_multisite_mpo_squared<cx64>();
         const auto &env2 = edges.get_multisite_env_var_blk();
         if constexpr(settings::debug)
             tools::log->trace("Measuring energy variance: state dims {} | model sites {} dims {} | edges sites {} dims [L{} R{}]", multisite_mps.dimensions(),
@@ -621,7 +621,7 @@ double tools::finite::measure::energy_variance(const Eigen::Tensor<cx64, 3> &mul
         tools::log->trace("Measuring energy variance: state dims {} | sites {}", multisite_mps.dimensions(), model.active_sites);
         H2 = tools::finite::measure::expectation_value(multisite_mps, multisite_mps, mpos, envs, svd_cfg);
         if constexpr(settings::debug_expval) {
-            const auto &mpo   = model.get_multisite_mpo_squared();
+            const auto &mpo   = model.get_multisite_mpo_squared<cx64>();
             const auto &env   = edges.get_multisite_env_var_blk();
             const auto  H2dbg = tools::common::contraction::expectation_value(multisite_mps, mpo, env.L, env.R);
             tools::log->trace("H2   : {:.16f}{:+.16f}i", H2.real(), H2.imag());
@@ -746,14 +746,14 @@ double tools::finite::measure::residual_norm(const Eigen::Tensor<cx64, 3> &mps, 
 }
 
 double tools::finite::measure::residual_norm_H1(const TensorsFinite &tensors) {
-    const auto &mps = tensors.get_state().get_multisite_mps();
+    const auto &mps = tensors.get_state().get_multisite_mps<cx64>();
     const auto &mpo = tensors.get_model().get_mpo_active();
     const auto &env = tensors.get_edges().get_ene_active();
     return residual_norm(mps, mpo, env);
 }
 
 double tools::finite::measure::residual_norm_H2(const TensorsFinite &tensors) {
-    const auto &mps = tensors.get_state().get_multisite_mps();
+    const auto &mps = tensors.get_state().get_multisite_mps<cx64>();
     const auto &mpo = tensors.get_model().get_mpo_active();
     const auto &env = tensors.get_edges().get_var_active();
     return residual_norm(mps, mpo, env);
@@ -764,7 +764,7 @@ double tools::finite::measure::residual_norm_full(const StateFinite &state, cons
     // Note that the full residual norm is equal to the sqrt(Var(H)) = Std(H)
     tools::log->info("Calculating residual norm with full system");
     auto sites = num::range<size_t>(0, state.get_length());
-    auto t     = state.get_multisite_mps(sites);
+    auto t     = state.get_multisite_mps<cx64>(sites);
     std::vector<Eigen::Tensor<cx64,4>> mpos;
     for(const auto & mpo : model.get_mpo(sites)) mpos.emplace_back(mpo.get().MPO());
     auto envs  = edges.get_env_ene_blk(sites.front(), sites.back());

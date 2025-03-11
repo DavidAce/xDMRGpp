@@ -23,9 +23,9 @@
 int eig::solver::zgeev(cx64 *matrix, size_type L) {
     eig::log->trace("Starting eig_zgeev (non-optimized");
     auto  t_start  = std::chrono::high_resolution_clock::now();
-    auto &eigvals  = result.get_eigvals<Form::NSYM>();
-    auto &eigvecsR = result.get_eigvecs<Form::NSYM, Type::CPLX, Side::R>();
-    auto &eigvecsL = result.get_eigvecs<Form::NSYM, Type::CPLX, Side::L>();
+    auto &eigvals  = result.get_eigvals<Form::NSYM, Type::CX64>();
+    auto &eigvecsR = result.get_eigvecs<Form::NSYM, Type::CX64, Side::R>();
+    auto &eigvecsL = result.get_eigvecs<Form::NSYM, Type::CX64, Side::L>();
     eigvals.resize(safe_cast<size_t>(L));
     eigvecsR.resize(safe_cast<size_t>(L * L));
     eigvecsL.resize(safe_cast<size_t>(L * L));
@@ -62,7 +62,7 @@ int eig::solver::zgeev(cx64 *matrix, size_type L) {
         result.meta.nev_converged  = Lint;
         result.meta.n              = L;
         result.meta.form           = Form::NSYM;
-        result.meta.type           = Type::CPLX;
+        result.meta.type           = Type::CX64;
         result.meta.time_prep      = std::chrono::duration<double>(t_prep - t_start).count();
         result.meta.time_total     = std::chrono::duration<double>(t_total - t_start).count();
     } else {

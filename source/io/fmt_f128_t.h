@@ -22,18 +22,12 @@ struct fmt::formatter<f128_t, Char> : fmt::formatter<f128_t::format_type, Char> 
         // In quadmath, precision is the number of digits, and width is the total number of chars in the string.
         // std::printf("format\n");
         char prsnt = 'g';
-        switch(specs_.type) {
-                /* clang-format off */
-            case fmt::presentation_type::exp: {prsnt = 'e'; break  ;}
-            case fmt::presentation_type::fixed: {prsnt = 'f'; break  ;}
-            case fmt::presentation_type::general: {prsnt = 'g'; break  ;}
-            default: prsnt='g';
-                /* clang-format on */
-        }
-        return fmt::format_to(ctx.out(), "{}",
-                              num.string(specs_.precision, specs_.width, prsnt,
-                                         specs_.align == fmt::align_t ::left      ? "<"
-                                         : ">", specs_.sign == fmt::sign_t::plus ? "+"
-                                                                                  : ""));
+
+        if(specs_.type() == fmt::presentation_type::exp) {prsnt = 'e';}
+        if(specs_.type() == fmt::presentation_type::fixed) {prsnt = 'f';}
+        if(specs_.type() == fmt::presentation_type::general) {prsnt = 'g';}
+        return fmt::format_to(
+            ctx.out(), "{}",
+            num.string(specs_.precision, specs_.width, prsnt, specs_.align() == fmt::align::left ? "<" : ">", specs_.sign() == fmt::sign::plus ? "+" : ""));
     }
 };

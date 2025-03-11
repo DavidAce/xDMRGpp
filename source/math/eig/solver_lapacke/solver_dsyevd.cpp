@@ -53,7 +53,7 @@ int eig::solver::dsyevd(fp64 *matrix, size_type L) {
     auto t_total = std::chrono::high_resolution_clock::now();
     if(info == 0) {
         if(config.compute_eigvecs == Vecs::ON) {
-            auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::REAL>();
+            auto &eigvecs = result.get_eigvecs<Form::SYMM, Type::FP64>();
             eigvecs.resize(static_cast<size_t>(L * L));
             std::copy(matrix, matrix + L * L, eigvecs.begin());
         }
@@ -65,7 +65,7 @@ int eig::solver::dsyevd(fp64 *matrix, size_type L) {
         result.meta.nev_converged  = n;
         result.meta.n              = L;
         result.meta.form           = Form::SYMM;
-        result.meta.type           = Type::REAL;
+        result.meta.type           = Type::FP64;
         result.meta.time_prep      = std::chrono::duration<double>(t_prep - t_start).count();
         result.meta.time_total     = std::chrono::duration<double>(t_total - t_start).count();
     } else {
