@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2018 Nico Weber
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,6 @@ Usage:
     ninjatracing $BUILDDIR/.ninja_log > trace.json
 """
 
-from __future__ import print_function
 import json
 import os
 import optparse
@@ -55,6 +54,8 @@ def read_targets(log, show_all):
     targets = {}
     last_end_seen = 0
     for line in log:
+        if line.startswith('#'):
+            continue
         start, end, _, name, cmdhash = line.strip().split('\t') # Ignore restat.
         if not show_all and int(end) < last_end_seen:
             # An earlier time stamp means that this step is the first in a new
