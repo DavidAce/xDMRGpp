@@ -6,8 +6,8 @@ if(INIT_CACHE_FILE)
 endif()
 include(ExternalProject)
 
-set(cflags "-O3 -DNDEBUG -std=c17 -fPIC -g ${CMAKE_CXX_FLAGS_RELEASE} -DPRIMME_BLASINT_SIZE=32 -DPRIMME_INT_SIZE=0")
-set(cxxflags "-O3 -DNDEBUG -std=c++23 -fPIC -g ${CMAKE_C_FLAGS_RELEASE} -DPRIMME_BLASINT_SIZE=32 -DPRIMME_INT_SIZE=0")
+set(cflags "-O3 -DNDEBUG -std=c17 -fPIC -g ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -DPRIMME_BLASINT_SIZE=32 -DPRIMME_INT_SIZE=0")
+set(cxxflags "-O3 -DNDEBUG -std=c++23 -fPIC -g ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE} -DPRIMME_BLASINT_SIZE=32 -DPRIMME_INT_SIZE=0")
 
 if(BUILD_SHARED_LIBS)
     set(type solib)
@@ -38,6 +38,7 @@ externalproject_add(external_primme
                     INSTALL_COMMAND
                     COMMAND cd <SOURCE_DIR>
                     COMMAND make install includedir=<INSTALL_DIR>/include/primme libdir=<INSTALL_DIR>/lib
+                    COMMAND make clean
                     )
 
 if(NOT BUILD_SHARED_LIBS)
