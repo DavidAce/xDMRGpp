@@ -366,11 +366,12 @@ int main() {
     using real = double;
     // using cplx = std::complex<double>;
     long sites = 24;
-    long d     = 2 << (sites - 1);
+    // long d     = 2 << (sites - 1);
     // long d     = 8 << (sites - 1);
+    long d = 2;
     long m    = 12;
-    long chiL = 1;
-    long chiR = 1;
+    long chiL = 256;
+    long chiR = 256;
 
     tools::log->info("__builtin_cpu_supports(avx512f)    : {}", __builtin_cpu_supports("avx512f"));
     tools::log->info("__builtin_cpu_supports(x86-64-v4)  : {}", __builtin_cpu_supports("x86-64-v4"));
@@ -387,7 +388,7 @@ int main() {
     auto res     = Eigen::Tensor<real, 3>(d, chiL, chiR);
     auto mps     = Eigen::Tensor<real, 3>(d, chiL, chiR);
     auto mps_shf = Eigen::Tensor<real, 3>(chiR, d, chiL);
-    // auto mpo     = Eigen::Tensor<real, 4>(m, m, d, d);
+    auto mpo     = Eigen::Tensor<real, 4>(m, m, d, d);
     auto enL     = Eigen::Tensor<real, 3>(chiL, chiL, m);
     auto enR     = Eigen::Tensor<real, 3>(chiR, chiR, m);
     auto mpo_shf = Eigen::Tensor<real, 4>(2, 2, m, m);
@@ -403,11 +404,11 @@ int main() {
     auto mpos_shf = std::vector<Eigen::Tensor<real, 4>>(safe_cast<size_t>(sites), mpo_shf);
 
     {
-        // ankerl::nanobench::Bench().warmup(4).epochs(4).minEpochIterations(10).run("tools::common::contraction::matrix_vector_product", [&] {
-        //     tools::common::contraction::matrix_vector_product(res, mps, mpo, enL, enR);
-        //     ankerl::nanobench::doNotOptimizeAway(res);
-        //     ankerl::nanobench::doNotOptimizeAway(mps);
-        // });
+        ankerl::nanobench::Bench().warmup(4).epochs(10).minEpochIterations(100).run("tools::common::contraction::matrix_vector_product", [&] {
+            tools::common::contraction::matrix_vector_product(res, mps, mpo, enL, enR);
+            ankerl::nanobench::doNotOptimizeAway(res);
+            ankerl::nanobench::doNotOptimizeAway(mps);
+        });
         // ankerl::nanobench::Bench().warmup(4).epochs(4).minEpochIterations(10).run("matrix_vector_product_tblis", [&] {
         //     matrix_vector_product_tblis(res, mps, mpo, enL, enR, get_arch());
         //     ankerl::nanobench::doNotOptimizeAway(res);
@@ -418,12 +419,12 @@ int main() {
         //     ankerl::nanobench::doNotOptimizeAway(res);
         //     ankerl::nanobench::doNotOptimizeAway(mps);
         // });
-        ankerl::nanobench::Bench().warmup(1).epochs(1).minEpochIterations(2).run("matrix_vector_product_custom", [&] {
-            matrix_vector_product_custom(res, mps, mpos_shf, enL, enR);
-            // matrix_vector_product_custom(res, mps, mpos_shf, enL, enR);
-            ankerl::nanobench::doNotOptimizeAway(res);
-            ankerl::nanobench::doNotOptimizeAway(mps);
-        });
+        // ankerl::nanobench::Bench().warmup(1).epochs(1).minEpochIterations(2).run("matrix_vector_product_custom", [&] {
+        //     matrix_vector_product_custom(res, mps, mpos_shf, enL, enR);
+        //     // matrix_vector_product_custom(res, mps, mpos_shf, enL, enR);
+        //     ankerl::nanobench::doNotOptimizeAway(res);
+        //     ankerl::nanobench::doNotOptimizeAway(mps);
+        // });
         // ankerl::nanobench::Bench().warmup(5).epochs(5).minEpochIterations(100).run("mps enL tblis", [&] {
         //     mps_enL_tblis(mps_enL, mps, enL, get_arch());
         //     ankerl::nanobench::doNotOptimizeAway(mps_enL);
