@@ -32,9 +32,9 @@ namespace tid {
         }
     }
 
-    token ur::tic_token() noexcept { return token(*this); }
+    token ur::tic_token(double add_time) noexcept { return token(*this, add_time); }
 
-    token ur::tic_token(std::string_view prefix) noexcept { return {*this, prefix}; }
+    token ur::tic_token(std::string_view prefix,  double add_time) noexcept { return {*this, prefix, add_time}; }
 
     void ur::set_label(std::string_view label_) noexcept { label = label_; }
 

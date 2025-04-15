@@ -1,14 +1,20 @@
 #include "tid.h"
 namespace tid {
-    token::token(ur &t_) : t(t_) {
+    token::token(ur &t_, double add_time) : t(t_) {
         if(t.lvl == level::disabled) return;
-        t.tic();
+        if(add_time != 0)
+            t.add_time(add_time);
+        else
+            t.tic();
     }
-    token::token(ur &t_, std::string_view prefix_) : t(t_) {
+    token::token(ur &t_, std::string_view prefix_, double add_time) : t(t_) {
         if(t.lvl == level::disabled) return;
         temp_prefix = prefix_;
         tid::internal::ur_prefix_push_back(temp_prefix);
-        t.tic();
+        if(add_time != 0)
+            t.add_time(add_time);
+        else
+            t.tic();
     }
 
     token::~token() noexcept {

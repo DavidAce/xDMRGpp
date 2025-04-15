@@ -8,9 +8,14 @@
 #include "tools/common/views.h"
 #include "tools/infinite/measure.h"
 #include "tools/infinite/mps.h"
-using Scalar = StateInfinite::Scalar;
 
-StateInfinite::StateInfinite() : MPS_A(std::make_unique<MpsSite>()), MPS_B(std::make_unique<MpsSite>()) { tools::log->trace("Constructing state"); }
+template class StateInfinite<cx64>;
+template class StateInfinite<cx128>;
+
+template<typename Scalar>
+StateInfinite<Scalar>::StateInfinite() : MPS_A(std::make_unique<MpsSite<Scalar>>()), MPS_B(std::make_unique<MpsSite<Scalar>>()) {
+    tools::log->trace("Constructing state");
+}
 
 // We need to define the destructor and other special functions
 // because we enclose data in unique_ptr for this pimpl idiom.
@@ -21,14 +26,17 @@ StateInfinite::StateInfinite() : MPS_A(std::make_unique<MpsSite>()), MPS_B(std::
 // operator= and copy assignment constructor.
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
-StateInfinite::~StateInfinite()                                 = default; // default dtor
-StateInfinite:: StateInfinite(StateInfinite &&other)            = default; // default move ctor
-StateInfinite  &StateInfinite::operator=(StateInfinite &&other) = default; // default move assign
+template<typename Scalar>
+StateInfinite<Scalar>::~StateInfinite() = default; // default dtor
+template<typename Scalar>
+StateInfinite<Scalar>::StateInfinite(StateInfinite &&other) = default; // default move ctor
+template<typename Scalar>
+StateInfinite<Scalar> &StateInfinite<Scalar>::operator=(StateInfinite &&other) = default; // default move assign
 
 /* clang-format off */
-StateInfinite::StateInfinite(const StateInfinite &other):
-    MPS_A(std::make_unique<MpsSite>(*other.MPS_A)),
-    MPS_B(std::make_unique<MpsSite>(*other.MPS_B)),
+template<typename Scalar> StateInfinite<Scalar>::StateInfinite(const StateInfinite &other):
+    MPS_A(std::make_unique<MpsSite<Scalar>>(*other.MPS_A)),
+    MPS_B(std::make_unique<MpsSite<Scalar>>(*other.MPS_B)),
     swapped(other.swapped),
     cache(other.cache),
     name(other.name),
@@ -38,12 +46,12 @@ StateInfinite::StateInfinite(const StateInfinite &other):
 
 }
 /* clang-format on */
-
-StateInfinite &StateInfinite::operator=(const StateInfinite &other) {
+template<typename Scalar>
+StateInfinite<Scalar> &StateInfinite<Scalar>::operator=(const StateInfinite &other) {
     // check for self-assignment
     if(this != &other) {
-        MPS_A                    = std::make_unique<MpsSite>(*other.MPS_A);
-        MPS_B                    = std::make_unique<MpsSite>(*other.MPS_B);
+        MPS_A                    = std::make_unique<MpsSite<Scalar>>(*other.MPS_A);
+        MPS_B                    = std::make_unique<MpsSite<Scalar>>(*other.MPS_B);
         swapped                  = other.swapped;
         cache                    = other.cache;
         name                     = other.name;
@@ -54,7 +62,8 @@ StateInfinite &StateInfinite::operator=(const StateInfinite &other) {
     return *this;
 }
 
-void StateInfinite::initialize(ModelType model_type) {
+template<typename Scalar>
+void StateInfinite<Scalar>::initialize(ModelType model_type) {
     tools::log->trace("Initializing state");
     long spin_dim = 2;
     switch(model_type) {
@@ -68,94 +77,150 @@ void StateInfinite::initialize(ModelType model_type) {
     M.setZero();
     M(0, 0, 0) = 1;
     L.setConstant(1.0);
-    MPS_A = std::make_unique<MpsSite>(M, L, 0, 0, "A");
-    MPS_B = std::make_unique<MpsSite>(M, L, 1, 0, "B");
+    MPS_A = std::make_unique<MpsSite<Scalar>>(M, L, 0, 0, "A");
+    MPS_B = std::make_unique<MpsSite<Scalar>>(M, L, 1, 0, "B");
     MPS_A->set_LC(L);
 }
 
-void        StateInfinite::set_name(std::string_view statename) { name = statename; }
-std::string StateInfinite::get_name() const { return name; }
+template<typename Scalar>
+void StateInfinite<Scalar>::set_name(std::string_view statename) {
+    name = statename;
+}
+template<typename Scalar>
+std::string StateInfinite<Scalar>::get_name() const {
+    return name;
+}
 
-void          StateInfinite::set_algorithm(const AlgorithmType &algo_type) { algo = algo_type; }
-AlgorithmType StateInfinite::get_algorithm() const { return algo; }
+template<typename Scalar>
+void StateInfinite<Scalar>::set_algorithm(const AlgorithmType &algo_type) {
+    algo = algo_type;
+}
+template<typename Scalar>
+AlgorithmType StateInfinite<Scalar>::get_algorithm() const {
+    return algo;
+}
 
-std::pair<size_t, size_t> StateInfinite::get_positions() { return std::make_pair(MPS_A->get_position(), MPS_B->get_position()); }
-size_t                    StateInfinite::get_positionA() { return MPS_A->get_position(); }
-size_t                    StateInfinite::get_positionB() { return MPS_B->get_position(); }
+template<typename Scalar>
+std::pair<size_t, size_t> StateInfinite<Scalar>::get_positions() {
+    return std::make_pair(MPS_A->get_position(), MPS_B->get_position());
+}
+template<typename Scalar>
+size_t StateInfinite<Scalar>::get_positionA() {
+    return MPS_A->get_position();
+}
+template<typename Scalar>
+size_t StateInfinite<Scalar>::get_positionB() {
+    return MPS_B->get_position();
+}
 
-long StateInfinite::chiC() const { return MPS_A->get_LC().dimension(0); }
-long StateInfinite::chiA() const { return MPS_A->get_L().dimension(0); }
-long StateInfinite::chiB() const { return MPS_B->get_L().dimension(0); }
+template<typename Scalar>
+long StateInfinite<Scalar>::chiC() const {
+    return MPS_A->get_LC().dimension(0);
+}
+template<typename Scalar>
+long StateInfinite<Scalar>::chiA() const {
+    return MPS_A->get_L().dimension(0);
+}
+template<typename Scalar>
+long StateInfinite<Scalar>::chiB() const {
+    return MPS_B->get_L().dimension(0);
+}
 
-long StateInfinite::get_spin_dimA() const { return MPS_A->spin_dim(); }
-long StateInfinite::get_spin_dimB() const { return MPS_B->spin_dim(); }
-
-double StateInfinite::get_truncation_error() const {
-    // Should get the the current limit on allowed bond dimension for the duration of the simulation
+template<typename Scalar>
+long StateInfinite<Scalar>::get_spin_dimA() const {
+    return MPS_A->spin_dim();
+}
+template<typename Scalar>
+long StateInfinite<Scalar>::get_spin_dimB() const {
+    return MPS_B->spin_dim();
+}
+template<typename Scalar>
+double StateInfinite<Scalar>::get_truncation_error() const {
+    // Should get the current limit on allowed bond dimension for the duration of the simulation
     return get_mps_siteA().get_truncation_error();
 }
 
-Eigen::DSizes<long, 3> StateInfinite::dimensions() const { return Eigen::DSizes<long, 3>{get_spin_dimA() * get_spin_dimB(), chiA(), chiB()}; }
+template<typename Scalar>
+Eigen::DSizes<long, 3> StateInfinite<Scalar>::dimensions() const {
+    return Eigen::DSizes<long, 3>{get_spin_dimA() * get_spin_dimB(), chiA(), chiB()};
+}
 
-const MpsSite &StateInfinite::get_mps_siteA() const { return *MPS_A; }
-const MpsSite &StateInfinite::get_mps_siteB() const { return *MPS_B; }
-MpsSite       &StateInfinite::get_mps_siteA() { return *MPS_A; }
-MpsSite       &StateInfinite::get_mps_siteB() { return *MPS_B; }
-const MpsSite &StateInfinite::get_mps_site(size_t pos) const {
+template<typename Scalar>
+const MpsSite<Scalar> &StateInfinite<Scalar>::get_mps_siteA() const {
+    return *MPS_A;
+}
+template<typename Scalar>
+const MpsSite<Scalar> &StateInfinite<Scalar>::get_mps_siteB() const {
+    return *MPS_B;
+}
+template<typename Scalar>
+MpsSite<Scalar> &StateInfinite<Scalar>::get_mps_siteA() {
+    return *MPS_A;
+}
+template<typename Scalar>
+MpsSite<Scalar> &StateInfinite<Scalar>::get_mps_siteB() {
+    return *MPS_B;
+}
+template<typename Scalar>
+const MpsSite<Scalar> &StateInfinite<Scalar>::get_mps_site(size_t pos) const {
     if(pos == 0) return *MPS_A;
     if(pos == 1) return *MPS_B;
     throw except::runtime_error("Got wrong site position {}. Expected 0 or 1", pos);
 }
-MpsSite &StateInfinite::get_mps_site(size_t pos) {
+template<typename Scalar>
+MpsSite<Scalar> &StateInfinite<Scalar>::get_mps_site(size_t pos) {
     if(pos == 0) return *MPS_A;
     if(pos == 1) return *MPS_B;
     throw except::runtime_error("Got wrong site position {}. Expected 0 or 1", pos);
 }
-const MpsSite &StateInfinite::get_mps_site(std::string_view pos) const {
+template<typename Scalar>
+const MpsSite<Scalar> &StateInfinite<Scalar>::get_mps_site(std::string_view pos) const {
     if(pos == "A") return *MPS_A;
     if(pos == "B") return *MPS_B;
     throw except::runtime_error("Got wrong site position {}. Expected 0 or 1", pos);
 }
-MpsSite &StateInfinite::get_mps_site(std::string_view pos) {
+template<typename Scalar>
+MpsSite<Scalar> &StateInfinite<Scalar>::get_mps_site(std::string_view pos) {
     if(pos == "A") return *MPS_A;
     if(pos == "B") return *MPS_B;
     throw except::runtime_error("Got wrong site position {}. Expected 0 or 1", pos);
 }
 
 /* clang-format off */
-const Eigen::Tensor<Scalar, 3> &StateInfinite::A_bare() const { return MPS_A->get_M_bare(); }
-const Eigen::Tensor<Scalar, 3> &StateInfinite::A() const { return MPS_A->get_M(); }
-const Eigen::Tensor<Scalar, 3> &StateInfinite::B() const { return MPS_B->get_M(); }
-const Eigen::Tensor<Scalar, 2> &StateInfinite::LC_diag() const { if(cache.LC_diag) return cache.LC_diag.value(); else cache.LC_diag = tenx::asDiagonal(MPS_A->get_LC()); return cache.LC_diag.value();}
-const Eigen::Tensor<Scalar, 2> &StateInfinite::LA_diag() const { if(cache.LA_diag) return cache.LA_diag.value(); else cache.LA_diag = tenx::asDiagonal(MPS_A->get_L()); return cache.LA_diag.value();}
-const Eigen::Tensor<Scalar, 2> &StateInfinite::LB_diag() const { if(cache.LB_diag) return cache.LB_diag.value(); else cache.LB_diag = tenx::asDiagonal(MPS_B->get_L()); return cache.LB_diag.value();}
-const Eigen::Tensor<Scalar, 2> &StateInfinite::LC_diag_inv() const { if(cache.LC_diag_inv) return cache.LC_diag_inv.value(); else cache.LC_diag_inv = tenx::asDiagonalInversed(MPS_A->get_LC()); return cache.LC_diag_inv.value();}
-const Eigen::Tensor<Scalar, 2> &StateInfinite::LA_diag_inv() const { if(cache.LA_diag_inv) return cache.LA_diag_inv.value(); else cache.LA_diag_inv = tenx::asDiagonalInversed(MPS_A->get_L()); return cache.LA_diag_inv.value();}
-const Eigen::Tensor<Scalar, 2> &StateInfinite::LB_diag_inv() const { if(cache.LB_diag_inv) return cache.LB_diag_inv.value(); else cache.LB_diag_inv = tenx::asDiagonalInversed(MPS_B->get_L()); return cache.LB_diag_inv.value();}
-const Eigen::Tensor<Scalar, 1> &StateInfinite::LC() const { return MPS_A->get_LC(); }
-const Eigen::Tensor<Scalar, 1> &StateInfinite::LA() const { return MPS_A->get_L(); }
-const Eigen::Tensor<Scalar, 1> &StateInfinite::LB() const { return MPS_B->get_L(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::A_bare() const { return MPS_A->get_M_bare(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::A() const { return MPS_A->get_M(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::B() const { return MPS_B->get_M(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 2> &StateInfinite<Scalar>::LC_diag() const { if(cache.LC_diag) return cache.LC_diag.value(); else cache.LC_diag = tenx::asDiagonal(MPS_A->get_LC()); return cache.LC_diag.value();}
+template<typename Scalar> const Eigen::Tensor<Scalar, 2> &StateInfinite<Scalar>::LA_diag() const { if(cache.LA_diag) return cache.LA_diag.value(); else cache.LA_diag = tenx::asDiagonal(MPS_A->get_L()); return cache.LA_diag.value();}
+template<typename Scalar> const Eigen::Tensor<Scalar, 2> &StateInfinite<Scalar>::LB_diag() const { if(cache.LB_diag) return cache.LB_diag.value(); else cache.LB_diag = tenx::asDiagonal(MPS_B->get_L()); return cache.LB_diag.value();}
+template<typename Scalar> const Eigen::Tensor<Scalar, 2> &StateInfinite<Scalar>::LC_diag_inv() const { if(cache.LC_diag_inv) return cache.LC_diag_inv.value(); else cache.LC_diag_inv = tenx::asDiagonalInversed(MPS_A->get_LC()); return cache.LC_diag_inv.value();}
+template<typename Scalar> const Eigen::Tensor<Scalar, 2> &StateInfinite<Scalar>::LA_diag_inv() const { if(cache.LA_diag_inv) return cache.LA_diag_inv.value(); else cache.LA_diag_inv = tenx::asDiagonalInversed(MPS_A->get_L()); return cache.LA_diag_inv.value();}
+template<typename Scalar> const Eigen::Tensor<Scalar, 2> &StateInfinite<Scalar>::LB_diag_inv() const { if(cache.LB_diag_inv) return cache.LB_diag_inv.value(); else cache.LB_diag_inv = tenx::asDiagonalInversed(MPS_B->get_L()); return cache.LB_diag_inv.value();}
+template<typename Scalar> const Eigen::Tensor<Scalar, 1> &StateInfinite<Scalar>::LC() const { return MPS_A->get_LC(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 1> &StateInfinite<Scalar>::LA() const { return MPS_A->get_L(); }
+template<typename Scalar> const Eigen::Tensor<Scalar, 1> &StateInfinite<Scalar>::LB() const { return MPS_B->get_L(); }
 
-const Eigen::Tensor<Scalar, 3> &StateInfinite::GA() const {
+template<typename Scalar> const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::GA() const {
     if(cache.GA) return cache.GA.value();
     else {
         Eigen::Tensor<Scalar,1> L_inv = MPS_A->get_L().inverse();
-        cache.GA = tools::common::contraction::contract_bnd_mps_temp(L_inv, MPS_A->get_M_bare());
+        cache.GA = tools::common::contraction::contract_bnd_mps(L_inv, MPS_A->get_M_bare());
     }
     return cache.GA.value();
 }
-const Eigen::Tensor<Scalar, 3> &StateInfinite::GB() const {
+template<typename Scalar> const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::GB() const {
     if(cache.GB) return cache.GB.value();
     else{
         Eigen::Tensor<Scalar,1> L_inv = MPS_B->get_L().inverse();
-        cache.GB = tools::common::contraction::contract_mps_bnd_temp(MPS_B->get_M_bare(), L_inv);
+        cache.GB = tools::common::contraction::contract_mps_bnd(MPS_B->get_M_bare(), L_inv);
     }
     return cache.GB.value();
 }
 
 /* clang-format on */
 
-const Eigen::Tensor<Scalar, 3> &StateInfinite::get_2site_mps(Scalar norm) const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::get_2site_mps(Scalar norm) const {
     /*!
  * Returns a two-site tensor
      @verbatim
@@ -173,19 +238,26 @@ const Eigen::Tensor<Scalar, 3> &StateInfinite::get_2site_mps(Scalar norm) const 
  */
 
     if(cache.twosite_mps) return cache.twosite_mps.value();
-    cache.twosite_mps = tools::common::contraction::contract_mps_mps_temp(A(), B()) / norm;
+    cache.twosite_mps = tools::common::contraction::contract_mps_mps(A(), B()) / norm;
     return cache.twosite_mps.value();
 }
 
-void StateInfinite::assert_validity() const {
+template<typename Scalar>
+void StateInfinite<Scalar>::assert_validity() const {
     MPS_A->assert_validity();
     MPS_B->assert_validity();
 }
-bool StateInfinite::is_real() const { return MPS_A->is_real() and MPS_B->is_real(); }
-bool StateInfinite::has_nan() const { return MPS_A->has_nan() or MPS_B->has_nan(); }
+template<typename Scalar>
+bool StateInfinite<Scalar>::is_real() const {
+    return MPS_A->is_real() and MPS_B->is_real();
+}
+template<typename Scalar>
+bool StateInfinite<Scalar>::has_nan() const {
+    return MPS_A->has_nan() or MPS_B->has_nan();
+}
 //
 // template<typename T>
-// Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> StateInfinite::get_H_local_matrix() const {
+// Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> StateInfinite<Scalar>::get_H_local_matrix() const {
 //    Eigen::Tensor<T, 5> tempL;
 //    Eigen::Tensor<T, 5> tempR;
 //    if constexpr(std::is_same<T, double>::value) {
@@ -212,11 +284,11 @@ bool StateInfinite::has_nan() const { return MPS_A->has_nan() or MPS_B->has_nan(
 //    return Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>>(H_local.data(), shape, shape);
 //}
 
-// template Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>               StateInfinite::get_H_local_matrix<double>() const;
-// template Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic> StateInfinite::get_H_local_matrix<std::complex<double>>() const;
+// template Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>               StateInfinite<Scalar>::get_H_local_matrix<double>() const;
+// template Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic> StateInfinite<Scalar>::get_H_local_matrix<std::complex<double>>() const;
 //
 // template<typename T>
-// Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> StateInfinite::get_H_local_sq_matrix() const {
+// Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> StateInfinite<Scalar>::get_H_local_sq_matrix() const {
 //    Eigen::Tensor<T, 6> tempL;
 //    Eigen::Tensor<T, 6> tempR;
 //    if constexpr(std::is_same<T, double>::value) {
@@ -254,10 +326,10 @@ bool StateInfinite::has_nan() const { return MPS_A->has_nan() or MPS_B->has_nan(
 //    return Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>>(H_local.data(), shape, shape);
 //}
 
-// template Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>               StateInfinite::get_H_local_sq_matrix<double>() const;
-// template Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic> StateInfinite::get_H_local_sq_matrix<std::complex<double>>() const;
+// template Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>               StateInfinite<Scalar>::get_H_local_sq_matrix<double>() const;
+// template Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic> StateInfinite<Scalar>::get_H_local_sq_matrix<std::complex<double>>() const;
 
-// void StateInfinite::enlarge_environment(int direction) {
+// void StateInfinite<Scalar>::enlarge_environment(int direction) {
 //    assert_positions();
 //    auto position_A_new = mps_sites->MPS_A->get_position() + 1;
 //    *Lblock             = Lblock->enlarge(*mps_sites->MPS_A, *HA);
@@ -284,16 +356,19 @@ bool StateInfinite::has_nan() const { return MPS_A->has_nan() or MPS_B->has_nan(
 //    assert_positions();
 //}
 
-void StateInfinite::set_positions(size_t position) {
+template<typename Scalar>
+void StateInfinite<Scalar>::set_positions(size_t position) {
     MPS_A->set_position(position);
     MPS_B->set_position(position + 1);
 }
 
-void StateInfinite::set_mps(const Eigen::Tensor<Scalar, 3> &twosite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg) {
+template<typename Scalar>
+void StateInfinite<Scalar>::set_mps(const Eigen::Tensor<Scalar, 3> &twosite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg) {
     tools::infinite::mps::merge_twosite_tensor(*this, twosite_tensor, mevent, svd_cfg);
 }
 
-void StateInfinite::set_mps(const std::vector<MpsSite> &mps_list) {
+template<typename Scalar>
+void StateInfinite<Scalar>::set_mps(const std::vector<MpsSite<Scalar>> &mps_list) {
     if(mps_list.size() != 2) throw except::runtime_error("Expected 2 sites, got: {}", mps_list.size());
     const auto &mpsA = *std::next(mps_list.begin(), 0);
     const auto &mpsB = *std::next(mps_list.begin(), 1);
@@ -301,39 +376,50 @@ void StateInfinite::set_mps(const std::vector<MpsSite> &mps_list) {
     clear_cache();
 }
 
-void StateInfinite::set_mps(const MpsSite &mpsA, const MpsSite &mpsB) {
+template<typename Scalar>
+void StateInfinite<Scalar>::set_mps(const MpsSite<Scalar> &mpsA, const MpsSite<Scalar> &mpsB) {
     if(not mpsA.isCenter()) throw std::runtime_error("Given mps for site A is not a center");
-    MPS_A = std::make_unique<MpsSite>(mpsA);
-    MPS_B = std::make_unique<MpsSite>(mpsB);
+    MPS_A = std::make_unique<MpsSite<Scalar>>(mpsA);
+    MPS_B = std::make_unique<MpsSite<Scalar>>(mpsB);
     clear_cache();
 }
 
-void StateInfinite::set_mps(const Eigen::Tensor<Scalar, 3> &MA, const Eigen::Tensor<Scalar, 1> &LC, const Eigen::Tensor<Scalar, 3> &MB) {
+template<typename Scalar>
+void StateInfinite<Scalar>::set_mps(const Eigen::Tensor<Scalar, 3> &MA, const Eigen::Tensor<Scalar, 1> &LC, const Eigen::Tensor<Scalar, 3> &MB) {
     MPS_A->set_M(MA);
     MPS_A->set_LC(LC);
     MPS_B->set_M(MB);
     clear_cache();
 }
-void StateInfinite::set_mps(const Eigen::Tensor<Scalar, 1> &LA, const Eigen::Tensor<Scalar, 3> &MA, const Eigen::Tensor<Scalar, 1> &LC,
-                            const Eigen::Tensor<Scalar, 3> &MB, const Eigen::Tensor<Scalar, 1> &LB) {
+template<typename Scalar>
+void StateInfinite<Scalar>::set_mps(const Eigen::Tensor<Scalar, 1> &LA, const Eigen::Tensor<Scalar, 3> &MA, const Eigen::Tensor<Scalar, 1> &LC,
+                                    const Eigen::Tensor<Scalar, 3> &MB, const Eigen::Tensor<Scalar, 1> &LB) {
     MPS_A->set_mps(MA, LA, 0, "A");
     MPS_A->set_LC(LC);
     MPS_B->set_mps(MB, LB, 0, "B");
     clear_cache();
 }
 
-bool StateInfinite::is_limited_by_bond(long bond_lim) const { return chiC() >= bond_lim; }
-
-bool StateInfinite::is_truncated(double truncation_error_limit) const { return get_truncation_error() > truncation_error_limit; }
-
-void StateInfinite::clear_cache() const { cache = Cache(); }
-
-void StateInfinite::clear_measurements() const {
+template<typename Scalar>
+bool StateInfinite<Scalar>::is_limited_by_bond(long bond_lim) const {
+    return chiC() >= bond_lim;
+}
+template<typename Scalar>
+bool StateInfinite<Scalar>::is_truncated(double truncation_error_limit) const {
+    return get_truncation_error() > truncation_error_limit;
+}
+template<typename Scalar>
+void StateInfinite<Scalar>::clear_cache() const {
+    cache = Cache();
+}
+template<typename Scalar>
+void StateInfinite<Scalar>::clear_measurements() const {
     measurements                              = MeasurementsStateInfinite();
     tools::common::views::components_computed = false;
 }
 
-void StateInfinite::swap_AB() {
+template<typename Scalar>
+void StateInfinite<Scalar>::swap_AB() {
     tools::log->trace("Swapping AB");
     swapped = !swapped;
     // Store the positions

@@ -1,7 +1,8 @@
-
-#include "../measure.h"
+#include "information.h"
 #include "config/settings.h"
 #include "debug/info.h"
+#include "dimensions.h"
+#include "entanglement_entropy.h"
 #include "general/iter.h"
 #include "io/fmt_custom.h"
 #include "math/eig.h"
@@ -26,13 +27,18 @@
 #include <Eigen/SVD>
 #include <span>
 
+using tools::finite::measure::RealArrayX;
+using tools::finite::measure::RealArrayXX;
+using tools::finite::measure::RealScalar;
+
 namespace settings {
     constexpr bool debug_subsystem_entropy = false;
 }
 
 template<typename ContainerType>
-double count_finite(const ContainerType &arr) {
-    double count = 0;
+RealScalar<typename ContainerType::Scalar> count_finite(const ContainerType &arr) {
+    using real_t = RealScalar<typename ContainerType::Scalar>;
+    real_t count = 0;
     for(const auto &a : arr) {
         if(std::isnan(a)) continue;
         if(std::isinf(a)) continue;
@@ -42,30 +48,34 @@ double count_finite(const ContainerType &arr) {
 }
 
 template<typename ContainerType>
-double nansum(const ContainerType &arr) {
-    if(arr.size() == 0) return std::numeric_limits<double>::quiet_NaN();
-    double sum   = 0;
-    double count = 0;
+typename ContainerType::Scalar nansum(const ContainerType &arr) {
+    using Scalar = typename ContainerType::Scalar;
+    using real_t = RealScalar<typename ContainerType::Scalar>;
+    if(arr.size() == 0) return std::numeric_limits<real_t>::quiet_NaN();
+    Scalar sum   = 0;
+    real_t count = 0;
     for(const auto &a : arr) {
         if(std::isnan(a)) continue;
         sum += a;
         count += 1;
     }
-    if(count == 0) return std::numeric_limits<double>::quiet_NaN();
+    if(count == 0) return std::numeric_limits<real_t>::quiet_NaN();
     return sum;
 }
 
 template<typename ContainerType>
-double nanmean(const ContainerType &arr) {
-    if(arr.size() == 0) return std::numeric_limits<double>::quiet_NaN();
-    double sum   = 0;
-    double count = 0;
+typename ContainerType::Scalar nanmean(const ContainerType &arr) {
+    using Scalar = typename ContainerType::Scalar;
+    using real_t = RealScalar<typename ContainerType::Scalar>;
+    if(arr.size() == 0) return std::numeric_limits<real_t>::quiet_NaN();
+    Scalar sum   = 0;
+    real_t count = 0;
     for(const auto &a : arr) {
         if(std::isnan(a)) continue;
         sum += a;
         count += 1;
     }
-    if(count == 0) return std::numeric_limits<double>::quiet_NaN();
+    if(count == 0) return std::numeric_limits<RealScalar<real_t>>::quiet_NaN();
     return sum / count;
 }
 
@@ -83,63 +93,16 @@ std::vector<size_t> get_subsystem_complement(size_t length, const std::vector<si
     return complement;
 }
 
-double tools::finite::measure::entanglement_entropy_log2(const StateFinite &state, size_t nsites /* sites to the left of the partition */) {
-    auto t_ent = tid::tic_scope("neumann_entropy", tid::level::highest);
-    if(nsites == 0ul) return 0.0;
-    auto pos_pl1 = static_cast<size_t>(state.get_position<long>() + 1l);
-    auto pos_tgt = 0ul;
-    if(pos_pl1 < nsites) {
-        // Get the L of the B-site at pos == nsites-1
-        pos_tgt = nsites - 1ul;
-    } else if(pos_pl1 == nsites) {
-        // Get the LC of the AC site at pos == nsites-1
-        pos_tgt = nsites - 1ul;
-    } else {
-        // Get the L of the A (or AC) -site at pos == nsites
-        pos_tgt = nsites;
-    }
-    const auto &mps = state.get_mps_site(pos_tgt);
-    if(mps.isCenter()) {
-        auto &LC = mps.get_LC();
-        auto  SE = Eigen::Tensor<cx64, 0>(-LC.square().contract(LC.square().log2().eval(), tenx::idx({0}, {0})));
-        return std::abs(SE(0));
-    } else {
-        auto &L  = mps.get_L();
-        auto  SE = Eigen::Tensor<cx64, 0>(-L.square().contract(L.square().log2().eval(), tenx::idx({0}, {0})));
-        return std::abs(SE(0));
-    }
-}
-
-std::vector<double> tools::finite::measure::entanglement_entropies_log2(const StateFinite &state) {
-    auto                t_ent = tid::tic_scope("neumann_entropy", tid::level::highest);
-    std::vector<double> entanglement_entropies;
-    entanglement_entropies.reserve(state.get_length() + 1);
-    if(not state.has_center_point()) entanglement_entropies.emplace_back(0);
-    for(const auto &mps : state.mps_sites) {
-        auto                  &L  = mps->get_L();
-        Eigen::Tensor<cx64, 0> SE = -L.square().contract(L.square().log2().eval(), tenx::idx({0}, {0}));
-        entanglement_entropies.emplace_back(std::abs(SE(0)));
-        if(mps->isCenter()) {
-            auto &LC = mps->get_LC();
-            SE       = -LC.square().contract(LC.square().log2().eval(), tenx::idx({0}, {0}));
-            entanglement_entropies.emplace_back(std::abs(SE(0)));
-        }
-    }
-    if(entanglement_entropies.size() != state.get_length() + 1) throw except::logic_error("entanglement_entropies.size() should be length+1");
-    if(entanglement_entropies.front() != 0.0) throw except::logic_error("First entropy should be 0. Got: {:.16f}", entanglement_entropies.front());
-    if(entanglement_entropies.back() != 0.0) throw except::logic_error("Last entropy should be 0. Got: {:.16f}", entanglement_entropies.back());
-    return entanglement_entropies;
-}
-
-double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite &state, const std::vector<size_t> &sites, Precision prec,
-                                                                   size_t eig_max_size = -1ul, std::string_view side = "") {
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite<Scalar> &state, const std::vector<size_t> &sites,
+                                                                               Precision prec, size_t eig_max_size, std::string_view side) {
     if(sites.empty()) return 0;
     bool sites_is_contiguous = sites == num::range<size_t>(sites.front(), sites.back() + 1);
     if(not sites_is_contiguous) { throw except::logic_error("sites are not contiguous: {}", sites); }
     // If sites is contiguous starting at 0, then we can return a bipartite entropy
     if(sites == num::range<size_t>(0ul, sites.size())) { return tools::finite::measure::entanglement_entropy_log2(state, sites.size()); }
     // If sites is contiguous ending at L-1, then we can return a bipartite entropy
-    auto L = state.get_length<size_t>();
+    auto L = state.template get_length<size_t>();
     if(sites == num::range<size_t>(L - sites.size(), L)) { return tools::finite::measure::entanglement_entropy_log2(state, L - sites.size()); }
     if(eig_max_size > 10000) throw except::runtime_error("subsystem_entanglement_entropy_log2: eig_max_size invalid range (<= 10000). Got: {}", eig_max_size);
     bool is_real = state.is_real();
@@ -164,15 +127,15 @@ double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFi
     std::array<double, 2> mat_costs_trf = {};
     switch(prec) {
         case Precision::SINGLE: {
-            mat_costs_rho = is_real ? state.get_reduced_density_matrix_cost<fp32>(sites) : state.get_reduced_density_matrix_cost<cx32>(sites);
-            mat_costs_cmp = is_real ? state.get_reduced_density_matrix_cost<fp32>(cites) : state.get_reduced_density_matrix_cost<cx32>(cites);
-            mat_costs_trf = is_real ? state.get_transfer_matrix_costs<fp32>(sites, side) : state.get_transfer_matrix_costs<cx32>(sites, side);
+            mat_costs_rho = is_real ? state.template get_reduced_density_matrix_cost<fp32>(sites) : state.template get_reduced_density_matrix_cost<cx32>(sites);
+            mat_costs_cmp = is_real ? state.template get_reduced_density_matrix_cost<fp32>(cites) : state.template get_reduced_density_matrix_cost<cx32>(cites);
+            mat_costs_trf = is_real ? state.template get_transfer_matrix_costs<fp32>(sites, side) : state.template get_transfer_matrix_costs<cx32>(sites, side);
             break;
         }
         case Precision::DOUBLE: {
-            mat_costs_rho = is_real ? state.get_reduced_density_matrix_cost<fp64>(sites) : state.get_reduced_density_matrix_cost<cx64>(sites);
-            mat_costs_cmp = is_real ? state.get_reduced_density_matrix_cost<fp64>(cites) : state.get_reduced_density_matrix_cost<cx64>(cites);
-            mat_costs_trf = is_real ? state.get_transfer_matrix_costs<fp64>(sites, side) : state.get_transfer_matrix_costs<cx64>(sites, side);
+            mat_costs_rho = is_real ? state.template get_reduced_density_matrix_cost<fp64>(sites) : state.template get_reduced_density_matrix_cost<cx64>(sites);
+            mat_costs_cmp = is_real ? state.template get_reduced_density_matrix_cost<fp64>(cites) : state.template get_reduced_density_matrix_cost<cx64>(cites);
+            mat_costs_trf = is_real ? state.template get_transfer_matrix_costs<fp64>(sites, side) : state.template get_transfer_matrix_costs<cx64>(sites, side);
             break;
         }
     }
@@ -205,7 +168,7 @@ double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFi
     }
 
     auto                  solver   = eig::solver();
-    auto                  evs      = Eigen::ArrayXd(); // Eigenvalues
+    auto                  evs      = RealArrayX<Scalar>(); // Eigenvalues
     [[maybe_unused]] auto mat_time = 0.0;
     [[maybe_unused]] auto eig_time = 0.0;
     switch(prec) {
@@ -213,31 +176,31 @@ double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFi
             if(is_real) {
                 Eigen::Tensor<fp32, 2> mat;
                 if(min_cost_idx == 0) {
-                    mat      = state.get_reduced_density_matrix<fp32>(sites);
+                    mat      = state.template get_reduced_density_matrix<fp32>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 1) {
-                    mat      = state.get_reduced_density_matrix<fp32>(cites);
+                    mat      = state.template get_reduced_density_matrix<fp32>(cites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 2) {
-                    mat      = state.get_transfer_matrix<fp32>(sites, side);
+                    mat      = state.template get_transfer_matrix<fp32>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
                 solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = eig::view::get_eigvals<fp32>(solver.result).cast<fp64>(); // Eigenvalues
+                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp32>(solver.result)); // Eigenvalues
             } else {
                 Eigen::Tensor<cx32, 2> mat;
                 if(min_cost_idx == 0) {
-                    mat      = state.get_reduced_density_matrix<cx32>(sites);
+                    mat      = state.template get_reduced_density_matrix<cx32>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 1) {
-                    mat      = state.get_reduced_density_matrix<cx32>(sites);
+                    mat      = state.template get_reduced_density_matrix<cx32>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 2) {
-                    mat      = state.get_transfer_matrix<cx32>(sites, side);
+                    mat      = state.template get_transfer_matrix<cx32>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
                 solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = eig::view::get_eigvals<fp32>(solver.result).cast<fp64>(); // Eigenvalues
+                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp32>(solver.result)); // Eigenvalues
             }
             break;
         }
@@ -245,40 +208,40 @@ double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFi
             if(is_real) {
                 Eigen::Tensor<fp64, 2> mat;
                 if(min_cost_idx == 0) {
-                    mat      = state.get_reduced_density_matrix<fp64>(sites);
+                    mat      = state.template get_reduced_density_matrix<fp64>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                     // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after rho");
                 } else if(min_cost_idx == 1) {
-                    mat      = state.get_reduced_density_matrix<fp64>(cites);
+                    mat      = state.template get_reduced_density_matrix<fp64>(cites);
                     mat_time = tid::get("rho").get_last_interval();
                     // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after cmp");
                 } else if(min_cost_idx == 2) {
-                    mat      = state.get_transfer_matrix<fp64>(sites, side);
+                    mat      = state.template get_transfer_matrix<fp64>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
                 solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = eig::view::get_eigvals<fp64>(solver.result); // Eigenvalues
+                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp64>(solver.result)); // Eigenvalues
             } else {
                 Eigen::Tensor<cx64, 2> mat;
                 if(min_cost_idx == 0) {
-                    mat      = state.get_reduced_density_matrix<cx64>(sites);
+                    mat      = state.template get_reduced_density_matrix<cx64>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 1) {
-                    mat      = state.get_reduced_density_matrix<cx64>(sites);
+                    mat      = state.template get_reduced_density_matrix<cx64>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 2) {
-                    mat      = state.get_transfer_matrix<cx64>(sites, side);
+                    mat      = state.template get_transfer_matrix<cx64>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
                 solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = eig::view::get_eigvals<fp64>(solver.result); // Eigenvalues
+                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp64>(solver.result)); // Eigenvalues
             }
             break;
         }
     }
 
-    eig_time                       = solver.result.meta.time_total;
-    fp64 entanglement_entropy_log2 = 0;
+    eig_time                                     = solver.result.meta.time_total;
+    RealScalar<Scalar> entanglement_entropy_log2 = 0;
     for(const auto &e : evs) {
         if(e > 0) entanglement_entropy_log2 += -e * std::log2(e); // We use log base 2 for information
     }
@@ -304,8 +267,13 @@ double tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFi
 
     return entanglement_entropy_log2;
 }
+template RealScalar<cx64>  tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite<cx64> &state, const std::vector<size_t> &sites,
+                                                                                       Precision prec, size_t eig_max_size, std::string_view side);
+template RealScalar<cx128> tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite<cx128> &state, const std::vector<size_t> &sites,
+                                                                                       Precision prec, size_t eig_max_size, std::string_view side);
 
-std::pair<std::deque<std::vector<size_t>>, std::deque<std::vector<size_t>>> get_missing_subsystems(const Eigen::ArrayXXd &see) {
+template<typename Scalar>
+std::pair<std::deque<std::vector<size_t>>, std::deque<std::vector<size_t>>> get_missing_subsystems(const RealArrayXX<Scalar> &see) {
     auto subsystemsL = std::deque<std::vector<size_t>>(); // list of missing subsystems closest to the left edge
     auto subsystemsR = std::deque<std::vector<size_t>>(); // list of missing subsystems closest to the right edge
     auto len         = see.rows();
@@ -330,39 +298,47 @@ std::pair<std::deque<std::vector<size_t>>, std::deque<std::vector<size_t>>> get_
     return {subsystemsL, subsystemsR};
 }
 
+template<typename Scalar>
 struct SeeProgress {
-    Eigen::ArrayXXd info;
-    double          icom;
-    double          bits_total = 0;
-    double          bits_found = 0;
-    double          bits_error = 0;
-    double          bits_minus = 0;
-    double          progress   = 0;
+    RealArrayXX<Scalar> info;
+    RealScalar<Scalar>  icom;
+    RealScalar<Scalar>  bits_total = 0;
+    RealScalar<Scalar>  bits_found = 0;
+    RealScalar<Scalar>  bits_error = 0;
+    RealScalar<Scalar>  bits_minus = 0;
+    RealScalar<Scalar>  progress   = 0;
 };
 
-SeeProgress check_see_progress(const Eigen::ArrayXXd &see, LogPolicy log_policy = LogPolicy::SILENT, spdlog::level::level_enum lvl = spdlog::level::debug) {
+template<typename Scalar>
+SeeProgress<Scalar> check_see_progress(const RealArrayXX<Scalar> &see, LogPolicy log_policy = LogPolicy::SILENT,
+                                       spdlog::level::level_enum lvl = spdlog::level::debug) {
     // Check the information lattice
-    auto sp       = SeeProgress();
-    auto L        = static_cast<double>(see.rows());
-    sp.info       = tools::finite::measure::information_lattice(see);
-    sp.icom       = tools::finite::measure::information_center_of_mass(sp.info);
+    auto sp       = SeeProgress<Scalar>();
+    auto L        = static_cast<RealScalar<Scalar>>(see.rows());
+    sp.info       = tools::finite::measure::information_lattice<Scalar>(see);
+    sp.icom       = tools::finite::measure::information_center_of_mass<Scalar>(sp.info);
     sp.bits_total = L;
     sp.bits_found = sp.info.isNaN().select(0, sp.info).sum();
     sp.bits_error = 1 - sp.bits_found / sp.bits_total;
     sp.bits_minus = (sp.info < 0).select(sp.info, 0).sum();
     sp.progress =
-        (see.isNaN()).select(0.0, Eigen::ArrayXXd::Ones(see.rows(), see.cols())).sum() / (L * (L + 1.0) / 2.0); // Found entries in the top left triangle
-    if(log_policy == LogPolicy::VERBOSE) {
-        tools::log->log(lvl, "see: \n{}\n", linalg::matrix::to_string(see, 10));
-        tools::log->log(lvl, "info: \n{}\n", linalg::matrix::to_string(sp.info, 6));
-        tools::log->log(lvl, "il: \n{}\n", linalg::matrix::to_string(tools::finite::measure::information_per_scale(sp.info), 6));
+        (see.isNaN()).select(0.0, RealArrayXX<Scalar>::Ones(see.rows(), see.cols())).sum() / (L * (L + 1.0) / 2.0); // Found entries in the top left triangle
+    if constexpr(!tenx::sfinae::is_quadruple_prec_v<Scalar>) {
+        if(log_policy == LogPolicy::VERBOSE) {
+            tools::log->log(lvl, "see: \n{}\n", linalg::matrix::to_string(see, 10));
+            tools::log->log(lvl, "info: \n{}\n", linalg::matrix::to_string(sp.info, 6));
+            tools::log->log(lvl, "il: \n{}\n", linalg::matrix::to_string(tools::finite::measure::information_per_scale<Scalar>(sp.info), 6));
+        }
     }
     if(log_policy != LogPolicy::SILENT) {
-        tools::log->log(lvl, " -- progress {:<6.2f}% bits {:<20.16f}/{} err {:.2e} icom {:.16f} neg {:.1e} mem[rss {:<.1f} hwm {:<.1f}]MB", sp.progress * 100,
-                        sp.bits_found, sp.bits_total, sp.bits_error, sp.icom, sp.bits_minus, debug::mem_rss_in_mb(), debug::mem_hwm_in_mb());
+        tools::log->log(lvl, " -- progress {:<6.2f}% bits {:<20.16f}/{} err {:.2e} icom {:.16f} neg {:.1e} mem[rss {:<.1f} hwm {:<.1f}]MB",
+                        fp(sp.progress * 100.0), fp(sp.bits_found), fp(sp.bits_total), fp(sp.bits_error), fp(sp.icom), fp(sp.bits_minus),
+                        debug::mem_rss_in_mb(), debug::mem_hwm_in_mb());
     }
     return sp;
 }
+template SeeProgress<cx64>  check_see_progress(const RealArrayXX<cx64> &see, LogPolicy log_policy, spdlog::level::level_enum lvl);
+template SeeProgress<cx128> check_see_progress(const RealArrayXX<cx128> &see, LogPolicy log_policy, spdlog::level::level_enum lvl);
 
 /*! Calculates the subsystem entanglement entropies,
  * starting with the cheapest entries and progressively harder until a threshold number of bits have been found.
@@ -370,20 +346,27 @@ SeeProgress check_see_progress(const Eigen::ArrayXXd &see, LogPolicy log_policy 
  *  - use a positive value to indicate relative error
  *  - use a negative value to indicate absolute error (i.e. how many missing bits you can accept)
  */
-
-Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite &state, InfoPolicy ip) {
-    if(has_flag(ip.cachePolicy, CachePolicy::READ) and state.measurements.subsystem_entanglement_entropies.has_value())
-        return state.measurements.subsystem_entanglement_entropies.value();
-    auto t_see        = tid::tic_scope("see", tid::level::normal);
+template<typename Scalar>
+RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite<Scalar> &state, InfoPolicy ip) {
     ip.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err);
     ip.eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size);
     ip.svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim);
     ip.svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim);
     ip.precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision);
-    ip.cachePolicy    = ip.cachePolicy.value_or(settings::storage::dataset::subsystem_entanglement_entropies::cache);
-    auto length       = state.get_length<size_t>();
-    auto state_temp   = state;
-    auto sites_temp   = num::range<size_t>(0, length);
+
+    if(ip.is_compatible(state.measurements.info_policy)) {
+        if(state.measurements.subsystem_entanglement_entropies.has_value()) return state.measurements.subsystem_entanglement_entropies.value();
+    }
+    // Clear the dependent objects from the measurements cache since we are going to re-calculate the entropies
+    state.measurements.information_center_of_mass.reset();
+    state.measurements.information_lattice.reset();
+    state.measurements.information_per_scale.reset();
+    state.measurements.subsystem_entanglement_entropies.reset();
+
+    auto t_see      = tid::tic_scope("see", tid::level::normal);
+    auto length     = state.template get_length<size_t>();
+    auto state_temp = state;
+    auto sites_temp = num::range<size_t>(0, length);
 
     // Start by normalizing the state.
     // For some reason this step helps with the precision of entropies that we obtain later.
@@ -400,10 +383,10 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
     tools::log->info("subsystem_entanglement_entropies_log2: calculating | max bit err {:.2e} | max size eig {} svd {} trnc {:.2e} | prec {}",
                      ip.bits_max_error.value(), ip.eig_max_size.value(), ip.svd_max_size.value(), ip.svd_trnc_lim.value(), enum2sv(ip.precision.value()));
 
-    constexpr auto  nan = std::numeric_limits<double>::quiet_NaN();
-    auto            len = state_temp.get_length<long>();
-    auto            bee = measure::entanglement_entropies_log2(state_temp); // bipartite entanglement entropies
-    Eigen::ArrayXXd see = Eigen::ArrayXXd::Zero(len, len) * nan;            // susbsystem entanglement entropies
+    constexpr auto      nan = std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
+    auto                len = state_temp.template get_length<long>();
+    auto                bee = measure::entanglement_entropies_log2(state_temp); // bipartite entanglement entropies
+    RealArrayXX<Scalar> see = RealArrayXX<Scalar>::Zero(len, len) * nan;        // susbsystem entanglement entropies
 
     // We begin with the low-hanging fruit (1): Bipartite entanglement entropies
     for(long ext = 1; ext <= len; ++ext) { // Assume off == 0
@@ -411,20 +394,20 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
         see(ext - 1, 0) = bee[idx];
         if(len - ext >= 1) see(len - ext - 1, ext) = bee[idx];
     }
-    check_see_progress(see, LogPolicy::DEBUG, spdlog::level::debug);
+    check_see_progress<Scalar>(see, LogPolicy::DEBUG, spdlog::level::debug);
 
     // Next we take small subsystems
     // We can take subsystems on the left side first and discard their caches before moving onto those on the right side.
-    auto [subsystemsL, subsystemsR] = get_missing_subsystems(see);
+    auto [subsystemsL, subsystemsR] = get_missing_subsystems<Scalar>(see);
     {
         auto posL = subsystemsL.empty() ? -1ul : subsystemsL.front().front();
         for(const auto &subsystem : subsystemsL) {
             auto off          = safe_cast<long>(subsystem.front());
             auto ext          = safe_cast<long>(subsystem.size());
             see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_temp, subsystem, ip.precision.value(), ip.eig_max_size.value(), "left");
-            if(!std::isnan(see(ext - 1, off)) and see(ext - 1, off) < -1e-8) throw except::runtime_error("Negative entropy: {:.16f}", see(ext - 1, off));
+            if(!std::isnan(see(ext - 1, off)) and see(ext - 1, off) < -1e-5) throw except::runtime_error("Negative entropy: {:.16f}", fp(see(ext - 1, off)));
             if(posL != safe_cast<size_t>(off) or &subsystem == &subsystemsL.back()) {
-                check_see_progress(see, LogPolicy::DEBUG);
+                check_see_progress<Scalar>(see, LogPolicy::DEBUG);
                 posL = safe_cast<size_t>(off);
             }
         }
@@ -435,17 +418,17 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
             auto off          = safe_cast<long>(subsystem.front());
             auto ext          = safe_cast<long>(subsystem.size());
             see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_temp, subsystem, ip.precision.value(), ip.eig_max_size.value(), "right");
-            if(!std::isnan(see(ext - 1, off)) and see(ext - 1, off) < -1e-8) throw except::runtime_error("Negative entropy: {:.16f}", see(ext - 1, off));
+            if(!std::isnan(see(ext - 1, off)) and see(ext - 1, off) < -1e-5) throw except::runtime_error("Negative entropy: {:.16f}", fp(see(ext - 1, off)));
             if(posR != subsystem.back() or &subsystem == &subsystemsR.back()) {
-                check_see_progress(see, LogPolicy::DEBUG);
+                check_see_progress<Scalar>(see, LogPolicy::DEBUG);
                 posR = subsystem.back();
             }
         }
     }
-    check_see_progress(see, LogPolicy::DEBUG);
+    check_see_progress<Scalar>(see, LogPolicy::DEBUG);
 
     // Refresh the missing subsystems
-    std::tie(subsystemsL, subsystemsR) = get_missing_subsystems(see);
+    std::tie(subsystemsL, subsystemsR) = get_missing_subsystems<Scalar>(see);
     for(const auto &s : subsystemsL) tools::log->info("subsystemL {} -> see({},{})", s, s.size() - 1, s.front());
     for(const auto &s : subsystemsR) tools::log->info("subsystemR {} -> see({},{})", s, s.size() - 1, s.front());
     auto posL      = subsystemsL.empty() ? -1ul : subsystemsL.front().front();
@@ -458,7 +441,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
     while(!subsystemsL.empty() or !subsystemsR.empty()) {
         if(posL > 2) {
             // We need at least the first two columns of see to avoid getting nans in the first column of info
-            auto sp = check_see_progress(see, LogPolicy::DEBUG);
+            auto sp = check_see_progress<Scalar>(see, LogPolicy::DEBUG);
             if(ip.bits_max_error >= 0 and sp.bits_error <= ip.bits_max_error) break;
             if(ip.bits_max_error < 0 and std::abs(sp.bits_total - sp.bits_found) <= std::abs(ip.bits_max_error.value())) break;
         }
@@ -512,7 +495,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
             }
             subsystemsL.pop_front();
             tools::log->info("swap l2r subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, posL,
-                             see(ext - 1, safe_cast<long>(posL)), sites_l2r, measure::bond_dimensions(state_l2r));
+                             fp(see(ext - 1, safe_cast<long>(posL))), sites_l2r, measure::bond_dimensions(state_l2r));
 
             if(!subsystem_success) {
                 // Reset and pop entries that have the same posR
@@ -522,7 +505,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
 
         if(posL > 2) {
             // We need at least the first two columns of see to avoid getting nans in the first column of info
-            auto sp = check_see_progress(see, LogPolicy::DEBUG);
+            auto sp = check_see_progress<Scalar>(see, LogPolicy::DEBUG);
             if(ip.bits_max_error >= 0 and sp.bits_error <= ip.bits_max_error) break;
             if(ip.bits_max_error < 0 and std::abs(sp.bits_total - sp.bits_found) <= std::abs(ip.bits_max_error.value())) break;
         }
@@ -580,7 +563,7 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
             }
             subsystemsR.pop_front();
             tools::log->info("swap r2l subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, off,
-                             see(ext - 1, off), sites_r2l, measure::bond_dimensions(state_r2l));
+                             fp(see(ext - 1, off)), sites_r2l, measure::bond_dimensions(state_r2l));
             if(!subsystem_success) {
                 // Pop entries that have the same posR
                 while(!subsystemsR.empty() and posR == subsystemsR.front().back()) { subsystemsR.pop_front(); }
@@ -589,17 +572,21 @@ Eigen::ArrayXXd tools::finite::measure::subsystem_entanglement_entropies_log2(co
         // loop_counter++;
     }
 
-    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) {
-        state.measurements.see_time                         = t_see->get_last_interval();
-        state.measurements.subsystem_entanglement_entropies = see;
-    }
-    check_see_progress(see, LogPolicy::DEBUG, spdlog::level::info);
+    state.measurements.see_time                         = t_see->get_last_interval();
+    state.measurements.subsystem_entanglement_entropies = see;
+    state.measurements.info_policy                      = ip;
+
+    check_see_progress<Scalar>(see, LogPolicy::DEBUG, spdlog::level::info);
     return see;
 }
 
-Eigen::ArrayXXd tools::finite::measure::information_lattice(const Eigen::ArrayXXd &SEE) {
-    auto            Ldim        = SEE.rows();
-    Eigen::ArrayXXd infolattice = Eigen::ArrayXXd::Zero(Ldim, Ldim);
+template RealArrayXX<cx64>  tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite<cx64> &state, InfoPolicy ip);
+template RealArrayXX<cx128> tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite<cx128> &state, InfoPolicy ip);
+
+template<typename Scalar>
+RealArrayXX<Scalar> tools::finite::measure::information_lattice(const RealArrayXX<Scalar> &SEE) {
+    auto                Ldim        = SEE.rows();
+    RealArrayXX<Scalar> infolattice = RealArrayXX<Scalar>::Zero(Ldim, Ldim);
     for(long nidx = 0; nidx < Ldim; ++nidx) /* The offset */ {
         for(long lidx = 0; lidx < Ldim; ++lidx) /* The extent, or "scale" */ {
             if(lidx + nidx >= Ldim) continue;
@@ -614,90 +601,111 @@ Eigen::ArrayXXd tools::finite::measure::information_lattice(const Eigen::ArrayXX
     }
     return infolattice; // Since SEE may contain NaN, this infolattice may contain NaN
 }
+template RealArrayXX<cx64>  tools::finite::measure::information_lattice<cx64>(const RealArrayXX<cx64> &SEE);
+template RealArrayXX<cx128> tools::finite::measure::information_lattice<cx128>(const RealArrayXX<cx128> &SEE);
 
-Eigen::ArrayXXd tools::finite::measure::information_lattice(const StateFinite &state, InfoPolicy ip) {
-    if(has_flag(ip.cachePolicy, CachePolicy::READ) and state.measurements.information_lattice.has_value())
-        return state.measurements.information_lattice.value();
-    auto SEE         = subsystem_entanglement_entropies_log2(state, ip);
-    auto infolattice = information_lattice(SEE);
-    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_lattice = infolattice;
+template<typename Scalar>
+RealArrayXX<Scalar> tools::finite::measure::information_lattice(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    if(ip.is_compatible(state.measurements.info_policy)) {
+        if(state.measurements.information_lattice.has_value()) return state.measurements.information_lattice.value();
+    }
+
+    auto SEE                               = subsystem_entanglement_entropies_log2(state, ip);
+    auto infolattice                       = information_lattice<Scalar>(SEE);
+    state.measurements.information_lattice = infolattice;
     return infolattice;
 }
-
-Eigen::ArrayXd tools::finite::measure::information_per_scale(const Eigen::ArrayXXd &information_lattice) {
+template<typename Scalar>
+RealArrayX<Scalar> tools::finite::measure::information_per_scale(const RealArrayXX<Scalar> &information_lattice) {
     return information_lattice.isNaN().select(0.0, information_lattice).rowwise().sum(); // Does not have NaN
 }
+template RealArrayX<cx64>  tools::finite::measure::information_per_scale<cx64>(const RealArrayXX<cx64> &information_lattice);
+template RealArrayX<cx128> tools::finite::measure::information_per_scale<cx128>(const RealArrayXX<cx128> &information_lattice);
 
-Eigen::ArrayXd tools::finite::measure::information_per_scale(const StateFinite &state, InfoPolicy ip) {
-    if(has_flag(ip.cachePolicy, CachePolicy::READ) and state.measurements.information_per_scale.has_value())
-        return state.measurements.information_per_scale.value();
-    auto           infolattice    = information_lattice(state, ip); // May have NaN
-    Eigen::ArrayXd info_per_scale = information_per_scale(infolattice);
-    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_per_scale = info_per_scale;
-    // tools::log->info("info per scale: {::.3e}", state.measurements.information_per_scale.value());
+template<typename Scalar>
+RealArrayX<Scalar> tools::finite::measure::information_per_scale(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    if(ip.is_compatible(state.measurements.info_policy)) {
+        if(state.measurements.information_per_scale.has_value()) return state.measurements.information_per_scale.value();
+    }
+    auto               infolattice           = information_lattice(state, ip); // May have NaN
+    RealArrayX<Scalar> info_per_scale        = information_per_scale<Scalar>(infolattice);
+    state.measurements.information_per_scale = info_per_scale;
     return info_per_scale;
 }
+template RealArrayX<cx64>  tools::finite::measure::information_per_scale(const StateFinite<cx64> &state, InfoPolicy ip);
+template RealArrayX<cx128> tools::finite::measure::information_per_scale(const StateFinite<cx128> &state, InfoPolicy ip);
 
-double tools::finite::measure::information_bit_scale(const Eigen::ArrayXd &information_per_scale, double bit) {
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::information_bit_scale(const RealArrayX<Scalar> &information_per_scale, double bit) {
     double idx = 0;
     for(idx = 0; idx < information_per_scale.size(); ++idx) {
         if(information_per_scale.topRows(idx + 1).sum() > bit) return idx;
     }
     return idx;
 }
+template RealScalar<cx64>  tools::finite::measure::information_bit_scale<cx64>(const RealArrayX<cx64> &information_per_scale, double bit);
+template RealScalar<cx128> tools::finite::measure::information_bit_scale<cx128>(const RealArrayX<cx128> &information_per_scale, double bit);
 
 /*! For masses m_i at coordinates x_i, the center of mass is defined as
  *      sum_i m_i * x_i
  *      ---------------
  *      sum_i m_i
  */
-double tools::finite::measure::information_center_of_mass(const Eigen::ArrayXXd &information_lattice) {
-    Eigen::ArrayXd il = information_lattice.isNaN().select(0.0, information_lattice).rowwise().sum();
-    auto           l  = Eigen::ArrayXd::LinSpaced(il.size(), 0.0, static_cast<double>(il.size() - 1l));
-    auto           ic = il.cwiseProduct(l).sum() / il.sum();
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const RealArrayXX<Scalar> &information_lattice) {
+    RealArrayX<Scalar> il = information_lattice.isNaN().select(0.0, information_lattice).rowwise().sum();
+    auto               l  = RealArrayX<Scalar>::LinSpaced(il.size(), 0.0, static_cast<RealScalar<Scalar>>(il.size() - 1l));
+    auto               ic = il.cwiseProduct(l).sum() / il.sum();
     return ic;
 }
+template RealScalar<cx64>  tools::finite::measure::information_center_of_mass<cx64>(const RealArrayXX<cx64> &information_lattice);
+template RealScalar<cx128> tools::finite::measure::information_center_of_mass<cx128>(const RealArrayXX<cx128> &information_lattice);
+
 /*! For masses m_i at coordinates x_i, the center of mass is defined as
  *      sum_i m_i * x_i
  *      ---------------
  *      sum_i m_i
  */
-double tools::finite::measure::information_center_of_mass(const Eigen::ArrayXd &information_per_scale) {
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const RealArrayX<Scalar> &information_per_scale) {
     auto il = information_per_scale.isNaN().select(0.0, information_per_scale).eval();
-    auto l  = Eigen::ArrayXd::LinSpaced(il.size(), 0.0, static_cast<double>(il.size() - 1l));
+    auto l  = RealArrayX<Scalar>::LinSpaced(il.size(), 0.0, static_cast<RealScalar<Scalar>>(il.size() - 1l));
     auto ic = il.cwiseProduct(l).sum() / il.sum();
     return ic;
 }
+template RealScalar<cx64>  tools::finite::measure::information_center_of_mass<cx64>(const RealArrayX<cx64> &information_per_scale);
+template RealScalar<cx128> tools::finite::measure::information_center_of_mass<cx128>(const RealArrayX<cx128> &information_per_scale);
 
 /*! For masses m_i at coordinates x_i, the center of mass is defined as
  *      sum_i m_i * x_i
  *      ---------------
  *      sum_i m_i
  */
-double tools::finite::measure::information_center_of_mass(const StateFinite &state, InfoPolicy ip) {
-    return information_center_of_mass(information_lattice(state, ip));
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    if(ip.is_compatible(state.measurements.info_policy)) {
+        if(state.measurements.information_center_of_mass.has_value()) return state.measurements.information_center_of_mass.value();
+    }
+    return information_center_of_mass<Scalar>(information_lattice(state, ip));
 }
+template RealScalar<cx64>  tools::finite::measure::information_center_of_mass(const StateFinite<cx64> &state, InfoPolicy ip);
+template RealScalar<cx128> tools::finite::measure::information_center_of_mass(const StateFinite<cx128> &state, InfoPolicy ip);
 
-InfoAnalysis tools::finite::measure::information_lattice_analysis(const StateFinite &state, InfoPolicy ip) {
-    InfoAnalysis info_analysis                     = {};
+template<typename Scalar>
+InfoAnalysis<Scalar> tools::finite::measure::information_lattice_analysis(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    InfoAnalysis<Scalar> info_analysis             = {};
     info_analysis.ip                               = ip;
     info_analysis.subsystem_entanglement_entropies = subsystem_entanglement_entropies_log2(state, ip);
+    info_analysis.info_lattice                     = information_lattice(state, ip);
+    info_analysis.info_per_scale                   = information_per_scale(state, ip);
+    info_analysis.icom                             = safe_cast<double>(information_center_of_mass(state, ip));
 
-    info_analysis.info_lattice = information_lattice(info_analysis.subsystem_entanglement_entropies);
-    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_lattice = info_analysis.info_lattice;
-
-    info_analysis.info_per_scale = information_per_scale(info_analysis.info_lattice);
-    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_per_scale = info_analysis.info_per_scale;
-
-    info_analysis.icom = information_center_of_mass(info_analysis.info_per_scale);
-    if(has_flag(ip.cachePolicy, CachePolicy::WRITE)) state.measurements.information_center_of_mass = info_analysis.icom;
-
-    info_analysis.bits_found    = info_analysis.info_per_scale.sum();
-    info_analysis.scale_bit_one = information_bit_scale(info_analysis.info_per_scale, 1);
-    info_analysis.scale_bit_two = information_bit_scale(info_analysis.info_per_scale, 2);
-    info_analysis.scale_bit_mid = information_bit_scale(info_analysis.info_per_scale, state.get_length<double>() / 2.0);
-    info_analysis.scale_bit_pen = information_bit_scale(info_analysis.info_per_scale, state.get_length<double>() - 1.0);
-    info_analysis.scale_bit_all = information_bit_scale(info_analysis.info_per_scale, state.get_length<double>());
+    info_analysis.bits_found    = safe_cast<double>(info_analysis.info_per_scale.sum());
+    info_analysis.scale_bit_one = safe_cast<double>(information_bit_scale<Scalar>(info_analysis.info_per_scale, 1));
+    info_analysis.scale_bit_two = safe_cast<double>(information_bit_scale<Scalar>(info_analysis.info_per_scale, 2));
+    info_analysis.scale_bit_mid = safe_cast<double>(information_bit_scale<Scalar>(info_analysis.info_per_scale, state.template get_length<double>() / 2.0));
+    info_analysis.scale_bit_pen = safe_cast<double>(information_bit_scale<Scalar>(info_analysis.info_per_scale, state.template get_length<double>() - 1.0));
+    info_analysis.scale_bit_all = safe_cast<double>(information_bit_scale<Scalar>(info_analysis.info_per_scale, state.template get_length<double>()));
 
     tools::log->debug("scale_bit_one : {:.16f}", info_analysis.scale_bit_one);
     tools::log->debug("scale_bit_two : {:.16f}", info_analysis.scale_bit_two);
@@ -706,14 +714,17 @@ InfoAnalysis tools::finite::measure::information_lattice_analysis(const StateFin
     tools::log->debug("scale_bit_all : {:.16f}", info_analysis.scale_bit_all);
     return info_analysis;
 }
+template InfoAnalysis<cx64>  tools::finite::measure::information_lattice_analysis(const StateFinite<cx64> &state, InfoPolicy ip);
+template InfoAnalysis<cx128> tools::finite::measure::information_lattice_analysis(const StateFinite<cx128> &state, InfoPolicy ip);
 
 /*! Calculates xi from the expectation value of the geometric distribution, such that p = 1-exp(-1/xi) */
-double tools::finite::measure::information_xi_from_geometric_dist(const StateFinite &state, InfoPolicy ip) {
-    Eigen::ArrayXd il = information_per_scale(state, ip);
-    auto           L  = il.size();
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::information_xi_from_geometric_dist(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    RealArrayX<Scalar> il = information_per_scale(state, ip);
+    auto               L  = il.size();
     if(il.size() <= 2) return std::numeric_limits<double>::quiet_NaN();
-    Eigen::ArrayXd l    = Eigen::ArrayXd::LinSpaced(L, 0.0, static_cast<double>(L - 1l));
-    Eigen::ArrayXd mask = Eigen::ArrayXd::Ones(L); // Mask to select the interesting interval
+    RealArrayX<Scalar> l    = RealArrayX<Scalar>::LinSpaced(L, 0.0, static_cast<double>(L - 1l));
+    RealArrayX<Scalar> mask = RealArrayX<Scalar>::Ones(L); // Mask to select the interesting interval
 
     bool has_extended_info = il.bottomRows(L / 2).sum() >= 0.9; // Both topological and thermal states have >= 1 bits beyond L/2.
     bool decay_starts_at_0 = il[0] > il[1];
@@ -722,19 +733,19 @@ double tools::finite::measure::information_xi_from_geometric_dist(const StateFin
     if(has_extended_info) mask.bottomRows(L / 2) = 0; // If there is a topological bit at l ~ L? we should only consider l in [0,L/2]
     if(decay_starts_at_1) mask[0] = 0;                // If the decay starts at l==1, take the geometric distribution starting at l==1
 
-    auto ic = (il * mask).cwiseProduct(l).sum() / (il * mask).sum(); // information center of mass (or <l>)
-    auto p  = 1.0;                                                   // Probability p for the geometric distribution
+    RealScalar<Scalar> ic = (il * mask).cwiseProduct(l).sum() / (il * mask).sum(); // information center of mass (or <l>)
+    RealScalar<Scalar> p  = RealScalar<Scalar>(1.0);                               // Probability p for the geometric distribution
 
     if(decay_starts_at_0) {
         p = 1 / (1 + ic); // The geometric decay starts at l == 0
     } else if(decay_starts_at_1) {
         p = 1 / ic; // The geometric decay starts at l == 1
     }
-    auto xi = -1.0 / std::log(1 - p);
+    auto xi = RealScalar<Scalar>(-1.0) / std::log(1.0 - p);
     // auto N  = decay_starts_at_1 ? il[1] : il[0]; // The initial value of the exponential decay
     // auto lstart = decay_starts_at_1 ? 1.0 : 0.0;
-    // auto y_geom = Eigen::ArrayXd((il * mask).sum() * p * pow(1 - p, l - lstart));
-    // auto y_expd = Eigen::ArrayXd(N * mask * exp(-(l - lstart) / xi));
+    // auto y_geom = RealArrayX<Scalar>((il * mask).sum() * p * pow(1 - p, l - lstart));
+    // auto y_expd = RealArrayX<Scalar>(N * mask * exp(-(l - lstart) / xi));
     // tools::log->info("info_xi_from_geom: ic       : {:.16f}", ic);
     // tools::log->info("info_xi_from_geom: p        : {:.16f}", p);
     // tools::log->info("info_xi_from_geom: xi       : {:.16f}", xi);
@@ -743,15 +754,18 @@ double tools::finite::measure::information_xi_from_geometric_dist(const StateFin
     // tools::log->info("info_xi_from_geom: y_expfit : {::.16f}", y_expd);
     return xi;
 }
+template RealScalar<cx64>  tools::finite::measure::information_xi_from_geometric_dist(const StateFinite<cx64> &state, InfoPolicy ip);
+template RealScalar<cx128> tools::finite::measure::information_xi_from_geometric_dist(const StateFinite<cx128> &state, InfoPolicy ip);
 
 /*! Calculates xi from the slope of the decay in the exponential distribution in log-scale */
-double tools::finite::measure::information_xi_from_avg_log_slope(const StateFinite &state, InfoPolicy ip) {
-    constexpr auto nan = std::numeric_limits<double>::quiet_NaN();
-    Eigen::ArrayXd il  = information_per_scale(state, ip);
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::information_xi_from_avg_log_slope(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    constexpr auto     nan = std::numeric_limits<double>::quiet_NaN();
+    RealArrayX<Scalar> il  = information_per_scale(state, ip);
     if(il.size() <= 3) return nan;
-    auto           L    = il.size();
-    Eigen::ArrayXd l    = Eigen::ArrayXd::LinSpaced(L, 0.0, static_cast<double>(L - 1l));
-    Eigen::ArrayXd mask = Eigen::ArrayXd::Ones(L); // Mask to select the interesting interval
+    auto               L    = il.size();
+    RealArrayX<Scalar> l    = RealArrayX<Scalar>::LinSpaced(L, 0.0, static_cast<double>(L - 1l));
+    RealArrayX<Scalar> mask = RealArrayX<Scalar>::Ones(L); // Mask to select the interesting interval
 
     bool has_extended_info = il.bottomRows(L / 2).sum() >= 0.9; // Both topological and thermal states have >= 1 bits beyond L/2.
     bool decay_starts_at_1 = il[1] >= il[0] and il[1] > il[2];
@@ -760,13 +774,13 @@ double tools::finite::measure::information_xi_from_avg_log_slope(const StateFini
     if(decay_starts_at_1) mask[0] = nan;                    // If the decay starts at l==1, take the geometric distribution starting at l==1
     mask = (il < 1e-15).select(nan, mask);                  // Filter tiny noisy values
 
-    auto il_log      = Eigen::ArrayXd(Eigen::log(il * mask));
-    auto il_log_diff = Eigen::ArrayXd(il_log.bottomRows(L - 1) - il_log.topRows(L - 1));
+    auto il_log      = RealArrayX<Scalar>(Eigen::log(il * mask));
+    auto il_log_diff = RealArrayX<Scalar>(il_log.bottomRows(L - 1) - il_log.topRows(L - 1));
     auto xi          = -1.0 / nanmean(il_log_diff);
 
     // auto lstart = decay_starts_at_1 ? 1.0 : 0.0;
     // auto istart = decay_starts_at_1 ? 1 : 0;
-    // auto y_expd = Eigen::ArrayXd(il[istart] * mask * exp(-(l - lstart) / xi));
+    // auto y_expd = RealArrayX<Scalar>(il[istart] * mask * exp(-(l - lstart) / xi));
     // tools::log->info("info_xi_from_expd: xi            : {:.16f}", xi);
     // tools::log->info("info_xi_from_expd: y_info        : {::.16f}", il);
     // tools::log->info("info_xi_from_expd: y_expfit      : {::.16f}", y_expd);
@@ -775,14 +789,17 @@ double tools::finite::measure::information_xi_from_avg_log_slope(const StateFini
     // tools::log->info("info_xi_from_expd: il_log_diff⁻¹ : {::.6f}", il_log_diff.cwiseInverse());
     return xi;
 }
+template RealScalar<cx64>  tools::finite::measure::information_xi_from_avg_log_slope(const StateFinite<cx64> &state, InfoPolicy ip);
+template RealScalar<cx128> tools::finite::measure::information_xi_from_avg_log_slope(const StateFinite<cx128> &state, InfoPolicy ip);
 
-double tools::finite::measure::information_xi_from_exp_fit(const StateFinite &state, InfoPolicy ip) {
-    constexpr auto nan = std::numeric_limits<double>::quiet_NaN();
-    Eigen::ArrayXd il  = information_per_scale(state, ip);
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::information_xi_from_exp_fit(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    constexpr auto     nan = std::numeric_limits<double>::quiet_NaN();
+    RealArrayX<Scalar> il  = information_per_scale(state, ip);
     if(il.size() <= 3) return nan;
-    auto           L    = il.size();
-    Eigen::ArrayXd l    = Eigen::ArrayXd::LinSpaced(L, 0.0, static_cast<double>(L - 1l));
-    Eigen::ArrayXd mask = Eigen::ArrayXd::Ones(L); // Mask to select the interesting interval
+    auto               L    = il.size();
+    RealArrayX<Scalar> l    = RealArrayX<Scalar>::LinSpaced(L, 0.0, static_cast<double>(L - 1l));
+    RealArrayX<Scalar> mask = RealArrayX<Scalar>::Ones(L); // Mask to select the interesting interval
 
     bool has_extended_info = il.bottomRows(L / 2).sum() >= 0.9; // Both topological and thermal states have >= 1 bits beyond L/2.
     bool decay_starts_at_1 = il[1] >= il[0] and il[1] > il[2];
@@ -792,15 +809,17 @@ double tools::finite::measure::information_xi_from_exp_fit(const StateFinite &st
     mask = (il < 1e-15).select(0, mask);                  // Filter tiny noisy values
 
     // Collect the well-defined points in the domain
-    auto Y = std::vector<double>();
-    auto X = std::vector<double>();
+    auto Y = std::vector<RealScalar<Scalar>>();
+    auto X = std::vector<RealScalar<Scalar>>();
     for(const auto &[i, m] : iter::enumerate(mask))
         if(m == 1) {
             Y.emplace_back(std::log(il[static_cast<long>(i)]));
             X.emplace_back(l[static_cast<long>(i)]);
         }
-    tools::log->info("X : {}", X);
-    tools::log->info("Y : {::.16f}", Y);
+    // tools::log->info("X : {}", X);
+    // tools::log->info("Y : {::.16f}", Y);
     auto linfit = stat::linearFit(X, Y);
     return -1.0 / linfit.slope;
 }
+template RealScalar<cx64>  tools::finite::measure::information_xi_from_exp_fit(const StateFinite<cx64> &state, InfoPolicy ip);
+template RealScalar<cx128> tools::finite::measure::information_xi_from_exp_fit(const StateFinite<cx128> &state, InfoPolicy ip);

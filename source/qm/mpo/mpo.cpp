@@ -9,7 +9,8 @@
 #include <fmt/ranges.h>
 
 namespace qm::mpo {
-    std::tuple<Eigen::Tensor<cx64, 4>, Eigen::Tensor<cx64, 3>, Eigen::Tensor<cx64, 3>> pauli_mpo(const Eigen::MatrixXcd &paulimatrix)
+    template<typename Scalar>
+    std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> pauli_mpo(const Eigen::MatrixXcd &paulimatrix)
     /*! Builds the MPO string for measuring  spin on many-body systems.
      *      P = Π  σ_{i}
      * where Π is the product sites=0...L-1 and σ_{i} is the given pauli matrix for site i.
@@ -24,22 +25,23 @@ namespace qm::mpo {
      *
      */
     {
-        long                   spin_dim = paulimatrix.rows();
-        std::array<long, 4>    extent4  = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
-        std::array<long, 2>    extent2  = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
-        Eigen::Tensor<cx64, 4> MPO(1, 1, spin_dim, spin_dim);
+        long                     spin_dim = paulimatrix.rows();
+        std::array<long, 4>      extent4  = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
+        std::array<long, 2>      extent2  = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
+        Eigen::Tensor<Scalar, 4> MPO(1, 1, spin_dim, spin_dim);
         MPO.setZero();
-        MPO.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(paulimatrix);
+        MPO.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(tenx::TensorMap(paulimatrix));
 
         // Create compatible edges
-        Eigen::Tensor<cx64, 3> Ledge(1, 1, 1); // The left  edge
-        Eigen::Tensor<cx64, 3> Redge(1, 1, 1); // The right edge
+        Eigen::Tensor<Scalar, 3> Ledge(1, 1, 1); // The left  edge
+        Eigen::Tensor<Scalar, 3> Redge(1, 1, 1); // The right edge
         Ledge(0, 0, 0) = 1;
         Redge(0, 0, 0) = 1;
         return {MPO, Ledge, Redge};
     }
-    std::tuple<Eigen::Tensor<cx64, 4>, Eigen::Tensor<cx64, 3>, Eigen::Tensor<cx64, 3>> prod_pauli_mpo(std::string_view axis) {
-        return qm::mpo::pauli_mpo(spin::half::get_pauli(axis));
+    template<typename Scalar>
+    std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> prod_pauli_mpo(std::string_view axis) {
+        return qm::mpo::pauli_mpo<Scalar>(spin::half::get_pauli(axis));
     }
 
     std::tuple<std::vector<Eigen::Tensor<cx64, 4>>, Eigen::Tensor<cx64, 3>, Eigen::Tensor<cx64, 3>> parity_projector_mpos(const Eigen::MatrixXcd &paulimatrix,
@@ -267,7 +269,6 @@ namespace qm::mpo {
                 mpos.push_back(MPO_S);
                 mpos_str.emplace_back("S");
             } else {
-
                 mpos.push_back(MPO_I);
                 mpos_str.emplace_back("I");
             }

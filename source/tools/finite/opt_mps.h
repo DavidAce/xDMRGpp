@@ -70,7 +70,13 @@ namespace tools::finite::opt {
         [[nodiscard]] std::string_view              get_name() const;
         [[nodiscard]] const Eigen::Tensor<cx64, 3> &get_tensor() const;
         template<typename T>
-        [[nodiscard]] Eigen::Tensor<T, 3>                get_tensor_as() const;
+        [[nodiscard]] decltype(auto) get_tensor_as() const {
+            return tenx::asScalarType<T>(get_tensor());
+        }
+        template<typename T>
+        [[nodiscard]] auto get_vector_as() const {
+            return tenx::VectorCast(get_tensor_as<T>());
+        }
         [[nodiscard]] const Eigen::Tensor<cx64, 2>      &get_bond() const;
         [[nodiscard]] Eigen::Map<const Eigen::VectorXcd> get_vector() const;
         [[nodiscard]] Eigen::Map<const Eigen::VectorXd>  get_vector_cplx_as_2xreal() const;

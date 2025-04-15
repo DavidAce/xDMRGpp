@@ -23,7 +23,7 @@
 
 using namespace eig;
 
-int eig::solver::zheevr(cx64 *matrix /*!< gets destroyed */, size_type L, char range, int il, int iu, double vl, double vu) {
+int eig::solver::zheevr(cx64 *matrix /*!< gets destroyed */, size_type L, char range, int il, int iu, fp64 vl, fp64 vu) {
     eig::log->trace("Starting eig zheevr | range {} | i [{},{}] | v [{},{}]", range, il, iu, vl, vu);
     auto t_start = std::chrono::high_resolution_clock::now();
 

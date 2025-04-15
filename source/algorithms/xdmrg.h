@@ -11,7 +11,7 @@ namespace tools::finite::opt {
  * \brief Class that runs the excited-state DMRG algorithm.
  */
 
-class StateFinite;
+template<typename Scalar> class StateFinite;
 class xdmrg : public AlgorithmFinite {
     public:
     // Inherit the constructor of class_algorithm_base

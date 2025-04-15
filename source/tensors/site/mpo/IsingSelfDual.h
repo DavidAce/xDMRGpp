@@ -7,14 +7,28 @@
 namespace h5pp::hid {
     class h5t;
 }
-
-class IsingSelfDual : public MpoSite {
+template<typename Scalar>
+class IsingSelfDual : public MpoSite<Scalar> {
     private:
     h5tb_ising_selfdual    h5tb;
     [[nodiscard]] double   get_coupling() const;
     [[nodiscard]] double   get_field() const;
-    Eigen::Tensor<cx64, 4> get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+    Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
                                    std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    using MpoSite<Scalar>::extent2;
+    using MpoSite<Scalar>::extent4;
+    using MpoSite<Scalar>::all_mpo_parameters_have_been_set;
+    using MpoSite<Scalar>::local_energy_upper_bound;
+    using MpoSite<Scalar>::global_energy_upper_bound;
+    using MpoSite<Scalar>::position;
+    using MpoSite<Scalar>::get_position;
+    using MpoSite<Scalar>::unique_id;
+    using MpoSite<Scalar>::unique_id_sq;
+    using MpoSite<Scalar>::mpo_internal;
+    using MpoSite<Scalar>::mpo_squared;
+    using MpoSite<Scalar>::build_mpo;
+    using MpoSite<Scalar>::build_mpo_squared;
+    using TableMap = typename MpoSite<Scalar>::TableMap;
 
     public:
     explicit IsingSelfDual(ModelType model_type_, size_t position_);
@@ -22,7 +36,7 @@ class IsingSelfDual : public MpoSite {
     // Functions that extend the base (no final)
     void set_realization_averages(double J_avrg_, double h_avrg_);
     // Functions that final the base
-    [[nodiscard]] std::unique_ptr<MpoSite> clone() const final;
+    [[nodiscard]] std::unique_ptr<MpoSite<Scalar>> clone() const final;
     [[nodiscard]] long                     get_spin_dimension() const final;
     [[nodiscard]] TableMap                 get_parameters() const final;
     [[nodiscard]] std::any                 get_parameter(std::string_view name) const final;

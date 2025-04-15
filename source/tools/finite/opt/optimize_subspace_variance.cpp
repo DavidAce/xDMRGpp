@@ -97,8 +97,9 @@ opt_mps tools::finite::opt::internal::optimize_subspace_variance(const TensorsFi
 
     std::vector<opt_mps> subspace;
     switch(meta.optType) {
-        case OptType::CPLX: subspace = internal::subspace::find_subspace<cx64>(tensors, meta); break;
-        case OptType::REAL: subspace = internal::subspace::find_subspace<fp64>(tensors, meta); break;
+        case OptType::FP64: subspace = internal::subspace::find_subspace<fp64>(tensors, meta); break;
+        case OptType::CX64: subspace = internal::subspace::find_subspace<cx64>(tensors, meta); break;
+        default: throw except::runtime_error("optimize_subspace_variance(): not implemented for type {}", enum2sv(meta.optType));
     }
 
     tools::log->trace("Subspace found with {} eigenvectors", subspace.size());
@@ -153,18 +154,8 @@ opt_mps tools::finite::opt::internal::optimize_subspace_variance(const TensorsFi
 
     auto t_eigs = tid::tic_scope("eigs");
     switch(meta.optType) {
-        case OptType::CPLX: {
-            tools::log->trace("Optimizing subspace EIGS|CPLX");
-            // auto H1_subspace = subspace::get_hamiltonian_in_subspace<cx64>(model, edges, subspace);
-            // auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<cx64>(model, edges, subspace);
-            // Eigen::MatrixXcd Var_subspace = H2_subspace - H1_subspace*H1_subspace;
-            // solver.eig<eig::Form::SYMM>(Var_subspace.data(), Var_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
-            auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<cx64>(model, edges, subspace);
-            solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
-            break;
-        }
-        case OptType::REAL: {
-            tools::log->trace("Optimizing subspace EIGS|REAL");
+        case OptType::FP64: {
+            tools::log->trace("Optimizing subspace EIGS|FP64");
             // auto H1_subspace = subspace::get_hamiltonian_in_subspace<fp64>(model, edges, subspace);
             // auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<fp64>(model, edges, subspace);
             // Eigen::MatrixXd Var_subspace = H2_subspace - H1_subspace*H1_subspace;
@@ -173,6 +164,17 @@ opt_mps tools::finite::opt::internal::optimize_subspace_variance(const TensorsFi
             solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
             break;
         }
+        case OptType::CX64: {
+            tools::log->trace("Optimizing subspace EIGS|CX64");
+            // auto H1_subspace = subspace::get_hamiltonian_in_subspace<cx64>(model, edges, subspace);
+            // auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<cx64>(model, edges, subspace);
+            // Eigen::MatrixXcd Var_subspace = H2_subspace - H1_subspace*H1_subspace;
+            // solver.eig<eig::Form::SYMM>(Var_subspace.data(), Var_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
+            auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<cx64>(model, edges, subspace);
+            solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
+            break;
+        }
+        default: throw except::runtime_error("optimize_subspace_variance(): not implemented for type {}", enum2sv(meta.optType));
     }
     extract_results_subspace(tensors, initial_mps, meta, solver, subspace, results);
 

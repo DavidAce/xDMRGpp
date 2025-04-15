@@ -1,22 +1,26 @@
 #pragma once
 #include "config/enums.h"
+#include "math/float.h"
 #include "math/svd/config.h"
 #include "math/tenx/fwd_decl.h"
 #include "measure/MeasurementsTensorsInfinite.h"
 #include <complex>
 #include <memory>
 
+template<typename Scalar>
 class StateInfinite;
+template<typename Scalar>
 class ModelInfinite;
+template<typename Scalar>
 class EdgesInfinite;
 
+template<typename Scalar = cx64>
 class TensorsInfinite {
     public:
-    using Scalar = std::complex<double>;
-    std::unique_ptr<StateInfinite>      state;
-    std::unique_ptr<ModelInfinite>      model;
-    std::unique_ptr<EdgesInfinite>      edges;
-    mutable MeasurementsTensorsInfinite measurements;
+    std::unique_ptr<StateInfinite<Scalar>>      state;
+    std::unique_ptr<ModelInfinite<Scalar>>      model;
+    std::unique_ptr<EdgesInfinite<Scalar>>      edges;
+    mutable MeasurementsTensorsInfinite<Scalar> measurements;
 
     // This class should have these responsibilities:
     //  - Initialize the tensors
@@ -25,12 +29,12 @@ class TensorsInfinite {
     //  - Activate sites
     //  - Manage measurements cache
 
-                     TensorsInfinite();
-    ~                TensorsInfinite();                             // Read comment on implementation
-                     TensorsInfinite(TensorsInfinite &&other);      // default move ctor
-    TensorsInfinite &operator=(TensorsInfinite &&other);            // default move assign
-                     TensorsInfinite(const TensorsInfinite &other); // copy ctor
-    TensorsInfinite &operator=(const TensorsInfinite &other);       // copy assign
+    TensorsInfinite();
+    ~TensorsInfinite();                                       // Read comment on implementation
+    TensorsInfinite(TensorsInfinite &&other);                 // default move ctor
+    TensorsInfinite &operator=(TensorsInfinite &&other);      // default move assign
+    TensorsInfinite(const TensorsInfinite &other);            // copy ctor
+    TensorsInfinite &operator=(const TensorsInfinite &other); // copy assign
 
     void initialize(ModelType model_type);
     void initialize_model();

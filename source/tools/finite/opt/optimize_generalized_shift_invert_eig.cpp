@@ -2,8 +2,8 @@
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/eig.h"
-#include "math/num.h"
 #include "math/linalg.h"
+#include "math/num.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
@@ -98,7 +98,6 @@ namespace tools::finite::opt::internal {
             }
 
             case OptRitz::LM: {
-
                 // auto L = matrixA.dimension(0);
                 // if(L < 64) {
                 //     auto A = Eigen::Map<Eigen::Matrix<Scalar,Eigen::Dynamic,Eigen::Dynamic>>(matrixA.data(), L, L);
@@ -114,7 +113,8 @@ namespace tools::finite::opt::internal {
                 //     tools::log->info("B:\n{}\n", linalg::matrix::to_string(evalsB, 8));
                 //     for(long i = 0; i < L; i++) {
                 //         auto quot = alphas[i]/betas[i];
-                //         tools::log->info("{:4}: alpha {:.16f}{:+.16f}i beta {:.16f}  alpha/beta {:.16f}{:+.16f}i", i, alphas[i].real(), alphas[i].imag(), betas[i], quot.real(), quot.imag());
+                //         tools::log->info("{:4}: alpha {:.16f}{:+.16f}i beta {:.16f}  alpha/beta {:.16f}{:+.16f}i", i, alphas[i].real(), alphas[i].imag(),
+                //         betas[i], quot.real(), quot.imag());
                 //     }
                 // }
 
@@ -173,8 +173,9 @@ namespace tools::finite::opt::internal {
         auto                 t_var = tid::tic_scope("eig-gdmrg", tid::level::higher);
         std::vector<opt_mps> results;
         switch(meta.optType) {
-            case OptType::REAL: optimize_generalized_shift_invert_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CPLX: optimize_generalized_shift_invert_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+            case OptType::FP64: optimize_generalized_shift_invert_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
+            case OptType::CX64: optimize_generalized_shift_invert_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+            default: throw except::runtime_error("optimize_generalized_shift_invert_eig(): not implemented for type {}", enum2sv(meta.optType));
         }
         auto t_post = tid::tic_scope("post");
         if(results.empty()) {

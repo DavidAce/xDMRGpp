@@ -11,8 +11,9 @@
 #include <vector>
 
 namespace qm::time {
-
-    std::vector<Eigen::Tensor<cx64, 2>> Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<cx64, 2> &h_evn, const Eigen::Tensor<cx64, 2> &h_odd) {
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 2>> Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
+                                                                   const Eigen::Tensor<Scalar, 2> &h_odd) {
         auto h_evn_matrix = tenx::MatrixMap(h_evn);
         auto h_odd_matrix = tenx::MatrixMap(h_odd);
         auto dt           = cx64(static_cast<fp64>(delta_t.real()), static_cast<fp64>(delta_t.imag()));
@@ -21,8 +22,12 @@ namespace qm::time {
             tenx::TensorCast((static_cast<cx64>(-1.0i * dt) * h_odd_matrix).exp())  // exp(-i dt H)
         };
     }
+    template std::vector<Eigen::Tensor<cx64, 2>> Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<cx64, 2> &h_evn,
+                                                                          const Eigen::Tensor<cx64, 2> &h_odd);
 
-    std::vector<Eigen::Tensor<cx64, 2>> Suzuki_Trotter_2nd_order(cx128 delta_t, const Eigen::Tensor<cx64, 2> &h_evn, const Eigen::Tensor<cx64, 2> &h_odd) {
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 2>> Suzuki_Trotter_2nd_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
+                                                                   const Eigen::Tensor<Scalar, 2> &h_odd) {
         auto h_evn_matrix = tenx::MatrixMap(h_evn);
         auto h_odd_matrix = tenx::MatrixMap(h_odd);
         auto dt           = cx64(static_cast<fp64>(delta_t.real()), static_cast<fp64>(delta_t.imag()));
@@ -31,8 +36,11 @@ namespace qm::time {
                 tenx::TensorCast((static_cast<cx64>(-1.0i * dt) * h_odd_matrix).exp()),
                 tenx::TensorCast((static_cast<cx64>(-1.0i * dt) * h_evn_matrix / 2.0).exp())};
     }
+    template std::vector<Eigen::Tensor<cx64, 2>> Suzuki_Trotter_2nd_order(cx128 delta_t, const Eigen::Tensor<cx64, 2> &h_evn,
+                                                                          const Eigen::Tensor<cx64, 2> &h_odd);
 
-    std::vector<Eigen::Tensor<cx64, 2>> Suzuki_Trotter_4th_order(cx128 delta_t, const Eigen::Tensor<cx64, 2> &h_evn, const Eigen::Tensor<cx64, 2> &h_odd)
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 2>> Suzuki_Trotter_4th_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd)
     /*!
      * Implementation based on
      * Janke, W., & Sauer, T. (1992).
@@ -52,18 +60,21 @@ namespace qm::time {
         auto   dt           = cx64(static_cast<fp64>(delta_t.real()), static_cast<fp64>(delta_t.imag()));
 
         std::vector<Eigen::Tensor<cx64, 2>> temp;
-        temp.emplace_back(tenx::TensorCast((alph1 * static_cast<cx64>(-1.0i * dt) * h_evn_matrix).exp()));
-        temp.emplace_back(tenx::TensorCast((beta1 * static_cast<cx64>(-1.0i * dt) * h_odd_matrix).exp()));
-        temp.emplace_back(tenx::TensorCast((alph2 * static_cast<cx64>(-1.0i * dt) * h_evn_matrix).exp()));
-        temp.emplace_back(tenx::TensorCast((beta2 * static_cast<cx64>(-1.0i * dt) * h_odd_matrix).exp()));
-        temp.emplace_back(tenx::TensorCast((alph2 * static_cast<cx64>(-1.0i * dt) * h_evn_matrix).exp()));
-        temp.emplace_back(tenx::TensorCast((beta1 * static_cast<cx64>(-1.0i * dt) * h_odd_matrix).exp()));
-        temp.emplace_back(tenx::TensorCast((alph1 * static_cast<cx64>(-1.0i * dt) * h_evn_matrix).exp()));
+        temp.emplace_back(tenx::TensorCast((alph1 * static_cast<Scalar>(-1.0i * dt) * h_evn_matrix).exp()));
+        temp.emplace_back(tenx::TensorCast((beta1 * static_cast<Scalar>(-1.0i * dt) * h_odd_matrix).exp()));
+        temp.emplace_back(tenx::TensorCast((alph2 * static_cast<Scalar>(-1.0i * dt) * h_evn_matrix).exp()));
+        temp.emplace_back(tenx::TensorCast((beta2 * static_cast<Scalar>(-1.0i * dt) * h_odd_matrix).exp()));
+        temp.emplace_back(tenx::TensorCast((alph2 * static_cast<Scalar>(-1.0i * dt) * h_evn_matrix).exp()));
+        temp.emplace_back(tenx::TensorCast((beta1 * static_cast<Scalar>(-1.0i * dt) * h_odd_matrix).exp()));
+        temp.emplace_back(tenx::TensorCast((alph1 * static_cast<Scalar>(-1.0i * dt) * h_evn_matrix).exp()));
         return temp;
     }
+    template std::vector<Eigen::Tensor<cx64, 2>> Suzuki_Trotter_4th_order(cx128 delta_t, const Eigen::Tensor<cx64, 2> &h_evn,
+                                                                          const Eigen::Tensor<cx64, 2> &h_odd);
 
-    std::vector<Eigen::Tensor<cx64, 2>> get_twosite_time_evolution_operators(cx128 delta_t, size_t susuki_trotter_order, const Eigen::Tensor<cx64, 2> &h_evn,
-                                                                             const Eigen::Tensor<cx64, 2> &h_odd)
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 2>> get_twosite_time_evolution_operators(cx128 delta_t, size_t susuki_trotter_order,
+                                                                               const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd)
     /*! Returns a set of 2-site unitary gates, using Suzuki Trotter decomposition to order 1, 2 or 3.
      * These gates need to be applied to the MPS one at a time with a swap in between.
      */
@@ -75,9 +86,9 @@ namespace qm::time {
             default: return Suzuki_Trotter_2nd_order(delta_t, h_evn, h_odd);
         }
     }
-
-    std::vector<Eigen::Tensor<cx64, 2>> compute_G(const cx128 a, size_t susuki_trotter_order, const Eigen::Tensor<cx64, 2> &h_evn,
-                                                  const Eigen::Tensor<cx64, 2> &h_odd)
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 2>> compute_G(const cx128 a, size_t susuki_trotter_order, const Eigen::Tensor<Scalar, 2> &h_evn,
+                                                    const Eigen::Tensor<Scalar, 2> &h_odd)
     /*! Returns the moment generating function, or characteristic function (if a is imaginary) for the Hamiltonian as a rank 2 tensor.
      *  The legs contain two physical spin indices each
     *   G := exp(iaM) or exp(aM), where a is a small parameter and M is an MPO.
@@ -96,6 +107,8 @@ namespace qm::time {
                          " This function may not have been adjusted to the new convention");
         return get_twosite_time_evolution_operators(a, susuki_trotter_order, h_evn, h_odd);
     }
+    template std::vector<Eigen::Tensor<cx64, 2>> compute_G(const cx128 a, size_t susuki_trotter_order, const Eigen::Tensor<cx64, 2> &h_evn,
+                                                           const Eigen::Tensor<cx64, 2> &h_odd);
 
     std::pair<std::vector<qm::Gate>, std::vector<qm::Gate>> get_time_evolution_gates(cx128 delta_t, const std::vector<qm::Gate> &hams_nsite) {
         /* Here we do a second-order Suzuki-Trotter decomposition which holds for n-site hamiltonians as described

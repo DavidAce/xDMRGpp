@@ -23,7 +23,7 @@ svd::config::config(std::optional<double> truncation_lim_) : truncation_limit(tr
 
 svd::config::config(std::optional<long> rank_max_, std::optional<double> truncation_lim_) : rank_max(rank_max_), truncation_limit(truncation_lim_) {}
 
-std::string svd::config::to_string() {
+std::string svd::config::to_string() const {
     /* clang-format off */
     std::string msg;
     if (rank_max) msg.append(fmt::format(" | rank_max {}", rank_max.value()));

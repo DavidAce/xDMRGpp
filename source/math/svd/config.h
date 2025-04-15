@@ -24,20 +24,20 @@ namespace svd {
         gersvd, /*!< Fastest for very few k. Randomized SVD works well for very low rank approximations of huge matrices */
         geauto  /*!< Defaults to gejsv for small matrices, moving to gesdd for large matrices, and to either gesvdx or gersvd for low k */
     };
-    enum class save{
+    enum class save {
         NONE, /*!< Never save svd matrices to file  */
-        ALL, /*!< Save all matrices and their result  */
-        LAST,  /*!< Save the last matrix (overwriting previous)  */
-        FAIL,  /*!< Only save on failure  */
+        ALL,  /*!< Save all matrices and their result  */
+        LAST, /*!< Save the last matrix (overwriting previous)  */
+        FAIL, /*!< Only save on failure  */
     };
 
     struct svdx_values_t {
-        double vl=1e-10;
-        double vu=1e+10;
+        double vl = 1e-10;
+        double vu = 1e+10;
     };
     struct svdx_indices_t {
-        size_t il=1;
-        size_t iu=10000;
+        size_t il = 1;
+        size_t iu = 10000;
     };
     using svdx_select_t = std::variant<svdx_indices_t, svdx_values_t>;
 
@@ -83,7 +83,7 @@ namespace svd {
         std::optional<svd::rtn>      svd_rtn          = std::nullopt;
         std::optional<svd::save>     svd_save         = std::nullopt;
         std::optional<bool>          benchmark        = std::nullopt;
-        std::string                  to_string();
+        std::string                  to_string() const;
         config() = default;
         explicit config(long rank_max_);
         explicit config(double truncation_lim_);

@@ -8,14 +8,21 @@
 #include "tools/common/log.h"
 #include <utility>
 
-EnvVar::EnvVar(std::string side_, const MpsSite &mps, const MpoSite &mpo) : EnvBase(std::move(side_), "var", mps, mpo) { set_edge_dims(mps, mpo); }
+template class EnvVar<cx64>;
+template class EnvVar<cx128>;
 
-EnvVar EnvVar::enlarge(const MpsSite &mps, const MpoSite &mpo) const {
-    tools::log->trace("EnvVar::enlarge(mps,mpo): {}{}[{}]", tag, side, get_position());
+template<typename Scalar>
+EnvVar<Scalar>::EnvVar(std::string side_, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) : EnvBase<Scalar>(std::move(side_), "var", mps, mpo) {
+    set_edge_dims(mps, mpo);
+}
+
+template<typename Scalar>
+EnvVar<Scalar> EnvVar<Scalar>::enlarge(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) const {
+    tools::log->trace("EnvVar<Scalar>::enlarge(mps,mpo): {}{}[{}]", tag, side, get_position());
     // enlarge() uses "this" block together with mps and mpo to generate a new environment block corresponding to a neighboring site
     if constexpr(settings::debug)
         if(not num::all_equal(get_position(), mps.get_position(), mpo.get_position()))
-            throw except::logic_error("EnvVar::enlarge: {}{}[{}]: All positions are not equal: env {} | mps {} | mpo {}", tag, side, get_position(),
+            throw except::logic_error("EnvVar<Scalar>::enlarge: {}{}[{}]: All positions are not equal: env {} | mps {} | mpo {}", tag, side, get_position(),
                                       get_position(), mps.get_position(), mpo.get_position());
 
     EnvVar env = *this;
@@ -26,7 +33,7 @@ EnvVar EnvVar::enlarge(const MpsSite &mps, const MpoSite &mpo) const {
         return env;
     }
 
-    env.enlarge(mps.get_M_bare(), mpo.MPO2());
+    env.enlarge(mps.template get_M_bare_as<Scalar>(), mpo.template MPO2_as<Scalar>());
     // Update positions assuming this is a finite chain.
     // This needs to be corrected (on the right side) on infinite chains
     if(env.side == "L")
@@ -49,7 +56,8 @@ EnvVar EnvVar::enlarge(const MpsSite &mps, const MpoSite &mpo) const {
     return env;
 }
 
-void EnvVar::refresh(const EnvVar &env, const MpsSite &mps, const MpoSite &mpo) {
+template<typename Scalar>
+void EnvVar<Scalar>::refresh(const EnvVar &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) {
     // If side == L, env,mps and mpo are all corresponding to the neighbor on the left
     // If side == R, env,mps and mpo are all corresponding to the neighbor on the right
     if constexpr(settings::debug)
@@ -59,10 +67,10 @@ void EnvVar::refresh(const EnvVar &env, const MpsSite &mps, const MpoSite &mpo) 
 
     if(side == "L" and get_position() != mps.get_position() + 1)
         throw except::logic_error(
-            fmt::format("EnvVar::refresh(pos == {}): This env{} needs env, mps and mpo at position {}", get_position(), side, get_position() - 1));
+            fmt::format("EnvVar<Scalar>::refresh(pos == {}): This env{} needs env, mps and mpo at position {}", get_position(), side, get_position() - 1));
     if(side == "R" and get_position() + 1 != mps.get_position())
         throw except::logic_error(
-            fmt::format("EnvVar::refresh(pos == {}): This env{} needs env, mps and mpo at position {}", get_position(), side, get_position() + 1));
+            fmt::format("EnvVar<Scalar>::refresh(pos == {}): This env{} needs env, mps and mpo at position {}", get_position(), side, get_position() + 1));
 
     // We refresh this block if any of these conditions hold:
     //   not has_block()
@@ -107,7 +115,7 @@ void EnvVar::refresh(const EnvVar &env, const MpsSite &mps, const MpoSite &mpo) 
             tools::log->trace("Refreshing {} env{}({}): modified {}", tag, side, get_position(), reason);
         }
 
-        build_block(*env.block, mps.get_M_bare(), mpo.MPO2());
+        build_block(*env.block, mps.template get_M_bare_as<Scalar>(), mpo.template MPO2_as<Scalar>());
         // Store id's to objects used to create this env.
         unique_id_env = env.get_unique_id();
         unique_id_mps = mps.get_unique_id();
@@ -121,17 +129,18 @@ void EnvVar::refresh(const EnvVar &env, const MpsSite &mps, const MpoSite &mpo) 
     }
 }
 
-void EnvVar::set_edge_dims(const MpsSite &mps, const MpoSite &mpo) {
-    Eigen::Tensor<cx64, 1> edge;
-    if(side == "L") edge = mpo.get_MPO2_edge_left();
-    if(side == "R") edge = mpo.get_MPO2_edge_right();
+template<typename Scalar>
+void EnvVar<Scalar>::set_edge_dims(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) {
+    Eigen::Tensor<Scalar, 1> edge;
+    if(side == "L") edge = tenx::asScalarType<Scalar>(mpo.get_MPO2_edge_left());
+    if(side == "R") edge = tenx::asScalarType<Scalar>(mpo.get_MPO2_edge_right());
     std::size_t unique_id_edge = hash::hash_buffer(edge.data(), static_cast<size_t>(edge.size()));
     if(unique_id_env and unique_id_env.value() == unique_id_edge) return;
     if constexpr(settings::debug)
         if(side != "L" and side != "R") throw except::runtime_error("Wrong side: {}", side);
 
-    tools::log->trace("EnvVar::set_edge_dims: {}{}({}): {}", tag, side, get_position(), edge.dimensions());
-    set_edge_dims(mps.get_M_bare(), mpo.MPO2(), edge);
+    tools::log->trace("EnvVar<Scalar>::set_edge_dims: {}{}({}): {}", tag, side, get_position(), edge.dimensions());
+    set_edge_dims(mps.template get_M_bare_as<Scalar>(), mpo.template MPO2_as<Scalar>(), edge);
     unique_id     = get_unique_id();
     unique_id_env = unique_id_edge;
     unique_id_mps = mps.get_unique_id();

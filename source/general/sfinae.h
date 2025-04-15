@@ -133,7 +133,7 @@ namespace sfinae {
     template<typename T>
     concept has_c_str_v = requires(T m) {
         { m.c_str() } -> is_pointer_type;
-        { m.c_str() } -> std::same_as<const char*>;
+        { m.c_str() } -> std::same_as<const char *>;
     };
 
     template<typename T>

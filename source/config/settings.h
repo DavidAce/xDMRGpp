@@ -170,8 +170,7 @@ namespace settings {
             inline long eig_size = 4096l; /*!< Maximum matrix size to diagonalize */
             inline long bond_lim = 2048l; /*!< Bond dimension limit during swap operations  */
             inline auto trnc_lim = 1e-8;  /*!< Truncation error limit during swap operations  */
-            inline auto precision = Precision::DOUBLE;
-            inline auto cache     = CachePolicy::WRITE;
+            inline auto precision = Precision::DOUBLE; /*!< Use SINGLE or DOUBLE precision internally */
         }
         namespace dataset::information_lattice{
             /*! Information lattice built from subsystem_entanglement_entropies */
@@ -227,8 +226,17 @@ namespace settings {
         inline size_t              dmrg_min_blocksize          = 1;                                      /*!< Minimum number of sites in a dmrg optimization step. */
         inline size_t              dmrg_max_blocksize          = 4;                                      /*!< Maximum number of sites in a dmrg optimization step. */
         inline long                dmrg_max_prob_size          = 1024*2*1024;                            /*!< Restricts the dmrg blocksize to keep the problem size below this limit. Problem size = chiL * (spindim ** blocksize) * chiR */
-        inline EnvExpandMode       dmrg_env_expand_mode        = EnvExpandMode::DEFAULT;                 /*!< Select options for environment expansion (aka subspace expansion) [NONE H1, H2, SSITE, NSITE, REAR, FORE, DEFAULT(H1 | H2 | NSITE | REAR | FORE)] */
-        inline size_t              dmrg_env_expand_iter        = 20;                                     /*!< How many iterations to use in the nsite environment expansion (ignored in 1-site expansion) */
+        inline BondExpansionPolicy dmrg_bond_expansion_policy  = BondExpansionPolicy::DEFAULT;           /*!< Select options for bond expansion (aka subspace expansion)  [NONE, POSTOPT_1SITE, PREOPT_NSITE_REAR, PREOPT_NSITE_FORE, H1, H2, DEFAULT=POSTOPT_1SITE | H1 | H2] */
+        namespace dmrg_bond_expansion {
+            namespace postopt {
+                inline double              maxalpha            = 1e-3;                                   /*!< Upper limit for mixing factors derived from the local residual norms */
+                inline double              minalpha            = 1e-15;                                  /*!< Lower limit for mixing factors derived from the local residual norms */
+            }
+            namespace preopt {
+                inline size_t              maxiter             = 1;                                      /*!< How many Lanczos iterations to use in the nsite bond expansion */
+                inline size_t              nkrylov             = 3;                                      /*!< The krylov subspace size to use in nsite bond expansion */
+            }
+        }
         inline std::string         target_axis                 = "none";                                 /*!< Find an eigenstate with global spin component along this axis. Choose between Choose {none, (+-) x,y or z}  */
         inline std::string         initial_axis                = "none";                                 /*!< Initialize state with global spin component along this axis. Choose {none, (+-) x,y or z}  */
         inline StateInitType       initial_type                = StateInitType::REAL;                    /*!< Initial state can be REAL/CPLX */
@@ -236,13 +244,12 @@ namespace settings {
         inline std::string         initial_pattern             = {};                                     /*!< The actual random spin configuration used for the initial product state (for internal use) */
         inline double              rbds_rate                   = 0.5;                                    /*!< If rbds_rate > 0, runs reverse bond dimension scaling (rbds) after the main algorithm. Values [0,1] represent the shrink factor, while [1,infty] represents a shrink step */
         inline double              rtes_rate                   = 1e1;                                    /*!< If rtes_rate > 1, runs reverse truncation error scaling (rtes) after the main algorithm. Values [1, infty] represent the growth factor for the truncation error limit */
-        inline UpdatePolicy        bond_increase_when          = UpdatePolicy::NEVER;                    /*!< If and when to increase the bond dimension limit {NEVER, TRUNCATED, STUCK, SATURATED, ITERATION}. */
+        inline UpdatePolicy        bond_increase_when          = UpdatePolicy::NEVER;                    /*!< If and when to increase the bond dimension limit {NEVER, WARMUP, HALFSWEEP, FULLSWEEP, TRUNCATED, SAT_EVAR, SAT_ALGO, STK_ALGO}. */
         inline double              bond_increase_rate          = 8;                                      /*!< Bond dimension growth rate. Factor if 1<x<=2, constant shift if x > 2, otherwise invalid. */
-        inline UpdatePolicy        trnc_decrease_when          = UpdatePolicy::NEVER;                    /*!< If and when to decrease SVD truncation error limit {NEVER, TRUNCATED, STUCK, SATURATED, ITERATION} */
+        inline UpdatePolicy        trnc_decrease_when          = UpdatePolicy::NEVER;                    /*!< If and when to decrease SVD truncation error limit {NEVER, WARMUP, HALFSWEEP, FULLSWEEP, TRUNCATED, SAT_EVAR, SAT_ALGO, STK_ALGO} */
         inline double              trnc_decrease_rate          = 1e-1;                                   /*!< Decrease SVD truncation error limit by this factor. Valid if 0 < x < 1 */
-        inline UpdatePolicy        etol_decrease_when          = UpdatePolicy::NEVER;                    /*!< If and when to decrease EIGS tolerance {NEVER, TRUNCATED, STUCK, SATURATED, ITERATION} */
+        inline UpdatePolicy        etol_decrease_when          = UpdatePolicy::NEVER;                    /*!< If and when to decrease EIGS tolerance {NEVER, WARMUP, HALFSWEEP, FULLSWEEP, TRUNCATED, SAT_EVAR, SAT_ALGO, STK_ALGO} */
         inline double              etol_decrease_rate          = 1e-1;                                   /*!< Decrease EIGS tolerance by this factor. Valid if 0 < x < 1 */
-
     }
 
 
@@ -252,7 +259,7 @@ namespace settings {
         inline size_t             eigs_iter_min                   = 1000;                        /*!< Minimum number of iterations for eigenvalue solver. */
         inline size_t             eigs_iter_max                   = 100000;                      /*!< Maximum number of iterations for eigenvalue solver. */
         inline double             eigs_iter_gain                  = 2     ;                      /*!< Increase number of iterations on OptSolver::EIGS by gain^(iters without progress) */
-        inline GainPolicy         eigs_iter_gain_policy           = GainPolicy::SAT_VAR;         /*!< Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC] */
+        inline GainPolicy         eigs_iter_gain_policy           = GainPolicy::SAT_EVAR;         /*!< Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC] */
         inline double             eigs_tol_min                    = 1e-14 ;                      /*!< Precision tolerance for halting the eigenvalue solver. */
         inline double             eigs_tol_max                    = 1e-8 ;                       /*!< Precision tolerance for halting the eigenvalue solver. */
         inline int                eigs_ncv                        = 0     ;                      /*!< Basis size (krylov space) in the eigensolver. Set ncv <= 0 for automatic selection */
@@ -426,6 +433,8 @@ namespace settings {
         inline OptRitz    ritz                          = OptRitz::SM;             /*!< Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)] */
         inline OptAlgo    algo_warmup                   = OptAlgo::XDMRG;          /*!< Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]  */
         inline OptRitz    ritz_warmup                   = OptRitz::SM;             /*!< Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)] */
+        inline OptAlgo    algo_stuck                    = OptAlgo::GDMRG;          /*!< Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]  */
+        inline OptRitz    ritz_stuck                    = OptRitz::LM;             /*!< Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)] */
         inline double     energy_spectrum_shift         = 1e-10 ;                  /*!< (Used with ritz == OptRitz::SM) Shift the energy eigenvalue spectrum by this amount: H -> H - shift   */
         inline double     energy_density_target         = 0.5;                     /*!< (Used with ritz == OptRitz::TE) Target energy in [0-1], Target energy = energy_density_target * (EMAX+EMIN) + EMIN. */
         inline size_t     iter_min                      = 4;                       /*!< Min number of iterations. One iterations moves L steps. */

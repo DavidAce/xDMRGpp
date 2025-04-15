@@ -7,7 +7,11 @@
 #include "math/tenx.h"
 #include "tensors/site/mpo/MpoFactory.h"
 
-ModelInfinite::ModelInfinite() = default;
+template class ModelInfinite<cx64>;
+template class ModelInfinite<cx128>;
+
+template<typename Scalar>
+ModelInfinite<Scalar>::ModelInfinite() = default;
 
 // We need to define the destructor and other special functions
 // because we enclose data in unique_ptr for this pimpl idiom.
@@ -18,13 +22,19 @@ ModelInfinite::ModelInfinite() = default;
 // operator= and copy assignment constructor.
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
-ModelInfinite::~ModelInfinite()                                = default; // default dtor
-ModelInfinite::ModelInfinite(ModelInfinite &&other)            = default; // default move ctor
-ModelInfinite &ModelInfinite::operator=(ModelInfinite &&other) = default; // default move assign
+template<typename Scalar>
+ModelInfinite<Scalar>::~ModelInfinite() = default; // default dtor
+template<typename Scalar>
+ModelInfinite<Scalar>::ModelInfinite(ModelInfinite &&other) = default; // default move ctor
+template<typename Scalar>
+ModelInfinite<Scalar> &ModelInfinite<Scalar>::operator=(ModelInfinite &&other) = default; // default move assign
 
-ModelInfinite::ModelInfinite(const ModelInfinite &other) : cache(other.cache), HA(other.HA->clone()), HB(other.HB->clone()), model_type(other.model_type) {}
+template<typename Scalar>
+ModelInfinite<Scalar>::ModelInfinite(const ModelInfinite &other)
+    : cache(other.cache), HA(other.HA->clone()), HB(other.HB->clone()), model_type(other.model_type) {}
 
-ModelInfinite &ModelInfinite::operator=(const ModelInfinite &other) {
+template<typename Scalar>
+ModelInfinite<Scalar> &ModelInfinite<Scalar>::operator=(const ModelInfinite &other) {
     // check for self-assignment
     if(this != &other) {
         cache      = other.cache;
@@ -35,33 +45,37 @@ ModelInfinite &ModelInfinite::operator=(const ModelInfinite &other) {
     return *this;
 }
 
-void ModelInfinite::initialize(ModelType model_type_) {
+template<typename Scalar>
+void ModelInfinite<Scalar>::initialize(ModelType model_type_) {
     tools::log->trace("Initializing model");
     // Generate MPO
     model_type = model_type_;
-    HA         = MpoFactory::create_mpo(0, model_type);
-    HB         = MpoFactory::create_mpo(1, model_type);
+    HA         = MpoFactory<Scalar>::create_mpo(0, model_type);
+    HB         = MpoFactory<Scalar>::create_mpo(1, model_type);
 }
 
-void ModelInfinite::randomize() {
+template<typename Scalar>
+void ModelInfinite<Scalar>::randomize() {
     tools::log->trace("Randomizing hamiltonian");
     HA->randomize_hamiltonian();
     HB->randomize_hamiltonian();
-    std::vector<MpoSite::TableMap> all_params;
+    std::vector<typename MpoSite<Scalar>::TableMap> all_params;
     all_params.push_back(HA->get_parameters());
     all_params.push_back(HB->get_parameters());
     HA->set_averages(all_params, true);
     HB->set_averages(all_params, true);
 }
 
-void ModelInfinite::reset_mpo_squared() {
+template<typename Scalar>
+void ModelInfinite<Scalar>::reset_mpo_squared() {
     tools::log->debug("Resetting squared MPO");
     HA->build_mpo_squared();
     HB->build_mpo_squared();
 }
 
-void ModelInfinite::rebuild_mpo_squared() {
-    if(settings::precision::use_compressed_mpo_squared  != MpoCompress::NONE) {
+template<typename Scalar>
+void ModelInfinite<Scalar>::rebuild_mpo_squared() {
+    if(settings::precision::use_compressed_mpo_squared != MpoCompress::NONE) {
         tools::log->trace("Compressing MPO²");
         throw std::runtime_error("Compressing the squared MPO² is currently unsupported on infinite systems.\n"
                                  "Set settings::precision::use_compressed_mpo_squared_all = false");
@@ -72,9 +86,10 @@ void ModelInfinite::rebuild_mpo_squared() {
         reset_mpo_squared();
 }
 
-std::vector<Eigen::Tensor<cx64, 4>> ModelInfinite::get_compressed_mpo_squared() {
+template<typename Scalar>
+std::vector<Eigen::Tensor<Scalar, 4>> ModelInfinite<Scalar>::get_compressed_mpo_squared() {
     // First, rebuild the MPO's
-    std::vector<Eigen::Tensor<cx64, 4>> mpos_sq;
+    std::vector<Eigen::Tensor<Scalar, 4>> mpos_sq;
     mpos_sq.emplace_back(HA->get_non_compressed_mpo_squared());
     mpos_sq.emplace_back(HB->get_non_compressed_mpo_squared());
 
@@ -96,8 +111,8 @@ std::vector<Eigen::Tensor<cx64, 4>> ModelInfinite::get_compressed_mpo_squared() 
 
     for(size_t iter = 0; iter < 1; iter++) {
         // Next compress from left to right
-        Eigen::Tensor<cx64, 2> T_l2r; // Transfer matrix
-        Eigen::Tensor<cx64, 4> T_mpo_sq;
+        Eigen::Tensor<Scalar, 2> T_l2r; // Transfer matrix
+        Eigen::Tensor<Scalar, 4> T_mpo_sq;
         for(const auto &[idx, mpo_sq] : iter::enumerate(mpos_sq)) {
             if(T_l2r.size() == 0)
                 T_mpo_sq = mpo_sq;
@@ -110,13 +125,13 @@ std::vector<Eigen::Tensor<cx64, 4>> ModelInfinite::get_compressed_mpo_squared() 
                 std::tie(mpo_sq, T_l2r) = svd.split_mpo_l2r(T_mpo_sq);
                 if(idx + 1 == mpos_sq.size())
                     // The remaining transfer matrix T can be multiplied back into the last MPO from the right
-                    mpo_sq = Eigen::Tensor<cx64, 4>(mpo_sq.contract(T_l2r, tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2}));
+                    mpo_sq = Eigen::Tensor<Scalar, 4>(mpo_sq.contract(T_l2r, tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2}));
             }
         }
 
         // Now we have done left to right. Next we do right to left
-        Eigen::Tensor<cx64, 2> T_r2l;    // Transfer matrix
-        Eigen::Tensor<cx64, 4> mpo_sq_T; // Absorbs transfer matrix
+        Eigen::Tensor<Scalar, 2> T_r2l;    // Transfer matrix
+        Eigen::Tensor<Scalar, 4> mpo_sq_T; // Absorbs transfer matrix
         for(const auto &[idx, mpo_sq] : iter::enumerate_reverse(mpos_sq)) {
             if(T_r2l.size() == 0)
                 mpo_sq_T = mpo_sq;
@@ -128,7 +143,7 @@ std::vector<Eigen::Tensor<cx64, 4>> ModelInfinite::get_compressed_mpo_squared() 
                 std::tie(T_r2l, mpo_sq) = svd.split_mpo_r2l(mpo_sq_T);
                 if(idx == 0)
                     // The remaining transfer matrix T can be multiplied back into the first MPO from the left
-                    mpo_sq = Eigen::Tensor<cx64, 4>(T_r2l.contract(mpo_sq, tenx::idx({1}, {0})));
+                    mpo_sq = Eigen::Tensor<Scalar, 4>(T_r2l.contract(mpo_sq, tenx::idx({1}, {0})));
             }
         }
     }
@@ -139,19 +154,39 @@ std::vector<Eigen::Tensor<cx64, 4>> ModelInfinite::get_compressed_mpo_squared() 
     return mpos_sq;
 }
 
-bool ModelInfinite::is_real() const { return HA->is_real() and HB->is_real(); }
-bool ModelInfinite::has_nan() const { return HA->has_nan() or HB->has_nan(); }
-void ModelInfinite::assert_validity() const {
+template<typename Scalar>
+bool ModelInfinite<Scalar>::is_real() const {
+    return HA->is_real() and HB->is_real();
+}
+template<typename Scalar>
+bool ModelInfinite<Scalar>::has_nan() const {
+    return HA->has_nan() or HB->has_nan();
+}
+template<typename Scalar>
+void ModelInfinite<Scalar>::assert_validity() const {
     HA->assert_validity();
     HB->assert_validity();
 }
 
-const MpoSite &ModelInfinite::get_mpo_siteA() const { return *HA; }
-const MpoSite &ModelInfinite::get_mpo_siteB() const { return *HB; }
-MpoSite       &ModelInfinite::get_mpo_siteA() { return *HA; }
-MpoSite       &ModelInfinite::get_mpo_siteB() { return *HB; }
+template<typename Scalar>
+const MpoSite<Scalar> &ModelInfinite<Scalar>::get_mpo_siteA() const {
+    return *HA;
+}
+template<typename Scalar>
+const MpoSite<Scalar> &ModelInfinite<Scalar>::get_mpo_siteB() const {
+    return *HB;
+}
+template<typename Scalar>
+MpoSite<Scalar> &ModelInfinite<Scalar>::get_mpo_siteA() {
+    return *HA;
+}
+template<typename Scalar>
+MpoSite<Scalar> &ModelInfinite<Scalar>::get_mpo_siteB() {
+    return *HB;
+}
 
-Eigen::DSizes<long, 4> ModelInfinite::dimensions() const {
+template<typename Scalar>
+Eigen::DSizes<long, 4> ModelInfinite<Scalar>::dimensions() const {
     long dim0 = get_mpo_siteA().MPO().dimension(0);
     long dim1 = get_mpo_siteB().MPO().dimension(1);
     long dim2 = get_mpo_siteA().MPO().dimension(2) * get_mpo_siteB().MPO().dimension(2);
@@ -159,20 +194,27 @@ Eigen::DSizes<long, 4> ModelInfinite::dimensions() const {
     return Eigen::DSizes<long, 4>{dim0, dim1, dim2, dim3};
 }
 
-bool ModelInfinite::is_shifted() const { return HA->has_energy_shifted_mpo() and HB->has_energy_shifted_mpo(); }
+template<typename Scalar>
+bool ModelInfinite<Scalar>::is_shifted() const {
+    return HA->has_energy_shifted_mpo() and HB->has_energy_shifted_mpo();
+}
 
-double ModelInfinite::get_energy_shift_per_site() const {
+template<typename Scalar>
+Scalar ModelInfinite<Scalar>::get_energy_shift_per_site() const {
     if(not num::all_equal(HA->get_energy_shift_mpo(), get_mpo_siteB().get_energy_shift_mpo()))
-        throw except::runtime_error("Energy shift mismatch: HA {:.16f} != HB {:.16f}", get_mpo_siteA().get_energy_shift_mpo(), get_mpo_siteB().get_energy_shift_mpo());
-    return HA->get_energy_shift_mpo().real();
+        throw except::runtime_error("Energy shift mismatch: HA {:.16f} != HB {:.16f}", fp(get_mpo_siteA().get_energy_shift_mpo()),
+                                    fp(get_mpo_siteB().get_energy_shift_mpo()));
+    return HA->get_energy_shift_mpo();
 }
 
-void ModelInfinite::set_energy_shift_per_site(double energy_shift_per_site) {
-    HA->set_energy_shift_mpo(cx64(energy_shift_per_site,0.0));
-    HB->set_energy_shift_mpo(cx64(energy_shift_per_site,0.0));
+template<typename Scalar>
+void ModelInfinite<Scalar>::set_energy_shift_per_site(Scalar energy_shift_per_site) {
+    HA->set_energy_shift_mpo(energy_shift_per_site);
+    HB->set_energy_shift_mpo(energy_shift_per_site);
 }
 
-const Eigen::Tensor<cx64, 4> &ModelInfinite::get_2site_mpo_AB() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 4> &ModelInfinite<Scalar>::get_2site_mpo_AB() const {
     if(cache.twosite_mpo_AB) return cache.twosite_mpo_AB.value();
     long dim0            = get_mpo_siteA().MPO().dimension(0);
     long dim1            = get_mpo_siteB().MPO().dimension(1);
@@ -186,7 +228,8 @@ const Eigen::Tensor<cx64, 4> &ModelInfinite::get_2site_mpo_AB() const {
     return cache.twosite_mpo_AB.value();
 }
 
-const Eigen::Tensor<cx64, 4> &ModelInfinite::get_2site_mpo_BA() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 4> &ModelInfinite<Scalar>::get_2site_mpo_BA() const {
     if(cache.twosite_mpo_BA) return cache.twosite_mpo_BA.value();
     long dim0 = get_mpo_siteB().MPO().dimension(0);
     long dim1 = get_mpo_siteA().MPO().dimension(1);
@@ -197,21 +240,26 @@ const Eigen::Tensor<cx64, 4> &ModelInfinite::get_2site_mpo_BA() const {
     return cache.twosite_mpo_BA.value();
 }
 
-const Eigen::Tensor<cx64, 2> &ModelInfinite::get_2site_ham_AB() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 2> &ModelInfinite<Scalar>::get_2site_ham_AB() const {
     if(cache.twosite_ham_AB) return cache.twosite_ham_AB.value();
     auto twosite_mpo_AB  = get_2site_mpo_AB();
-    auto edgeL           = get_mpo_siteA().get_MPO_edge_left();
-    auto edgeR           = get_mpo_siteB().get_MPO_edge_right();
+    auto edgeL           = get_mpo_siteA().template get_MPO_edge_left<Scalar>();
+    auto edgeR           = get_mpo_siteB().template get_MPO_edge_right<Scalar>();
     cache.twosite_ham_AB = twosite_mpo_AB.contract(edgeL, tenx::idx({0}, {0})).contract(edgeR, tenx::idx({0}, {0}));
     return cache.twosite_ham_AB.value();
 }
-const Eigen::Tensor<cx64, 2> &ModelInfinite::get_2site_ham_BA() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 2> &ModelInfinite<Scalar>::get_2site_ham_BA() const {
     if(cache.twosite_ham_BA) return cache.twosite_ham_BA.value();
     auto twosite_mpo_BA  = get_2site_mpo_BA();
-    auto edgeL           = get_mpo_siteB().get_MPO_edge_left();
-    auto edgeR           = get_mpo_siteA().get_MPO_edge_right();
+    auto edgeL           = get_mpo_siteB().template get_MPO_edge_left<Scalar>();
+    auto edgeR           = get_mpo_siteA().template get_MPO_edge_right<Scalar>();
     cache.twosite_ham_BA = twosite_mpo_BA.contract(edgeL, tenx::idx({0}, {0})).contract(edgeR, tenx::idx({0}, {0}));
     return cache.twosite_ham_BA.value();
 }
 
-void ModelInfinite::clear_cache() { cache = Cache(); }
+template<typename Scalar>
+void ModelInfinite<Scalar>::clear_cache() {
+    cache = Cache();
+}

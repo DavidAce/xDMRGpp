@@ -1,6 +1,7 @@
 add_source_target(xdmrg++-tools-finite-mps
         TARGET_SOURCES
         mps.cpp
+        add.cpp
         mps_init_entangled_state.cpp
         mps_init_product_state.cpp
         OBJECT_LINK_LIBRARIES

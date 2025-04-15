@@ -16,19 +16,7 @@ add_source_target(xdmrg++-tools-finite-ops
             xdmrg++-tools-common-contraction
         )
 
-add_source_target(xdmrg++-tools-finite-mpo
-        TARGET_SOURCES
-            mpo.cpp mpo_inv.cpp
-        OBJECT_LINK_LIBRARIES
-            xdmrg++-deps xdmrg++-flags
-        INTERFACE_LINK_LIBRARIES
-            xdmrg++-tid
-            xdmrg++-math-svd
-            xdmrg++-math-tenx
-            xdmrg++-tensors-mpo
-            xdmrg++-tools-common-log
-            xdmrg++-tools-common-contraction
-        )
+
 add_source_target(xdmrg++-tools-finite-print
         TARGET_SOURCES
             print.cpp
@@ -47,8 +35,10 @@ add_subdirectory(multisite)
 add_subdirectory(env)
 add_subdirectory(mps)
 add_subdirectory(opt)
+add_subdirectory(mpo)
 
-add_library(xdmrg++-tools-finite INTERFACE)
+add_library(xdmrg++-tools-finite INTERFACE
+mps/add.cpp)
 target_link_libraries(xdmrg++-tools-finite INTERFACE
         xdmrg++-tools-finite-h5
         xdmrg++-tools-finite-ed

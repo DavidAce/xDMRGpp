@@ -31,30 +31,30 @@ tools::finite::opt::opt_mps tools::finite::opt::get_opt_initial_mps(const Tensor
     initial_mps.set_tensor(tensors.get_multisite_mps<cx64>());
     initial_mps.set_energy(tools::finite::measure::energy(tensors));
     initial_mps.set_eshift(tools::finite::measure::energy_shift(tensors));
-    initial_mps.set_hsquared(std::real(tools::finite::measure::expval_hamiltonian_squared(tensors)));
+    initial_mps.set_hsquared(std::real(tools::finite::measure::expval_hamiltonian_squared<cx64>(tensors)));
     initial_mps.set_variance(tools::finite::measure::energy_variance(tensors));
-    initial_mps.set_rnorm_H1(tools::finite::measure::residual_norm_H1(tensors));
-    initial_mps.set_rnorm_H2(tools::finite::measure::residual_norm_H2(tensors));
+    initial_mps.set_rnorm_H1(tools::finite::measure::residual_norm_H1<cx64>(tensors));
+    initial_mps.set_rnorm_H2(tools::finite::measure::residual_norm_H2<cx64>(tensors));
     initial_mps.set_overlap(1.0);
 
     switch(meta.optAlgo) {
         case OptAlgo::DMRG:
         case OptAlgo::DMRGX:
         case OptAlgo::HYBRID_DMRGX: {
-            auto H1 = tools::finite::measure::expval_hamiltonian(tensors);
+            auto H1 = tools::finite::measure::expval_hamiltonian<cx64>(tensors);
             initial_mps.set_eigs_eigval(std::real(H1));
             break;
         }
         case OptAlgo::XDMRG: {
             // (H-Eshift)v =  <H²> v
-            auto H2 = tools::finite::measure::expval_hamiltonian_squared(tensors);
+            auto H2 = tools::finite::measure::expval_hamiltonian_squared<cx64>(tensors);
             initial_mps.set_eigs_eigval(std::real(H2));
             break;
         }
         case OptAlgo::GDMRG: {
             // (H-Eshift)v =  <H¹>/<H²> (H-Eshift)²v
-            auto H1 = tools::finite::measure::expval_hamiltonian(tensors);         // <H>
-            auto H2 = tools::finite::measure::expval_hamiltonian_squared(tensors); // <H²>
+            auto H1 = tools::finite::measure::expval_hamiltonian<cx64>(tensors);         // <H>
+            auto H2 = tools::finite::measure::expval_hamiltonian_squared<cx64>(tensors); // <H²>
             initial_mps.set_eigs_eigval(std::real(H1) / std::real(H2));
             break;
         }

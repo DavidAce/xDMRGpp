@@ -37,7 +37,7 @@ namespace tools::common::h5 {
         status.energy_variance_lowest       = h5file.readTableField<std::optional<double>>               (status_path, "energy_variance_lowest",     offset).value_or(1.0);
         status.energy_variance_max_digits   = h5file.readTableField<std::optional<size_t>>               (status_path, "energy_variance_max_digits", offset).value_or(0);
         status.energy_variance_prec_limit   = h5file.readTableField<std::optional<double>>               (status_path, "energy_variance_prec_limit", offset).value_or(0);
-        status.env_expansion_alpha          = h5file.readTableField<std::optional<double>>               (status_path, "env_expansion_alpha",        offset).value_or(0.0);
+        status.bond_expansion_alpha          = h5file.readTableField<std::optional<double>>               (status_path, "bond_expansion_alpha",        offset).value_or(0.0);
         status.phys_time                    = h5file.readTableField<std::optional<h5pp::fstr_t<64>>>     (status_path, "phys_time",                  offset).value_or(h5pp::fstr_t<64>{});
         status.wall_time                    = h5file.readTableField<std::optional<double>>               (status_path, "wall_time",                  offset).value_or(0);
         status.algo_time                    = h5file.readTableField<std::optional<double>>               (status_path, "algo_time",                  offset).value_or(0);

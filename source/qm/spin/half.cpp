@@ -19,7 +19,7 @@ namespace qm::spin::half {
         const std::array<Eigen::VectorXcd, 2> sx_spinors(get_sx_spinors<Eigen::VectorXcd>());
         const std::array<Eigen::VectorXcd, 2> sy_spinors(get_sy_spinors<Eigen::VectorXcd>());
         const std::array<Eigen::VectorXcd, 2> sz_spinors(get_sz_spinors<Eigen::VectorXcd>());
-        Eigen::VectorXcd                     get_spinor(std::string_view axis, int sign) {
+        Eigen::VectorXcd                      get_spinor(std::string_view axis, int sign) {
             auto axus = get_axis_unsigned(axis);
             if(axus == "x" and sign >= 0) return sx_spinors[0];
             if(axus == "x" and sign < 0) return sx_spinors[1];
@@ -56,6 +56,16 @@ namespace qm::spin::half {
             throw except::runtime_error("get_spinor given invalid axis: {}", axis);
         }
         Eigen::Tensor<cx64, 1> get_spinor(std::string_view axis) { return get_spinor(axis, get_sign(axis)); }
+
+        Eigen::Tensor<cx64, 2> get_pauli(std::string_view axis) {
+            auto axus = get_axis_unsigned(axis);
+            if(axus == "x") return sx;
+            if(axus == "y") return sy;
+            if(axus == "z") return sz;
+            if(axus == "i") return id;
+            throw except::runtime_error("get_pauli: could not match axis string: {}", axis);
+        }
+
     }
 
     const Eigen::Matrix2cd sx(get_sx<Eigen::Matrix2cd>());

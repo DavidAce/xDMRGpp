@@ -7,6 +7,7 @@
 #include <optional>
 #include <unsupported/Eigen/CXX11/Tensor>
 
+template<typename Scalar>
 class MpsSite;
 
 /*!
@@ -14,10 +15,9 @@ class MpsSite;
   \brief This class contains the current 2-site translationally invariant wave function in MPS form
 */
 
+template<typename Scalar>
 class StateInfinite {
     public:
-    using Scalar = std::complex<double>;
-
     private:
     struct Cache {
         std::optional<Eigen::Tensor<Scalar, 3>> twosite_mps = std::nullopt;
@@ -32,12 +32,12 @@ class StateInfinite {
         std::optional<Eigen::Tensor<Scalar, 2>> LB_diag_inv = std::nullopt;
     };
 
-    std::unique_ptr<MpsSite> MPS_A;
-    std::unique_ptr<MpsSite> MPS_B;
-    bool                     swapped = false; /*!< Tracks the swapped state of A and B positions. */
-    mutable Cache            cache;
-    std::string              name;
-    AlgorithmType            algo = AlgorithmType::ANY;
+    std::unique_ptr<MpsSite<Scalar>> MPS_A;
+    std::unique_ptr<MpsSite<Scalar>> MPS_B;
+    bool                             swapped = false; /*!< Tracks the swapped state of A and B positions. */
+    mutable Cache                    cache;
+    std::string                      name;
+    AlgorithmType                    algo = AlgorithmType::ANY;
 
     public:
     mutable MeasurementsStateInfinite measurements;
@@ -72,14 +72,14 @@ class StateInfinite {
     [[nodiscard]] long                      get_spin_dimA() const;
     [[nodiscard]] long                      get_spin_dimB() const;
     [[nodiscard]] Eigen::DSizes<long, 3>    dimensions() const;
-    [[nodiscard]] const MpsSite            &get_mps_siteA() const;
-    [[nodiscard]] const MpsSite            &get_mps_siteB() const;
-    [[nodiscard]] MpsSite                  &get_mps_siteA();
-    [[nodiscard]] MpsSite                  &get_mps_siteB();
-    [[nodiscard]] const MpsSite            &get_mps_site(size_t pos) const;
-    [[nodiscard]] MpsSite                  &get_mps_site(size_t pos);
-    [[nodiscard]] const MpsSite            &get_mps_site(std::string_view pos) const;
-    [[nodiscard]] MpsSite                  &get_mps_site(std::string_view pos);
+    [[nodiscard]] const MpsSite<Scalar>    &get_mps_siteA() const;
+    [[nodiscard]] const MpsSite<Scalar>    &get_mps_siteB() const;
+    [[nodiscard]] MpsSite<Scalar>          &get_mps_siteA();
+    [[nodiscard]] MpsSite<Scalar>          &get_mps_siteB();
+    [[nodiscard]] const MpsSite<Scalar>    &get_mps_site(size_t pos) const;
+    [[nodiscard]] MpsSite<Scalar>          &get_mps_site(size_t pos);
+    [[nodiscard]] const MpsSite<Scalar>    &get_mps_site(std::string_view pos) const;
+    [[nodiscard]] MpsSite<Scalar>          &get_mps_site(std::string_view pos);
 
     [[nodiscard]] const Eigen::Tensor<Scalar, 3> &A_bare() const;
     [[nodiscard]] const Eigen::Tensor<Scalar, 3> &A() const;
@@ -101,8 +101,8 @@ class StateInfinite {
 
     void swap_AB(); /*!< Swap the roles of A and B. Used in the infinite-DMRG stage.*/
     void set_mps(const Eigen::Tensor<Scalar, 3> &twosite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg);
-    void set_mps(const std::vector<MpsSite> &mps_list);
-    void set_mps(const MpsSite &mpsA, const MpsSite &mpsB);
+    void set_mps(const std::vector<MpsSite<Scalar>> &mps_list);
+    void set_mps(const MpsSite<Scalar> &mpsA, const MpsSite<Scalar> &mpsB);
     void set_mps(const Eigen::Tensor<Scalar, 3> &MA, const Eigen::Tensor<Scalar, 1> &LC, const Eigen::Tensor<Scalar, 3> &MB);
     void set_mps(const Eigen::Tensor<Scalar, 1> &LA, const Eigen::Tensor<Scalar, 3> &MA, const Eigen::Tensor<Scalar, 1> &LC, const Eigen::Tensor<Scalar, 3> &MB,
                  const Eigen::Tensor<Scalar, 1> &LB);

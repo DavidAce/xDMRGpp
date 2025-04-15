@@ -19,12 +19,12 @@
 
 //
 
+#include "../mpo.h"
 #include "config/debug.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
 #include "math/float.h"
 #include "math/svd.h"
-#include "mpo.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/mpo/MpoSite.h"
 #include "tid/tid.h"

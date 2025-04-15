@@ -38,7 +38,6 @@ namespace tools::finite::opt {
             if(y == nullptr) return;
             if(primme == nullptr) return;
             const auto H_ptr      = static_cast<MatVecMPOS<Scalar> *>(primme->matrix);
-            auto       t_precond  = tid::tic_scope(fmt::format("precGsiJcb-{}", H_ptr->get_jcbMaxBlockSize()));
             H_ptr->preconditioner = eig::Preconditioner::JACOBI;
             H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
         }
@@ -58,7 +57,6 @@ namespace tools::finite::opt {
             } else {
                 for(long n = 0; n < nev; n++) {
                     // Take the latest result with idx == n
-
                     // Start by collecting the results with the correct index
                     std::vector<std::reference_wrapper<const opt_mps>> results_idx_n;
                     for(const auto &r : results) {
@@ -102,10 +100,10 @@ namespace tools::finite::opt {
     void eigs_generalized_shift_invert_executor(eig::solver &solver, MatVecType &hamiltonian_squared, const TensorsFinite &tensors, const opt_mps &initial_mps,
                                                 std::vector<opt_mps> &results, const OptMeta &meta) {
         using Scalar = typename MatVecType::Scalar;
-        if(std::is_same_v<Scalar, cx64> and meta.optType == OptType::REAL)
-            throw except::logic_error("eigs_variance_executor error: Mixed Scalar:cx64 with OptType::REAL");
-        if(std::is_same_v<Scalar, fp64> and meta.optType == OptType::CPLX)
-            throw except::logic_error("eigs_variance_executor error: Mixed Scalar:real with OptType::CPLX");
+        if(std::is_same_v<Scalar, cx64> and meta.optType == OptType::FP64)
+            throw except::logic_error("eigs_variance_executor error: Mixed Scalar:cx64 with OptType::FP64");
+        if(std::is_same_v<Scalar, fp64> and meta.optType == OptType::CX64)
+            throw except::logic_error("eigs_variance_executor error: Mixed Scalar:real with OptType::CX64");
 
         solver.config.primme_effective_ham_sq = &hamiltonian_squared;
         hamiltonian_squared.reset();
@@ -146,9 +144,8 @@ namespace tools::finite::opt {
         cfg.primme_minRestartSize = meta.primme_minRestartSize;
         cfg.primme_maxBlockSize   = meta.primme_maxBlockSize;
         cfg.primme_locking        = 0;
-
-        cfg.lib           = eig::Lib::PRIMME;
-        cfg.primme_method = eig::stringToMethod(meta.primme_method);
+        cfg.lib                   = eig::Lib::PRIMME;
+        cfg.primme_method         = eig::stringToMethod(meta.primme_method);
         cfg.tag += meta.label;
         switch(meta.optRitz) {
             case OptRitz::SR: cfg.ritz = eig::Ritz::primme_smallest; break;
@@ -174,16 +171,26 @@ namespace tools::finite::opt {
         cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
 
         // Overrides from default
-        const auto &mpos                = tensors.get_model().get_mpo_active();
-        const auto &enve                = tensors.get_edges().get_ene_active();
-        const auto &envv                = tensors.get_edges().get_var_active();
-        auto        hamiltonian_squared = MatVecMPOS<Scalar>(mpos, enve, envv);
+        const auto &mpos                  = tensors.get_model().get_mpo_active();
+        const auto &enve                  = tensors.get_edges().get_ene_active();
+        const auto &envv                  = tensors.get_edges().get_var_active();
+        auto        hamiltonian_squared   = MatVecMPOS<Scalar>(mpos, enve, envv);
         hamiltonian_squared.factorization = eig::Factorization::LLT;
         eigs_generalized_shift_invert_executor(solver, hamiltonian_squared, tensors, initial_mps, results, meta);
     }
 
     opt_mps internal::optimize_generalized_shift_invert(const TensorsFinite &tensors, const opt_mps &initial_mps,
                                                         [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta) {
+
+        #pragma message "remove this test"
+        if(status.energy_variance_lowest < status.energy_variance_prec_limit) {
+            auto meta2 = meta;
+            meta2.optSolver = OptSolver::H1H2;
+            meta2.optType = OptType::FP128;
+            meta2.eigs_iter_max = 100;
+            meta2.eigs_ncv = 3;
+            return optimize_lanczos_h1h2(tensors, initial_mps, status, meta2);
+        }
         if(meta.optSolver == OptSolver::EIG) return optimize_generalized_shift_invert_eig(tensors, initial_mps, status, meta);
 
         using namespace internal;
@@ -194,8 +201,9 @@ namespace tools::finite::opt {
         auto                 t_gdmrg = tid::tic_scope("eigs-gdmrg", tid::level::higher);
         std::vector<opt_mps> results;
         switch(meta.optType) {
-            case OptType::REAL: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CPLX: eigs_manager_generalized_shift_invert<cx64>(tensors, initial_mps, results, meta); break;
+            case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta); break;
+            case OptType::CX64: eigs_manager_generalized_shift_invert<cx64>(tensors, initial_mps, results, meta); break;
+            default: throw except::runtime_error("optimize_generalized_shift_invert(): not implemented for type {}", enum2sv(meta.optType));
         }
         auto t_post = tid::tic_scope("post");
         if(results.empty()) {

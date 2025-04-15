@@ -107,15 +107,19 @@ void h5_enum_algo_stop::commit(const h5pp::hid::h5f &file_id) {
     if(err < 0) throw except::runtime_error("Failed to commit AlgorithmStop to file");
 }
 
-h5pp::hid::h5t h5pp_table_measurements_finite::get_h5t() {
+template<typename Scalar>
+h5pp::hid::h5t h5pp_table_measurements_finite<Scalar>::get_h5t() {
     register_table_type();
     return h5_type;
 }
-void h5pp_table_measurements_finite::register_table_type() {
+template<typename Scalar>
+void h5pp_table_measurements_finite<Scalar>::register_table_type() {
     if(h5_type.valid()) return;
+
+    auto H5T_REAL_SCALAR = h5pp::type::getH5Type<RealScalar>();
     h5_enum_storage_event::create();
     std::array<hsize_t, 1> array3_dims    = {3};
-    h5pp::hid::h5t         H5_ARRAY3_TYPE = H5Tarray_create(H5T_NATIVE_DOUBLE, array3_dims.size(), array3_dims.data());
+    h5pp::hid::h5t         H5_ARRAY3_TYPE = H5Tarray_create(H5T_REAL_SCALAR, array3_dims.size(), array3_dims.data());
 
     /* clang-format off */
         h5_type = H5Tcreate(H5T_COMPOUND, sizeof(table));
@@ -124,20 +128,20 @@ void h5pp_table_measurements_finite::register_table_type() {
         H5Tinsert(h5_type, "position",                      HOFFSET(table, position),                      H5T_NATIVE_LONG);
         H5Tinsert(h5_type, "event",                         HOFFSET(table, event),                         h5_enum_storage_event::get_h5t());
         H5Tinsert(h5_type, "length",                        HOFFSET(table, length),                        H5T_NATIVE_UINT64);
-        H5Tinsert(h5_type, "energy",                        HOFFSET(table, energy),                        H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "energy_variance",               HOFFSET(table, energy_variance),               H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "energy_variance_lowest",        HOFFSET(table, energy_variance_lowest),        H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "norm",                          HOFFSET(table, norm),                          H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "truncation_error",              HOFFSET(table, truncation_error),              H5T_NATIVE_DOUBLE);
+        H5Tinsert(h5_type, "energy",                        HOFFSET(table, energy),                        H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "energy_variance",               HOFFSET(table, energy_variance),               H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "energy_variance_lowest",        HOFFSET(table, energy_variance_lowest),        H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "norm",                          HOFFSET(table, norm),                          H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "truncation_error",              HOFFSET(table, truncation_error),              H5T_REAL_SCALAR);
         H5Tinsert(h5_type, "bond_mid",                      HOFFSET(table, bond_mid),                      H5T_NATIVE_LONG);
         H5Tinsert(h5_type, "bond_lim",                      HOFFSET(table, bond_lim),                      H5T_NATIVE_LONG);
         H5Tinsert(h5_type, "bond_max",                      HOFFSET(table, bond_max),                      H5T_NATIVE_LONG);
-        H5Tinsert(h5_type, "entanglement_entropy",          HOFFSET(table, entanglement_entropy),          H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "renyi_entropy_2",               HOFFSET(table, renyi_entropy_2),               H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "renyi_entropy_3",               HOFFSET(table, renyi_entropy_3),               H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "renyi_entropy_4",               HOFFSET(table, renyi_entropy_4),               H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "renyi_entropy_inf",             HOFFSET(table, renyi_entropy_inf),             H5T_NATIVE_DOUBLE);
-        H5Tinsert(h5_type, "number_entropy",                HOFFSET(table, number_entropy),                H5T_NATIVE_DOUBLE);
+        H5Tinsert(h5_type, "entanglement_entropy",          HOFFSET(table, entanglement_entropy),          H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "renyi_entropy_2",               HOFFSET(table, renyi_entropy_2),               H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "renyi_entropy_3",               HOFFSET(table, renyi_entropy_3),               H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "renyi_entropy_4",               HOFFSET(table, renyi_entropy_4),               H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "renyi_entropy_inf",             HOFFSET(table, renyi_entropy_inf),             H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "number_entropy",                HOFFSET(table, number_entropy),                H5T_REAL_SCALAR);
         H5Tinsert(h5_type, "spin_global",                   HOFFSET(table, spin_global),                   H5_ARRAY3_TYPE);
         H5Tinsert(h5_type, "spin_local",                    HOFFSET(table, spin_local),                    H5_ARRAY3_TYPE);
         H5Tinsert(h5_type, "structure_factors",             HOFFSET(table, structure_factors),             H5_ARRAY3_TYPE);
@@ -216,7 +220,7 @@ void h5pp_table_algorithm_status::register_table_type() {
     H5Tinsert(h5_type, "energy_variance_lowest",      HOFFSET(table, energy_variance_lowest),     H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "energy_variance_max_digits",  HOFFSET(table, energy_variance_max_digits), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "energy_variance_prec_limit",  HOFFSET(table, energy_variance_prec_limit), H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "env_expansion_alpha",         HOFFSET(table, env_expansion_alpha),        H5T_NATIVE_DOUBLE);
+    H5Tinsert(h5_type, "bond_expansion_alpha",        HOFFSET(table, bond_expansion_alpha),       H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "phys_time",                   HOFFSET(table, phys_time),                  decltype(table::phys_time)::get_h5type());
     H5Tinsert(h5_type, "wall_time",                   HOFFSET(table, wall_time),                  H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "algo_time",                   HOFFSET(table, algo_time),                  H5T_NATIVE_DOUBLE);

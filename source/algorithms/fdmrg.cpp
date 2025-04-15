@@ -9,6 +9,7 @@
 #include "tools/common/prof.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure.h"
+#include "tools/finite/mps.h"
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
@@ -197,7 +198,7 @@ void fdmrg::run_algorithm() {
     status.algorithm_has_finished = true;
     if(settings::fdmrg::store_wavefn and tensors.get_length<long>() <= 16) {
 #pragma message "Save fdmrg wavevector properly"
-        Eigen::Tensor<fp64, 1> psi = tools::finite::measure::mps2tensor(*tensors.state).real();
+        Eigen::Tensor<fp64, 1> psi = tools::finite::mps::mps2tensor(*tensors.state).real();
         write_to_file(psi, "psi", StorageEvent::FINISHED);
     }
 }
@@ -208,7 +209,7 @@ void fdmrg::run_algorithm() {
 // m1.label = "opt_meta1";
 //
 // // The first decision is easy. Real or complex optimization
-// if(tensors.is_real()) m1.optType = OptType::REAL;
+// if(tensors.is_real()) m1.optType = OptType::FP64;
 // // Set the target eigenvalue
 // m1.optRitz = status.opt_ritz;
 //
@@ -270,9 +271,9 @@ void fdmrg::run_algorithm() {
 // // Do eig instead of eigs when it's cheap (e.g. near the edges or early in the simulation)
 // if(m1.problem_size <= settings::precision::eig_max_size) m1.optSolver = OptSolver::EIG;
 //
-// // if(status.env_expansion_alpha > 0) {
+// // if(status.bond_expansion_alpha > 0) {
 // //     // If we are doing 1-site dmrg, then we better use subspace expansion
-// //     if(m1.chosen_sites.size() == 1) m1.alpha_expansion = status.env_expansion_alpha;
+// //     if(m1.chosen_sites.size() == 1) m1.alpha_expansion = status.bond_expansion_alpha;
 // // }
 //
 // m1.validate();
@@ -297,9 +298,9 @@ void fdmrg::update_state() {
     // Hold the variance before the optimization step for comparison
     if(not variance_before_step) variance_before_step = tools::finite::measure::energy_variance(tensors); // Should just take value from cache
 
-    // Expand the environment to grow the bond dimension in 1-site dmrg
-    if(opt_meta.expand_mode != EnvExpandMode::NONE) {
-        expand_environment(opt_meta.expand_mode, opt_meta.optAlgo, opt_meta.optRitz);
+    // Expand bonds 1-site dmrg
+    if(opt_meta.bondexp_policy != BondExpansionPolicy::NONE) {
+        expand_bonds(opt_meta.bondexp_policy, opt_meta.optAlgo, opt_meta.optRitz);
         // update_environment_expansion_alpha();
         // The expansion may have changed the problem size!
         opt_meta.problem_dims = tools::finite::multisite::get_dimensions(*tensors.state);

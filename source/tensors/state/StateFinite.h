@@ -9,8 +9,9 @@
 #include <unordered_map>
 #include <unsupported/Eigen/CXX11/Tensor>
 
+template<typename Scalar>
 class MpsSite;
-class TensorsFinite;
+template<typename Scalar> class TensorsFinite;
 /**
  * \class StateFinite
  *
@@ -29,8 +30,10 @@ class TensorsFinite;
  *  The numbers in parentheses denote the position in the chain, note that this isn't the same as the position in the corresponding containers.
  */
 
+template<typename Scalar = cx64>
 class StateFinite {
     private:
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
     template<typename T>
     struct Cache {
         std::optional<Eigen::Tensor<T, 3>>                      multisite_mps = std::nullopt;
@@ -68,34 +71,34 @@ class StateFinite {
     AlgorithmType             algo = AlgorithmType::ANY;
     std::vector<double>       convrates;
 
-    template<typename Scalar>
-    using optional_tensor4ref = std::optional<std::reference_wrapper<const Eigen::Tensor<Scalar, 4>>>;
-    template<typename Scalar>
-    using optional_tensor3ref = std::optional<std::reference_wrapper<const Eigen::Tensor<Scalar, 3>>>;
-    template<typename Scalar>
-    optional_tensor4ref<Scalar> load_trf_from_cache(const std::string &key) const;
-    template<typename Scalar>
-    optional_tensor4ref<Scalar> load_trf_from_cache(const std::vector<size_t> &sites, size_t pos, std::string_view side) const;
-    template<typename Scalar>
-    void save_trf_into_cache(const Eigen::Tensor<Scalar, 4> &trf, const std::string &key) const;
-    template<typename Scalar>
-    void save_trf_into_cache(const Eigen::Tensor<Scalar, 4> &trf, const std::vector<size_t> &sites, size_t pos, std::string_view side) const;
-    template<typename Scalar>
-    std::optional<TrfCacheEntry<Scalar>> get_optimal_trf_from_cache(const std::vector<size_t> &sites, std::string_view side) const;
-    template<typename Scalar>
-    std::optional<TrfCacheEntry<Scalar>> get_optimal_trf_from_cache(const std::vector<size_t> &sites) const;
-    template<typename Scalar>
-    optional_tensor3ref<Scalar> get_cached_mps(const std::string &key) const;
-    template<typename Scalar>
+    template<typename T>
+    using optional_tensor4ref = std::optional<std::reference_wrapper<const Eigen::Tensor<T, 4>>>;
+    template<typename T>
+    using optional_tensor3ref = std::optional<std::reference_wrapper<const Eigen::Tensor<T, 3>>>;
+    template<typename T>
+    optional_tensor4ref<T> load_trf_from_cache(const std::string &key) const;
+    template<typename T>
+    optional_tensor4ref<T> load_trf_from_cache(const std::vector<size_t> &sites, size_t pos, std::string_view side) const;
+    template<typename T>
+    void save_trf_into_cache(const Eigen::Tensor<T, 4> &trf, const std::string &key) const;
+    template<typename T>
+    void save_trf_into_cache(const Eigen::Tensor<T, 4> &trf, const std::vector<size_t> &sites, size_t pos, std::string_view side) const;
+    template<typename T>
+    std::optional<TrfCacheEntry<T>> get_optimal_trf_from_cache(const std::vector<size_t> &sites, std::string_view side) const;
+    template<typename T>
+    std::optional<TrfCacheEntry<T>> get_optimal_trf_from_cache(const std::vector<size_t> &sites) const;
+    template<typename T>
+    optional_tensor3ref<T> get_cached_mps(const std::string &key) const;
+    template<typename T>
     bool        has_cached_mps(const std::string &key) const;
     std::string generate_cache_key(const std::vector<size_t> &sites, const size_t pos, std::string_view side) const;
-    template<typename Scalar>
-    double get_transfer_matrix_cost(const std::vector<size_t> &sites, std::string_view side, const std::optional<TrfCacheEntry<Scalar>> &trf_cache) const;
+    template<typename T>
+    double get_transfer_matrix_cost(const std::vector<size_t> &sites, std::string_view side, const std::optional<TrfCacheEntry<T>> &trf_cache) const;
 
     public:
-    std::vector<std::unique_ptr<MpsSite>> mps_sites;
-    std::vector<size_t>                   active_sites;
-    mutable MeasurementsStateFinite       measurements;
+    std::vector<std::unique_ptr<MpsSite<Scalar>>> mps_sites;
+    std::vector<size_t>                           active_sites;
+    mutable MeasurementsStateFinite<Scalar>       measurements;
     size_t popcount = -1ul; /*!< Number of 1's or particles in the product state pattern. Used in the fLBIT algorithm, which conserves the particle number. */
 
     public:
@@ -114,9 +117,9 @@ class StateFinite {
     void                        set_algorithm(const AlgorithmType &algo_type);
     [[nodiscard]] AlgorithmType get_algorithm() const;
 
-    const Eigen::Tensor<cx64, 1> &get_bond(long posL, long posR) const;
-    const Eigen::Tensor<cx64, 1> &get_midchain_bond() const;
-    const Eigen::Tensor<cx64, 1> &current_bond() const;
+    const Eigen::Tensor<Scalar, 1> &get_bond(long posL, long posR) const;
+    const Eigen::Tensor<Scalar, 1> &get_midchain_bond() const;
+    const Eigen::Tensor<Scalar, 1> &current_bond() const;
 
     template<typename T = size_t>
     [[nodiscard]] T get_length() const;
@@ -155,18 +158,18 @@ class StateFinite {
     void assert_validity() const;
     // For individual sites
     template<typename T = size_t>
-    const MpsSite &get_mps_site(T pos) const;
+    const MpsSite<Scalar> &get_mps_site(T pos) const;
     template<typename T = size_t>
-    MpsSite       &get_mps_site(T pos);
-    const MpsSite &get_mps_site() const;
-    MpsSite       &get_mps_site();
+    MpsSite<Scalar>       &get_mps_site(T pos);
+    const MpsSite<Scalar> &get_mps_site() const;
+    MpsSite<Scalar>       &get_mps_site();
     // For multiple sites
-    void                                               set_mps(const std::vector<MpsSite> &mps_list);
-    std::vector<std::reference_wrapper<const MpsSite>> get_mps(const std::vector<size_t> &sites) const;
-    std::vector<std::reference_wrapper<MpsSite>>       get_mps(const std::vector<size_t> &sites);
-    std::vector<MpsSite>                               get_mps_copy(const std::vector<size_t> &sites);
-    std::vector<std::reference_wrapper<const MpsSite>> get_mps_active() const;
-    std::vector<std::reference_wrapper<MpsSite>>       get_mps_active();
+    void                                                       set_mps(const std::vector<MpsSite<Scalar>> &mps_list);
+    std::vector<std::reference_wrapper<const MpsSite<Scalar>>> get_mps(const std::vector<size_t> &sites) const;
+    std::vector<std::reference_wrapper<MpsSite<Scalar>>>       get_mps(const std::vector<size_t> &sites);
+    std::vector<MpsSite<Scalar>>                               get_mps_copy(const std::vector<size_t> &sites);
+    std::vector<std::reference_wrapper<const MpsSite<Scalar>>> get_mps_active() const;
+    std::vector<std::reference_wrapper<MpsSite<Scalar>>>       get_mps_active();
 
     // For multisite
     std::array<long, 3>              active_dimensions() const;
@@ -178,17 +181,17 @@ class StateFinite {
     long                             get_spin_dim() const;
     std::vector<std::array<long, 3>> get_mps_dims(const std::vector<size_t> &sites) const;
     std::vector<std::array<long, 3>> get_mps_dims_active() const;
-    template<typename Scalar>
-    Eigen::Tensor<Scalar, 3> get_multisite_mps(const std::vector<size_t> &sites, bool use_cache = false) const;
-    template<typename Scalar>
-    const Eigen::Tensor<Scalar, 3> &get_multisite_mps() const;
-    template<typename Scalar>
-    Eigen::Tensor<Scalar, 2> get_reduced_density_matrix(const std::vector<size_t> &sites) const;
-    template<typename Scalar>
+    template<typename T>
+    Eigen::Tensor<T, 3> get_multisite_mps(const std::vector<size_t> &sites, bool use_cache = false) const;
+    template<typename T>
+    const Eigen::Tensor<T, 3> &get_multisite_mps() const;
+    template<typename T>
+    Eigen::Tensor<T, 2> get_reduced_density_matrix(const std::vector<size_t> &sites) const;
+    template<typename T>
     std::array<double, 3> get_reduced_density_matrix_cost(const std::vector<size_t> &sites) const;
-    template<typename Scalar>
-    Eigen::Tensor<Scalar, 2> get_transfer_matrix(const std::vector<size_t> &sites, std::string_view side) const;
-    template<typename Scalar>
+    template<typename T>
+    Eigen::Tensor<T, 2> get_transfer_matrix(const std::vector<size_t> &sites, std::string_view side) const;
+    template<typename T>
     std::array<double, 2> get_transfer_matrix_costs(const std::vector<size_t> &sites, std::string_view side) const;
     double                get_trf_cache_gbts() const;
     double                get_mps_cache_gbts() const;
@@ -209,7 +212,8 @@ class StateFinite {
 
     size_t num_sites_truncated(double truncation_threshold) const;
     size_t num_bonds_at_limit(long bond_lim) const;
-    bool   is_limited_by_bond(long bond_lim) const;
+    bool   is_at_bond_limit(long bond_lim) const;
+    size_t num_bonds_at_maximum(const std::vector<size_t> &sites) const;
     bool   is_truncated(double truncation_error_limit) const;
     void   clear_measurements(LogPolicy logPolicy = LogPolicy::SILENT) const;
     void   clear_cache(LogPolicy logPolicy = LogPolicy::SILENT) const;

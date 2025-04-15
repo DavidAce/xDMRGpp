@@ -1,9 +1,9 @@
 #pragma once
 #include "algorithms/AlgorithmBase.h"
 #include "tensors/TensorsInfinite.h"
-class StateInfinite;
-class ModelInfinite;
-class EdgesInfinite;
+template <typename Scalar> class StateInfinite;
+template <typename Scalar> class ModelInfinite;
+template <typename Scalar> class EdgesInfinite;
 
 class AlgorithmInfinite : public AlgorithmBase {
     public:

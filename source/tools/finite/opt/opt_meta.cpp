@@ -5,8 +5,8 @@
 
 namespace tools::finite::opt {
     OptMeta::OptMeta()
-        : optAlgo(OptAlgo::DMRG), optRitz(OptRitz::SR), optSolver(OptSolver::EIGS), optType(OptType::CPLX), optWhen(OptWhen::ALWAYS), optExit(OptExit::NONE),
-          expand_mode(EnvExpandMode::DEFAULT) {}
+        : optAlgo(OptAlgo::DMRG), optRitz(OptRitz::SR), optSolver(OptSolver::EIGS), optType(OptType::CX64), optWhen(OptWhen::ALWAYS), optExit(OptExit::NONE),
+          bondexp_policy(BondExpansionPolicy::DEFAULT) {}
 
     OptMeta::OptMeta(OptAlgo algo, OptRitz ritz) : OptMeta() {
         optAlgo = algo;
@@ -41,7 +41,7 @@ namespace tools::finite::opt {
         res += fmt::format(" | type {}", enum2sv(optType));
         res += fmt::format(" | ritz {}", enum2sv(optRitz));
         res += fmt::format(" | algo {}", enum2sv(optAlgo));
-        res += fmt::format(" | expm {}", flag2str(expand_mode));
+        res += fmt::format(" | expm {}", flag2str(bondexp_policy));
         if(eigv_target) res += fmt::format(" (tgt: {:.3e})", eigv_target.value());
         if(eigs_nev) res += fmt::format(" | nev {}", eigs_nev.value());
         if(eigs_ncv) res += fmt::format(" | ncv {}", eigs_ncv.value());

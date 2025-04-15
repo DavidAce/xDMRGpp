@@ -47,7 +47,7 @@ int eig::solver::ssyevx(fp32 *matrix, size_type L, char range, int il, int iu, f
         eigvecs.resize(static_cast<size_t>(ldz * m_req)); // Docs claim ldz * m, but it segfaults when 'V' finds more than m eigvals
     }
 
-    info = LAPACKE_ssyevx_work(LAPACK_COL_MAJOR, jobz, range, 'U', n, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_dlamch('S'), &m_found, eigvals.data(),
+    info = LAPACKE_ssyevx_work(LAPACK_COL_MAJOR, jobz, range, 'U', n, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_slamch('S'), &m_found, eigvals.data(),
                                eigvecs.data(), ldz, lwork_query, -1, iwork.data(), ifail.data());
 
     int lwork = safe_cast<int>(lwork_query[0]);
@@ -57,7 +57,7 @@ int eig::solver::ssyevx(fp32 *matrix, size_type L, char range, int il, int iu, f
 
     auto t_prep = std::chrono::high_resolution_clock::now();
 
-    info = LAPACKE_ssyevx_work(LAPACK_COL_MAJOR, jobz, range, 'U', n, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_dlamch('S'), &m_found, eigvals.data(),
+    info = LAPACKE_ssyevx_work(LAPACK_COL_MAJOR, jobz, range, 'U', n, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_slamch('S'), &m_found, eigvals.data(),
                                eigvecs.data(), ldz, work.data(), lwork, iwork.data(), ifail.data());
 
     auto t_total = std::chrono::high_resolution_clock::now();

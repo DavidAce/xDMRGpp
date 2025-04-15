@@ -13,6 +13,7 @@
 namespace tid {
     class ur;
 }
+template<typename Scalar>
 class MpoSite;
 
 template<typename T>
@@ -20,12 +21,15 @@ struct env_pair;
 
 struct primme_params;
 
-template<typename T>
+template<typename Scalar_>
 class MatVecMPOS {
-    static_assert(std::is_same_v<T, fp64> or std::is_same_v<T, cx64>);
+    // static_assert(std::is_same_v<T, fp64> or std::is_same_v<T, cx64>);
 
     public:
-    using Scalar     = T;
+    using T          = Scalar_;
+    using Scalar     = Scalar_;
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using CplxScalar = std::complex<RealScalar>;
     using T32        = std::conditional_t<std::is_same_v<T, fp64>, float, std::complex<float>>;
     using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorType = Eigen::Matrix<T, Eigen::Dynamic, 1>;
@@ -49,12 +53,25 @@ class MatVecMPOS {
     std::array<long, 3>              shape_mps;
     long                             size_mps;
     std::vector<long>                spindims;
-    eig::Form                        form = eig::Form::SYMM;
-    eig::Side                        side = eig::Side::R;
-    VectorType                       jcbDiagA, jcbDiagB;      // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
-    VectorType                       denseJcbDiagonal;        // The inverted diagonals used when jcBMaxBlockSize == 1
-    std::vector<std::pair<long, SparseType>> sparseJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as sparse matrices
-    std::vector<std::pair<long, MatrixType>> denseJcbBlocks;  // inverted blocks for the block Jacobi preconditioner stored as dense matrices
+    eig::Form                        form            = eig::Form::SYMM;
+    eig::Side                        side            = eig::Side::R;
+    std::optional<T>                 jcbShift        = std::nullopt;
+    long                             jcbMaxBlockSize = 1l;  // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
+    VectorType                       jcbDiagA, jcbDiagB;    // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
+    VectorType                       invJcbDiagonal;        // The inverted diagonals used when jcBMaxBlockSize == 1
+    std::vector<std::pair<long, SparseType>> sInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as sparse matrices
+    std::vector<std::pair<long, MatrixType>> dInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as dense matrices
+    // std::vector<std::pair<long, MatrixType>> dJcbBlocksA;   // the blocks for the Jacobi preconditioner stored as dense matrices
+    // std::vector<std::pair<long, MatrixType>> dJcbBlocksB;   // the blocks for the Jacobi preconditioner stored as dense matrices
+
+    using LLTType = Eigen::LLT<MatrixType, Eigen::Lower>;
+    std::vector<std::tuple<long, std::unique_ptr<LLTType>>> lltJcbBlocks; // Solvers for the block Jacobi preconditioner
+
+    using LUType = Eigen::PartialPivLU<MatrixType>;
+    std::vector<std::tuple<long, std::unique_ptr<LUType>>> luJcbBlocks; // Solvers for the block Jacobi preconditioner
+
+    using LDLTType = Eigen::LDLT<MatrixType, Eigen::Lower>;
+    std::vector<std::tuple<long, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
 
     using BICGType = Eigen::BiCGSTAB<SparseRowM, Eigen::IncompleteLUT<Scalar>>;
     std::vector<std::tuple<long, std::unique_ptr<SparseRowM>, std::unique_ptr<BICGType>>> bicgstabJcbBlocks; // Solvers for the block Jacobi preconditioner
@@ -63,18 +80,9 @@ class MatVecMPOS {
     using CGType = Eigen::ConjugateGradient<SparseType, Eigen::Lower | Eigen::Upper, Eigen::IncompleteCholesky<Scalar, Eigen::Lower | Eigen::Upper>>;
     std::vector<std::tuple<long, std::unique_ptr<SparseType>, std::unique_ptr<CGType>>> cgJcbBlocks; // Solvers for the block Jacobi preconditioner
 
-    using LLTType = Eigen::LLT<MatrixType, Eigen::Lower>;
-    std::vector<std::tuple<long, std::unique_ptr<LLTType>>> lltJcbBlocks; // Solvers for the block Jacobi preconditioner
-
-    using LDLTType = Eigen::LDLT<MatrixType, Eigen::Lower>;
-    std::vector<std::tuple<long, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
-
-    using LUType = Eigen::PartialPivLU<MatrixType>;
-    std::vector<std::tuple<long, std::unique_ptr<LUType>>> luJcbBlocks; // Solvers for the block Jacobi preconditioner
-
-    Eigen::LDLT<MatrixType>         ldlt; // Stores the ldlt matrix factorization on shift-invert
     Eigen::LLT<MatrixType>          llt;  // Stores the llt matrix factorization on shift-invert
     Eigen::PartialPivLU<MatrixType> lu;   // Stores the lu matrix factorization on shift-invert
+    Eigen::LDLT<MatrixType>         ldlt; // Stores the ldlt matrix factorization on shift-invert
 
     SparseType        sparseMatrix;
     VectorType        solverGuess;
@@ -84,16 +92,11 @@ class MatVecMPOS {
     T get_matrix_element(long I, long J, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const;
     VectorType get_diagonal_new(long offset, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
                                 const Eigen::Tensor<T, 3> &ENVR) const;
-    MatrixType get_diagonal_block_old(long offset, long extent, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-                                      const Eigen::Tensor<T, 3> &ENVR) const;
     MatrixType get_diagonal_block(long offset, long extent, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
                                   const Eigen::Tensor<T, 3> &ENVR) const;
     MatrixType get_diagonal_block(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A, const Eigen::Tensor<T, 3> &ENVL_A,
                                   const Eigen::Tensor<T, 3> &ENVR_A, const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
                                   const Eigen::Tensor<T, 3> &ENVR_B) const;
-    MatrixType get_diagonal_block_old(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A, const Eigen::Tensor<T, 3> &ENVL_A,
-                                      const Eigen::Tensor<T, 3> &ENVR_A, const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
-                                      const Eigen::Tensor<T, 3> &ENVR_B) const;
 
     // VectorType get_diagonal_old(long offset) const;
     VectorType get_row(long row_idx, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const;
@@ -104,49 +107,54 @@ class MatVecMPOS {
     // void                             thomas(const long rows, const VectorType &x, const VectorType &dl, const VectorType &dm, const VectorType &du);
 
     // Shift stuff
-    std::complex<double> sigma           = cx64(0.0, 0.0); // The shift
-    bool                 readyShift      = false;          // Flag to make sure the shift has occurred
-    bool                 readyFactorOp   = false;          // Flag to check if factorization has occurred
-    bool                 readyCalcPc     = false;
-    long                 jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
+    CplxScalar sigma         = CplxScalar(0.0, 0.0); // The shift
+    bool       readyShift    = false;                // Flag to make sure the shift has occurred
+    bool       readyFactorOp = false;                // Flag to check if factorization has occurred
+    bool       readyCalcPc   = false;
+    bool       lockCalcPc    = false;
+
     public:
     MatVecMPOS() = default;
     template<typename EnvType>
-    MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos, /*!< The Hamiltonian MPO's  */
-               const env_pair<const EnvType &>                          &envs  /*!< The left and right environments.  */
+    MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, /*!< The Hamiltonian MPO's  */
+               const env_pair<const EnvType &>                                  &envs  /*!< The left and right environments.  */
     );
     template<typename EnvTypeA, typename EnvTypeB>
-    MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos, /*!< The Hamiltonian MPO's  */
-               const env_pair<const EnvTypeA &>                         &enva, /*!< The left and right environments.  */
-               const env_pair<const EnvTypeB &>                         &envb  /*!< The left and right environments.  */
+    MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, /*!< The Hamiltonian MPO's  */
+               const env_pair<const EnvTypeA &>                                 &enva, /*!< The left and right environments.  */
+               const env_pair<const EnvTypeB &>                                 &envb  /*!< The left and right environments.  */
     );
 
     // Functions used in Arpack++ solver
     [[nodiscard]] int rows() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
     [[nodiscard]] int cols() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
 
-    void FactorOP();                      //  Factorizes (A-sigma*I) (or finds its diagonal elements)
-    void MultOPv(T *mps_in_, T *mps_out); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
-    void MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
-    void MultAx(T *mps_in_, T *mps_out_); //  Computes the matrix-vector multiplication x_out <- A*x_in.
-    void MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err);
-    void MultBx(T *mps_in_, T *mps_out_); //  Computes the matrix-vector multiplication x_out <- A*x_in.
-    void MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err);
+    void                FactorOP();                      //  Factorizes (A-sigma*I) (or finds its diagonal elements)
+    void                MultOPv(T *mps_in_, T *mps_out); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
+    void                MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
+    void                MultAx(T *mps_in_, T *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void                MultAx(const T *mps_in_, T *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void                MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
+    void                MultBx(T *mps_in_, T *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void                MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
+    Eigen::Tensor<T, 3> operator*(const Eigen::Tensor<T, 3> &x) const;
+    Eigen::Tensor<T, 1> operator*(const Eigen::Tensor<T, 1> &x) const;
+    VectorType          operator*(const VectorType &x) const;
 
     void CalcPc(T shift = 0.0);                         //  Calculates the diagonal or tridiagonal part of A
     void MultPc(T *mps_in_, T *mps_out, T shift = 0.0); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
     void MultPc(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
 
     // Various utility functions
-    long num_mv = 0;
-    long num_op = 0;
-    long num_pc = 0;
-    void print() const;
-    void reset();
-    void set_shift(std::complex<double> shift);
-    void set_mode(eig::Form form_);
-    void set_side(eig::Side side_);
-    void set_jcbMaxBlockSize(std::optional<long> jcbSize); // the llt preconditioner bandwidth (default 8) (tridiagonal has bandwidth == 1)
+    mutable long num_mv = 0;
+    mutable long num_op = 0;
+    mutable long num_pc = 0;
+    void         print() const;
+    void         reset();
+    void         set_shift(CplxScalar shift);
+    void         set_mode(eig::Form form_);
+    void         set_side(eig::Side side_);
+    void         set_jcbMaxBlockSize(std::optional<long> jcbSize); // the llt preconditioner bandwidth (default 8) (tridiagonal has bandwidth == 1)
 
     [[nodiscard]] T                                       get_shift() const;
     [[nodiscard]] eig::Form                               get_form() const;

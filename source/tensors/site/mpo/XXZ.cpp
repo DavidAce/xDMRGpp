@@ -8,7 +8,11 @@
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
 
-XXZ::XXZ(ModelType model_type_, size_t position_) : MpoSite(model_type_, position_) {
+template class XXZ<cx64>;
+template class XXZ<cx128>;
+
+template<typename Scalar>
+XXZ<Scalar>::XXZ(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {
     h5tb.param.delta        = settings::model::xxz::delta;
     h5tb.param.spin_dim     = settings::model::xxz::spin_dim;
     h5tb.param.distribution = settings::model::xxz::distribution;
@@ -16,12 +20,25 @@ XXZ::XXZ(ModelType model_type_, size_t position_) : MpoSite(model_type_, positio
     extent2                 = {h5tb.param.spin_dim, h5tb.param.spin_dim};
 }
 
-double XXZ::get_field() const { return h5tb.param.h_rand; }
-double XXZ::get_coupling() const { return h5tb.param.delta; }
-void   XXZ::print_parameter_names() const { h5tb.print_parameter_names(); }
-void   XXZ::print_parameter_values() const { h5tb.print_parameter_values(); }
+template<typename Scalar>
+double XXZ<Scalar>::get_field() const {
+    return h5tb.param.h_rand;
+}
+template<typename Scalar>
+double XXZ<Scalar>::get_coupling() const {
+    return h5tb.param.delta;
+}
+template<typename Scalar>
+void XXZ<Scalar>::print_parameter_names() const {
+    h5tb.print_parameter_names();
+}
+template<typename Scalar>
+void XXZ<Scalar>::print_parameter_values() const {
+    h5tb.print_parameter_values();
+}
 
-void XXZ::set_parameters(TableMap &parameters) {
+template<typename Scalar>
+void XXZ<Scalar>::set_parameters(TableMap &parameters) {
     h5tb.param.delta                 = std::any_cast<decltype(h5tb.param.delta)>(parameters["delta"]);
     h5tb.param.h_rand                = std::any_cast<decltype(h5tb.param.h_rand)>(parameters["h_rand"]);
     h5tb.param.spin_dim              = std::any_cast<decltype(h5tb.param.spin_dim)>(parameters["spin_dim"]);
@@ -29,7 +46,8 @@ void XXZ::set_parameters(TableMap &parameters) {
     all_mpo_parameters_have_been_set = true;
 }
 
-XXZ::TableMap XXZ::get_parameters() const {
+template<typename Scalar>
+typename XXZ<Scalar>::TableMap XXZ<Scalar>::get_parameters() const {
     /* clang-format off */
     TableMap parameters;
     parameters["delta"]         = h5tb.param.delta;
@@ -40,7 +58,8 @@ XXZ::TableMap XXZ::get_parameters() const {
     /* clang-format on */
 }
 
-std::any XXZ::get_parameter(const std::string_view name) const {
+template<typename Scalar>
+std::any XXZ<Scalar>::get_parameter(const std::string_view name) const {
     /* clang-format off */
     if(name      == "delta")        return  h5tb.param.delta;
     else if(name == "h_rand")       return  h5tb.param.h_rand;
@@ -50,7 +69,8 @@ std::any XXZ::get_parameter(const std::string_view name) const {
     throw except::logic_error("Invalid parameter name for XXZ model: {}", name);
 }
 
-void XXZ::set_parameter(const std::string_view name, std::any value) {
+template<typename Scalar>
+void XXZ<Scalar>::set_parameter(const std::string_view name, std::any value) {
     /* clang-format off */
     if(name      == "delta")         h5tb.param.delta = std::any_cast<decltype(h5tb.param.delta)>(value);
     else if(name == "h_rand")       h5tb.param.h_rand = std::any_cast<decltype(h5tb.param.h_rand)>(value);
@@ -95,8 +115,9 @@ void XXZ::set_parameter(const std::string_view name, std::any value) {
  *         |---σz{i}---[3]------------------ Δσz{i+1}--------------|
  *
  */
-Eigen::Tensor<cx64, 4> XXZ::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                    [[maybe_unused]] std::optional<std::vector<size_t>> skip) const
+template<typename Scalar>
+Eigen::Tensor<cx64, 4> XXZ<Scalar>::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                            [[maybe_unused]] std::optional<std::vector<size_t>> skip) const
 
 {
     using namespace qm::spin::half::tensor;
@@ -135,7 +156,8 @@ Eigen::Tensor<cx64, 4> XXZ::get_mpo(cx64 energy_shift_per_site, std::optional<st
     return mpo_build;
 }
 
-void XXZ::randomize_hamiltonian() {
+template<typename Scalar>
+void XXZ<Scalar>::randomize_hamiltonian() {
     if(h5tb.param.distribution != "uniform") throw except::runtime_error("XXZ expects a uniform distribution. Got: {}", h5tb.param.distribution);
     h5tb.param.h_rand = rnd::uniform_double_box(settings::model::xxz::h_wdth);
 
@@ -145,11 +167,18 @@ void XXZ::randomize_hamiltonian() {
     unique_id_sq                     = std::nullopt;
 }
 
-std::unique_ptr<MpoSite> XXZ::clone() const { return std::make_unique<XXZ>(*this); }
+template<typename Scalar>
+std::unique_ptr<MpoSite<Scalar>> XXZ<Scalar>::clone() const {
+    return std::make_unique<XXZ>(*this);
+}
 
-long XXZ::get_spin_dimension() const { return h5tb.param.spin_dim; }
+template<typename Scalar>
+long XXZ<Scalar>::get_spin_dimension() const {
+    return h5tb.param.spin_dim;
+}
 
-void XXZ::set_averages(std::vector<TableMap> all_parameters, bool infinite) {
+template<typename Scalar>
+void XXZ<Scalar>::set_averages(std::vector<TableMap> all_parameters, bool infinite) {
     if(not infinite) { all_parameters.back()["J_rand"] = 0.0; }
     set_parameters(all_parameters[get_position()]);
     double delta              = h5tb.param.delta;
@@ -158,12 +187,14 @@ void XXZ::set_averages(std::vector<TableMap> all_parameters, bool infinite) {
     global_energy_upper_bound = (2 + delta) * (L - 1) + h * L;
 }
 
-void XXZ::save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const {
+template<typename Scalar>
+void XXZ<Scalar>::save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const {
     if(not file.linkExists(hamiltonian_table_path)) file.createTable(h5tb.get_h5_type(), hamiltonian_table_path, "XXZ");
     file.appendTableRecords(h5tb.param, hamiltonian_table_path);
 }
 
-void XXZ::load_hamiltonian(const h5pp::File &file, std::string_view model_path) {
+template<typename Scalar>
+void XXZ<Scalar>::load_hamiltonian(const h5pp::File &file, std::string_view model_path) {
     auto ham_table = fmt::format("{}/hamiltonian", model_path);
     if(file.linkExists(ham_table)) {
         h5tb.param                       = file.readTableRecords<h5tb_xxz::table>(ham_table, position);
@@ -172,7 +203,7 @@ void XXZ::load_hamiltonian(const h5pp::File &file, std::string_view model_path) 
         throw except::runtime_error("could not load mpo: table [{}] does not exist", ham_table);
 
     using namespace settings::model::xxz;
-    if(std::abs(h5tb.param.delta - delta) > 1e-6) throw except::runtime_error("delta  {:.16f} != {:.16f} xxz::delta", h5tb.param.delta, delta);
+    if(std::abs(h5tb.param.delta - delta) > 1e-6) throw except::runtime_error("delta  {:.16f} != {:.16f} XXZ<Scalar>::delta", h5tb.param.delta, delta);
 
     local_energy_upper_bound = 2 + h5tb.param.delta + h5tb.param.delta;
 
@@ -183,7 +214,6 @@ void XXZ::load_hamiltonian(const h5pp::File &file, std::string_view model_path) 
         global_energy_upper_bound += std::abs(param.h_rand);
         global_energy_upper_bound += 2 + std::abs(param.delta);
     }
-
 
     build_mpo();
 }

@@ -12,22 +12,27 @@ enum class OptType;
 enum class OptWhen;
 enum class OptExit;
 enum class OptRitz;
-enum class EnvExpandMode;
+enum class BondExpansionPolicy;
 
 namespace tools::finite::opt {
     struct OptMeta {
-        OptAlgo       optAlgo;
-        OptRitz       optRitz;
-        OptSolver     optSolver;
-        OptType       optType;
-        OptWhen       optWhen;
-        OptExit       optExit;
-        EnvExpandMode expand_mode;
-        size_t        max_sites        = 2;
-        size_t        min_sites        = 1;
-        long          max_problem_size = 0;
-        long          problem_size     = 0;
-        // std::optional<double>      alpha_expansion  = std::nullopt;
+        OptAlgo             optAlgo;
+        OptRitz             optRitz;
+        OptSolver           optSolver;
+        OptType             optType;
+        OptWhen             optWhen;
+        OptExit             optExit;
+        BondExpansionPolicy bondexp_policy;
+        size_t              bondexp_maxiter   = 1ul;
+        size_t              bondexp_blocksize = 1ul;
+        size_t              bondexp_nkrylov   = 10ul;
+        double              bondexp_factor    = 1.0;
+        double              bondexp_minalpha  = 1e-15;
+        double              bondexp_maxalpha  = 1e-3;
+        size_t              max_sites         = 2ul;
+        size_t              min_sites         = 1ul;
+        long                max_problem_size  = 0;
+        long                problem_size      = 0;
         std::array<long, 3>        problem_dims = {};
         std::vector<size_t>        chosen_sites = {};
         std::string                label;
@@ -45,8 +50,8 @@ namespace tools::finite::opt {
         std::optional<int>         primme_minRestartSize = std::nullopt;
         std::optional<int>         primme_maxBlockSize   = std::nullopt;
 
-                           OptMeta();
-        explicit           OptMeta(OptAlgo algo, OptRitz ritz);
+        OptMeta();
+        explicit OptMeta(OptAlgo algo, OptRitz ritz);
         [[nodiscard]] bool should_proceed(OptExit previous_exit) const;
         void               validate() const;
         std::string        string() const;

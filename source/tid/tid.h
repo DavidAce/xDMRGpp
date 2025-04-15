@@ -44,8 +44,8 @@ namespace tid {
         std::string temp_prefix;
 
         public:
-        explicit token(ur &t_);
-        token(ur &t_, std::string_view prefix_);
+        explicit token(ur &t_, double add_time = 0);
+        token(ur &t_, std::string_view prefix_, double add_time = 0);
         ~token() noexcept;
         void tic() noexcept;
         void toc() noexcept;
@@ -103,9 +103,10 @@ namespace tid {
         ur &operator+=(const ur &rhs) noexcept;
         ur &operator-=(const ur &rhs) noexcept;
 
-        [[nodiscard]] token tic_token() noexcept; /*!< Gives a token RAII-style tic-toc */
+        [[nodiscard]] token tic_token(double add_time = 0) noexcept; /*!< Gives a token RAII-style tic-toc */
         [[nodiscard]] token tic_token(
-            std::string_view prefix) noexcept; /*!< Gives a token RAII-style tic-toc, and temporarily sets a new global prefix for subsequent tic/tokens */
+            std::string_view prefix,
+            double add_time = 0) noexcept; /*!< Gives a token RAII-style tic-toc, and temporarily sets a new global prefix for subsequent tic/tokens */
         friend class token;
         friend class internal::ur_node_t;
 
@@ -117,8 +118,8 @@ namespace tid {
 
     [[nodiscard]] extern ur   &get(std::string_view key, level l = level::parent, bool unscoped = false);
     [[nodiscard]] extern ur   &get_unscoped(std::string_view key, level l = level::parent);
-    [[nodiscard]] extern token tic_token(std::string_view key, level l = level::parent);
-    [[nodiscard]] extern token tic_scope(std::string_view key, level l = level::parent);
+    [[nodiscard]] extern token tic_token(std::string_view key, level l = level::parent, double add_time = 0);
+    [[nodiscard]] extern token tic_scope(std::string_view key, level l = level::parent, double add_time = 0);
 
     extern void add(std::string_view key, std::string_view label = "");
     extern void tic(std::string_view key, level l = level::parent);

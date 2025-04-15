@@ -10,20 +10,22 @@
 namespace tid {
     class ur;
 }
-class MpoSite;
-class MpsSite;
+template<typename Scalar> class MpoSite;
+template<typename Scalar> class MpsSite;
 
 template<typename T>
 struct env_pair;
 
 struct primme_params;
 
-template<typename T>
+template<typename Scalar_>
 class MatVecZero {
-    static_assert(std::is_same_v<T, fp64> or std::is_same_v<T, cx64>);
 
     public:
-    using Scalar     = T;
+    using T      = Scalar_;
+    using Scalar = Scalar_;
+    static_assert(std::is_same_v<T, fp64> or std::is_same_v<T, cx64>);
+
     using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorType = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
@@ -51,8 +53,8 @@ class MatVecZero {
     public:
     MatVecZero() = default;
     template<typename EnvType>
-    MatVecZero(const std::vector<std::reference_wrapper<const MpsSite>> &mpss_, /*!< The MPS sites  */
-               const std::vector<std::reference_wrapper<const MpoSite>> &mpos,  /*!< The Hamiltonian MPO's  */
+    MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> &mpss_, /*!< The MPS sites  */
+               const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos,  /*!< The Hamiltonian MPO's  */
                const env_pair<const EnvType &>                          &envs   /*!< The left and right environments.  */
     );
     // Functions used in Arpack++ solver

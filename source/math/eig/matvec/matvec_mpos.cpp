@@ -4,6 +4,7 @@
 #include "config/settings.h"
 #include "debug/info.h"
 #include "general/sfinae.h"
+#include "io/fmt_f128_t.h"
 #include "math/eig/solver.h"
 #include "math/linalg/matrix.h"
 #include "math/linalg/tensor.h"
@@ -48,41 +49,13 @@ MatVecMPOS<T>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite
     fullsystem = envs_.L.get_sites() == 0 and envs_.R.get_sites() == 0; //  mpos.size() == settings::model::model_size;
 
     if constexpr(std::is_same_v<EnvType, EnvEne>) {
-        if constexpr(std::is_same_v<T, cx64>) {
-            for(const auto &mpo_ : mpos_) mpos_A.emplace_back(mpo_.get().MPO());
-            envL_A = envs_.L.get_block();
-            envR_A = envs_.R.get_block();
-        } else {
-            if constexpr(eig::debug) {
-                if(not tenx::isReal(envs_.L.get_block())) throw except::runtime_error("envL is not real");
-                if(not tenx::isReal(envs_.R.get_block())) throw except::runtime_error("envR is not real");
-            }
-            for(const auto &mpo_ : mpos_) {
-                if(not tenx::isReal(mpo_.get().MPO())) throw except::runtime_error("mpo is not real");
-                mpos_A.emplace_back(mpo_.get().MPO().real());
-            }
-            envL_A = envs_.L.get_block().real();
-            envR_A = envs_.R.get_block().real();
-        }
+        for(const auto &mpo_ : mpos_) mpos_A.emplace_back(mpo_.get().MPO_as<T>());
     }
     if constexpr(std::is_same_v<EnvType, EnvVar>) {
-        if constexpr(std::is_same_v<T, cx64>) {
-            for(const auto &mpo_ : mpos_) mpos_A.emplace_back(mpo_.get().MPO2());
-            envL_A = envs_.L.get_block();
-            envR_A = envs_.R.get_block();
-        } else {
-            if constexpr(eig::debug) {
-                if(not tenx::isReal(envs_.L.get_block())) throw except::runtime_error("envL is not real");
-                if(not tenx::isReal(envs_.R.get_block())) throw except::runtime_error("envR is not real");
-            }
-            for(const auto &mpo_ : mpos_) {
-                if(not tenx::isReal(mpo_.get().MPO2())) throw except::runtime_error("mpo is not real");
-                mpos_A.emplace_back(mpo_.get().MPO2().real());
-            }
-            envL_A = envs_.L.get_block().real();
-            envR_A = envs_.R.get_block().real();
-        }
+        for(const auto &mpo_ : mpos_) mpos_A.emplace_back(mpo_.get().MPO2_as<T>());
     }
+    envL_A = envs_.L.template get_block_as<T>();
+    envR_A = envs_.R.template get_block_as<T>();
 
     long spin_dim = 1;
     for(const auto &mpo : mpos_A) spin_dim *= mpo.dimension(2);
@@ -129,11 +102,19 @@ MatVecMPOS<T>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite
     t_multAx   = std::make_unique<tid::ur>("Time MultAx");
     t_multPc   = std::make_unique<tid::ur>("Time MultPc");
 }
-
-template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
+template MatVecMPOS<fp32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
 template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
+template MatVecMPOS<fp128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
+template MatVecMPOS<cx32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
+template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
+template MatVecMPOS<cx128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
+
+template MatVecMPOS<fp32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
 template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
+template MatVecMPOS<fp128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
+template MatVecMPOS<cx32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
+template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
+template MatVecMPOS<cx128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
 
 template<typename T>
 template<typename EnvTypeA, typename EnvTypeB>
@@ -144,27 +125,13 @@ MatVecMPOS<T>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite
     // static_assert(sfinae::is_any_v<EnvTypeA, EnvVar>);
     // static_assert(sfinae::is_any_v<EnvTypeB, EnvEne>);
     if constexpr(std::is_same_v<EnvTypeB, EnvEne>) {
-        if constexpr(std::is_same_v<T, cx64>) {
-            for(const auto &mpo_ : mpos_) mpos_B.emplace_back(mpo_.get().MPO());
-            envL_B = envb_.L.get_block();
-            envR_B = envb_.R.get_block();
-        } else {
-            for(const auto &mpo_ : mpos_) mpos_B.emplace_back(mpo_.get().MPO().real());
-            envL_B = envb_.L.get_block().real();
-            envR_B = envb_.R.get_block().real();
-        }
+        for(const auto &mpo_ : mpos_) mpos_B.emplace_back(mpo_.get().MPO_as<T>());
     }
     if constexpr(std::is_same_v<EnvTypeB, EnvVar>) {
-        if constexpr(std::is_same_v<T, cx64>) {
-            for(const auto &mpo_ : mpos_) mpos_B.emplace_back(mpo_.get().MPO2());
-            envL_B = envb_.L.get_block();
-            envR_B = envb_.R.get_block();
-        } else {
-            for(const auto &mpo_ : mpos_) mpos_B.emplace_back(mpo_.get().MPO2().real());
-            envL_B = envb_.L.get_block().real();
-            envR_B = envb_.R.get_block().real();
-        }
+        for(const auto &mpo_ : mpos_) mpos_B.emplace_back(mpo_.get().MPO2_as<T>());
     }
+    envL_B = envb_.L.template get_block_as<T>();
+    envR_B = envb_.R.template get_block_as<T>();
 
     if(mpos_B.size() <= 5) {
         constexpr auto contract_idx    = tenx::idx({1}, {0});
@@ -186,15 +153,19 @@ MatVecMPOS<T>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite
     }
 }
 
-template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_,
-                                      const env_pair<const EnvEne &> &envb);
-template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_,
-                                      const env_pair<const EnvEne &> &envb);
+template MatVecMPOS<fp32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
+template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
+template MatVecMPOS<fp128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
+template MatVecMPOS<cx32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
+template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
+template MatVecMPOS<cx128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
 
-template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_,
-                                      const env_pair<const EnvVar &> &envb);
-template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_,
-                                      const env_pair<const EnvVar &> &envb);
+template MatVecMPOS<fp32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
+template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
+template MatVecMPOS<fp128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
+template MatVecMPOS<cx32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
+template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
+template MatVecMPOS<cx128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
 
 template<typename T>
 int MatVecMPOS<T>::rows() const {
@@ -357,23 +328,25 @@ T MatVecMPOS<T>::get_matrix_element(long I, long J, const std::vector<Eigen::Ten
         auto        ext = std::array<long, 4>{dim[0], dim[1], 1, 1};
         if(mdx == 0) {
             mpo_i = mpo.slice(off, ext);
-            if(tenx::isZero(mpo_i, std::numeric_limits<double>::epsilon())) { return 0.0; }
+            if(tenx::isZero(mpo_i, std::numeric_limits<RealScalar>::epsilon())) { return T{0.0}; }
             continue;
         }
         auto shp = std::array<long, 4>{mpo_i.dimension(0), dim[1], 1, 1};
         temp.resize(shp);
         temp  = mpo_i.contract(mpo.slice(off, ext), tenx::idx({1}, {0})).shuffle(shf).reshape(shp);
         mpo_i = std::move(temp);
-        if(tenx::isZero(mpo_i, std::numeric_limits<double>::epsilon())) {
+        if(tenx::isZero(mpo_i, std::numeric_limits<RealScalar>::epsilon())) {
             // eig::log->info("({}, {}) = < {} | {} > = 0 (mdx {}, pr {}, pc {}, pd {}, hd {})", I, J, irxs, icxs, mdx, pr, pc, pd,
             // HammingDist(static_cast<size_t>(ir), static_cast<size_t>(ic)));
-            return 0.0;
+            return T{0.0};
         }
     }
 
     if(fullsystem and mpo_i.size() == 1) {
-        if(mpo_i.coeff(0) != 0.0 and shouldBeZero) { eig::log->info("({}, {}) = < {} | {} > = {:.16f}", I, J, irxs, icxs, mpo_i.coeff(0)); }
-        // eig::log->info("({}, {}) = < {} | {} > = {:.16f} (pr {}, pc {} diff {} | hd {})", I, J, irxs, icxs, mpo_i.coeff(0), pr, pc, pd, hd);
+        if(mpo_i.coeff(0) != T{0.0} and shouldBeZero) {
+            auto valmsg = std::format("{:.16f}{:+.16f}i", std::real(mpo_i.coeff(0)), std::imag(mpo_i.coeff(0)));
+            eig::log->info("({}, {}) = < {} | {} > = {}", I, J, irxs, icxs, valmsg);
+        }
         return mpo_i.coeff(0);
     }
 
@@ -476,157 +449,16 @@ long round_up(long num, long multiple) {
 }
 
 template<typename T>
-typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block_old(long offset, long extent, const std::vector<Eigen::Tensor<T, 4>> &MPOS,
-                                                                         const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const {
-    if(MPOS.empty()) return MatrixType::Identity(extent, extent);
-    extent = std::min(extent, size_mps - offset);
-    if(offset >= size_mps) { return {}; }
-    auto res = MatrixType(extent, extent);
-#pragma omp parallel for collapse(2)
-    for(long J = 0; J < extent; J++) {
-        for(long I = J; I < extent; I++) {
-            if(I + offset >= size_mps) continue;
-            if(J + offset >= size_mps) continue;
-            auto elem = get_matrix_element(I + offset, J + offset, MPOS, ENVL, ENVR);
-            res(I, J) = elem;
-            if constexpr(std::is_same_v<T, cx64>)
-                res(J, I) = std::conj(elem);
-            else
-                res(J, I) = elem;
-        }
-    }
-    return res;
-}
-
-template<typename T>
 typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset, long extent, const std::vector<Eigen::Tensor<T, 4>> &MPOS,
                                                                      const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const {
     if(MPOS.empty()) return MatrixType::Identity(extent, extent);
-    extent = std::min(extent, size_mps - offset);
-    if(offset >= size_mps) { return {}; }
-    auto t_old = tid::ur("old");
-    auto t_new = tid::ur("new");
-
-    if(MPOS.size() > 1) {
-        auto res = MatrixType(extent, extent);
-        t_old.tic();
-#pragma omp parallel for collapse(2)
-        for(long J = 0; J < extent; J++) {
-            for(long I = J; I < extent; I++) {
-                if(I + offset >= size_mps) continue;
-                if(J + offset >= size_mps) continue;
-                auto elem = get_matrix_element(I + offset, J + offset, MPOS, ENVL, ENVR);
-                res(I, J) = elem;
-                if constexpr(std::is_same_v<T, cx64>)
-                    res(J, I) = std::conj(elem);
-                else
-                    res(J, I) = elem;
-            }
-        }
-        t_old.toc();
-        return res;
-    } else {
-        // t_new.tic();
-        MatrixType resC(extent, extent);
-        resC.setZero();
-        long J0 = offset;
-        long JN = offset + extent - 1;
-        long JY = J0;
-        while(JY <= JN) {
-            long I0 = JY;
-            long IN = offset + extent - 1;
-            long R0 = std::clamp(round_dn(I0, shape_mps[0] * shape_mps[1]), 0l, size_mps - 1);
-            long RN = std::clamp(round_up(IN, shape_mps[0] * shape_mps[1]), 0l, size_mps - 1);
-            long C0 = JY;
-            long CN = JY;
-            if(R0 == C0) {
-                // We are at a tensor dimension boundary, so we can actually calculate more columns when we start from here
-                // There is no point in taking too many columns though, since we discard the top right triangle of the sub block
-                CN = std::clamp(round_up(C0 + 1, shape_mps[0] * shape_mps[1]) - 1, C0, JN);
-            }
-            auto R0_ijk = get_offset(R0, shape_mps);
-            auto RN_ijk = get_offset(RN, shape_mps);
-            auto C0_ijk = get_offset(C0, shape_mps);
-            auto CN_ijk = get_offset(CN, shape_mps);
-            auto R_ext  = get_extent(R0_ijk, RN_ijk, shape_mps);
-            auto C_ext  = get_extent(C0_ijk, CN_ijk, shape_mps);
-
-            std::array<long, 2> ext_blk2 = {R_ext[0] * R_ext[1] * R_ext[2], C_ext[0] * C_ext[1] * C_ext[2]};
-            std::array<long, 3> off_envl = {R0_ijk[1], C0_ijk[1], 0};
-            std::array<long, 3> ext_envl = {R_ext[1], C_ext[1], MPOS.front().dimension(0)};
-            std::array<long, 3> off_envr = {R0_ijk[2], C0_ijk[2], 0};
-            std::array<long, 3> ext_envr = {R_ext[2], C_ext[2], MPOS.front().dimension(1)};
-            std::array<long, 4> off_mpos = {off_envl[2], off_envr[2], R0_ijk[0], C0_ijk[0]};
-            std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
-
-            std::array<long, 2> off_resC = {I0 - offset, JY - offset};
-            std::array<long, 2> ext_resC = {IN - I0 + 1, CN - C0 + 1};
-
-            auto  blockC  = Eigen::Tensor<T, 2>(ext_blk2);
-            auto &threads = tenx::threads::get();
-
-            blockC.device(*threads->dev) = ENVL.slice(off_envl, ext_envl)
-                                               .contract(MPOS.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
-                                               .contract(ENVR.slice(off_envr, ext_envr), tenx::idx({2}, {2}))
-                                               .shuffle(tenx::array6{2, 0, 4, 3, 1, 5})
-                                               .reshape(ext_blk2);
-
-            resC.block(off_resC[0], off_resC[1], ext_resC[0], ext_resC[1]) =
-                Eigen::Map<MatrixType>(blockC.data(), blockC.dimension(0), blockC.dimension(1)).block(I0 - R0, JY - C0, ext_resC[0], ext_resC[1]);
-            // MatrixType matC = resC.block(off_resC[0], off_resC[1], ext_resC[0], ext_resC[1]);
-            // MatrixType matF = res.block(off_resC[0], off_resC[1], ext_resC[0], ext_resC[1]);
-            // if(!matC.isApprox(matF)) {
-            //     eig::log->info("I0       {}", I0);
-            //     eig::log->info("J0       {}", J0);
-            //     eig::log->info("IN       {}", IN);
-            //     eig::log->info("JN       {}", JN);
-            //     eig::log->info("R0       {}", R0);
-            //     eig::log->info("RN       {}", RN);
-            //     eig::log->info("C0       {}", C0);
-            //     eig::log->info("CN       {}", CN);
-            //     eig::log->info("R0_ijk   {}", R0_ijk);
-            //     eig::log->info("RN_ijk   {}", RN_ijk);
-            //     eig::log->info("C0_ijk   {}", C0_ijk);
-            //     eig::log->info("CN_ijk   {}", CN_ijk);
-            //     eig::log->info("R_ext    {}", R_ext);
-            //     eig::log->info("C_ext    {}", C_ext);
-            //     eig::log->info("ext_blk6 {}", ext_blk6);
-            //     eig::log->info("ext_blk2 {}", ext_blk2);
-            //     eig::log->info("off_envl {}", off_envl);
-            //     eig::log->info("ext_envl {}", ext_envl);
-            //     eig::log->info("off_envr {}", off_envr);
-            //     eig::log->info("ext_envr {}", ext_envr);
-            //     eig::log->info("off_mpos {}", off_mpos);
-            //     eig::log->info("ext_mpos {}", ext_mpos);
-            //     eig::log->info("off_resC {}", off_resC);
-            //     eig::log->info("ext_resC {}", ext_resC);
-            //     for(long r = 0; r < matC.rows(); ++r) {
-            //         VectorType vecC = matC.row(r);
-            //         VectorType vecF = matF.row(r);
-            //         eig::log->info("({},{}:{}):  {} | {} ", r, JY, JY + CN - C0 + 1, vecC, vecF);
-            //     }
-            //     throw except::logic_error("matC and matF mismatch");
-            // }
-            JY += (CN - C0 + 1);
-        }
-        return resC.template selfadjointView<Eigen::Lower>();
-    }
-}
-
-template<typename T>
-typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A,
-                                                                     const Eigen::Tensor<T, 3> &ENVL_A, const Eigen::Tensor<T, 3> &ENVR_A,
-                                                                     const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
-                                                                     const Eigen::Tensor<T, 3> &ENVR_B) const {
-    if(MPOS_A.empty()) return MatrixType::Identity(extent, extent);
     extent = std::min(extent, size_mps - offset);
     if(offset >= size_mps) { return {}; }
     auto  t_old   = tid::ur("old");
     auto  t_new   = tid::ur("new");
     auto  res     = MatrixType(extent, extent);
     auto &threads = tenx::threads::get();
-
-    if(MPOS_A.size() > 1) {
+    if(MPOS.size() > 1) {
         t_old.tic();
 #pragma omp parallel for collapse(2)
         for(long J = 0; J < extent; J++) {
@@ -634,10 +466,8 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
                 if(I + offset >= size_mps) continue;
                 if(J + offset >= size_mps) continue;
                 // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
-                auto elemA = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
-                auto elemB = get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B);
-                auto elem  = elemA - shift * elemB;
-                res(I, J)  = elem;
+                auto elem = get_matrix_element(I + offset, J + offset, MPOS, ENVL, ENVR);
+                res(I, J) = elem;
                 if constexpr(std::is_same_v<T, cx64>)
                     res(J, I) = std::conj(elem);
                 else
@@ -649,24 +479,6 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
     }
 
     {
-        //         auto dbg = MatrixType(extent, extent);
-        // #pragma omp parallel for collapse(2)
-        //         for(long J = 0; J < extent; J++) {
-        //             for(long I = J; I < extent; I++) {
-        //                 if(I + offset >= size_mps) continue;
-        //                 if(J + offset >= size_mps) continue;
-        //                 // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
-        //                 auto elemA = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
-        //                 auto elemB = get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B);
-        //                 auto elem  = elemA - shift * elemB;
-        //                 dbg(I, J)  = elem;
-        //                 if constexpr(std::is_same_v<T, cx64>)
-        //                     dbg(J, I) = std::conj(elem);
-        //                 else
-        //                     dbg(J, I) = elem;
-        //             }
-        //         }
-
         t_new.tic();
         res.setZero();
         long J0 = offset;              // index of the first column
@@ -701,9 +513,9 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
             auto off_res  = std::array<long, 2>{IX - offset, JY - offset};
             auto ext_res  = std::array<long, 2>{IN - IX + 1, CN - C0 + 1};
 
-            auto get_subblock = [&](const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-                                    const Eigen::Tensor<T, 3> &ENVR) -> MatrixType {
-                if(MPOS.empty()) {
+            auto get_subblock = [&](const std::vector<Eigen::Tensor<T, 4>> &mpos_, const Eigen::Tensor<T, 3> &envl_,
+                                    const Eigen::Tensor<T, 3> &envr_) -> MatrixType {
+                if(mpos_.empty()) {
                     auto subblock = MatrixType(ext_res[0], ext_res[1]);
                     subblock.setZero();
                     // Set 1's along the diagonal of the supermatrix
@@ -718,72 +530,36 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
                     return subblock;
                 }
                 std::array<long, 3> off_envl = {R0_ijk[1], C0_ijk[1], 0};
-                std::array<long, 3> ext_envl = {R_ext[1], C_ext[1], MPOS.front().dimension(0)};
+                std::array<long, 3> ext_envl = {R_ext[1], C_ext[1], mpos_.front().dimension(0)};
                 std::array<long, 3> off_envr = {R0_ijk[2], C0_ijk[2], 0};
-                std::array<long, 3> ext_envr = {R_ext[2], C_ext[2], MPOS.front().dimension(1)};
+                std::array<long, 3> ext_envr = {R_ext[2], C_ext[2], mpos_.front().dimension(1)};
                 std::array<long, 4> off_mpos = {off_envl[2], off_envr[2], R0_ijk[0], C0_ijk[0]};
                 std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
-
-                auto block = Eigen::Tensor<T, 2>(ext_blk2);
-                if(ENVL.dimension(0) <= ENVR.dimension(0)) {
-                    block.device(*threads->dev) = ENVL.slice(off_envl, ext_envl)
-                                                      .contract(MPOS.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
-                                                      .contract(ENVR.slice(off_envr, ext_envr), tenx::idx({2}, {2}))
+                auto                block    = Eigen::Tensor<T, 2>(ext_blk2);
+                if(envl_.dimension(0) <= envr_.dimension(0)) {
+                    block.device(*threads->dev) = envl_.slice(off_envl, ext_envl)
+                                                      .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
+                                                      .contract(envr_.slice(off_envr, ext_envr), tenx::idx({2}, {2}))
                                                       .shuffle(tenx::array6{2, 0, 4, 3, 1, 5})
                                                       .reshape(ext_blk2);
                 } else {
-                    block.device(*threads->dev) = ENVR.slice(off_envr, ext_envr)
-                                                      .contract(MPOS.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}))
-                                                      .contract(ENVL.slice(off_envl, ext_envl), tenx::idx({2}, {2}))
+                    block.device(*threads->dev) = envr_.slice(off_envr, ext_envr)
+                                                      .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}))
+                                                      .contract(envl_.slice(off_envl, ext_envl), tenx::idx({2}, {2}))
                                                       .shuffle(tenx::array6{2, 4, 0, 3, 5, 1})
                                                       .reshape(ext_blk2);
                 }
                 return Eigen::Map<MatrixType>(block.data(), ext_blk2[0], ext_blk2[1]).block(IX - R0, JY - C0, ext_res[0], ext_res[1]);
             };
 
-            res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) = get_subblock(MPOS_A, ENVL_A, ENVR_A) - get_subblock(MPOS_B, ENVL_B, ENVR_B) * shift;
-
-            MatrixType blkres = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
+            res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) = get_subblock(MPOS, ENVL, ENVR);
+            MatrixType blkres                                         = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // MatrixType blkdbg = dbg.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // if(!blkres.isApprox(blkdbg)) {
             if constexpr(eig::debug)
                 eig::log->trace("IX {:5} JY {:5} J0 {:5} JN {:5} R0 {:5} RN {:5} C0 {:5} CN {:5} R0_ijk {} RN_ijk {} C0_ijk {}, CN_ijk {} R_ext {} C_ext {} "
                                 "ext_blk2 {} off_res {} ext_res {}",
                                 IX, JY, J0, JN, R0, RN, C0, CN, R0_ijk, RN_ijk, C0_ijk, CN_ijk, R_ext, C_ext, ext_blk2, off_res, ext_res);
-            // eig::log->info("IX       {}", IX);
-            // eig::log->info("JY       {}", JY);
-            // eig::log->info("J0       {}", J0);
-            // eig::log->info("IN       {}", IN);
-            // eig::log->info("JN       {}", JN);
-            // eig::log->info("R0       {}", R0);
-            // eig::log->info("RN       {}", RN);
-            // eig::log->info("C0       {}", C0);
-            // eig::log->info("CN       {}", CN);
-            // eig::log->info("R0_ijk   {}", R0_ijk);
-            // eig::log->info("RN_ijk   {}", RN_ijk);
-            // eig::log->info("C0_ijk   {}", C0_ijk);
-            // eig::log->info("CN_ijk   {}", CN_ijk);
-            // eig::log->info("R_ext    {}", R_ext);
-            // eig::log->info("C_ext    {}", C_ext);
-            // eig::log->info("ext_blk2 {}", ext_blk2);
-            // eig::log->info("ext_blk6 {}", ext_blk6);
-            // eig::log->info("off_envl {}", off_envl);
-            // eig::log->info("ext_envl {}", ext_envl);
-            // eig::log->info("off_envr {}", off_envr);
-            // eig::log->info("ext_envr {}", ext_envr);
-            // eig::log->info("off_mpos {}", off_mpos);
-            // eig::log->info("ext_mpos {}", ext_mpos);
-            // eig::log->info("off_resC {}", off_resC);
-            // eig::log->info("ext_resC {}", ext_resC);
-            // if(!blkres.isApprox(blkdbg)) {
-            //     for(long r = 0; r < blkres.rows(); ++r) {
-            //         VectorType vecC = blkres.row(r);
-            //         VectorType vecF = blkdbg.row(r);
-            //         eig::log->info("({},{}:{}):  {} | {} ", r, JY, JY + CN - C0 + 1, vecC, vecF);
-            //     }
-            //     throw except::logic_error("matC and matF mismatch");
-            // }
-            // }
             JY += (CN - C0 + 1);
         }
 
@@ -793,17 +569,17 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
 }
 
 template<typename T>
-typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block_old(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A,
-                                                                         const Eigen::Tensor<T, 3> &ENVL_A, const Eigen::Tensor<T, 3> &ENVR_A,
-                                                                         const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
-                                                                         const Eigen::Tensor<T, 3> &ENVR_B) const {
+typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A,
+                                                                     const Eigen::Tensor<T, 3> &ENVL_A, const Eigen::Tensor<T, 3> &ENVR_A,
+                                                                     const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
+                                                                     const Eigen::Tensor<T, 3> &ENVR_B) const {
     if(MPOS_A.empty()) return MatrixType::Identity(extent, extent);
     extent = std::min(extent, size_mps - offset);
     if(offset >= size_mps) { return {}; }
-    auto t_old = tid::ur("old");
-    auto t_new = tid::ur("new");
-    auto res   = MatrixType(extent, extent);
-
+    auto  t_old   = tid::ur("old");
+    auto  t_new   = tid::ur("new");
+    auto  res     = MatrixType(extent, extent);
+    auto &threads = tenx::threads::get();
     if(MPOS_A.size() > 1) {
         t_old.tic();
 #pragma omp parallel for collapse(2)
@@ -812,10 +588,10 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block_old(long of
                 if(I + offset >= size_mps) continue;
                 if(J + offset >= size_mps) continue;
                 // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
-                auto elemA = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
-                auto elemB = get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B);
-                auto elem  = elemA - shift * elemB;
-                res(I, J)  = elem;
+                T elemA   = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
+                T elemB   = shift != T{0.0} ? get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B) : T{0.0};
+                T elem    = elemA - shift * elemB;
+                res(I, J) = elem;
                 if constexpr(std::is_same_v<T, cx64>)
                     res(J, I) = std::conj(elem);
                 else
@@ -827,42 +603,30 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block_old(long of
     }
 
     {
-        // auto dbg = MatrixType(extent, extent);
-        // #pragma omp parallel for collapse(2)
-        // for(long J = 0; J < extent; J++) {
-        //     for(long I = J; I < extent; I++) {
-        //         if(I + offset >= size_mps) continue;
-        //         if(J + offset >= size_mps) continue;
-        //         // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
-        //         auto elemA = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
-        //         auto elemB = get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B);
-        //         auto elem  = elemA - shift * elemB;
-        //         dbg(I, J)  = elem;
-        //         if constexpr(std::is_same_v<T, cx64>)
-        //             dbg(J, I) = std::conj(elem);
-        //         else
-        //             dbg(J, I) = elem;
-        //     }
-        // }
-
-        // t_new.tic();
+        t_new.tic();
         res.setZero();
-        long J0 = offset;
-        long JN = offset + extent - 1;
-        long JY = J0;
+        long J0 = offset;              // index of the first column
+        long JN = offset + extent - 1; // index of the last column
+        long JY = J0;                  // JY iterates  J0 ... JN
         while(JY <= JN) {
-            long I0 = JY;
-            long IN = offset + extent - 1;
-            long R0 = std::clamp(round_dn(I0, shape_mps[0] * shape_mps[1]), 0l, size_mps - 1);
-            long RN = std::clamp(round_up(IN, shape_mps[0] * shape_mps[1]), 0l, size_mps - 1);
-            long C0 = JY;
-            long CN = JY;
+            long IX = JY;                  // index of the first row
+            long IN = offset + extent - 1; // index of the last row
+
+            // We now define a new sub-block [R0...RN, C0...CN] which lies inside [IX...IN, JY...JN] with boundaries
+            // at multiples of the dim0*dim1 of the mps indices, so that we always contract entire tiles along dim3.
+            long R0 = std::clamp(round_dn(IX, shape_mps[0] * shape_mps[1]) - 0l, 0l, size_mps - 1); // index of the first row in the current sub-block
+            long RN = std::clamp(round_up(IN, shape_mps[0] * shape_mps[1]) - 1l, 0l, size_mps - 1); // index of the last row in the current sub-block
+            long C0 = JY;                                                                           // index of the first column
+            long CN = JY; // index of the last column  (calculate one column at a time by default)
             if(R0 == C0) {
                 // We are at a tensor dimension boundary, so we can actually calculate more columns when we start from here
-                // There is no point in taking too many columns though, since we discard the top right triangle of the sub block
-                CN = std::clamp(round_up(C0 + 1, shape_mps[0] * shape_mps[1]) - 1, C0, JN);
+                // There is no point in taking too many columns though, since we discard the top right triangle of the sub block (due to hermiticity)
+                // long sqrt_shape2 = std::clamp(static_cast<long>(std::sqrt(shape_mps[2])), 1l, shape_mps[2]);
+                // CN = std::clamp(round_up(C0 + 1, shape_mps[0] * shape_mps[1]) - 1, C0, JN);
+                CN = std::clamp(round_up(C0 + static_cast<long>(std::sqrt(extent)), shape_mps[0] * shape_mps[1]) - 1, C0, JN);
+                // CN = std::clamp(C0 + 1, C0, JN);
             }
-
+            // Map the sub-block indices to ijk indices and extents of the mps tensor.
             auto R0_ijk   = get_offset(R0, shape_mps);
             auto RN_ijk   = get_offset(RN, shape_mps);
             auto C0_ijk   = get_offset(C0, shape_mps);
@@ -870,78 +634,57 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block_old(long of
             auto R_ext    = get_extent(R0_ijk, RN_ijk, shape_mps);
             auto C_ext    = get_extent(C0_ijk, CN_ijk, shape_mps);
             auto ext_blk2 = std::array<long, 2>{R_ext[0] * R_ext[1] * R_ext[2], C_ext[0] * C_ext[1] * C_ext[2]};
-            auto off_res  = std::array<long, 2>{I0 - offset, JY - offset};
-            auto ext_res  = std::array<long, 2>{IN - I0 + 1, CN - C0 + 1};
+            auto off_res  = std::array<long, 2>{IX - offset, JY - offset};
+            auto ext_res  = std::array<long, 2>{IN - IX + 1, CN - C0 + 1};
 
-            auto get_tile2 = [&](const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) -> MatrixType {
-                if(MPOS.empty()) {
-                    auto block = MatrixType(ext_res[0], ext_res[1]);
-                    block.setZero();
+            auto get_subblock = [&](const std::vector<Eigen::Tensor<T, 4>> &mpos_, const Eigen::Tensor<T, 3> &envl_,
+                                    const Eigen::Tensor<T, 3> &envr_) -> MatrixType {
+                if(mpos_.empty()) {
+                    auto subblock = MatrixType(ext_res[0], ext_res[1]);
+                    subblock.setZero();
                     // Set 1's along the diagonal of the supermatrix
-                    for(long R = 0; R < block.rows(); ++R) {
-                        for(long C = 0; C < block.cols(); ++C) {
-                            long I = I0 - R;
+                    for(long R = 0; R < subblock.rows(); ++R) {
+                        for(long C = 0; C < subblock.cols(); ++C) {
+                            long I = IX - R;
                             long J = JY - C;
-                            if(I == J) block(R, C) = 1;
+                            if(I == J) subblock(R, C) = T{1.0};
                         }
                     }
 
-                    return block;
+                    return subblock;
                 }
                 std::array<long, 3> off_envl = {R0_ijk[1], C0_ijk[1], 0};
-                std::array<long, 3> ext_envl = {R_ext[1], C_ext[1], MPOS.front().dimension(0)};
+                std::array<long, 3> ext_envl = {R_ext[1], C_ext[1], mpos_.front().dimension(0)};
                 std::array<long, 3> off_envr = {R0_ijk[2], C0_ijk[2], 0};
-                std::array<long, 3> ext_envr = {R_ext[2], C_ext[2], MPOS.front().dimension(1)};
+                std::array<long, 3> ext_envr = {R_ext[2], C_ext[2], mpos_.front().dimension(1)};
                 std::array<long, 4> off_mpos = {off_envl[2], off_envr[2], R0_ijk[0], C0_ijk[0]};
                 std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
-
-                auto  block   = Eigen::Tensor<T, 2>(ext_blk2);
-                auto &threads = tenx::threads::get();
-
-                block.device(*threads->dev) = ENVL.slice(off_envl, ext_envl)
-                                                  .contract(MPOS.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
-                                                  .contract(ENVR.slice(off_envr, ext_envr), tenx::idx({2}, {2}))
-                                                  .shuffle(tenx::array6{2, 0, 4, 3, 1, 5})
-                                                  .reshape(ext_blk2);
-                return Eigen::Map<MatrixType>(block.data(), ext_blk2[0], ext_blk2[1]).block(I0 - R0, JY - C0, ext_res[0], ext_res[1]);
+                auto                block    = Eigen::Tensor<T, 2>(ext_blk2);
+                if(envl_.dimension(0) <= envr_.dimension(0)) {
+                    block.device(*threads->dev) = envl_.slice(off_envl, ext_envl)
+                                                      .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
+                                                      .contract(envr_.slice(off_envr, ext_envr), tenx::idx({2}, {2}))
+                                                      .shuffle(tenx::array6{2, 0, 4, 3, 1, 5})
+                                                      .reshape(ext_blk2);
+                } else {
+                    block.device(*threads->dev) = envr_.slice(off_envr, ext_envr)
+                                                      .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}))
+                                                      .contract(envl_.slice(off_envl, ext_envl), tenx::idx({2}, {2}))
+                                                      .shuffle(tenx::array6{2, 4, 0, 3, 5, 1})
+                                                      .reshape(ext_blk2);
+                }
+                return Eigen::Map<MatrixType>(block.data(), ext_blk2[0], ext_blk2[1]).block(IX - R0, JY - C0, ext_res[0], ext_res[1]);
             };
 
-            res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) = get_tile2(MPOS_A, ENVL_A, ENVR_A) - get_tile2(MPOS_B, ENVL_B, ENVR_B) * shift;
-
-            // MatrixType blkres = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
+            res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) = get_subblock(MPOS_A, ENVL_A, ENVR_A);
+            if(shift != T{0.0}) res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) -= get_subblock(MPOS_B, ENVL_B, ENVR_B) * shift;
+            MatrixType blkres = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // MatrixType blkdbg = dbg.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // if(!blkres.isApprox(blkdbg)) {
-            //     eig::log->info("I0       {}", I0);
-            //     eig::log->info("J0       {}", J0);
-            //     eig::log->info("IN       {}", IN);
-            //     eig::log->info("JN       {}", JN);
-            //     eig::log->info("R0       {}", R0);
-            //     eig::log->info("RN       {}", RN);
-            //     eig::log->info("C0       {}", C0);
-            //     eig::log->info("CN       {}", CN);
-            //     eig::log->info("R0_ijk   {}", R0_ijk);
-            //     eig::log->info("RN_ijk   {}", RN_ijk);
-            //     eig::log->info("C0_ijk   {}", C0_ijk);
-            //     eig::log->info("CN_ijk   {}", CN_ijk);
-            //     eig::log->info("R_ext    {}", R_ext);
-            //     eig::log->info("C_ext    {}", C_ext);
-            //     eig::log->info("ext_blk2 {}", ext_blk2);
-            //     // eig::log->info("ext_blk6 {}", ext_blk6);
-            //     // eig::log->info("off_envl {}", off_envl);
-            //     // eig::log->info("ext_envl {}", ext_envl);
-            //     // eig::log->info("off_envr {}", off_envr);
-            //     // eig::log->info("ext_envr {}", ext_envr);
-            //     // eig::log->info("off_mpos {}", off_mpos);
-            //     // eig::log->info("ext_mpos {}", ext_mpos);
-            //     // eig::log->info("off_resC {}", off_resC);
-            //     // eig::log->info("ext_resC {}", ext_resC);
-            //     for(long r = 0; r < blkres.rows(); ++r) {
-            //         VectorType vecC = blkres.row(r);
-            //         VectorType vecF = blkdbg.row(r);
-            //         eig::log->info("({},{}:{}):  {} | {} ", r, JY, JY + CN - C0 + 1, vecC, vecF);
-            //     }
-            //     throw except::logic_error("matC and matF mismatch");
-            // }
+            if constexpr(eig::debug)
+                eig::log->trace("IX {:5} JY {:5} J0 {:5} JN {:5} R0 {:5} RN {:5} C0 {:5} CN {:5} R0_ijk {} RN_ijk {} C0_ijk {}, CN_ijk {} R_ext {} C_ext {} "
+                                "ext_blk2 {} off_res {} ext_res {}",
+                                IX, JY, J0, JN, R0, RN, C0, CN, R0_ijk, RN_ijk, C0_ijk, CN_ijk, R_ext, C_ext, ext_blk2, off_res, ext_res);
             JY += (CN - C0 + 1);
         }
 
@@ -949,6 +692,165 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block_old(long of
         return res.template selfadjointView<Eigen::Lower>();
     }
 }
+
+// template<typename T>
+// typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block_old(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A,
+//                                                                          const Eigen::Tensor<T, 3> &ENVL_A, const Eigen::Tensor<T, 3> &ENVR_A,
+//                                                                          const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
+//                                                                          const Eigen::Tensor<T, 3> &ENVR_B) const {
+//     if(MPOS_A.empty()) return MatrixType::Identity(extent, extent);
+//     extent = std::min(extent, size_mps - offset);
+//     if(offset >= size_mps) { return {}; }
+//     auto t_old = tid::ur("old");
+//     auto t_new = tid::ur("new");
+//     auto res   = MatrixType(extent, extent);
+//
+//     if(MPOS_A.size() > 1) {
+//         t_old.tic();
+// #pragma omp parallel for collapse(2)
+//         for(long J = 0; J < extent; J++) {
+//             for(long I = J; I < extent; I++) {
+//                 if(I + offset >= size_mps) continue;
+//                 if(J + offset >= size_mps) continue;
+//                 // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
+//                 auto elemA = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
+//                 auto elemB = get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B);
+//                 auto elem  = elemA - shift * elemB;
+//                 res(I, J)  = elem;
+//                 if constexpr(std::is_same_v<T, cx64>)
+//                     res(J, I) = std::conj(elem);
+//                 else
+//                     res(J, I) = elem;
+//             }
+//         }
+//         t_old.toc();
+//         return res;
+//     }
+//
+//     {
+//         // auto dbg = MatrixType(extent, extent);
+//         // #pragma omp parallel for collapse(2)
+//         // for(long J = 0; J < extent; J++) {
+//         //     for(long I = J; I < extent; I++) {
+//         //         if(I + offset >= size_mps) continue;
+//         //         if(J + offset >= size_mps) continue;
+//         //         // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
+//         //         auto elemA = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
+//         //         auto elemB = get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B);
+//         //         auto elem  = elemA - shift * elemB;
+//         //         dbg(I, J)  = elem;
+//         //         if constexpr(std::is_same_v<T, cx64>)
+//         //             dbg(J, I) = std::conj(elem);
+//         //         else
+//         //             dbg(J, I) = elem;
+//         //     }
+//         // }
+//
+//         // t_new.tic();
+//         res.setZero();
+//         long J0 = offset;
+//         long JN = offset + extent - 1;
+//         long JY = J0;
+//         while(JY <= JN) {
+//             long I0 = JY;
+//             long IN = offset + extent - 1;
+//             long R0 = std::clamp(round_dn(I0, shape_mps[0] * shape_mps[1]), 0l, size_mps - 1);
+//             long RN = std::clamp(round_up(IN, shape_mps[0] * shape_mps[1]), 0l, size_mps - 1);
+//             long C0 = JY;
+//             long CN = JY;
+//             if(R0 == C0) {
+//                 // We are at a tensor dimension boundary, so we can actually calculate more columns when we start from here
+//                 // There is no point in taking too many columns though, since we discard the top right triangle of the sub block
+//                 CN = std::clamp(round_up(C0 + 1, shape_mps[0] * shape_mps[1]) - 1, C0, JN);
+//             }
+//
+//             auto R0_ijk   = get_offset(R0, shape_mps);
+//             auto RN_ijk   = get_offset(RN, shape_mps);
+//             auto C0_ijk   = get_offset(C0, shape_mps);
+//             auto CN_ijk   = get_offset(CN, shape_mps);
+//             auto R_ext    = get_extent(R0_ijk, RN_ijk, shape_mps);
+//             auto C_ext    = get_extent(C0_ijk, CN_ijk, shape_mps);
+//             auto ext_blk2 = std::array<long, 2>{R_ext[0] * R_ext[1] * R_ext[2], C_ext[0] * C_ext[1] * C_ext[2]};
+//             auto off_res  = std::array<long, 2>{I0 - offset, JY - offset};
+//             auto ext_res  = std::array<long, 2>{IN - I0 + 1, CN - C0 + 1};
+//
+//             auto get_tile2 = [&](const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) ->
+//             MatrixType {
+//                 if(MPOS.empty()) {
+//                     auto block = MatrixType(ext_res[0], ext_res[1]);
+//                     block.setZero();
+//                     // Set 1's along the diagonal of the supermatrix
+//                     for(long R = 0; R < block.rows(); ++R) {
+//                         for(long C = 0; C < block.cols(); ++C) {
+//                             long I = I0 - R;
+//                             long J = JY - C;
+//                             if(I == J) block(R, C) = 1;
+//                         }
+//                     }
+//
+//                     return block;
+//                 }
+//                 std::array<long, 3> off_envl = {R0_ijk[1], C0_ijk[1], 0};
+//                 std::array<long, 3> ext_envl = {R_ext[1], C_ext[1], MPOS.front().dimension(0)};
+//                 std::array<long, 3> off_envr = {R0_ijk[2], C0_ijk[2], 0};
+//                 std::array<long, 3> ext_envr = {R_ext[2], C_ext[2], MPOS.front().dimension(1)};
+//                 std::array<long, 4> off_mpos = {off_envl[2], off_envr[2], R0_ijk[0], C0_ijk[0]};
+//                 std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
+//
+//                 auto  block   = Eigen::Tensor<T, 2>(ext_blk2);
+//                 auto &threads = tenx::threads::get();
+//
+//                 block.device(*threads->dev) = ENVL.slice(off_envl, ext_envl)
+//                                                   .contract(MPOS.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
+//                                                   .contract(ENVR.slice(off_envr, ext_envr), tenx::idx({2}, {2}))
+//                                                   .shuffle(tenx::array6{2, 0, 4, 3, 1, 5})
+//                                                   .reshape(ext_blk2);
+//                 return Eigen::Map<MatrixType>(block.data(), ext_blk2[0], ext_blk2[1]).block(I0 - R0, JY - C0, ext_res[0], ext_res[1]);
+//             };
+//
+//             res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) = get_tile2(MPOS_A, ENVL_A, ENVR_A) - get_tile2(MPOS_B, ENVL_B, ENVR_B) * shift;
+//
+//             // MatrixType blkres = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
+//             // MatrixType blkdbg = dbg.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
+//             // if(!blkres.isApprox(blkdbg)) {
+//             //     eig::log->info("I0       {}", I0);
+//             //     eig::log->info("J0       {}", J0);
+//             //     eig::log->info("IN       {}", IN);
+//             //     eig::log->info("JN       {}", JN);
+//             //     eig::log->info("R0       {}", R0);
+//             //     eig::log->info("RN       {}", RN);
+//             //     eig::log->info("C0       {}", C0);
+//             //     eig::log->info("CN       {}", CN);
+//             //     eig::log->info("R0_ijk   {}", R0_ijk);
+//             //     eig::log->info("RN_ijk   {}", RN_ijk);
+//             //     eig::log->info("C0_ijk   {}", C0_ijk);
+//             //     eig::log->info("CN_ijk   {}", CN_ijk);
+//             //     eig::log->info("R_ext    {}", R_ext);
+//             //     eig::log->info("C_ext    {}", C_ext);
+//             //     eig::log->info("ext_blk2 {}", ext_blk2);
+//             //     // eig::log->info("ext_blk6 {}", ext_blk6);
+//             //     // eig::log->info("off_envl {}", off_envl);
+//             //     // eig::log->info("ext_envl {}", ext_envl);
+//             //     // eig::log->info("off_envr {}", off_envr);
+//             //     // eig::log->info("ext_envr {}", ext_envr);
+//             //     // eig::log->info("off_mpos {}", off_mpos);
+//             //     // eig::log->info("ext_mpos {}", ext_mpos);
+//             //     // eig::log->info("off_resC {}", off_resC);
+//             //     // eig::log->info("ext_resC {}", ext_resC);
+//             //     for(long r = 0; r < blkres.rows(); ++r) {
+//             //         VectorType vecC = blkres.row(r);
+//             //         VectorType vecF = blkdbg.row(r);
+//             //         eig::log->info("({},{}:{}):  {} | {} ", r, JY, JY + CN - C0 + 1, vecC, vecF);
+//             //     }
+//             //     throw except::logic_error("matC and matF mismatch");
+//             // }
+//             JY += (CN - C0 + 1);
+//         }
+//
+//         // t_new.toc();
+//         return res.template selfadjointView<Eigen::Lower>();
+//     }
+// }
 
 template<typename T>
 typename MatVecMPOS<T>::VectorType MatVecMPOS<T>::get_row(long row_idx, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
@@ -1073,7 +975,7 @@ void MatVecMPOS<T>::FactorOP() {
         return;
     }
     MatrixType A_matrix = get_matrix();
-    if(not readyShift and std::abs(get_shift()) != 0.0) { A_matrix.diagonal() -= VectorType::Constant(rows(), get_shift()); }
+    if(not readyShift and std::abs(get_shift()) != T{0.0}) { A_matrix.diagonal() -= VectorType::Constant(rows(), get_shift()); }
 
     if(factorization == eig::Factorization::LDLT) {
         eig::log->debug("LDLT Factorization");
@@ -1143,7 +1045,7 @@ void MatVecMPOS<T>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize
 template<typename T>
 void MatVecMPOS<T>::MultAx(T *mps_in_, T *mps_out_) {
     auto token   = t_multAx->tic_token();
-    auto mps_in  = Eigen::TensorMap<Eigen::Tensor<T, 3>>(mps_in_, shape_mps);
+    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<T, 3>>(mps_in_, shape_mps);
     auto mps_out = Eigen::TensorMap<Eigen::Tensor<T, 3>>(mps_out_, shape_mps);
     if(mpos_A.size() == 1) {
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A.front(), envL_A, envR_A);
@@ -1152,9 +1054,20 @@ void MatVecMPOS<T>::MultAx(T *mps_in_, T *mps_out_) {
     }
     num_mv++;
 }
-
 template<typename T>
-void MatVecMPOS<T>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) {
+void MatVecMPOS<T>::MultAx(const T *mps_in_, T *mps_out_) const {
+    auto token   = t_multAx->tic_token();
+    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<T, 3>>(mps_in_, shape_mps);
+    auto mps_out = Eigen::TensorMap<Eigen::Tensor<T, 3>>(mps_out_, shape_mps);
+    if(mpos_A.size() == 1) {
+        tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A.front(), envL_A, envR_A);
+    } else {
+        tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A_shf, envL_A, envR_A);
+    }
+    num_mv++;
+}
+template<typename T>
+void MatVecMPOS<T>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
     for(int i = 0; i < *blockSize; i++) {
         T *mps_in_ptr  = static_cast<T *>(x) + *ldx * i;
         T *mps_out_ptr = static_cast<T *>(y) + *ldy * i;
@@ -1164,7 +1077,7 @@ void MatVecMPOS<T>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize,
 }
 
 template<typename T>
-void MatVecMPOS<T>::MultBx(T *mps_in_, T *mps_out_) {
+void MatVecMPOS<T>::MultBx(T *mps_in_, T *mps_out_) const {
     if(mpos_B.empty() and mpos_B_shf.empty()) return;
     auto token = t_multAx->tic_token();
 
@@ -1189,7 +1102,7 @@ void MatVecMPOS<T>::MultBx(T *mps_in_, T *mps_out_) {
 }
 
 template<typename T>
-void MatVecMPOS<T>::MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) {
+void MatVecMPOS<T>::MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
     for(int i = 0; i < *blockSize; i++) {
         T *mps_in_ptr  = static_cast<T *>(x) + *ldx * i;
         T *mps_out_ptr = static_cast<T *>(y) + *ldy * i;
@@ -1256,6 +1169,28 @@ void MatVecMPOS<T>::MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize,
 //     return res;
 // }
 
+template<typename T>
+Eigen::Tensor<T, 3> MatVecMPOS<T>::operator*(const Eigen::Tensor<T, 3> &x) const {
+    assert(x.size() == get_size());
+    Eigen::Tensor<T, 3> y(x.dimensions());
+    MultAx(x.data(), y.data());
+    return y;
+}
+template<typename T>
+Eigen::Tensor<T, 1> MatVecMPOS<T>::operator*(const Eigen::Tensor<T, 1> &x) const {
+    assert(x.size() == get_size());
+    Eigen::Tensor<T, 1> y(x.size());
+    MultAx(x.data(), y.data());
+    return y;
+}
+template<typename T>
+typename MatVecMPOS<T>::VectorType MatVecMPOS<T>::operator*(const VectorType &x) const {
+    assert(x.size() == get_size());
+    VectorType y(x.size());
+    MultAx(x.data(), y.data());
+    return y;
+}
+
 template<typename Derived>
 Eigen::Matrix<double, Eigen::Dynamic, 1> cond(const Eigen::MatrixBase<Derived> &m) {
     auto solver = Eigen::BDCSVD(m.eval());
@@ -1265,63 +1200,92 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> cond(const Eigen::MatrixBase<Derived> &
 
 template<typename T>
 void MatVecMPOS<T>::CalcPc(T shift) {
-    if(readyCalcPc) return;
+    // if(readyCalcPc) return;
+    if(lockCalcPc) return;
     if(preconditioner == eig::Preconditioner::NONE) {
         eig::log->info("MatVecMPOS<T>::CalcPc(): no preconditioner chosen");
         return;
     }
-    // auto nnz = get_non_zeros();
-    // tools::log->info("nonzeros: {} / {} = {:.16f}", nnz, size_mps * size_mps, static_cast<double>(nnz) / static_cast<double>(size_mps * size_mps));
+    if(jcbShift.has_value()) {
+        RealScalar relchange = std::abs(shift - jcbShift.value()) / (std::abs(shift + jcbShift.value()) / 2);
+        if(relchange < static_cast<RealScalar>(1e-1)) return; // Keep the preconditioner if the shifts haven't changed by more than 1%
+        eig::log->info("Recomputing the preconditioner", static_cast<fp64>(std::real(jcbShift.value())), static_cast<fp64>(std::real(shift)));
+    }
+    jcbShift = shift;
 
-    // long jcbBlockSize = std::min(jcbMaxBlockSize, shape_mps[0] * shape_mps[1]);
     long jcbBlockSize = jcbMaxBlockSize;
     if(jcbBlockSize == 1) {
-        eig::log->trace("MatVecMPOS<T>::CalcPc(): calculating the jacobi preconditioner ... (shift = {:.16f})", shift);
-        jcbDiagA = get_diagonal_new(0, mpos_A, envL_A, envR_A);
-        jcbDiagB = get_diagonal_new(0, mpos_B, envL_B, envR_B);
-        eig::log->debug("MatVecMPOS<T>::CalcPc(): calculating the jacobi preconditioner ... done (shift = {:.16f})", shift);
+        if(jcbDiagA.size() + jcbDiagB.size() > 0) return; // We only need to do this once
+        eig::log->trace("MatVecMPOS<T>::CalcPc(): calculating the jacobi preconditioner ... (shift = {:.16f})", static_cast<fp64>(std::real(shift)));
+        jcbDiagA   = get_diagonal_new(0, mpos_A, envL_A, envR_A);
+        jcbDiagB   = get_diagonal_new(0, mpos_B, envL_B, envR_B);
+        lockCalcPc = true;
+        eig::log->debug("MatVecMPOS<T>::CalcPc(): calculating the jacobi preconditioner ... done (shift = {:.16f})", static_cast<fp64>(std::real(shift)));
     } else if(jcbBlockSize > 1) {
         long nblocks = 1 + ((size_mps - 1) / jcbBlockSize); // ceil: note that the last block may be smaller than blocksize!
 
         eig::log->debug("MatVecMPOS<T>::CalcPc(): calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} ...",
                         eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks);
-        std::vector<double> sparsity;
-        auto                m_rss = debug::mem_hwm_in_mb();
-        auto                t_jcb = tid::ur("jcb");
+        std::vector<fp64> sparsity;
+        auto              m_rss = debug::mem_hwm_in_mb();
+        auto              t_jcb = tid::ur("jcb");
         t_jcb.tic();
 
-        // #pragma omp parallel for ordered schedule(dynamic, 1)
+        dInvJcbBlocks.clear();
+        sInvJcbBlocks.clear();
+        lltJcbBlocks.clear();
+        luJcbBlocks.clear();
+        ldltJcbBlocks.clear();
+        cgJcbBlocks.clear();
+        bicgstabJcbBlocks.clear();
+
+#pragma omp parallel for ordered schedule(dynamic, 1)
         for(long blkidx = 0; blkidx < nblocks; ++blkidx) {
             long offset = blkidx * jcbBlockSize;
             long extent = std::min((blkidx + 1) * jcbBlockSize - offset, size_mps - offset);
             // if constexpr(eig::debug) eig::log->trace("calculating block {}/{} ... done", blkidx, nblocks);
             auto t_dblk = tid::ur("dblk");
             t_dblk.tic();
-            MatrixType blockI = get_diagonal_block(offset, extent, shift, mpos_A, envL_A, envR_A, mpos_B, envL_B, envR_B);
+
+            MatrixType block;
+            if(mpos_B.empty()) {
+                block      = get_diagonal_block(offset, extent, mpos_A, envL_A, envR_A);
+                lockCalcPc = true;
+            } else {
+                {
+                    // Instead of using the preconditioner P = (H-shift*H²) we simply take P = H² when
+                    // calculating the generalized eigenvalue problem for GSI-DMRG with ritz == LM.
+                    // See the discussion in https://github.com/primme/primme/issues/83
+                    block      = get_diagonal_block(offset, extent, mpos_B, envL_B, envR_B);
+                    lockCalcPc = true;
+                }
+                // if(shift == 0.0) {
+                //     block = get_diagonal_block(offset, extent, mpos_A, envL_A, envR_A);
+                // } else {
+                //     block         = get_diagonal_block(offset, extent, shift, mpos_A, envL_A, envR_A, mpos_B, envL_B, envR_B);
+                //     factorization = eig::Factorization::LU;
+                // }
+                // lockCalcPc = false;
+            }
+
             t_dblk.toc();
-            double sp = static_cast<double>(blockI.cwiseAbs().count()) / static_cast<double>(blockI.size());
+            double sp = static_cast<double>(block.cwiseAbs().count()) / static_cast<double>(block.size());
 
-            // auto       blockA    = get_diagonal_block_old(offset, extent, mpos_A, envL_A, envR_A);
-            // auto       blockB    = get_diagonal_block_old(offset, extent, mpos_B, envL_B, envR_B);
-            // MatrixType blockIdbg = blockA - blockB * shift; // Reset
-            //
-            // if(!blockI.isApprox(blockIdbg, 1e-12)) { throw except::runtime_error("blockI != blockIdbg"); }
-
-            auto bicg         = std::make_unique<BICGType>();
-            auto cg           = std::make_unique<CGType>();
-            auto llt          = std::make_unique<LLTType>();
-            auto ldlt         = std::make_unique<LDLTType>();
-            auto lu           = std::make_unique<LUType>();
-            auto sparseRM     = std::make_unique<SparseRowM>();
-            auto sparseCM     = std::make_unique<SparseType>();
-            auto blockPtr     = std::make_unique<MatrixType>();
-            bool lltSuccess   = false;
-            bool ldltSuccess  = false;
-            bool luSuccess    = false;
-            bool qrSuccess    = false;
-            bool bicgSuccess  = false;
-            bool cgSuccess    = false;
-            bool solveSuccess = false;
+            auto bicg          = std::make_unique<BICGType>();
+            auto cg            = std::make_unique<CGType>();
+            auto llt           = std::make_unique<LLTType>();
+            auto ldlt          = std::make_unique<LDLTType>();
+            auto lu            = std::make_unique<LUType>();
+            auto sparseRM      = std::make_unique<SparseRowM>();
+            auto sparseCM      = std::make_unique<SparseType>();
+            auto blockPtr      = std::make_unique<MatrixType>();
+            bool lltSuccess    = false;
+            bool ldltSuccess   = false;
+            bool luSuccess     = false;
+            bool qrSuccess     = false;
+            bool bicgSuccess   = false;
+            bool cgSuccess     = false;
+            bool invertSuccess = false;
             switch(factorization) {
                 case eig::Factorization::NONE: {
                     eig::log->warn("MatvecMPOS::CalcPc(): No factorization has been set for the preconditioner");
@@ -1329,47 +1293,69 @@ void MatVecMPOS<T>::CalcPc(T shift) {
                 }
                 case eig::Factorization::LLT: {
                     auto t_llt = tid::ur("t_llt");
+                    if constexpr(eig::debug) eig::log->trace("llt factorizing block {}/{}", blkidx, nblocks);
                     t_llt.tic();
-                    if(std::real(blockI(0, 0)) > 0.0 /* Checks if the matrix is positive definite */) {
-                        llt->compute(blockI);
+                    VectorType D = block.diagonal().cwiseAbs().cwiseSqrt().cwiseInverse();
+                    block        = (D.asDiagonal() * block * D.asDiagonal()).eval();
+                    if(std::real(block(0, 0)) > RealScalar{0.0} /* Checks if the matrix is positive definite */) {
+                        llt->compute(block);
                     } else {
-                        llt->compute(-blockI); // Can sometimes be negative definite in the generalized problem
+                        llt->compute(-block); // Can sometimes be negative definite in the generalized problem
                     }
                     lltSuccess = llt->info() == Eigen::Success;
                     t_llt.toc();
                     if constexpr(eig::debug)
                         eig::log->debug("llt factorized block {}/{} : info {} thread {} tdblk {:.3e} s tllt {:.3e} s", blkidx, nblocks,
                                         static_cast<int>(llt->info()), omp_get_thread_num(), t_dblk.get_time(), t_llt.get_time());
+
+                    // eig::log->info("-- llt time: {:.3e}", t_llt.get_last_interval());
+
                     if(lltSuccess) break;
-                    [[fallthrough]];
-                }
-                case eig::Factorization::LDLT: {
-                    if constexpr(eig::debug) eig::log->trace("ldlt factorizing block {}/{}", blkidx, nblocks);
-                    ldlt->compute(blockI);
-                    ldltSuccess = ldlt->info() == Eigen::Success;
-                    if(ldltSuccess) break;
-                    if(!ldltSuccess) eig::log->debug("ldlt factorization failed on block {}/{}: info {}", blkidx, nblocks, static_cast<int>(ldlt->info()));
+                    // auto solver = Eigen::SelfAdjointEigenSolver<MatrixType>(blockI, Eigen::EigenvaluesOnly);
+                    // eig::log->info("blockI evals  : \n{}\n", linalg::matrix::to_string(solver.eigenvalues(), 16));
+                    // eig::log->info("shift: {:.16f} {:+.16f}i", std::real(shift), std::imag(shift));
+                    // eig::log->info("blockI diagonal: \n{}\n", linalg::matrix::to_string(blockI.diagonal(), 16));
+                    eig::log->info("llt factorization failed on block {}/{}: time {:.3e} info {}", blkidx, nblocks, t_llt.get_last_interval(),
+                                   static_cast<int>(llt->info()));
                     [[fallthrough]];
                 }
                 case eig::Factorization::LU: {
                     if constexpr(eig::debug) eig::log->trace("lu factorizing block {}/{}", blkidx, nblocks);
-                    lu->compute(blockI);
+                    auto t_lu = tid::ur("t_lu");
+                    t_lu.tic();
+                    VectorType D = block.diagonal().cwiseAbs().cwiseSqrt().cwiseInverse();
+                    block        = (D.asDiagonal() * block * D.asDiagonal()).eval();
+                    lu->compute(block);
+                    t_lu.toc();
                     luSuccess = true;
+                    // eig::log->info("-- lu : time {:.3e}", t_lu.get_last_interval());
+                    if constexpr(eig::debug)
+                        eig::log->debug("lu factorized block {}/{} : info {} thread {} time: blk {:.3e} s | lu {:.3e} s", blkidx, nblocks,
+                                        static_cast<int>(llt->info()), omp_get_thread_num(), t_dblk.get_time(), t_lu.get_time());
                     break;
                 }
+                case eig::Factorization::LDLT: {
+                    eig::log->info("-- ldlt");
+                    if constexpr(eig::debug) eig::log->trace("ldlt factorizing block {}/{}", blkidx, nblocks);
+                    ldlt->compute(block);
+                    ldltSuccess = ldlt->info() == Eigen::Success;
+                    if(ldltSuccess) break;
+                    eig::log->debug("ldlt factorization failed on block {}/{}: info {}", blkidx, nblocks, static_cast<int>(ldlt->info()));
+                    [[fallthrough]];
+                }
                 case eig::Factorization::QR: {
-                    auto qr   = Eigen::HouseholderQR<MatrixType>(blockI);
-                    blockI    = qr.solve(MatrixType::Identity(extent, extent));
+                    auto qr   = Eigen::HouseholderQR<MatrixType>(block);
+                    block     = qr.solve(MatrixType::Identity(extent, extent));
                     qrSuccess = true;
                     break;
                 }
                 case eig::Factorization::ILUT: {
                     auto t_sparse = tid::ur("sparse");
                     t_sparse.tic();
-                    double mean = blockI.cwiseAbs().mean();
-                    double stdv = std::sqrt((blockI.cwiseAbs().array() - mean).square().sum() / static_cast<double>(blockI.size() - 1));
+                    RealScalar mean = block.cwiseAbs().mean();
+                    RealScalar stdv = std::sqrt((block.cwiseAbs().array() - mean).square().sum() / static_cast<RealScalar>(block.size() - 1));
                     // sparseI = blockI.sparseView(mean, 1e-6);
-                    *sparseRM = blockI.sparseView(1e-1, stdv);
+                    *sparseRM = block.sparseView(static_cast<RealScalar>(1e-1), stdv);
                     sparseRM->makeCompressed();
                     sp = static_cast<double>(sparseRM->nonZeros()) / static_cast<double>(sparseRM->size());
                     // if constexpr(eig::debug)
@@ -1379,9 +1365,10 @@ void MatVecMPOS<T>::CalcPc(T shift) {
                     auto t_ilut = tid::ur("ilut");
                     t_ilut.tic();
                     bicg->setMaxIterations(1000);
-                    bicg->setTolerance(1e-8);
-                    bicg->preconditioner().setDroptol(1e-2);   // Drops elements smaller than droptol*rowwise().cwiseAbs().mean()
-                    bicg->preconditioner().setFillfactor(2.0); // if the original matrix has nnz nonzeros, LU matrix has at most nnz * fillfactor nonseros
+                    bicg->setTolerance(static_cast<RealScalar>(1e-8));
+                    bicg->preconditioner().setDroptol(static_cast<RealScalar>(1e-2)); // Drops elements smaller than droptol*rowwise().cwiseAbs().mean()
+                    bicg->preconditioner().setFillfactor(
+                        static_cast<RealScalar>(2.0)); // if the original matrix has nnz nonzeros, LU matrix has at most nnz * fillfactor nonseros
                     bicg->compute(*sparseRM);
                     bicgSuccess = bicg->info() == Eigen::Success;
                     t_ilut.toc();
@@ -1389,13 +1376,13 @@ void MatVecMPOS<T>::CalcPc(T shift) {
                         eig::log->trace("ILUT factorized block {}/{} sparcity {} : info {} thread {} t_dblk {:.3e} s t_sparse {:.3e} s t_ilut {:.3e} s mean "
                                         "{:.3e} stdv {:.3e} iter {} tol {:.3e}",
                                         blkidx, nblocks, sp, static_cast<int>(bicg->info()), omp_get_thread_num(), t_dblk.get_time(), t_sparse.get_time(),
-                                        t_ilut.get_time(), mean, stdv, bicg->iterations(), bicg->tolerance());
+                                        t_ilut.get_time(), fp(mean), fp(stdv), bicg->iterations(), fp(bicg->tolerance()));
 
                     if(!bicgSuccess) {
                         // Take the diagonal of blockI instead
-                        sp = static_cast<double>(blockI.cwiseAbs().count()) / static_cast<double>(blockI.size());
+                        sp = static_cast<double>(block.cwiseAbs().count()) / static_cast<double>(block.size());
                         sparseRM->resize(0, 0);
-                        blockI = MatrixType(blockI.diagonal().cwiseInverse().asDiagonal());
+                        block = MatrixType(block.diagonal().cwiseInverse().asDiagonal());
                         break;
                     }
                     break;
@@ -1403,12 +1390,12 @@ void MatVecMPOS<T>::CalcPc(T shift) {
                 case eig::Factorization::ILDLT: {
                     auto t_sparse = tid::ur("sparse");
                     t_sparse.tic();
-                    double mean = blockI.cwiseAbs().mean();
-                    double stdv = std::sqrt((blockI.cwiseAbs().array() - mean).square().sum() / static_cast<double>(blockI.size() - 1));
+                    RealScalar mean = block.cwiseAbs().mean();
+                    RealScalar stdv = std::sqrt((block.cwiseAbs().array() - mean).square().sum() / static_cast<RealScalar>(block.size() - 1));
                     // double geom = std::exp((blockI.array() == 0.0).select(0.0, blockI.array().cwiseAbs().log()).mean());
                     // double droptol    = 1e-2; // Drops elements smaller than droptol*rowwise().cwiseAbs().mean()
                     // int    fillfactor = 10;   // if the original matrix has nnz nonzeros, LDLT matrix has at most nnz * fillfactor nonseros
-                    *sparseCM = blockI.sparseView(1e-1, stdv);
+                    *sparseCM = block.sparseView(static_cast<RealScalar>(1e-1), stdv);
                     sparseCM->makeCompressed();
                     sp = static_cast<double>(sparseCM->nonZeros()) / static_cast<double>(sparseCM->size());
                     t_sparse.toc();
@@ -1417,10 +1404,10 @@ void MatVecMPOS<T>::CalcPc(T shift) {
                     // eig::log->info("cg compute block {}/{} ", blkidx, nblocks);
 
                     cg->setMaxIterations(1000);
-                    cg->setTolerance(1e-8); // Tolerance on the residual error
+                    cg->setTolerance(static_cast<RealScalar>(1e-8)); // Tolerance on the residual error
 
                     // Read about the preconditioner parameters here http://eigen.tuxfamily.org/dox/classEigen_1_1IncompleteCholesky.html
-                    cg->preconditioner().setInitialShift(1e-3); // default is 1e-3
+                    cg->preconditioner().setInitialShift(static_cast<RealScalar>(1e-3)); // default is 1e-3
                     cg->compute(*sparseCM);
                     cgSuccess = cg->info() == Eigen::Success;
                     t_ildlt.toc();
@@ -1428,31 +1415,30 @@ void MatVecMPOS<T>::CalcPc(T shift) {
                         eig::log->trace("ILDLT factorized block {}/{} sparcity {} : info {} thread {} t_dblk {:.3e} s t_sparse {:.3e} s t_ildlt {:.3e} s mean "
                                         "{:.3e} stdv {:.3e} iter {} tol {:.3e}",
                                         blkidx, nblocks, sp, static_cast<int>(cg->info()), omp_get_thread_num(), t_dblk.get_time(), t_sparse.get_time(),
-                                        t_ildlt.get_time(), mean, stdv, cg->iterations(), cg->tolerance());
+                                        t_ildlt.get_time(), fp(mean), fp(stdv), cg->iterations(), fp(cg->tolerance()));
                     if(!cgSuccess) {
                         eig::log->info("ILDLT solve failed on block {}/{}: {}", blkidx, nblocks, static_cast<int>(cg->info()));
                         // Take the diagonal of blockI instead
                         sparseCM->resize(0, 0);
-                        blockI = MatrixType(blockI.diagonal().cwiseInverse().asDiagonal());
+                        block = MatrixType(block.diagonal().cwiseInverse().asDiagonal());
                         break;
                     }
                     break;
                 }
             }
 
-            if(!lltSuccess and !ldltSuccess and !luSuccess and !qrSuccess and factorization != eig::Factorization::ILUT and
+            if(!lltSuccess and !luSuccess and !ldltSuccess and !qrSuccess and factorization != eig::Factorization::ILUT and
                factorization != eig::Factorization::ILDLT) {
                 eig::log->warn("factorization {} (and others) failed on block {}/{} ... resorting to Eigen::ColPivHouseholderQR",
                                eig::FactorizationToString(factorization), blkidx, nblocks);
-                blockI       = Eigen::ColPivHouseholderQR<MatrixType>(blockI).inverse(); // Should work on any matrix
-                solveSuccess = true;
+                block         = Eigen::ColPivHouseholderQR<MatrixType>(block).inverse(); // Should work on any matrix
+                invertSuccess = true;
             }
 #pragma omp ordered
             {
                 sparsity.emplace_back(sp);
-
-                if(solveSuccess) {
-                    denseJcbBlocks.emplace_back(offset, blockI); //
+                if(invertSuccess) {
+                    dInvJcbBlocks.emplace_back(offset, block); //
                 } else if(lltSuccess and llt->rows() > 0) {
                     lltJcbBlocks.emplace_back(offset, std::move(llt));
                 } else if(ldltSuccess and ldlt->rows() > 0) {
@@ -1464,7 +1450,7 @@ void MatVecMPOS<T>::CalcPc(T shift) {
                 } else if(cgSuccess and cg->rows() > 0) {
                     cgJcbBlocks.emplace_back(offset, std::move(sparseCM), std::move(cg));
                 } else if(sparseRM->size() > 0) {
-                    sparseJcbBlocks.emplace_back(offset, *sparseRM);
+                    sInvJcbBlocks.emplace_back(offset, *sparseRM);
                 }
             }
         }
@@ -1475,7 +1461,6 @@ void MatVecMPOS<T>::CalcPc(T shift) {
             "sparsity {:.3e} | mem +{:.3e} MB",
             size_mps, jcbBlockSize, nblocks, t_jcb.get_last_interval(), spavg, debug::mem_hwm_in_mb() - m_rss);
     }
-
     readyCalcPc = true;
 }
 
@@ -1483,10 +1468,14 @@ template<typename T>
 void MatVecMPOS<T>::MultPc([[maybe_unused]] void *x, [[maybe_unused]] int *ldx, [[maybe_unused]] void *y, [[maybe_unused]] int *ldy,
                            [[maybe_unused]] int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) {
     for(int i = 0; i < *blockSize; i++) {
-        T shift = primme->ShiftsForPreconditioner[i];
-        if(!mpos_B.empty())
-            shift = std::abs(primme->stats.estimateMaxEVal) > std::abs(primme->stats.estimateMinEVal) ? primme->stats.estimateMaxEVal
-                                                                                                      : primme->stats.estimateMinEVal;
+        T shift = static_cast<T>(primme->ShiftsForPreconditioner[i]);
+        // if(!mpos_B.empty())
+        //     shift = std::abs(primme->stats.estimateMaxEVal) > std::abs(primme->stats.estimateMinEVal) ? primme->stats.estimateMaxEVal
+        //                                                                                               : primme->stats.estimateMinEVal;
+        // eig::log->info("shift                             : {:.16f}", shift);
+        // eig::log->info("primme->stats.estimateMaxEVal     : {:.16f}", primme->stats.estimateMaxEVal);
+        // eig::log->info("primme->stats.estimateMinEval     : {:.16f}", primme->stats.estimateMinEVal);
+        // eig::log->info("primme->ShiftsForPreconditioner[i]: {:.16f}", primme->ShiftsForPreconditioner[i]);
         T *mps_in_ptr  = static_cast<T *>(x) + *ldx * i;
         T *mps_out_ptr = static_cast<T *>(y) + *ldy * i;
         MultPc(mps_in_ptr, mps_out_ptr, shift);
@@ -1500,27 +1489,25 @@ void MatVecMPOS<T>::MultPc([[maybe_unused]] T *mps_in_, [[maybe_unused]] T *mps_
     if(preconditioner == eig::Preconditioner::NONE) return;
     auto mps_in  = Eigen::Map<VectorType>(mps_in_, size_mps);
     auto mps_out = Eigen::Map<VectorType>(mps_out_, size_mps);
-
+    CalcPc(shift);
     if(jcbMaxBlockSize == 1) {
-        if(not readyCalcPc) { CalcPc(shift); }
         auto token = t_multPc->tic_token();
         // Diagonal jacobi preconditioner
-        denseJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).matrix();
-        mps_out          = denseJcbDiagonal.array().cwiseInverse().cwiseProduct(mps_in.array());
+        invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).matrix();
+        mps_out        = invJcbDiagonal.array().cwiseInverse().cwiseProduct(mps_in.array());
         num_pc++;
     } else if(jcbMaxBlockSize > 1) {
-        if(not readyCalcPc) { CalcPc(shift); }
         auto token = t_multPc->tic_token();
-
+        // eig::log->info("-- MultPc");
 #pragma omp parallel for
-        for(size_t idx = 0; idx < denseJcbBlocks.size(); ++idx) {
-            const auto &[offset, block]               = denseJcbBlocks[idx];
+        for(size_t idx = 0; idx < dInvJcbBlocks.size(); ++idx) {
+            const auto &[offset, block]               = dInvJcbBlocks[idx];
             long extent                               = block.rows();
             mps_out.segment(offset, extent).noalias() = block.template selfadjointView<Eigen::Lower>() * mps_in.segment(offset, extent);
         }
 #pragma omp parallel for
-        for(size_t idx = 0; idx < sparseJcbBlocks.size(); ++idx) {
-            const auto &[offset, block]               = sparseJcbBlocks[idx];
+        for(size_t idx = 0; idx < sInvJcbBlocks.size(); ++idx) {
+            const auto &[offset, block]               = sInvJcbBlocks[idx];
             long extent                               = block.rows();
             mps_out.segment(offset, extent).noalias() = block.template selfadjointView<Eigen::Lower>() * mps_in.segment(offset, extent);
         }
@@ -1580,13 +1567,13 @@ void MatVecMPOS<T>::reset() {
 }
 
 template<typename T>
-void MatVecMPOS<T>::set_shift(std::complex<double> shift) {
+void MatVecMPOS<T>::set_shift(CplxScalar shift) {
     // Here we set an energy shift directly on the MPO.
     // This only works if the MPO is not compressed already.
     if(readyShift) return;
     if(sigma == shift) return;
-    auto shift_per_mpo = shift / static_cast<double>(mpos_A.size());
-    auto sigma_per_mpo = sigma / static_cast<double>(mpos_A.size());
+    CplxScalar shift_per_mpo = shift / static_cast<RealScalar>(mpos_A.size());
+    CplxScalar sigma_per_mpo = sigma / static_cast<RealScalar>(mpos_A.size());
     for(size_t idx = 0; idx < mpos_A.size(); ++idx) {
         // The MPO is a rank4 tensor ijkl where the first 2 ij indices draw a simple
         // rank2 matrix, where each element is also a matrix with the size
@@ -1605,11 +1592,11 @@ void MatVecMPOS<T>::set_shift(std::complex<double> shift) {
         std::array<long, 2> extent2{spindim, spindim};
         auto                id = tenx::TensorIdentity<T>(spindim);
         // We undo the previous sigma and then subtract the new one. We are aiming for [A - I*shift]
-        if constexpr(std::is_same_v<T, fp64>)
-            mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma_per_mpo - shift_per_mpo);
-        else
+        if constexpr(tenx::sfinae::is_std_complex_v<T>)
             mpo.slice(offset4, extent4).reshape(extent2) += id * (sigma_per_mpo - shift_per_mpo);
-        eig::log->debug("Shifted MPO {} energy by {:.16f}", idx, shift_per_mpo);
+        else
+            mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma_per_mpo - shift_per_mpo);
+        eig::log->debug("Shifted MPO {} energy by {:.16f}", idx, static_cast<fp64>(std::real(shift_per_mpo)));
     }
     sigma = shift;
     if(not mpos_A_shf.empty()) {
@@ -1654,10 +1641,10 @@ void MatVecMPOS<T>::set_jcbMaxBlockSize(std::optional<long> size) {
 
 template<typename T>
 T MatVecMPOS<T>::get_shift() const {
-    if constexpr(std::is_same_v<T, fp64>)
-        return std::real(sigma);
-    else
+    if constexpr(tenx::sfinae::is_std_complex_v<T>)
         return sigma;
+    else
+        return std::real(sigma);
 }
 
 template<typename T>
@@ -1783,7 +1770,7 @@ typename MatVecMPOS<T>::SparseType MatVecMPOS<T>::get_sparse_matrix() const {
 #pragma omp parallel for
         for(long I = J; I < size_mps; I++) {
             auto elem = get_matrix_element(I, J, mpos_A, envL_A, envR_A);
-            if(std::abs(elem) > std::numeric_limits<double>::epsilon()) {
+            if(std::abs(elem) > std::numeric_limits<RealScalar>::epsilon()) {
 #pragma omp critical
                 { trip.emplace_back(Eigen::Triplet<T, long>{I, J, elem}); }
             }
@@ -1821,5 +1808,9 @@ bool MatVecMPOS<T>::isReadyShift() const {
 }
 
 // Explicit instantiations
+template class MatVecMPOS<fp32>;
 template class MatVecMPOS<fp64>;
+template class MatVecMPOS<fp128>;
+template class MatVecMPOS<cx32>;
 template class MatVecMPOS<cx64>;
+template class MatVecMPOS<cx128>;

@@ -66,9 +66,6 @@ void tools::common::contraction::matrix_vector_product(      Scalar * res_ptr,
         else{
             Eigen::Tensor<Scalar, 4> mpsenvR(mps.dimension(0), mps.dimension(1), envR.dimension(1), envR.dimension(2));
             Eigen::Tensor<Scalar, 4> mpsenvRmpo(mps.dimension(1), envR.dimension(1), mpo.dimension(0), mpo.dimension(3));
-            // contract_tblis(mps, envR, mpsenvR, "abf", "fcd", "abcd", tblis_config);
-            // contract_tblis(mpsenvR, mpo, mpsenvRmpo, "qijk", "rkql", "ijrl", tblis_config);
-            // contract_tblis(mpsenvRmpo, envL, res, "qkri", "qjr", "ijk", tblis_config);
             contract_tblis(mps.data(), mps.dimensions(),           //
                            envR.data(), envR.dimensions(),         //
                            mpsenvR.data(), mpsenvR.dimensions(),   //
@@ -126,6 +123,11 @@ template void tools::common::contraction::matrix_vector_product(      fp64 *    
                                                                 const fp64 * const mpo_ptr, std::array<long,4> mpo_dims,
                                                                 const fp64 * const envL_ptr, std::array<long,3> envL_dims,
                                                                 const fp64 * const envR_ptr, std::array<long,3> envR_dims);
+template void tools::common::contraction::matrix_vector_product(      fp128 *       res_ptr,
+                                                                const fp128 * const mps_ptr, std::array<long,3> mps_dims,
+                                                                const fp128 * const mpo_ptr, std::array<long,4> mpo_dims,
+                                                                const fp128 * const envL_ptr, std::array<long,3> envL_dims,
+                                                                const fp128 * const envR_ptr, std::array<long,3> envR_dims);
 template void tools::common::contraction::matrix_vector_product(      cx32 *       res_ptr,
                                                                 const cx32 * const mps_ptr, std::array<long,3> mps_dims,
                                                                 const cx32 * const mpo_ptr, std::array<long,4> mpo_dims,
@@ -136,7 +138,11 @@ template void tools::common::contraction::matrix_vector_product(      cx64 *    
                                                                 const cx64 * const mpo_ptr, std::array<long,4> mpo_dims,
                                                                 const cx64 * const envL_ptr, std::array<long,3> envL_dims,
                                                                 const cx64 * const envR_ptr, std::array<long,3> envR_dims);
-
+template void tools::common::contraction::matrix_vector_product(      cx128 *       res_ptr,
+                                                                const cx128 * const mps_ptr, std::array<long,3> mps_dims,
+                                                                const cx128 * const mpo_ptr, std::array<long,4> mpo_dims,
+                                                                const cx128 * const envL_ptr, std::array<long,3> envL_dims,
+                                                                const cx128 * const envR_ptr, std::array<long,3> envR_dims);
 
 
 template<typename Scalar, typename mpo_type>
@@ -274,15 +280,24 @@ template void tools::common::contraction::matrix_vector_product(      fp64 *    
                                                                 const std::vector<Eigen::Tensor<fp64, 4>> & mpos_shf,
                                                                 const fp64 * const envL_ptr, std::array<long,3> envL_dims,
                                                                 const fp64 * const envR_ptr, std::array<long,3> envR_dims);
-template void tools::common::contraction::matrix_vector_product(      cx64 *       res_ptr,
-                                                                const cx64 * const mps_ptr, std::array<long,3> mps_dims,
-                                                                const std::vector<Eigen::Tensor<cx64, 4>> & mpos_shf,
-                                                                const cx64 * const envL_ptr, std::array<long,3> envL_dims,
-                                                                const cx64 * const envR_ptr, std::array<long,3> envR_dims);
+template void tools::common::contraction::matrix_vector_product(      fp128 *       res_ptr,
+                                                                const fp128 * const mps_ptr, std::array<long,3> mps_dims,
+                                                                const std::vector<Eigen::Tensor<fp128, 4>> & mpos_shf,
+                                                                const fp128 * const envL_ptr, std::array<long,3> envL_dims,
+                                                                const fp128 * const envR_ptr, std::array<long,3> envR_dims);
 template void tools::common::contraction::matrix_vector_product(      cx32 *       res_ptr,
                                                                 const cx32 * const mps_ptr, std::array<long,3> mps_dims,
                                                                 const std::vector<Eigen::Tensor<cx32, 4>> & mpos_shf,
                                                                 const cx32 * const envL_ptr, std::array<long,3> envL_dims,
                                                                 const cx32 * const envR_ptr, std::array<long,3> envR_dims);
-
+template void tools::common::contraction::matrix_vector_product(      cx64 *       res_ptr,
+                                                                const cx64 * const mps_ptr, std::array<long,3> mps_dims,
+                                                                const std::vector<Eigen::Tensor<cx64, 4>> & mpos_shf,
+                                                                const cx64 * const envL_ptr, std::array<long,3> envL_dims,
+                                                                const cx64 * const envR_ptr, std::array<long,3> envR_dims);
+template void tools::common::contraction::matrix_vector_product(      cx128 *       res_ptr,
+                                                                const cx128 * const mps_ptr, std::array<long,3> mps_dims,
+                                                                const std::vector<Eigen::Tensor<cx128, 4>> & mpos_shf,
+                                                                const cx128 * const envL_ptr, std::array<long,3> envL_dims,
+                                                                const cx128 * const envR_ptr, std::array<long,3> envR_dims);
 

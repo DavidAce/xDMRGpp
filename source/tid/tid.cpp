@@ -146,40 +146,40 @@ namespace tid {
 
     ur &get_unscoped(std::string_view key, level l) { return get(key, l, true); }
 
-    token tic_token(std::string_view key, level l) {
+    token tic_token(std::string_view key, level l, double add_time) {
         if(internal::current_level < l) return internal::dummy.tic_token();
 #if defined(_OPENMP)
         if(omp_in_parallel()) {
             // We have to determine whether the threads have forked already
             if(internal::ur_prefix_get().find('@') != std::string::npos) {
                 // We found a fork! No need to add @ again
-                return tid::get(key, l).tic_token();
+                return tid::get(key, l).tic_token(add_time);
             }
             // No thread fork found!
             // Append the thread number to avoid data races on ur objects
             auto thread_key = fmt::format("{}@{}", key, omp_get_thread_num());
-            return tid::get(thread_key, l).tic_token();
+            return tid::get(thread_key, l).tic_token(add_time);
         }
 #endif
-        return tid::get(key, l).tic_token();
+        return tid::get(key, l).tic_token(add_time);
     }
 
-    token tic_scope(std::string_view key, level l) {
+    token tic_scope(std::string_view key, level l, double add_time) {
         if(internal::current_level < l) return internal::dummy.tic_token();
 #if defined(_OPENMP)
         if(omp_in_parallel()) {
             // We have to determine whether the threads have forked already
             if(internal::ur_prefix_get().find('@') != std::string::npos) {
                 // We found a fork! No need to add @ again
-                return tid::get(key, l).tic_token(key);
+                return tid::get(key, l).tic_token(key, add_time);
             }
             // No thread fork found!
             // Append the thread number to avoid data races on ur objects
             auto thread_key = fmt::format("{}@{}", key, omp_get_thread_num());
-            return tid::get(thread_key, l).tic_token(thread_key);
+            return tid::get(thread_key, l).tic_token(thread_key, add_time);
         }
 #endif
-        return tid::get(key, l).tic_token(key);
+        return tid::get(key, l).tic_token(key, add_time);
     }
 
     void tic(std::string_view key, level l) { get(key, l).tic(); }

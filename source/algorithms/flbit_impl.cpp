@@ -34,10 +34,11 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <unsupported/Eigen/MatrixFunctions>
 
-std::pair<StateFinite, AlgorithmStatus> flbit_impl::update_state(const size_t time_index, cx128 time_point, const StateFinite &state_lbit_init,
-                                                                 const std::vector<std::vector<qm::SwapGate>> &gates_tevo,
-                                                                 const std::vector<std::vector<qm::Gate>>     &unitary_circuit,
-                                                                 const AlgorithmStatus                        &status_init) {
+template<typename Scalar>
+std::pair<StateFinite<Scalar>, AlgorithmStatus> flbit_impl::update_state(const size_t time_index, cx128 time_point, const StateFinite<Scalar> &state_lbit_init,
+                                                                         const std::vector<std::vector<qm::SwapGate>> &gates_tevo,
+                                                                         const std::vector<std::vector<qm::Gate>>     &unitary_circuit,
+                                                                         const AlgorithmStatus                        &status_init) {
     /*!
      * \fn void update_state()
      */
@@ -52,12 +53,12 @@ std::pair<StateFinite, AlgorithmStatus> flbit_impl::update_state(const size_t ti
     status_tevo.phys_time       = abs(time_point);
     status_tevo.iter            = time_index + 1;
     status_tevo.step            = time_index * settings::model::model_size;
-    status_tevo.position        = state_tevo.get_position<long>();
+    status_tevo.position        = state_tevo.template get_position<long>();
     status_tevo.direction       = state_tevo.get_direction();
     return {state_tevo, check_convergence(status_tevo)};
 }
 
-std::vector<std::vector<qm::SwapGate>> flbit_impl::get_time_evolution_gates(const cx128                                 &time_point,
+std::vector<std::vector<qm::SwapGate>> flbit_impl::get_time_evolution_gates(const cx128                                  &time_point,
                                                                             const std::vector<std::vector<qm::SwapGate>> &ham_swap_gates) {
     auto t_upd = tid::tic_scope("gen_swap_gates", tid::level::normal);
     tools::log->debug("Updating time evolution swap gates to t = ({:.2e}, {:.2e})", f128_t(std::real(time_point)), f128_t(std::imag(time_point)));
@@ -67,9 +68,9 @@ std::vector<std::vector<qm::SwapGate>> flbit_impl::get_time_evolution_gates(cons
     }
     return time_swap_gates;
 }
-
-StateFinite flbit_impl::time_evolve_lbit_state(const StateFinite &state_lbit_init, const std::vector<std::vector<qm::SwapGate>> &gates_tevo,
-                                               const AlgorithmStatus &status) {
+template<typename Scalar>
+StateFinite<Scalar> flbit_impl::time_evolve_lbit_state(const StateFinite<Scalar> &state_lbit_init, const std::vector<std::vector<qm::SwapGate>> &gates_tevo,
+                                                       const AlgorithmStatus &status) {
     auto t_evo      = tid::tic_scope("time_evo", tid::level::normal);
     auto svd_cfg    = svd::config(status.bond_lim, status.trnc_lim);
     svd_cfg.svd_lib = svd::lib::lapacke;
@@ -94,8 +95,9 @@ StateFinite flbit_impl::time_evolve_lbit_state(const StateFinite &state_lbit_ini
     return state_lbit_tevo;
 }
 
-StateFinite flbit_impl::transform_to_real_basis(const StateFinite &state_lbit, const std::vector<std::vector<qm::Gate>> &unitary_circuit,
-                                                const AlgorithmStatus &status) {
+template<typename Scalar>
+StateFinite<Scalar> flbit_impl::transform_to_real_basis(const StateFinite<Scalar> &state_lbit, const std::vector<std::vector<qm::Gate>> &unitary_circuit,
+                                                        const AlgorithmStatus &status) {
     assert(unitary_circuit.size() == settings::model::lbit::u_depth);
     auto svd_cfg    = svd::config(status.bond_lim, status.trnc_lim);
     svd_cfg.svd_lib = svd::lib::lapacke;
@@ -130,7 +132,8 @@ AlgorithmStatus flbit_impl::check_convergence(const AlgorithmStatus &status_init
     return status;
 }
 
-void flbit_impl::print_status(const StateFinite &state_real, const AlgorithmStatus &status) {
+template<typename Scalar>
+void flbit_impl::print_status(const StateFinite<Scalar> &state_real, const AlgorithmStatus &status) {
     if(num::mod(status.iter, settings::print_freq(status.algo_type)) != 0) return;
     if(settings::print_freq(status.algo_type) == 0) return;
     auto        t_print = tid::tic_scope("print", tid::level::normal);
@@ -138,14 +141,13 @@ void flbit_impl::print_status(const StateFinite &state_real, const AlgorithmStat
     report += fmt::format("{:<} ", state_real.get_name());
     report += fmt::format("iter:{:<4} ", status.iter);
     report += fmt::format("step:{:<5} ", status.step);
-    report += fmt::format("t:{:>2}/{:<2}", omp_get_thread_num(),omp_get_num_threads());
+    report += fmt::format("t:{:>2}/{:<2}", omp_get_thread_num(), omp_get_num_threads());
     report += fmt::format("L:{} ", state_real.get_length());
     report += fmt::format("l:{:<2} ", state_real.get_position());
     report += fmt::format("ε:{:<8.2e} ", state_real.get_truncation_error_midchain());
     report += fmt::format("Sₑ(L/2):{:<18.16f} ", tools::finite::measure::entanglement_entropy_midchain(state_real));
     report += fmt::format("Sₙ(L/2):{:<18.16f} ", tools::finite::measure::number_entropy_midchain(state_real));
-    report += fmt::format("χ:{:<3}|{:<3}|{:<3} ", status.bond_max, status.bond_lim,
-                          tools::finite::measure::bond_dimension_midchain(state_real));
+    report += fmt::format("χ:{:<3}|{:<3}|{:<3} ", status.bond_max, status.bond_lim, tools::finite::measure::bond_dimension_midchain(state_real));
     if(settings::flbit::time_scale == TimeScale::LOGSPACED)
         report += fmt::format("ptime:{:<} ", fmt::format("{:>.2e}s", status.phys_time.to_floating_point<fp64>()));
     if(settings::flbit::time_scale == TimeScale::LINSPACED)

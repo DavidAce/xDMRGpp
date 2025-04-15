@@ -8,11 +8,13 @@
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
 
-double delta_to_J_mean(double delta) { return std::min(1.0, std::exp(delta)); }
+template class IsingSelfDual<cx64>;
 
+double delta_to_J_mean(double delta) { return std::min(1.0, std::exp(delta)); }
 double delta_to_h_mean(double delta) { return std::min(1.0, std::exp(-delta)); }
 
-IsingSelfDual::IsingSelfDual(ModelType model_type_, size_t position_) : MpoSite(model_type_, position_) {
+template<typename Scalar>
+IsingSelfDual<Scalar>::IsingSelfDual(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {
     h5tb.param.lambda = settings::model::ising_sdual::lambda;
     h5tb.param.delta  = settings::model::ising_sdual::delta;
     h5tb.param.J_mean = delta_to_J_mean(h5tb.param.delta);
@@ -28,12 +30,25 @@ IsingSelfDual::IsingSelfDual(ModelType model_type_, size_t position_) : MpoSite(
     extent2                 = {h5tb.param.spin_dim, h5tb.param.spin_dim};
 }
 
-double IsingSelfDual::get_coupling() const { return h5tb.param.J_rand; }
-double IsingSelfDual::get_field() const { return h5tb.param.h_rand; }
-void   IsingSelfDual::print_parameter_names() const { h5tb.print_parameter_names(); }
-void   IsingSelfDual::print_parameter_values() const { h5tb.print_parameter_values(); }
+template<typename Scalar>
+double IsingSelfDual<Scalar>::get_coupling() const {
+    return h5tb.param.J_rand;
+}
+template<typename Scalar>
+double IsingSelfDual<Scalar>::get_field() const {
+    return h5tb.param.h_rand;
+}
+template<typename Scalar>
+void IsingSelfDual<Scalar>::print_parameter_names() const {
+    h5tb.print_parameter_names();
+}
+template<typename Scalar>
+void IsingSelfDual<Scalar>::print_parameter_values() const {
+    h5tb.print_parameter_values();
+}
 
-void IsingSelfDual::set_parameters(TableMap &parameters) {
+template<typename Scalar>
+void IsingSelfDual<Scalar>::set_parameters(TableMap &parameters) {
     h5tb.param.J_mean                = std::any_cast<double>(parameters["J_mean"]);
     h5tb.param.J_wdth                = std::any_cast<double>(parameters["J_wdth"]);
     h5tb.param.J_rand                = std::any_cast<double>(parameters["J_rand"]);
@@ -47,7 +62,8 @@ void IsingSelfDual::set_parameters(TableMap &parameters) {
     all_mpo_parameters_have_been_set = true;
 }
 
-IsingSelfDual::TableMap IsingSelfDual::get_parameters() const {
+template<typename Scalar>
+IsingSelfDual<Scalar>::TableMap IsingSelfDual<Scalar>::get_parameters() const {
     TableMap parameters;
     parameters["J_mean"]       = h5tb.param.J_mean;
     parameters["J_wdth"]       = h5tb.param.J_wdth;
@@ -62,7 +78,8 @@ IsingSelfDual::TableMap IsingSelfDual::get_parameters() const {
     return parameters;
 }
 
-std::any IsingSelfDual::get_parameter(std::string_view name) const {
+template<typename Scalar>
+std::any IsingSelfDual<Scalar>::get_parameter(std::string_view name) const {
     /* clang-format off */
     if     (name == "J_mean")        return h5tb.param.J_mean;
     else if(name == "J_wdth")        return h5tb.param.J_wdth;
@@ -78,7 +95,8 @@ std::any IsingSelfDual::get_parameter(std::string_view name) const {
     throw except::logic_error("Invalid parameter name for IsingSelfDual model: {}", name);
 }
 
-void IsingSelfDual::set_parameter(const std::string_view name, std::any value) {
+template<typename Scalar>
+void IsingSelfDual<Scalar>::set_parameter(const std::string_view name, std::any value) {
     /* clang-format off */
     if(name      == "J_mean")           h5tb.param.J_mean = std::any_cast<decltype(h5tb.param.J_mean)>(value);
     else if(name == "J_wdth")           h5tb.param.J_wdth = std::any_cast<decltype(h5tb.param.J_wdth)>(value);
@@ -92,7 +110,7 @@ void IsingSelfDual::set_parameter(const std::string_view name, std::any value) {
     else if(name == "distribution")     h5tb.param.distribution = std::any_cast<decltype(h5tb.param.distribution)>(value);
     else
         /* clang-format on */
-            throw except::logic_error("Invalid parameter name for the IsingSelfDual model: {}", name);
+        throw except::logic_error("Invalid parameter name for the IsingSelfDual model: {}", name);
     build_mpo();
     build_mpo_squared();
 }
@@ -114,8 +132,9 @@ void IsingSelfDual::set_parameter(const std::string_view name, std::any value) {
  *        3
  *
  */
-Eigen::Tensor<cx64, 4> IsingSelfDual::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                              [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
+template<typename Scalar>
+Eigen::Tensor<cx64, 4> IsingSelfDual<Scalar>::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                                      [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
     using namespace qm::spin::half::matrix;
     tools::log->debug("mpo({}): building ising-selfdual mpo", get_position());
     if(not all_mpo_parameters_have_been_set)
@@ -151,7 +170,8 @@ Eigen::Tensor<cx64, 4> IsingSelfDual::get_mpo(cx64 energy_shift_per_site, std::o
     return mpo_build;
 }
 
-void IsingSelfDual::randomize_hamiltonian() {
+template<typename Scalar>
+void IsingSelfDual<Scalar>::randomize_hamiltonian() {
     if(h5tb.param.distribution == "normal") {
         h5tb.param.J_wdth = 1.0;
         h5tb.param.h_wdth = 1.0;
@@ -183,21 +203,30 @@ void IsingSelfDual::randomize_hamiltonian() {
     unique_id_sq                     = std::nullopt;
 }
 
-std::unique_ptr<MpoSite> IsingSelfDual::clone() const { return std::make_unique<IsingSelfDual>(*this); }
+template<typename Scalar>
+std::unique_ptr<MpoSite<Scalar>> IsingSelfDual<Scalar>::clone() const {
+    return std::make_unique<IsingSelfDual>(*this);
+}
 
-long IsingSelfDual::get_spin_dimension() const { return h5tb.param.spin_dim; }
+template<typename Scalar>
+long IsingSelfDual<Scalar>::get_spin_dimension() const {
+    return h5tb.param.spin_dim;
+}
 
-void IsingSelfDual::set_averages(std::vector<TableMap> all_parameters, bool infinite) {
+template<typename Scalar>
+void IsingSelfDual<Scalar>::set_averages(std::vector<TableMap> all_parameters, bool infinite) {
     if(not infinite) { all_parameters.back()["J_rand"] = 0.0; }
     set_parameters(all_parameters[get_position()]);
 }
 
-void IsingSelfDual::save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const {
+template<typename Scalar>
+void IsingSelfDual<Scalar>::save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const {
     if(not file.linkExists(hamiltonian_table_path)) file.createTable(h5tb.get_h5_type(), hamiltonian_table_path, "Selfdual Ising");
     file.appendTableRecords(h5tb.param, hamiltonian_table_path);
 }
 
-void IsingSelfDual::load_hamiltonian(const h5pp::File &file, std::string_view model_path) {
+template<typename Scalar>
+void IsingSelfDual<Scalar>::load_hamiltonian(const h5pp::File &file, std::string_view model_path) {
     auto ham_table = fmt::format("{}/hamiltonian", model_path);
     if(file.linkExists(ham_table)) {
         h5tb.param                       = file.readTableRecords<h5tb_ising_selfdual::table>(ham_table, position);

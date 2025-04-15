@@ -11,6 +11,7 @@
 enum class LbitCircuitGateWeightKind;
 enum class LbitCircuitGateMatrixKind;
 enum class MeanType;
+template<typename Scalar>
 class StateFinite;
 namespace h5pp {
     class File;
@@ -20,7 +21,8 @@ namespace h5pp {
 };
 
 namespace qm::lbit {
-
+    template<typename Scalar>
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
     /*! The values that we need to recreate a unitary gate exactly */
     struct UnitaryGateParameters {
         size_t                layer; /*!< Layer number of this gate */
@@ -170,20 +172,23 @@ namespace qm::lbit {
                                                                   std::vector<LbitCircuitGateWeightKind>   uweights = {},
                                                                   std::vector<LbitCircuitGateMatrixKind>   umatrixs = {}
                                                                 );
-
-    StateFinite transform_to_real_basis(const StateFinite &lbit_state,
+    template<typename Scalar>
+    StateFinite<Scalar> transform_to_real_basis(const StateFinite<Scalar> &lbit_state,
                                         const std::vector<std::vector<qm::Gate>> & unitary_gates_2site_layers,
                                         svd::config svd_cfg);
-    StateFinite transform_to_real_basis(const StateFinite &lbit_state,
-                                        const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> &unitary_gates_mpo_layers,
+    template<typename Scalar>
+    StateFinite<Scalar> transform_to_real_basis(const StateFinite<Scalar> &lbit_state,
+                                        const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &unitary_gates_mpo_layers,
                                         const Eigen::Tensor<std::complex<double>, 1> & ledge,
                                         const Eigen::Tensor<std::complex<double>, 1> & redge,
                                         svd::config svd_cfg);
-    StateFinite transform_to_lbit_basis(const StateFinite &real_state,
+    template<typename Scalar>
+    StateFinite<Scalar> transform_to_lbit_basis(const StateFinite<Scalar> &real_state,
                                         const std::vector<std::vector<qm::Gate>> & unitary_gates_2site_layers,
                                         svd::config svd_cfg);
-    StateFinite transform_to_lbit_basis(const StateFinite &real_state,
-                                        const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> &unitary_gates_mpo_layers,
+    template<typename Scalar>
+    StateFinite<Scalar> transform_to_lbit_basis(const StateFinite<Scalar> &real_state,
+                                        const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &unitary_gates_mpo_layers,
                                         const Eigen::Tensor<std::complex<double>, 1> & ledge,
                                         const Eigen::Tensor<std::complex<double>, 1> & redge,
                                         svd::config svd_cfg);

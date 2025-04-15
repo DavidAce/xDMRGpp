@@ -8,10 +8,10 @@
 // * \brief Class that runs the finite LBIT algorithm.
  */
 
-class StateFinite;
+template<typename Scalar> class StateFinite;
 class flbit : public AlgorithmFinite {
     public:
-    std::unique_ptr<StateFinite>                     state_lbit, state_lbit_init, state_real_init;
+    std::unique_ptr<StateFinite<Scalar>>             state_lbit, state_lbit_init, state_real_init;
     std::vector<qm::Gate>                            ham_gates_1body, time_gates_1body;
     std::vector<qm::Gate>                            ham_gates_2body, time_gates_2body;
     std::vector<qm::Gate>                            ham_gates_3body, time_gates_3body;

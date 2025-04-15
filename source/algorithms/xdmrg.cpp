@@ -305,10 +305,16 @@ void xdmrg::run_algorithm() {
         tools::log->trace("Starting step {}, iter {}, pos {}, dir {}", status.step, status.iter, status.position, status.direction);
         // Apply end-of-half-sweep actions
         // Updating bond dimension must go first since it decides based on truncation error, but a projection+normalize resets truncation.
+        // if(tensors.state->position_is_inward_edge() and status.iter > 0 and status.bond_lim > 96 ) {
+        //     settings::strategy::initial_pattern = "";
+        //     init_bond_dimension_limits();
+        //     init_truncation_error_limits();
+        //     initialize_state(ResetReason::INIT, StateInit::PRODUCT_STATE_NEEL_SHUFFLED);
+        //     rebuild_tensors();
+        // }
+
         update_bond_dimension_limit();   // Updates the bond dimension if the state precision is being limited by bond dimension
         update_truncation_error_limit(); // Updates the truncation error limit if the state is being truncated
-        update_eigs_tolerance();         // Updates the tolerance on the iterative eigensolver
-        update_dmrg_blocksize();         // Updates the number sites used in dmrg steps using the information typical scale
         set_energy_shift_mpo();          // Shifts the energy H -> H-<E> by subtracting E/L on each MPO.
         set_parity_shift_mpo();          // Shifts the energy spectrum of states with opposite parity away from the current energy.
         set_parity_shift_mpo_squared();  // Shifts the energy-squared spectrum of states with opposite parity up by 1 (makes sense with ritz == SM)
@@ -326,11 +332,9 @@ void xdmrg::run_algorithm() {
 
         // It's important not to perform the last move, so we break now: that last state would not get optimized
         if(status.algo_stop != AlgorithmStop::NONE) break;
-
+        update_eigs_tolerance();         // Updates the tolerance on the iterative eigensolver
+        update_dmrg_blocksize();         // Updates the number sites used in dmrg steps using the information typical scale
         // Prepare for next step
-
-        // try_moving_sites(); // Tries to overcome an entanglement barrier by moving sites around the lattice, to optimize non-nearest neighbors
-        // expand_environment(EnvExpandMode::VAR , EnvExpandSide::REAR);
 
         move_center_point(); // Moves the center point AC to the next site and increments status.iter and status.step
         status.wall_time = tid::get_unscoped("t_tot").get_time();
@@ -358,14 +362,9 @@ void xdmrg::update_state() {
 
     tools::log->debug("Updating state: {}", opt_meta.string()); // Announce the current configuration for optimization
     auto bond_dims_old = tensors.state->get_mps_dims_active();
-    // Expand the environment to grow the bond dimension in 1-site dmrg
-    // if(opt_meta.expand_mode != EnvExpandMode::NONE and tensors.active_sites.size() == 1) {
-    if(opt_meta.expand_mode != EnvExpandMode::NONE) {
-        expand_environment(opt_meta.expand_mode, opt_meta.optAlgo, opt_meta.optRitz);
-        opt_meta.problem_dims = tools::finite::multisite::get_dimensions(*tensors.state);
-        opt_meta.problem_size = tools::finite::multisite::get_problem_size(*tensors.state);
-        opt_meta.optSolver    = opt_meta.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
-    }
+
+    expand_bonds(opt_meta);
+
     auto variance_after_exp = tools::finite::measure::energy_variance(tensors);
     auto bond_dims_exp      = tensors.state->get_mps_dims_active();
 
@@ -405,16 +404,13 @@ void xdmrg::update_state() {
     tensors.state->tag_active_sites_normalized(false);
 
     // Do the truncation with SVD
-    // TODO: We may need to detect here whether the truncation error limit needs lowering due to a variance increase in the svd merge
     auto logPolicy = LogPolicy::SILENT;
     if constexpr(settings::debug) logPolicy = LogPolicy::VERBOSE;
     tensors.merge_multisite_mps(opt_state.get_tensor(), MergeEvent::OPT, opt_meta.svd_cfg, logPolicy);
     tensors.rebuild_edges(); // This will only do work if edges were modified, which is the case in 1-site dmrg.
-    if constexpr(settings::debug) {
-        if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
-    }
 
     if constexpr(settings::debug) {
+        if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
         auto variance_after_svd = tools::finite::measure::energy_variance(tensors);
         tools::log->debug("Before update: variance {:8.2e} | mps dims {}", var_latest, bond_dims_old);
         tools::log->debug("After  expns.: variance {:8.2e} | mps dims {}", variance_after_exp, bond_dims_exp);
@@ -439,6 +435,9 @@ void xdmrg::update_state() {
     last_optsolver = opt_state.get_optsolver();
     last_optalgo   = opt_state.get_optalgo();
     if constexpr(settings::debug) tensors.assert_validity();
+
+    expand_bonds(opt_meta);
+
 }
 
 void xdmrg::find_energy_range() {

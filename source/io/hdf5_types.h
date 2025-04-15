@@ -7,6 +7,7 @@
 #include "tid/enums.h"
 #include <array>
 #include <cstdio>
+#include <Eigen/src/Core/NumTraits.h>
 #include <h5pp/h5pp.h>
 #include <memory>
 #include <unordered_map>
@@ -62,39 +63,41 @@ class h5_enum_algo_stop {
     static void            commit(const h5pp::hid::h5f &file_id);
 };
 
+template<typename Scalar>
 class h5pp_table_measurements_finite {
     private:
     static inline h5pp::hid::h5t h5_type;
     static void                  register_table_type();
     static constexpr auto        nan = std::numeric_limits<double>::quiet_NaN();
+    using RealScalar                 = typename Eigen::NumTraits<Scalar>::Real;
 
     public:
     struct table {
-        uint64_t              iter                   = 0;
-        uint64_t              step                   = 0;
-        long                  position               = -1;
-        StorageEvent          event                  = StorageEvent::NONE;
-        uint64_t              length                 = 0;
-        double                energy                 = nan;
-        double                energy_variance        = nan;
-        double                energy_variance_lowest = nan;
-        double                norm                   = nan;
-        double                truncation_error       = nan;
-        long                  bond_mid               = -1;
-        long                  bond_lim               = -1;
-        long                  bond_max               = -1;
-        double                entanglement_entropy   = nan;
-        double                renyi_entropy_2        = nan;
-        double                renyi_entropy_3        = nan;
-        double                renyi_entropy_4        = nan;
-        double                renyi_entropy_inf      = nan;
-        double                number_entropy         = nan;
-        std::array<double, 3> spin_global            = {nan, nan, nan};
-        std::array<double, 3> spin_local             = {nan, nan, nan};
-        std::array<double, 3> structure_factors      = {nan, nan, nan};
-        double                total_time             = 0;
-        double                algorithm_time         = 0;
-        h5pp::fstr_t<64>      physical_time          = {};
+        uint64_t                  iter                   = 0;
+        uint64_t                  step                   = 0;
+        long                      position               = -1;
+        StorageEvent              event                  = StorageEvent::NONE;
+        uint64_t                  length                 = 0;
+        RealScalar                energy                 = nan;
+        RealScalar                energy_variance        = nan;
+        RealScalar                energy_variance_lowest = nan;
+        RealScalar                norm                   = nan;
+        RealScalar                truncation_error       = nan;
+        long                      bond_mid               = -1;
+        long                      bond_lim               = -1;
+        long                      bond_max               = -1;
+        RealScalar                entanglement_entropy   = nan;
+        RealScalar                renyi_entropy_2        = nan;
+        RealScalar                renyi_entropy_3        = nan;
+        RealScalar                renyi_entropy_4        = nan;
+        RealScalar                renyi_entropy_inf      = nan;
+        RealScalar                number_entropy         = nan;
+        std::array<RealScalar, 3> spin_global            = {nan, nan, nan};
+        std::array<RealScalar, 3> spin_local             = {nan, nan, nan};
+        std::array<RealScalar, 3> structure_factors      = {nan, nan, nan};
+        double                    total_time             = 0;
+        double                    algorithm_time         = 0;
+        h5pp::fstr_t<64>          physical_time          = {};
     };
     static h5pp::hid::h5t get_h5t();
 };
@@ -261,9 +264,9 @@ class h5pp_ur {
         double       avg;
         int          level;
         size_t       count;
-                     item() = default;
-                     item(const item &it);
-                     item(std::string_view name_, double time, double sum, double pcnt, double avg, int level, size_t count);
+        item() = default;
+        item(const item &it);
+        item(std::string_view name_, double time, double sum, double pcnt, double avg, int level, size_t count);
     };
 
     static h5pp::hid::h5t get_h5t();

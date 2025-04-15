@@ -121,7 +121,6 @@ inline std::string_view projToString(primme_projection proj) {
 
 template<typename MatrixProductType>
 void eig::solver::MultAx_wrapper(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *ierr) {
-    auto t_mv = tid::tic_scope("matvec", tid::level::highest);
     if(primme->matrix == nullptr) throw std::logic_error("primme->matrix == nullptr");
     auto matrix_ptr = static_cast<MatrixProductType *>(primme->matrix);
     matrix_ptr->MultAx(x, ldx, y, ldy, blockSize, primme, ierr);
@@ -177,12 +176,12 @@ std::string getLogMessage(struct primme_params *primme, [[maybe_unused]] int *ba
     std::string msg_diff = eigvals.size() >= 2 ? fmt::format(" | Δλ {:7.4e}", std::abs(get_eigval(0) - get_eigval(1))) : "";
     std::string msg_jcb  = solver.config.jcbMaxBlockSize.has_value() ? fmt::format(" | jcb {}", solver.config.jcbMaxBlockSize.value()) : "";
     std::string msg_mvec = primme->maxMatvecs == std::numeric_limits<PRIMME_INT>::max() ? "" : fmt::format("/{}", primme->maxMatvecs);
-    return fmt::format(
-        "iter {:>6} | mv {:>6}{} | size {}{} | λ {:19.16f}{} | rnorm {:8.2e} | eps {:8.2e} | time {:9.3e}s | {:8.2e} it/s | {:8.2e} mv/s| {} | {}",
-        primme->stats.numOuterIterations, primme->stats.numMatvecs, msg_mvec, primme->n, msg_jcb, solver.result.meta.last_eval, msg_diff,
-        result.meta.last_rnorm, primme->eps, primme->stats.elapsedTime, primme->stats.numOuterIterations / primme->stats.elapsedTime,
-        static_cast<double>(primme->stats.numMatvecs) / primme->stats.timeMatvec, eig::TypeToString(solver.config.type),
-        eig::MethodToString(solver.config.primme_method));
+    return fmt::format("oiter {:>6} | iiter {:>6} | piter {:>6} | mv {:>6}{} | size {}{} | λ {:19.16f}{} | rnorm {:8.2e} | eps {:8.2e} | time {:9.3e}s | "
+                       "{:8.2e} it/s | {:8.2e} mv/s| {} | {}",
+                       primme->stats.numOuterIterations, primme->stats.numOrthoInnerProds, primme->stats.numPreconds, primme->stats.numMatvecs, msg_mvec,
+                       primme->n, msg_jcb, solver.result.meta.last_eval, msg_diff, result.meta.last_rnorm, primme->eps, primme->stats.elapsedTime,
+                       primme->stats.numOuterIterations / primme->stats.elapsedTime, static_cast<double>(primme->stats.numMatvecs) / primme->stats.timeMatvec,
+                       eig::TypeToString(solver.config.type), eig::MethodToString(solver.config.primme_method));
 }
 
 void monitorFun([[maybe_unused]] void *basisEvals, [[maybe_unused]] int *basisSize, [[maybe_unused]] int *basisFlags, [[maybe_unused]] int *iblock,
@@ -283,6 +282,21 @@ void monitorFun([[maybe_unused]] void *basisEvals, [[maybe_unused]] int *basisSi
             // *ierr = 60;
         }
 
+        // Terminate if there have been too many "iterations"
+        // During PRIMME_DYNAMIC (JDQMR_etol or GD+k) the iteration counter increases differently
+        // depending on the solver, since JDQMR does many inner iterations per outer iteration, whereas GD+k
+        // only does a single matvec iteration per iteration.
+        // In addition, if we have defined massMatrixMatvec, there are about 4-5 extra matvecs per iteration.
+        // One way to set a "fair" upper limit is to count the applications of the preconditioner:
+        // At least we know that the number of preconditioner applications should never exceed the number of maxOuterIterations.
+        // By fair, we mean that given
+        if(primme->stats.numPreconds >= primme->maxOuterIterations) {
+            primme->maxMatvecs                          = 0;
+            primme->maxOuterIterations                  = 0;
+            primme->correctionParams.maxInnerIterations = -1;
+            // *ierr = 60;
+        }
+
         if(eig::log->level() <= level) {
             eig::log->log(level, "{}{}{} | {}", getLogMessage(primme, basisSize, basisFlags, basisEvals, basisNorms, numLocked, lockedEvals, lockedNorms),
                           basisMessage, nlockMessage, eventMessage);
@@ -365,8 +379,8 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     primme.locking                     = config.primme_locking.value_or(1);                                            // Use locking by default
     primme.target                      = RitzToTarget(config.ritz.value_or(Ritz::primme_smallest));
     primme.projectionParams.projection = stringToProj(config.primme_projection.value_or("primme_proj_default"));
-#pragma message "Decide what to do about maxmatvecs"
-    // primme.maxMatvecs                  = ;//config.maxIter.value_or(primme.maxMatvecs);
+    // #pragma message "Decide what to do about maxmatvecs"
+    primme.maxMatvecs                          = config.maxIter.value_or(primme.maxMatvecs);
     primme.maxOuterIterations                  = config.maxIter.value_or(primme.maxOuterIterations);
     primme.correctionParams.maxInnerIterations = -1; // Up to the remaining matvecs
     primme.maxBlockSize                        = config.primme_maxBlockSize.value_or(1);
@@ -446,6 +460,11 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
         try {
             auto t_dprimme = tid::tic_scope("dprimme");
             info = dprimme(eigvals.data(), eigvecs.data(), result.meta.residual_norms.data(), &primme);
+            auto t_ortho = tid::tic_token("ortho", tid::level::higher, primme.stats.timeOrtho);
+            auto t_dense = tid::tic_token("dense", tid::level::higher, primme.stats.timeDense);
+            auto t_glsum = tid::tic_token("glsum", tid::level::higher, primme.stats.timeGlobalSum);
+            auto t_matvec = tid::tic_token("matvec", tid::level::higher, primme.stats.timeMatvec);
+            auto t_precond = tid::tic_token("precond", tid::level::higher, primme.stats.timePrecond);
         } catch(const std::exception &ex) { eig::log->error("dprimme has exited with error: info {} | msg: {}", info, ex.what()); } catch(...) {
             eig::log->error("dprimme has exited with error: info {}", info);
         }
@@ -453,6 +472,11 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
         try {
             auto t_zprimme = tid::tic_scope("zprimme");
             info = zprimme(eigvals.data(), eigvecs.data(), result.meta.residual_norms.data(), &primme);
+            auto t_ortho = tid::tic_token("ortho", tid::level::higher, primme.stats.timeOrtho);
+            auto t_dense = tid::tic_token("dense", tid::level::higher, primme.stats.timeDense);
+            auto t_glsum = tid::tic_token("glsum", tid::level::higher, primme.stats.timeGlobalSum);
+            auto t_matvec = tid::tic_token("matvec", tid::level::higher, primme.stats.timeMatvec);
+            auto t_precond = tid::tic_token("precond", tid::level::higher, primme.stats.timePrecond);
         } catch(const std::exception &ex) { eig::log->error("zprimme has exited with error: info {} | msg: {}", info, ex.what()); } catch(...) {
             eig::log->error("zprimme has exited with error: info {}", info);
         }
@@ -512,6 +536,7 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     result.meta.type           = config.type.value();
     result.meta.time_total     = primme.stats.elapsedTime;
     result.meta.last_rnorm     = *std::max_element(result.meta.residual_norms.begin(), result.meta.residual_norms.end());
+
     primme_free(&primme);
     return info;
 }

@@ -32,7 +32,7 @@ class AlgorithmStatus {
     double            energy_variance_lowest     = 1.0;
     size_t            energy_variance_max_digits = 0;
     double            energy_variance_prec_limit = 0;
-    double            env_expansion_alpha        = 0.0; /*!< subspace expansion factor alpha */
+    double            bond_expansion_alpha        = 0.0; /*!< subspace expansion factor alpha */
     h5pp::fstr_t<64>  phys_time                  = {};
     double            wall_time                  = 0;
     double            algo_time                  = 0;

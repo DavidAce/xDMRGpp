@@ -10,11 +10,10 @@ void  tools::common::contraction::contract_mps_bnd(      Scalar * res_ptr      ,
                                                    const Scalar * const bnd_ptr, std::array<long,1> bnd_dims){
     assert(mps_dims[2] == bnd_dims[0]);
     assert(mps_dims == res_dims);
-
-    auto res_mat = Eigen::Map<Eigen::Matrix<Scalar,Eigen::Dynamic, Eigen::Dynamic>>(res_ptr, res_dims[0] * res_dims[1], res_dims[2]);
-    auto mps_mat = Eigen::Map<const Eigen::Matrix<Scalar,Eigen::Dynamic, Eigen::Dynamic>>(mps_ptr, mps_dims[0] * mps_dims[1], mps_dims[2]);
-    auto bnd_mat = Eigen::Map<const Eigen::Matrix<Scalar,Eigen::Dynamic, 1>>(bnd_ptr, bnd_dims[0]);
-    res_mat.noalias() = mps_mat * bnd_mat.asDiagonal(); // calls gemm
+    auto res = Eigen::TensorMap<Eigen::Tensor<Scalar,3>>(res_ptr,res_dims);
+    auto mps = Eigen::TensorMap<const Eigen::Tensor<Scalar,3>>(mps_ptr,mps_dims);
+    auto bnd = Eigen::TensorMap<const Eigen::Tensor<Scalar,1>>(bnd_ptr,bnd_dims);
+    tenx::asDiagonalContract(res, bnd, mps , 2);
 }
 
 

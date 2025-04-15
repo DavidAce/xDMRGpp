@@ -75,8 +75,9 @@ namespace tools::finite::opt::internal {
         auto                 t_gs = tid::tic_scope("eig-ene", tid::level::higher);
         std::vector<opt_mps> results;
         switch(meta.optType) {
-            case OptType::REAL: optimize_energy_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CPLX: optimize_energy_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+            case OptType::FP64: optimize_energy_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
+            case OptType::CX64: optimize_energy_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+            default: throw except::runtime_error("optimize_energy_eig(): not implemented for type {}", enum2sv(meta.optType));
         }
         if(results.empty()) {
             meta.optExit = OptExit::FAIL_ERROR;

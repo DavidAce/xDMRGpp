@@ -1,6 +1,6 @@
-#include "math/float.h"
 #include "flbit.h"
 #include "flbit_impl.h"
+#include "math/float.h"
 //
 #include "config/settings.h"
 #include "debug/exceptions.h"
@@ -234,9 +234,9 @@ void flbit::run_preprocessing() {
             } else {
                 state_real = qm::lbit::transform_to_real_basis(*state_lbit, unitary_gates_2site_layers, svd_cfg);
             }
-            auto psi_lbit_t  = tools::finite::measure::mps2tensor(*state_lbit);
-            auto psi_real1_t = tools::finite::measure::mps2tensor(*tensors.state);
-            auto psi_real2_t = tools::finite::measure::mps2tensor(state_real);
+            auto psi_lbit_t  = tools::finite::mps::mps2tensor(*state_lbit);
+            auto psi_real1_t = tools::finite::mps::mps2tensor(*tensors.state);
+            auto psi_real2_t = tools::finite::mps::mps2tensor(state_real);
             auto u_circuit_t =
                 qm::lbit::get_unitary_circuit_as_tensor(unitary_gates_2site_layers); // TODO: For some reason this is a transpose away from our typical circuit
             auto        psi_lbit_v            = tenx::VectorMap(psi_lbit_t);
@@ -394,7 +394,7 @@ void flbit::run_algorithm2() {
         tools::log->info("Generating u_and^dagger psi_init");
         auto u_and_adj_state_init = *tensors.state;
         tools::finite::mps::apply_circuit(u_and_adj_state_init, u_and, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
-        const auto u_and_adj_psi_init_tensor = tools::finite::measure::mps2tensor(u_and_adj_state_init);
+        const auto u_and_adj_psi_init_tensor = tools::finite::mps::mps2tensor(u_and_adj_state_init);
         const auto u_and_adj_psi_init_vector = tenx::VectorMap(u_and_adj_psi_init_tensor);
         tools::log->info("Starting time evolution");
 
@@ -532,7 +532,7 @@ void flbit::check_convergence() {
 }
 
 void flbit::create_time_points() {
-    auto   t_crt = tid::tic_scope("create_time_points");
+    auto  t_crt = tid::tic_scope("create_time_points");
     cx128 time_start(static_cast<fp128>(settings::flbit::time_start_real), static_cast<fp128>(settings::flbit::time_start_imag));
     cx128 time_final(static_cast<fp128>(settings::flbit::time_final_real), static_cast<fp128>(settings::flbit::time_final_imag));
     tools::log->info("Creating time points ({},{}) -> ({},{})", settings::flbit::time_start_real, settings::flbit::time_start_imag,
@@ -986,14 +986,12 @@ void flbit::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
     // Save the lbit density matrix analysis
     auto num_rps = settings::flbit::opdm::num_rps; // Number of random product states
     if(num_rps > 0 and h5file and storage_event == StorageEvent::MODEL) {
-        auto length      = safe_cast<long>(settings::model::model_size);
-        auto svd_cfg     = svd::config(8192, 1e-12);
-        svd_cfg.svd_lib  = svd::lib::lapacke;
-        svd_cfg.svd_rtn  = svd::rtn::gejsv;
-        auto sz          = tenx::TensorCast(qm::spin::half::sz);
-        auto sp          = tenx::TensorCast(qm::spin::half::sp);
-        auto sm          = tenx::TensorCast(qm::spin::half::sm);
-        using op_t       = tools::finite::measure::LocalObservableOp;
+        auto length     = safe_cast<long>(settings::model::model_size);
+        auto svd_cfg    = svd::config(8192, 1e-12);
+        svd_cfg.svd_lib = svd::lib::lapacke;
+        svd_cfg.svd_rtn = svd::rtn::gejsv;
+        using namespace qm::spin::half::tensor;
+        using op_t       = tools::finite::measure::LocalObservableOp<cx64>;
         using opstring_t = std::vector<op_t>;
         auto eigvals_all = Eigen::MatrixXd(num_rps, length);
         for(auto nrps : num::range(0, num_rps)) {
@@ -1020,7 +1018,7 @@ void flbit::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
                         for(auto pos_x : num::range(pos_i, pos_j)) opstring.emplace_back(op_t{sz, pos_x});
                     }
                     opstring.emplace_back(op_t{sm, pos_j});
-                    rho(pos_i, pos_j) = tools::finite::measure::expectation_value(state_real_rps, opstring);
+                    rho(pos_i, pos_j) = tools::finite::measure::expectation_value<cx64>(state_real_rps, opstring);
                     if(pos_i != pos_j) rho(pos_j, pos_i) = std::conj(rho(pos_i, pos_j));
                 }
             }

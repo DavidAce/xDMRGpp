@@ -80,19 +80,19 @@ namespace qm::spin {
         template<typename T>
         std::array<T, 2> get_sx_spinors() {
             std::array<T, 2> vecs{T(2), T(2)};
-            vecs[0](0) = 1.0/std::sqrt(2);
-            vecs[0](1) = 1.0/std::sqrt(2);
-            vecs[1](0) = 1.0/std::sqrt(2);
-            vecs[1](1) = -1.0/std::sqrt(2);
+            vecs[0](0) = 1.0 / std::sqrt(2);
+            vecs[0](1) = 1.0 / std::sqrt(2);
+            vecs[1](0) = 1.0 / std::sqrt(2);
+            vecs[1](1) = -1.0 / std::sqrt(2);
             return vecs;
         }
         template<typename T>
         std::array<T, 2> get_sy_spinors() {
             std::array<T, 2> vecs{T(2), T(2)};
-            vecs[0](0) = 1.0/std::sqrt(2);
-            vecs[0](1) = 1.0i/std::sqrt(2);
-            vecs[1](0) = 1.0/std::sqrt(2);
-            vecs[1](1) = -1.0i/std::sqrt(2);
+            vecs[0](0) = 1.0 / std::sqrt(2);
+            vecs[0](1) = 1.0i / std::sqrt(2);
+            vecs[1](0) = 1.0 / std::sqrt(2);
+            vecs[1](1) = -1.0i / std::sqrt(2);
             return vecs;
         }
         template<typename T>
@@ -131,6 +131,7 @@ namespace qm::spin {
             extern const std::array<Eigen::Tensor<cx64, 1>, 2> sz_spinors;
             extern Eigen::Tensor<cx64, 1>                      get_spinor(std::string_view axis, int sign);
             extern Eigen::Tensor<cx64, 1>                      get_spinor(std::string_view axis);
+            extern Eigen::Tensor<cx64, 2>                      get_pauli(std::string_view axis);
         }
         extern const Eigen::Matrix2cd          sx;
         extern const Eigen::Matrix2cd          sy;

@@ -3,45 +3,50 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 
+template<typename Scalar>
 class TensorsInfinite;
+template<typename Scalar>
 class StateInfinite;
+template<typename Scalar>
 class ModelInfinite;
+template<typename Scalar>
 class EdgesInfinite;
 namespace tools::infinite::measure {
-    using Scalar = std::complex<double>;
     /* clang-format off */
-    extern size_t length                          (const TensorsInfinite & tensors);
-    extern size_t length                          (const EdgesInfinite & edges);
-    extern long   bond_dimension                  (const StateInfinite & state);
-    extern double truncation_error                (const StateInfinite & state);
-    extern double norm                            (const StateInfinite & state);
-    extern double entanglement_entropy            (const StateInfinite & state);
+    template<typename Scalar>
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
 
-    template<typename state_or_mps_type>
-    double energy_minus_energy_shift     (const state_or_mps_type & state, const ModelInfinite & model, const EdgesInfinite & edges);
-    template<typename state_or_mps_type>
-    double energy_mpo                      (const state_or_mps_type & state, const ModelInfinite & model, const EdgesInfinite & edges);
-    template<typename state_or_mps_type>
-    double energy_per_site_mpo             (const state_or_mps_type & state, const ModelInfinite & model, const EdgesInfinite & edges);
-    template<typename state_or_mps_type>
-    double energy_variance_mpo             (const state_or_mps_type & state, const ModelInfinite & model, const EdgesInfinite & edges);
-    template<typename state_or_mps_type>
-    double energy_variance_per_site_mpo    (const state_or_mps_type & state, const ModelInfinite & model, const EdgesInfinite & edges);
+    template<typename Scalar> extern size_t length                           (const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern size_t length                           (const EdgesInfinite<Scalar> & edges);
+    template<typename Scalar> extern long   bond_dimension                   (const StateInfinite<Scalar> & state);
+    template<typename Scalar> extern RealScalar<Scalar> truncation_error     (const StateInfinite<Scalar> & state);
+    template<typename Scalar> extern RealScalar<Scalar> norm                 (const StateInfinite<Scalar> & state);
+    template<typename Scalar> extern RealScalar<Scalar> entanglement_entropy (const StateInfinite<Scalar> & state);
 
-    extern double energy_mpo                      (const TensorsInfinite & tensors);
-    extern double energy_per_site_mpo             (const TensorsInfinite & tensors);
-    extern double energy_variance_mpo             (const TensorsInfinite & tensors);
-    extern double energy_variance_per_site_mpo    (const TensorsInfinite & tensors);
+    template<typename state_or_mps_type, typename Scalar>
+    RealScalar<Scalar> energy_minus_energy_shift     (const state_or_mps_type & state, const ModelInfinite<Scalar> & model, const EdgesInfinite<Scalar> & edges);
+    template<typename state_or_mps_type, typename Scalar>
+    RealScalar<Scalar> energy_mpo                      (const state_or_mps_type & state, const ModelInfinite<Scalar> & model, const EdgesInfinite<Scalar> & edges);
+    template<typename state_or_mps_type, typename Scalar>
+    RealScalar<Scalar> energy_per_site_mpo             (const state_or_mps_type & state, const ModelInfinite<Scalar> & model, const EdgesInfinite<Scalar> & edges);
+    template<typename state_or_mps_type, typename Scalar>
+    RealScalar<Scalar> energy_variance_mpo             (const state_or_mps_type & state, const ModelInfinite<Scalar> & model, const EdgesInfinite<Scalar> & edges);
+    template<typename state_or_mps_type, typename Scalar>
+    RealScalar<Scalar> energy_variance_per_site_mpo    (const state_or_mps_type & state, const ModelInfinite<Scalar> & model, const EdgesInfinite<Scalar> & edges);
 
-    extern double energy_mpo                      (const Eigen::Tensor<Scalar,3> &mps, const TensorsInfinite & tensors);
-    extern double energy_per_site_mpo             (const Eigen::Tensor<Scalar,3> &mps, const TensorsInfinite & tensors);
-    extern double energy_variance_mpo             (const Eigen::Tensor<Scalar,3> &mps, const TensorsInfinite & tensors);
-    extern double energy_variance_per_site_mpo    (const Eigen::Tensor<Scalar,3> &mps, const TensorsInfinite & tensors);
 
-    extern double energy_per_site_ham             (const TensorsInfinite & tensors);
-    extern double energy_per_site_mom             (const TensorsInfinite & tensors);
-    extern double energy_variance_per_site_ham    (const TensorsInfinite & tensors);
-    extern double energy_variance_per_site_mom    (const TensorsInfinite & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_mpo                      (const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_per_site_mpo             (const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_variance_mpo             (const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_variance_per_site_mpo    (const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_mpo                      (const Eigen::Tensor<Scalar,3> &mps, const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_per_site_mpo             (const Eigen::Tensor<Scalar,3> &mps, const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_variance_mpo             (const Eigen::Tensor<Scalar,3> &mps, const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_variance_per_site_mpo    (const Eigen::Tensor<Scalar,3> &mps, const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_per_site_ham             (const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_per_site_mom             (const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_variance_per_site_ham    (const TensorsInfinite<Scalar> & tensors);
+    template<typename Scalar> extern RealScalar<Scalar> energy_variance_per_site_mom    (const TensorsInfinite<Scalar> & tensors);
 
     /* clang-format on */
 

@@ -1,9 +1,21 @@
 add_source_target(xdmrg++-tools-finite-measure
         TARGET_SOURCES
         measure.cpp
-        measure-parity-components.cpp
+        dimensions.cpp
+        correlation.cpp
         entropy.cpp
+        entanglement_entropy.cpp
+        expectation_value.cpp
+        hamiltonian.cpp
+        infopolicy.cpp
         information.cpp
+        number_entropy.cpp
+        opdm.cpp
+        residual.cpp
+        spin.cpp
+        truncation.cpp
+
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

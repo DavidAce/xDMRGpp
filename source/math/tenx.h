@@ -160,14 +160,60 @@ namespace tenx {
         constexpr auto rank      = Eigen::internal::array_size<DimType>::value;
         auto           size      = tensor.size();
         auto           tensorMap = Eigen::TensorMap<const Eigen::Tensor<Scalar, rank>>(tensor.data(), tensor.dimensions());
-        //        Eigen::Tensor<Scalar, 2> result = tensorMap.inflate(array1{size + 1}).reshape(array2{size, size});
         return static_cast<Eigen::Tensor<Scalar, 2>>(tensorMap.inflate(array1{size + 1}).reshape(array2{size, size}));
     }
-    //    void test(){
-    //        const Eigen::Tensor<cx64,2> t;
-    //        auto test= asDiagonal(t);
-    //        static_assert(std::is_same_v<decltype(asDiagonal(t)), Eigen::Tensor<cx64,2>>);
-    //    }
+
+    template<typename TensorL, typename TensorM, typename TensorR>
+    void asDiagonalContract(TensorR &R, const TensorL &L, const TensorM &M, long Mdim) {
+        using ScalarL = typename TensorL::Scalar;
+        using ScalarM = typename TensorM::Scalar;
+        using ScalarR = typename TensorR::Scalar;
+        static_assert(std::is_convertible_v<ScalarL, ScalarM>);
+        static_assert(std::is_convertible_v<ScalarM, ScalarR>);
+        static_assert(TensorM::NumDimensions == TensorR::NumDimensions);
+
+        assert(M.dimension(Mdim) == L.size());
+        assert(Mdim < TensorM::NumDimensions);
+        assert(R.dimensions() == M.dimensions());
+        for(long i = 0; i < L.size(); ++i) {
+            R.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarM { return v * static_cast<ScalarM>(L(i)); }).template cast<ScalarR>();
+        }
+    }
+    template<typename TensorL, typename TensorM, typename TensorR>
+    void asDiagonalInverseContract(TensorR &R, const TensorL &L, const TensorM &M, long Mdim) {
+        using ScalarL = typename TensorL::Scalar;
+        using ScalarM = typename TensorM::Scalar;
+        using ScalarR = typename TensorR::Scalar;
+        static_assert(std::is_convertible_v<ScalarL, ScalarM>);
+        static_assert(std::is_convertible_v<ScalarM, ScalarR>);
+        static_assert(TensorM::NumDimensions == TensorR::NumDimensions);
+
+        assert(M.dimension(Mdim) == L.size());
+        assert(Mdim < TensorM::NumDimensions);
+        assert(R.dimensions() == M.dimensions());
+        for(long i = 0; i < L.size(); ++i) {
+            R.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarM { return v / static_cast<ScalarM>(L(i)); }).template cast<ScalarR>();
+        }
+    }
+
+    template<typename TensorL, typename TensorM>
+    auto asDiagonalContract(const TensorL &L, const TensorM &M, long Mdim) {
+        using ScalarM                     = typename TensorM::Scalar;
+        constexpr auto               rank = TensorM::NumDimensions;
+        Eigen::Tensor<ScalarM, rank> R(M.dimensions());
+        asDiagonalContract(R, L, M, Mdim);
+        return R;
+    }
+    template<typename TensorL, typename TensorM>
+    auto asDiagonalInverseContract(const TensorL &L, const TensorM &M, long Mdim) {
+        using ScalarM                     = typename TensorM::Scalar;
+        constexpr auto               rank = TensorM::NumDimensions;
+        Eigen::Tensor<ScalarM, rank> R(M.dimensions());
+        ;
+        asDiagonalInverseContract(R, L, M, Mdim);
+        return R;
+    }
+
     template<typename Scalar>
     Eigen::Tensor<Scalar, 2> asDiagonalSquared(const Eigen::Tensor<Scalar, 1> &tensor) {
         auto csquare = [](auto z) -> double { return std::abs(std::conj(z) * z); };
@@ -201,12 +247,16 @@ namespace tenx {
     }
 
     template<typename T, typename Device = Eigen::DefaultDevice>
-    double norm(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr) {
-        auto csquare = [](auto z) -> double { return std::abs(std::conj(z) * z); };
-        return asEval(expr.unaryExpr(csquare).sum().sqrt())->coeff(0);
+    auto norm(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr) {
+        // auto csquare = [](auto z) -> double { return std::abs(std::conj(z) * z); };
+        // return asEval(expr.unaryExpr(csquare).sum().sqrt())->coeff(0);
+        auto tensor  = tenx::asEval(expr);
+        using Scalar = typename decltype(tensor)::Scalar;
+        return Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(tensor.data(), tensor.size()).norm();
     }
 
-    inline Eigen::Tensor<std::complex<double>, 1> broadcast(Eigen::Tensor<std::complex<double>, 1> &tensor, const std::array<long, 1> &bcast) {
+    template<typename T>
+    Eigen::Tensor<T, 1> broadcast(Eigen::Tensor<T, 1> &tensor, const std::array<long, 1> &bcast) {
         // Use this function to avoid a bug in Eigen when broadcasting complex tensors of rank 1, with compiler option -mfma
         // See more here https://gitlab.com/libeigen/eigen/-/issues/2351
         std::array<long, 2> bcast2 = {bcast[0], 1};
@@ -525,52 +575,44 @@ namespace tenx {
         return isPositive(vector);
     }
 
-    template<typename Derived>
-    bool isReal(const Eigen::EigenBase<Derived> &obj, epsilon_t<Derived> threshold = epsilon<Derived>()) {
+    template<typename Derived, typename... Args>
+    bool isReal(const Eigen::EigenBase<Derived> &obj, Args &&...args) {
         using Scalar     = typename Derived::Scalar;
         using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
         if constexpr(sfinae::is_std_complex_v<Scalar> and std::is_arithmetic_v<RealScalar>) {
-            auto imag_sum = obj.derived().imag().cwiseAbs().sum();
-            threshold *= std::max(static_cast<RealScalar>(1.0), static_cast<RealScalar>(obj.derived().size()));
-            //            if(imag_sum >= threshold) {
-            //                std::printf("thr*size : %.20f imag_sum : %.20f | isreal %d \n", threshold, imag_sum, imag_sum < threshold);
-            //            }
-            return imag_sum < threshold;
+            return obj.derived().imag().isZero(std::forward<Args>(args)...);
         } else {
             return true;
         }
     }
 
-    template<typename T>
-    bool isReal(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, epsilon_t<T> threshold = Eigen::NumTraits<typename T::Scalar>::dummy_precision()) {
+    template<typename T, typename... Args>
+    bool isReal(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, Args &&...args) {
         auto tensor      = tenx::asEval(expr);
         using Scalar     = typename decltype(tensor)::Scalar;
         using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
         if constexpr(sfinae::is_std_complex_v<Scalar> and std::is_arithmetic_v<RealScalar>) {
-            auto vector   = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(tensor.data(), tensor.size());
-            auto imag_sum = vector.imag().cwiseAbs().sum();
-            threshold *= std::max(static_cast<RealScalar>(1.0), static_cast<RealScalar>(vector.size()));
-            return static_cast<RealScalar>(imag_sum) < threshold;
+            auto vector = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(tensor.data(), tensor.size());
+            return vector.imag().isZero(std::forward<Args>(args)...);
         } else {
             return true;
         }
     }
 
-    template<typename Scalar, auto rank>
-    bool isZero(const Eigen::Tensor<Scalar, rank> &tensor, RealScalar<Scalar> threshold = Eigen::NumTraits<Scalar>::dummy_precision()) {
+    template<typename Scalar, auto rank, typename... Args>
+    bool isZero(const Eigen::Tensor<Scalar, rank> &tensor, Args &&...args) {
         Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>> vector(tensor.data(), tensor.size());
-        return vector.isZero(threshold);
+        return vector.isZero(std::forward<Args>(args)...);
     }
 
-    template<typename Scalar>
-    bool isIdentity(const Eigen::Tensor<Scalar, 2> &tensor, RealScalar<Scalar> threshold = Eigen::NumTraits<Scalar>::dummy_precision()) {
+    template<typename Scalar, typename... Args>
+    bool isIdentity(const Eigen::Tensor<Scalar, 2> &tensor, Args &&...args) {
         Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>> matrix(tensor.data(), tensor.dimension(0), tensor.dimension(1));
-        using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
-        return matrix.isIdentity(static_cast<RealScalar>(threshold));
+        return matrix.isIdentity(std::forward<Args>(args)...);
     }
 
-    template<typename T>
-    auto isIdentity(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, RealScalar<T> threshold = Eigen::NumTraits<T>::dummy_precision()) {
+    template<typename T, typename... Args>
+    auto isIdentity(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, Args &&...args) {
         auto tensor         = tenx::asEval(expr);
         using Scalar        = typename decltype(tensor)::Scalar;
         using DimType       = typename decltype(tensor)::Dimensions;
@@ -578,7 +620,7 @@ namespace tenx {
         static_assert(rank == 2 and "isIdentity(): expression must be a tensor of rank 2");
         auto size      = tensor.size();
         auto matrixMap = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>>(tensor.data(), tensor.dimension(0), tensor.dimension(1));
-        return matrixMap.isIdentity(threshold);
+        return matrixMap.isIdentity(std::forward<Args>(args)...);
     }
 
     template<typename Derived>
@@ -655,22 +697,89 @@ namespace tenx {
     }
 
     template<typename Scalar, typename T>
-    auto asScalarType(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr) {
-        auto tensor              = tenx::asEval(expr);
-        using OldScalar          = typename decltype(tensor)::Scalar;
-        using DimType            = typename decltype(tensor)::Dimensions;
-        constexpr bool cx2fp     = sfinae::is_std_complex_v<OldScalar> and !sfinae::is_std_complex_v<Scalar>;
-        constexpr auto rank      = Eigen::internal::array_size<DimType>::value;
-        auto           tensorMap = Eigen::TensorMap<const Eigen::Tensor<OldScalar, rank>>(tensor.data(), tensor.dimensions());
-        if constexpr(std::is_same_v<Scalar, OldScalar>) {
-            return tensorMap;
-        } else if constexpr(cx2fp) {
-            assert(tenx::isReal(tensorMap));
-            return Eigen::Tensor<Scalar, rank>(tensorMap.real().template cast<Scalar>());
+    requires tenx::sfinae::is_eigen_tensor_v<std::remove_cvref_t<T>>
+    decltype(auto) asScalarType(T &&tensor) {
+        static_assert(sfinae::is_any_v<Scalar, fp32, fp64, fp128, cx32, cx64, cx128>);
+        using EigenType = std::remove_cvref_t<decltype(tensor)>;
+        using OldScalar = typename EigenType::Scalar;
+        if constexpr(std::is_same_v<OldScalar, Scalar>) {
+            return (tensor); // Returns the exact same object as a reference
+        } else if constexpr(sfinae::is_std_complex_v<OldScalar> and !sfinae::is_std_complex_v<Scalar>) {
+            // Complex to Real
+            using DimType       = typename EigenType::Dimensions;
+            constexpr auto rank = Eigen::internal::array_size<DimType>::value;
+            return Eigen::Tensor<Scalar, rank>(tensor.real().template cast<Scalar>());
         } else {
-            return Eigen::Tensor<Scalar, rank>(tensorMap.template cast<Scalar>());
+            // Cast between different precisions, e.g. fp64 to fp32
+            using DimType       = typename EigenType::Dimensions;
+            constexpr auto rank = Eigen::internal::array_size<DimType>::value;
+            return Eigen::Tensor<Scalar, rank>(tensor.template cast<Scalar>());
         }
     }
+    template<typename Scalar, typename T>
+    requires tenx::sfinae::is_eigen_matrix_v<std::remove_cvref_t<T>>
+    decltype(auto) asScalarType(T &&obj) {
+        static_assert(sfinae::is_any_v<Scalar, fp32, fp64, fp128, cx32, cx64, cx128>);
+        using EigenType = std::remove_cvref_t<decltype(obj)>;
+        using OldScalar = typename EigenType::Scalar;
+        if constexpr(std::is_same_v<OldScalar, Scalar>) {
+            return (obj); // Returns the exact same object as a reference
+        } else if constexpr(sfinae::is_std_complex_v<OldScalar> and !sfinae::is_std_complex_v<Scalar>) {
+            // Complex to Real
+            return Eigen::Matrix<Scalar, EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime>(obj.real().template cast<Scalar>());
+        } else {
+            // Cast between different precisions, e.g. fp64 to fp32
+            return Eigen::Matrix<Scalar, EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime>(obj.template cast<Scalar>());
+        }
+    }
+    template<typename Scalar, typename T>
+    requires tenx::sfinae::is_eigen_array_v<std::remove_cvref_t<T>>
+    decltype(auto) asScalarType(T &&obj) {
+        static_assert(sfinae::is_any_v<Scalar, fp32, fp64, fp128, cx32, cx64, cx128>);
+        using EigenType = std::remove_cvref_t<decltype(obj)>;
+        using OldScalar = typename EigenType::Scalar;
+        if constexpr(std::is_same_v<OldScalar, Scalar>) {
+            return (obj); // Returns the exact same object as a reference
+        } else if constexpr(sfinae::is_std_complex_v<OldScalar> and !sfinae::is_std_complex_v<Scalar>) {
+            // Complex to Real
+            return Eigen::Array<Scalar, EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime>(obj.real().template cast<Scalar>());
+        } else {
+            // Cast between different precisions, e.g. fp64 to fp32
+            return Eigen::Array<Scalar, EigenType::RowsAtCompileTime, EigenType::ColsAtCompileTime>(obj.template cast<Scalar>());
+        }
+    }
+
+    // static_assert(std::is_same_v<decltype(asScalarType<fp32>(Eigen::Tensor<cx64,3>())), Eigen::Tensor<fp32,3>>);
+    // using crefTensor = const Eigen::Tensor<cx64,3> &;
+    // static_assert(std::is_same_v<decltype(asScalarType<cx64>(crefTensor())), const Eigen::Tensor<cx64,3> &>);
+    // static_assert(!std::is_same_v<decltype(asScalarType<cx64>(Eigen::Tensor<cx64,3>())), Eigen::Tensor<cx64,3>>);
+    // static_assert(std::is_same_v<decltype(asScalarType<cx64>(Eigen::Tensor<cx64,3>())), Eigen::Tensor<cx64,3> &>);
+    // template<typename Scalar, typename T, int AccessorLevel>
+    // decltype(auto) asScalarType(const Eigen::TensorBase<T, AccessorLevel> &expr) {
+    //     if constexpr(!tenx::sfinae::has_expression_v<T>) {
+    //         const auto &cref = *static_cast<const T *>(&expr);
+    //         if constexpr(sfinae::is_std_complex_v<typename T::Scalar> and !sfinae::is_std_complex_v<Scalar>)
+    //             return cref.real().template cast<Scalar>(); // Return the plain tensor as const ref
+    //         else {
+    //             cref.template cast<Scalar>();
+    //         }
+    //     } else {
+    //         auto tensor              = tenx::asEval(expr);
+    //         using OldScalar          = typename decltype(tensor)::Scalar;
+    //         using DimType            = typename decltype(tensor)::Dimensions;
+    //         constexpr bool cx2fp     = sfinae::is_std_complex_v<OldScalar> and !sfinae::is_std_complex_v<Scalar>;
+    //         constexpr auto rank      = Eigen::internal::array_size<DimType>::value;
+    //         auto           tensorMap = Eigen::TensorMap<const Eigen::Tensor<OldScalar, rank>>(tensor.data(), tensor.dimensions());
+    //         if constexpr(std::is_same_v<Scalar, OldScalar>) {
+    //             return tensorMap;
+    //         } else if constexpr(cx2fp) {
+    //             assert(tenx::isReal(tensorMap));
+    //             return Eigen::Tensor<Scalar, rank>(tensorMap.real().template cast<Scalar>());
+    //         } else {
+    //             return Eigen::Tensor<Scalar, rank>(tensorMap.template cast<Scalar>());
+    //         }
+    //     }
+    // }
 
     //******************************//
     // BLAS operations with tensors //

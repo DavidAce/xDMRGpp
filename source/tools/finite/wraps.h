@@ -3,9 +3,9 @@
 #include <memory>
 #include <string_view>
 
-class StateFinite;
-class ModelFinite;
-class EdgesFinite;
+template<typename Scalar> class StateFinite;
+template<typename Scalar> class ModelFinite;
+template<typename Scalar> class EdgesFinite;
 class AlgorithmStatus;
 namespace h5pp {
     class File;

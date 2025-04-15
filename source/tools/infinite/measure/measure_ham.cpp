@@ -10,8 +10,10 @@
 #include "tools/common/log.h"
 #include "tools/common/views.h"
 #include "tools/infinite/measure.h"
+using tools::infinite::measure::RealScalar;
 
-double tools::infinite::measure::energy_per_site_ham(const TensorsInfinite &tensors) {
+template<typename Scalar>
+RealScalar<Scalar> tools::infinite::measure::energy_per_site_ham(const TensorsInfinite<Scalar> &tensors) {
     auto        t_ene_ham = tid::tic_scope("ene_ham");
     const auto &state     = *tensors.state;
     const auto &model     = *tensors.model;
@@ -40,12 +42,13 @@ double tools::infinite::measure::energy_per_site_ham(const TensorsInfinite &tens
     return tensors.measurements.energy_per_site_ham.value();
 }
 
-double tools::infinite::measure::energy_variance_per_site_ham(const TensorsInfinite &tensors) {
+template<typename Scalar>
+RealScalar<Scalar> tools::infinite::measure::energy_variance_per_site_ham(const TensorsInfinite<Scalar> &tensors) {
     if(tensors.measurements.energy_variance_per_site_ham) return tensors.measurements.energy_variance_per_site_ham.value();
     //    if(tensors.MPS->chiA() != tensors.MPS->chiB()) return std::numeric_limits<double>::quiet_NaN();
     //    if(tensors.MPS->chiA() != tensors.MPS->chiC()) return std::numeric_limits<double>::quiet_NaN();
     //    if(tensors.MPS->chiB() != tensors.MPS->chiC()) return std::numeric_limits<double>::quiet_NaN();
-    if(tensors.state->chiC() <= 2) return std::numeric_limits<double>::quiet_NaN();
+    if(tensors.state->chiC() <= 2) return std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
 
     const auto &state = *tensors.state;
     const auto &model = *tensors.model;

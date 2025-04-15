@@ -47,7 +47,7 @@ int eig::solver::ssyevr(fp32 *matrix /*!< gets destroyed */, size_type L, char r
     if(config.compute_eigvecs == Vecs::ON) {
         eigvecs.resize(static_cast<size_t>(ldz * m_req)); // Docs claim ldz * m, but it segfaults when 'V' finds more than m eigvals
     }
-    info = LAPACKE_ssyevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', lda, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_dlamch('S'), &m_found, eigvals.data(),
+    info = LAPACKE_ssyevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', lda, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_slamch('S'), &m_found, eigvals.data(),
                                eigvecs.data(), ldz, isuppz.data(), lwork_query, -1, iwork_query, -1);
     if(info < 0) throw std::runtime_error("LAPACKE_dsyevr_work query: info" + std::to_string(info));
 
@@ -60,7 +60,7 @@ int eig::solver::ssyevr(fp32 *matrix /*!< gets destroyed */, size_type L, char r
     std::vector<fp32> work(static_cast<size_t>(lwork));
     std::vector<int>  iwork(static_cast<size_t>(liwork));
     auto              t_prep = std::chrono::high_resolution_clock::now();
-    info = LAPACKE_ssyevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', n, matrix, lda, vl, vu, il, iu, LAPACKE_dlamch('S'), &m_found, eigvals.data(),
+    info = LAPACKE_ssyevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', n, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_slamch('S'), &m_found, eigvals.data(),
                                eigvecs.data(), ldz, isuppz.data(), work.data(), lwork, iwork.data(), liwork);
     if(info < 0) throw std::runtime_error("LAPACKE_ssyevr_work: info" + std::to_string(info));
     /* From the MKL manual:

@@ -6,8 +6,11 @@
 #include "tensors/TensorsFinite.h"
 #include "tools/finite/opt_meta.h"
 
+template<typename Scalar>
 class StateFinite;
+template<typename Scalar>
 class ModelFinite;
+template<typename Scalar>
 class EdgesFinite;
 namespace tools::finite::opt {
     class opt_mps;
@@ -45,7 +48,8 @@ class AlgorithmFinite : public AlgorithmBase {
     void         set_parity_shift_mpo(std::optional<std::string> target_axis = std::nullopt);
     void         set_parity_shift_mpo_squared(std::optional<std::string> target_axis = std::nullopt);
     void         try_moving_sites();
-    void         expand_environment(EnvExpandMode envexpMode, OptAlgo algo, OptRitz ritz, std::optional<svd::config> svd_cfg = std::nullopt);
+    void         expand_bonds(OptMeta &meta);
+    void         expand_bonds(BondExpansionPolicy bep, OptAlgo algo, OptRitz ritz, std::optional<svd::config> svd_cfg = std::nullopt);
     void         move_center_point(std::optional<long> num_moves = std::nullopt);
     virtual void set_energy_shift_mpo(); // We override this in xdmrg
     void         rebuild_tensors();
@@ -76,7 +80,8 @@ class AlgorithmFinite : public AlgorithmBase {
     void check_convergence_icom(std::optional<double> saturation_sensitivity = std::nullopt);
     void check_convergence_entg_entropy(std::optional<double> saturation_sensitivity = std::nullopt);
     void check_convergence_spin_parity_sector(std::string_view target_axis, double threshold = 1e-8);
-    void write_to_file(const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges, StorageEvent storage_event,
+    template<typename Scalar>
+    void write_to_file(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, StorageEvent storage_event,
                        CopyPolicy copy_policy = CopyPolicy::TRY);
     template<typename T>
     void write_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy = CopyPolicy::TRY);
@@ -93,8 +98,8 @@ class AlgorithmFinite : public AlgorithmBase {
     std::vector<log_entry> algorithm_history;
     double                 ene_latest = 0.0;
     double                 var_latest = 1.0;
-    double                 ene_envexp = 1.0;
-    double                 var_envexp = 1.0;
+    double                 ene_bondex = 1.0;
+    double                 var_bondex = 1.0;
     double                 ene_delta  = 0.0;
     double                 var_delta  = 0.0;
     double                 var_change = 0.0; // Variance change from normal optimization

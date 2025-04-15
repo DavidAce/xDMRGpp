@@ -1,9 +1,13 @@
 #pragma once
 #include "general/sfinae.h"
 #include <string>
+template<typename Scalar>
 class StateFinite;
+template<typename Scalar>
 class ModelFinite;
+template<typename Scalar>
 class EdgesFinite;
+template<typename Scalar>
 class TensorsFinite;
 class AlgorithmStatus;
 enum class StorageLevel;
@@ -27,7 +31,8 @@ namespace tools::common::h5 {
 struct StorageInfo;
 
 namespace tools::finite::h5 {
-
+    template<typename Scalar>
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
     /* clang-format off */
     namespace save {
 //        void bootstrap_save_log(std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> &save_log, const h5pp::File &h5file, const std::vector<std::string_view> &links);
@@ -50,41 +55,43 @@ namespace tools::finite::h5 {
         extern void data      (h5pp::File & h5file, const StorageInfo & sinfo,  const T &data, std::string_view data_name, CopyPolicy copy_policy);
         template<typename T>
         extern void data      (h5pp::File & h5file, const StorageInfo & sinfo, const T &data, std::string_view data_name, std::string_view prefix);
-        extern void bonds     (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void state     (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void model     (h5pp::File & h5file, const StorageInfo & sinfo, const ModelFinite & model);
-        extern void mpo       (h5pp::File & h5file, const StorageInfo & sinfo, const ModelFinite & model);
+        template<typename Scalar> extern void bonds     (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void state     (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void model     (h5pp::File & h5file, const StorageInfo & sinfo, const ModelFinite<Scalar> & model);
+        template<typename Scalar> extern void mpo       (h5pp::File & h5file, const StorageInfo & sinfo, const ModelFinite<Scalar> & model);
 
-        extern void correlations (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
+        template<typename Scalar> extern void correlations (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
 
-        extern void measurements                    (h5pp::File & h5file, const StorageInfo & sinfo, const TensorsFinite & tensors, const AlgorithmStatus & status);
-        extern void measurements                    (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state, const ModelFinite & model, const EdgesFinite & edges, const AlgorithmStatus & status);
-        extern void bond_dimensions                 (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void schmidt_values                  (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void truncation_errors               (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void entanglement_entropies          (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void subsystem_entanglement_entropies(h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void information_lattice             (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void information_per_scale           (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void information_center_of_mass      (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void renyi_entropies                 (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void number_entropies                (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void expectations                    (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void structure_factors               (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void opdm                            (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void opdm_spectrum                   (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
-        extern void number_probabilities            (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite & state);
+        template<typename Scalar> extern void measurements                    (h5pp::File & h5file, const StorageInfo & sinfo, const TensorsFinite<Scalar> & tensors, const AlgorithmStatus & status);
+        template<typename Scalar> extern void measurements                    (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, const AlgorithmStatus & status);
+        template<typename Scalar> extern void bond_dimensions                 (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void schmidt_values                  (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void truncation_errors               (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void entanglement_entropies          (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void subsystem_entanglement_entropies(h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void information_lattice             (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void information_per_scale           (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void information_center_of_mass      (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void renyi_entropies                 (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void number_entropies                (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void expectations                    (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void structure_factors               (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void opdm                            (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void opdm_spectrum                   (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar> extern void number_probabilities            (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
 
-        [[nodiscard]] extern StorageInfo get_storage_info(const StateFinite & state, const AlgorithmStatus &status);
+        template<typename Scalar> [[nodiscard]] extern StorageInfo get_storage_info(const StateFinite<Scalar> & state, const AlgorithmStatus &status);
 
+        template<typename Scalar>
         extern void simulation(h5pp::File &h5file,
-                               const TensorsFinite & tensors,
+                               const TensorsFinite<Scalar> & tensors,
                                const AlgorithmStatus &status,
                                CopyPolicy copy_policy);
+        template<typename Scalar>
         extern void simulation(h5pp::File &h5file,
-                               const StateFinite & state,
-                               const ModelFinite & model,
-                               const EdgesFinite & edges,
+                               const StateFinite<Scalar> & state,
+                               const ModelFinite<Scalar> & model,
+                               const EdgesFinite<Scalar> & edges,
                                const AlgorithmStatus &status,
                                CopyPolicy copy_policy);
 
@@ -95,10 +102,10 @@ namespace tools::finite::h5 {
     }
     namespace load {
         using MpsInfo = tools::common::h5::MpsInfo;
-        extern void simulation (const h5pp::File & h5file, std::string_view  state_prefix, TensorsFinite & tensors, AlgorithmStatus & status, AlgorithmType algo_type);
-        extern void state   (const h5pp::File & h5file, std::string_view  state_prefix, StateFinite & state, MpsInfo & mpsinfo);
-        extern void model   (const h5pp::File & h5file, AlgorithmType algo_type, ModelFinite & model);
-        extern void validate (const h5pp::File & h5file, std::string_view  state_prefix, TensorsFinite & tensors, AlgorithmStatus & status, AlgorithmType algo_type);
+        template<typename Scalar> extern void simulation (const h5pp::File & h5file, std::string_view  state_prefix, TensorsFinite<Scalar> & tensors, AlgorithmStatus & status, AlgorithmType algo_type);
+        template<typename Scalar> extern void state   (const h5pp::File & h5file, std::string_view  state_prefix, StateFinite<Scalar> & state, MpsInfo & mpsinfo);
+        template<typename Scalar> extern void model   (const h5pp::File & h5file, AlgorithmType algo_type, ModelFinite<Scalar> & model);
+        template<typename Scalar> extern void validate (const h5pp::File & h5file, std::string_view  state_prefix, TensorsFinite<Scalar> & tensors, AlgorithmStatus & status, AlgorithmType algo_type);
     }
 
     namespace tmp{

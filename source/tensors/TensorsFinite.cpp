@@ -16,7 +16,7 @@
 #include "tid/tid.h"
 #include "tools/common/log.h"
 #include "tools/finite/env.h"
-#include "tools/finite/env/EnvExpansionResult.h"
+#include "tools/finite/env/BondExpansionResult.h"
 #include "tools/finite/measure.h"
 #include "tools/finite/mpo.h"
 #include "tools/finite/mps.h"
@@ -25,8 +25,14 @@
 
 //
 #include "math/linalg.h"
+#include <tools/finite/opt_meta.h>
 
-TensorsFinite::TensorsFinite() : state(std::make_unique<StateFinite>()), model(std::make_unique<ModelFinite>()), edges(std::make_unique<EdgesFinite>()) {
+template class TensorsFinite<cx64>;
+template class TensorsFinite<cx128>;
+
+template<typename Scalar>
+TensorsFinite<Scalar>::TensorsFinite()
+    : state(std::make_unique<StateFinite<Scalar>>()), model(std::make_unique<ModelFinite<Scalar>>()), edges(std::make_unique<EdgesFinite<Scalar>>()) {
     tools::log->trace("Constructing TensorsFinite");
 }
 
@@ -39,24 +45,29 @@ TensorsFinite::TensorsFinite() : state(std::make_unique<StateFinite>()), model(s
 // operator= and copy assignment constructor.
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
-TensorsFinite::~TensorsFinite()                                = default; // default dtor
-TensorsFinite::TensorsFinite(TensorsFinite &&other)            = default; // default move ctor
-TensorsFinite &TensorsFinite::operator=(TensorsFinite &&other) = default; // default move assign
+template<typename Scalar>
+TensorsFinite<Scalar>::~TensorsFinite() = default; // default dtor
+template<typename Scalar>
+TensorsFinite<Scalar>::TensorsFinite(TensorsFinite &&other) = default; // default move ctor
+template<typename Scalar>
+TensorsFinite<Scalar> &TensorsFinite<Scalar>::operator=(TensorsFinite &&other) = default; // default move assign
 
-TensorsFinite::TensorsFinite(const TensorsFinite &other)
+template<typename Scalar>
+TensorsFinite<Scalar>::TensorsFinite(const TensorsFinite &other)
     : cache_fp32(other.cache_fp32), cache_fp64(other.cache_fp64), cache_cx32(other.cache_cx32), cache_cx64(other.cache_cx64),
-      state(std::make_unique<StateFinite>(*other.state)), model(std::make_unique<ModelFinite>(*other.model)),
-      edges(std::make_unique<EdgesFinite>(*other.edges)), active_sites(other.active_sites), measurements(other.measurements) {}
-TensorsFinite &TensorsFinite::operator=(const TensorsFinite &other) {
+      state(std::make_unique<StateFinite<Scalar>>(*other.state)), model(std::make_unique<ModelFinite<Scalar>>(*other.model)),
+      edges(std::make_unique<EdgesFinite<Scalar>>(*other.edges)), active_sites(other.active_sites), measurements(other.measurements) {}
+template<typename Scalar>
+TensorsFinite<Scalar> &TensorsFinite<Scalar>::operator=(const TensorsFinite &other) {
     // check for self-assignment
     if(this != &other) {
         cache_fp32   = other.cache_fp32;
         cache_fp64   = other.cache_fp64;
         cache_cx32   = other.cache_cx32;
         cache_cx64   = other.cache_cx64;
-        state        = std::make_unique<StateFinite>(*other.state);
-        model        = std::make_unique<ModelFinite>(*other.model);
-        edges        = std::make_unique<EdgesFinite>(*other.edges);
+        state        = std::make_unique<StateFinite<Scalar>>(*other.state);
+        model        = std::make_unique<ModelFinite<Scalar>>(*other.model);
+        edges        = std::make_unique<EdgesFinite<Scalar>>(*other.edges);
         active_sites = other.active_sites;
         measurements = other.measurements;
         sync_active_sites();
@@ -64,12 +75,14 @@ TensorsFinite &TensorsFinite::operator=(const TensorsFinite &other) {
     return *this;
 }
 
-TensorsFinite::TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position) : TensorsFinite() {
+template<typename Scalar>
+TensorsFinite<Scalar>::TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position) : TensorsFinite() {
     initialize(algo_type, model_type, model_size, position);
 }
 
+template<typename Scalar>
 template<typename T>
-TensorsFinite::Cache<T> &TensorsFinite::get_cache() const {
+TensorsFinite<Scalar>::Cache<T> &TensorsFinite<Scalar>::get_cache() const {
     static_assert(sfinae::is_any_v<T, fp32, fp64, cx32, cx64>);
     /* clang-format off */
          if constexpr(std::is_same_v<T, fp32>) { return cache_fp32; }
@@ -77,21 +90,24 @@ TensorsFinite::Cache<T> &TensorsFinite::get_cache() const {
     else if constexpr(std::is_same_v<T, cx32>) { return cache_cx32; }
     else if constexpr(std::is_same_v<T, cx64>) { return cache_cx64; }
     else throw std::logic_error("unrecognized cache type T");
-    /* clang-format oon */
+    /* clang-format on */
 }
-template TensorsFinite::Cache<fp32> &TensorsFinite::get_cache() const;
-template TensorsFinite::Cache<fp64> &TensorsFinite::get_cache() const;
-template TensorsFinite::Cache<cx32> &TensorsFinite::get_cache() const;
-template TensorsFinite::Cache<cx64> &TensorsFinite::get_cache() const;
+template TensorsFinite<>::Cache<fp32> &TensorsFinite<>::get_cache() const;
+template TensorsFinite<>::Cache<fp64> &TensorsFinite<>::get_cache() const;
+template TensorsFinite<>::Cache<cx32> &TensorsFinite<>::get_cache() const;
+template TensorsFinite<>::Cache<cx64> &TensorsFinite<>::get_cache() const;
 
-StateFinite       &TensorsFinite::get_state() { return *state; }
-ModelFinite       &TensorsFinite::get_model() { return *model; }
-EdgesFinite       &TensorsFinite::get_edges() { return *edges; }
-const StateFinite &TensorsFinite::get_state() const { return *state; }
-const ModelFinite &TensorsFinite::get_model() const { return *model; }
-const EdgesFinite &TensorsFinite::get_edges() const { return *edges; }
+/* clang-format off */
+template<typename Scalar> StateFinite<Scalar>       &TensorsFinite<Scalar>::get_state() { return *state; }
+template<typename Scalar> ModelFinite<Scalar>       &TensorsFinite<Scalar>::get_model() { return *model; }
+template<typename Scalar> EdgesFinite<Scalar>       &TensorsFinite<Scalar>::get_edges() { return *edges; }
+template<typename Scalar> const StateFinite<Scalar> &TensorsFinite<Scalar>::get_state() const { return *state; }
+template<typename Scalar> const ModelFinite<Scalar> &TensorsFinite<Scalar>::get_model() const { return *model; }
+template<typename Scalar> const EdgesFinite<Scalar> &TensorsFinite<Scalar>::get_edges() const { return *edges; }
+/* clang-format on */
 
-void TensorsFinite::initialize(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::initialize(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position) {
     tools::log->debug("Initializing tensors: algorithm [{}] | model [{}] | sites [{}] | position [{}]", enum2sv(algo_type), enum2sv(model_type), model_size,
                       position);
     state->initialize(algo_type, model_size, position);
@@ -99,7 +115,8 @@ void TensorsFinite::initialize(AlgorithmType algo_type, ModelType model_type, si
     edges->initialize(model_size);
 }
 
-void TensorsFinite::initialize_model() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::initialize_model() {
     auto tic = tid::tic_scope("init_model");
     model->randomize();
     rebuild_mpo();
@@ -107,8 +124,9 @@ void TensorsFinite::initialize_model() {
     compress_mpo_squared();
 }
 
-void TensorsFinite::initialize_state(ResetReason reason, StateInit state_init, StateInitType state_type, std::string_view axis, bool use_eigenspinors,
-                                     long bond_lim, std::string &pattern) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::initialize_state(ResetReason reason, StateInit state_init, StateInitType state_type, std::string_view axis, bool use_eigenspinors,
+                                             long bond_lim, std::string &pattern) {
     state->clear_measurements();
     tools::log->debug("Initializing state [{}] to [{}] | Reason [{}] | Type [{}] | Sector [{}] | bond_lim {} | eigspinors {} | pattern {}", state->get_name(),
                       enum2sv(state_init), enum2sv(reason), enum2sv(state_type), axis, bond_lim, use_eigenspinors, pattern);
@@ -122,7 +140,8 @@ void TensorsFinite::initialize_state(ResetReason reason, StateInit state_init, S
                       fmt::join(tools::finite::measure::spin_components(*state), ", "));
 }
 
-void TensorsFinite::normalize_state(std::optional<svd::config> svd_cfg, NormPolicy norm_policy) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::normalize_state(std::optional<svd::config> svd_cfg, NormPolicy norm_policy) {
     // Normalize if unity was lost for some reason (numerical error buildup)
     bool modified = tools::finite::mps::normalize_state(*state, svd_cfg, norm_policy);
     if(modified) {
@@ -130,27 +149,38 @@ void TensorsFinite::normalize_state(std::optional<svd::config> svd_cfg, NormPoli
         clear_measurements();
     }
 }
-
-template<typename Scalar> const Eigen::Tensor<Scalar, 3> &TensorsFinite::get_multisite_mps() const { return state->get_multisite_mps<Scalar>(); }
-template const Eigen::Tensor<fp32, 3> &TensorsFinite::get_multisite_mps() const;
-template const Eigen::Tensor<fp64, 3> &TensorsFinite::get_multisite_mps() const;
-template const Eigen::Tensor<cx32, 3> &TensorsFinite::get_multisite_mps() const;
-template const Eigen::Tensor<cx64, 3> &TensorsFinite::get_multisite_mps() const;
-
-template<typename Scalar> const Eigen::Tensor<Scalar, 4> &TensorsFinite::get_multisite_mpo() const { return model->get_multisite_mpo<Scalar>(); }
-template const Eigen::Tensor<fp32, 4> &TensorsFinite::get_multisite_mpo() const;
-template const Eigen::Tensor<fp64, 4> &TensorsFinite::get_multisite_mpo() const;
-template const Eigen::Tensor<cx32, 4> &TensorsFinite::get_multisite_mpo() const;
-template const Eigen::Tensor<cx64, 4> &TensorsFinite::get_multisite_mpo() const;
-
-template<typename Scalar> const Eigen::Tensor<Scalar, 4> &TensorsFinite::get_multisite_mpo_squared() const { return model->get_multisite_mpo_squared<Scalar>(); }
-template const Eigen::Tensor<fp32, 4> &TensorsFinite::get_multisite_mpo_squared() const;
-template const Eigen::Tensor<fp64, 4> &TensorsFinite::get_multisite_mpo_squared() const;
-template const Eigen::Tensor<cx32, 4> &TensorsFinite::get_multisite_mpo_squared() const;
-template const Eigen::Tensor<cx64, 4> &TensorsFinite::get_multisite_mpo_squared() const;
+template<typename Scalar>
+template<typename T>
+const Eigen::Tensor<T, 3> &TensorsFinite<Scalar>::get_multisite_mps() const {
+    return state->template get_multisite_mps<T>();
+}
+template const Eigen::Tensor<fp32, 3> &TensorsFinite<>::get_multisite_mps() const;
+template const Eigen::Tensor<fp64, 3> &TensorsFinite<>::get_multisite_mps() const;
+template const Eigen::Tensor<cx32, 3> &TensorsFinite<>::get_multisite_mps() const;
+template const Eigen::Tensor<cx64, 3> &TensorsFinite<>::get_multisite_mps() const;
 
 template<typename Scalar>
-Eigen::Tensor<Scalar, 2> contract_mpo_env(const Eigen::Tensor<Scalar, 4> &mpo, const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR) {
+template<typename T>
+const Eigen::Tensor<T, 4> &TensorsFinite<Scalar>::get_multisite_mpo() const {
+    return model->template get_multisite_mpo<T>();
+}
+template const Eigen::Tensor<fp32, 4> &TensorsFinite<>::get_multisite_mpo() const;
+template const Eigen::Tensor<fp64, 4> &TensorsFinite<>::get_multisite_mpo() const;
+template const Eigen::Tensor<cx32, 4> &TensorsFinite<>::get_multisite_mpo() const;
+template const Eigen::Tensor<cx64, 4> &TensorsFinite<>::get_multisite_mpo() const;
+
+template<typename Scalar>
+template<typename T>
+const Eigen::Tensor<T, 4> &TensorsFinite<Scalar>::get_multisite_mpo_squared() const {
+    return model->template get_multisite_mpo_squared<T>();
+}
+template const Eigen::Tensor<fp32, 4> &TensorsFinite<>::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<fp64, 4> &TensorsFinite<>::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<cx32, 4> &TensorsFinite<>::get_multisite_mpo_squared() const;
+template const Eigen::Tensor<cx64, 4> &TensorsFinite<>::get_multisite_mpo_squared() const;
+
+template<typename T>
+Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &envL, const Eigen::Tensor<T, 3> &envR) {
     /*!
      *      |-------- 1               2--------|
      *      |                 0                |
@@ -161,74 +191,89 @@ Eigen::Tensor<Scalar, 2> contract_mpo_env(const Eigen::Tensor<Scalar, 4> &mpo, c
      *      |-------- 1               2 -------|
      */
 
-    long                     dim0_up = mpo.dimension(2);
-    long                     dim1_up = envL.dimension(0);
-    long                     dim2_up = envR.dimension(0);
-    long                     dim0_dn = mpo.dimension(3);
-    long                     dim1_dn = envL.dimension(1);
-    long                     dim2_dn = envR.dimension(1);
-    std::array<long, 2>      dims    = {dim0_up * dim1_up * dim2_up, dim0_dn * dim1_dn * dim2_dn};
-    auto                     t_con   = tid::tic_token("contract");
-    Eigen::Tensor<Scalar, 2> ham(dims);
-    auto                    &threads = tenx::threads::get();
+    long                dim0_up = mpo.dimension(2);
+    long                dim1_up = envL.dimension(0);
+    long                dim2_up = envR.dimension(0);
+    long                dim0_dn = mpo.dimension(3);
+    long                dim1_dn = envL.dimension(1);
+    long                dim2_dn = envR.dimension(1);
+    std::array<long, 2> dims    = {dim0_up * dim1_up * dim2_up, dim0_dn * dim1_dn * dim2_dn};
+    auto                t_con   = tid::tic_token("contract");
+    Eigen::Tensor<T, 2> ham(dims);
+    auto               &threads = tenx::threads::get();
     ham.device(*threads->dev) =
         envL.contract(mpo, tenx::idx({2}, {0})).contract(envR, tenx::idx({2}, {2})).shuffle(tenx::array6{3, 1, 5, 2, 0, 4}).reshape(dims);
     return ham;
 }
 
 template<typename Scalar>
-const Eigen::Tensor<Scalar, 2> &TensorsFinite::get_effective_hamiltonian() const {
-    auto t_ham = tid::tic_scope("ham");
-    auto & cache = get_cache<Scalar>();
+template<typename T>
+const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian() const {
+    auto  t_ham = tid::tic_scope("ham");
+    auto &cache = get_cache<T>();
     if(cache.effective_hamiltonian and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian.value();
-    const auto &mpo = get_multisite_mpo<Scalar>();
-    const auto &env = get_multisite_env_ene_blk_as<Scalar>();
+    const auto &mpo = get_multisite_mpo<T>();
+    const auto &env = get_multisite_env_ene_blk_as<T>();
     tools::log->trace("Contracting effective multisite Hamiltonian");
     cache.cached_sites_hamiltonian = active_sites;
-    cache.effective_hamiltonian = contract_mpo_env<Scalar>(mpo, env.L, env.R);
+    cache.effective_hamiltonian    = contract_mpo_env<T>(mpo, env.L, env.R);
     return cache.effective_hamiltonian.value();
-
 }
-template const Eigen::Tensor<fp32, 2> &TensorsFinite::get_effective_hamiltonian() const;
-template const Eigen::Tensor<fp64, 2> &TensorsFinite::get_effective_hamiltonian() const;
-template const Eigen::Tensor<cx32, 2> &TensorsFinite::get_effective_hamiltonian() const;
-template const Eigen::Tensor<cx64, 2> &TensorsFinite::get_effective_hamiltonian() const;
+template const Eigen::Tensor<fp32, 2> &TensorsFinite<>::get_effective_hamiltonian() const;
+template const Eigen::Tensor<fp64, 2> &TensorsFinite<>::get_effective_hamiltonian() const;
+template const Eigen::Tensor<cx32, 2> &TensorsFinite<>::get_effective_hamiltonian() const;
+template const Eigen::Tensor<cx64, 2> &TensorsFinite<>::get_effective_hamiltonian() const;
 
 template<typename Scalar>
-const Eigen::Tensor<Scalar, 2> &TensorsFinite::get_effective_hamiltonian_squared() const {
-    auto t_ham = tid::tic_scope("ham²");
-    auto & cache = get_cache<Scalar>();
-    if(cache.effective_hamiltonian_squared and active_sites == cache.cached_sites_hamiltonian)
-        return cache.effective_hamiltonian_squared.value();
+template<typename T>
+const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian_squared() const {
+    auto  t_ham = tid::tic_scope("ham²");
+    auto &cache = get_cache<T>();
+    if(cache.effective_hamiltonian_squared and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian_squared.value();
 
-    tools::log->trace("TensorsFinite::get_effective_hamiltonian_squared(): contracting active sites {}", active_sites);
-    const auto &mpo = get_multisite_mpo_squared<Scalar>();
-    const auto &env = get_multisite_env_var_blk_as<Scalar>();
+    tools::log->trace("TensorsFinite<Scalar>::get_effective_hamiltonian_squared(): contracting active sites {}", active_sites);
+    const auto &mpo                        = get_multisite_mpo_squared<T>();
+    const auto &env                        = get_multisite_env_var_blk_as<T>();
     cache.cached_sites_hamiltonian_squared = active_sites;
-    cache.effective_hamiltonian_squared = contract_mpo_env<Scalar>(mpo, env.L, env.R);
+    cache.effective_hamiltonian_squared    = contract_mpo_env<T>(mpo, env.L, env.R);
     return cache.effective_hamiltonian_squared.value();
 }
-template const Eigen::Tensor<fp32, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
-template const Eigen::Tensor<fp64, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
-template const Eigen::Tensor<cx32, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
-template const Eigen::Tensor<cx64, 2> &TensorsFinite::get_effective_hamiltonian_squared() const;
+template const Eigen::Tensor<fp32, 2> &TensorsFinite<>::get_effective_hamiltonian_squared() const;
+template const Eigen::Tensor<fp64, 2> &TensorsFinite<>::get_effective_hamiltonian_squared() const;
+template const Eigen::Tensor<cx32, 2> &TensorsFinite<>::get_effective_hamiltonian_squared() const;
+template const Eigen::Tensor<cx64, 2> &TensorsFinite<>::get_effective_hamiltonian_squared() const;
 
-env_pair<const Eigen::Tensor<cx64, 3> &> TensorsFinite::get_multisite_env_ene_blk() const { return std::as_const(*edges).get_multisite_env_ene_blk(); }
-env_pair<const Eigen::Tensor<cx64, 3> &> TensorsFinite::get_multisite_env_var_blk() const { return std::as_const(*edges).get_multisite_env_var_blk(); }
+template<typename Scalar>
+env_pair<const Eigen::Tensor<Scalar, 3> &> TensorsFinite<Scalar>::get_multisite_env_ene_blk() const {
+    return std::as_const(*edges).get_multisite_env_ene_blk();
+}
+template<typename Scalar>
+env_pair<const Eigen::Tensor<Scalar, 3> &> TensorsFinite<Scalar>::get_multisite_env_var_blk() const {
+    return std::as_const(*edges).get_multisite_env_var_blk();
+}
 
-template<typename Scalar> env_pair<Eigen::Tensor<Scalar, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const { return std::as_const(*edges).get_multisite_env_ene_blk_as<Scalar>(); }
-template env_pair<Eigen::Tensor<fp32, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<fp64, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<cx32, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<cx64, 3>> TensorsFinite::get_multisite_env_ene_blk_as() const;
+template<typename Scalar>
+template<typename T>
+env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_ene_blk_as() const {
+    return std::as_const(*edges).template get_multisite_env_ene_blk_as<T>();
+}
+template env_pair<Eigen::Tensor<fp32, 3>> TensorsFinite<>::get_multisite_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<fp64, 3>> TensorsFinite<>::get_multisite_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<cx32, 3>> TensorsFinite<>::get_multisite_env_ene_blk_as() const;
+template env_pair<Eigen::Tensor<cx64, 3>> TensorsFinite<>::get_multisite_env_ene_blk_as() const;
 
-template<typename Scalar> env_pair<Eigen::Tensor<Scalar, 3>> TensorsFinite::get_multisite_env_var_blk_as() const { return std::as_const(*edges).get_multisite_env_var_blk_as<Scalar>(); }
-template env_pair<Eigen::Tensor<fp32, 3>> TensorsFinite::get_multisite_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<fp64, 3>> TensorsFinite::get_multisite_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<cx32, 3>> TensorsFinite::get_multisite_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<cx64, 3>> TensorsFinite::get_multisite_env_var_blk_as() const;
+template<typename Scalar>
+template<typename T>
+env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_var_blk_as() const {
+    return std::as_const(*edges).template get_multisite_env_var_blk_as<T>();
+}
+template env_pair<Eigen::Tensor<fp32, 3>> TensorsFinite<>::get_multisite_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<fp64, 3>> TensorsFinite<>::get_multisite_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<cx32, 3>> TensorsFinite<>::get_multisite_env_var_blk_as() const;
+template env_pair<Eigen::Tensor<cx64, 3>> TensorsFinite<>::get_multisite_env_var_blk_as() const;
 
-void TensorsFinite::project_to_nearest_axis(std::string_view axis, std::optional<svd::config> svd_cfg) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::project_to_nearest_axis(std::string_view axis, std::optional<svd::config> svd_cfg) {
     auto sign = tools::finite::ops::project_to_nearest_axis(*state, axis, svd_cfg);
     if(sign != 0) clear_cache();
 }
@@ -255,7 +300,8 @@ struct DebugStatus {
     }
 };
 
-void TensorsFinite::set_parity_shift_mpo(OptRitz ritz, std::string_view axis) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::set_parity_shift_mpo(OptRitz ritz, std::string_view axis) {
     if(ritz == OptRitz::NONE or axis.empty()) {
         model->set_parity_shift_mpo(ritz, 0, ""); // reset the parity shift
         return;
@@ -276,7 +322,8 @@ void TensorsFinite::set_parity_shift_mpo(OptRitz ritz, std::string_view axis) {
     model->set_parity_shift_mpo(ritz, sign, axus); // will ignore the sign on the axis string if present
 }
 
-void TensorsFinite::set_parity_shift_mpo_squared(std::string_view axis) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::set_parity_shift_mpo_squared(std::string_view axis) {
     if(not qm::spin::half::is_valid_axis(axis)) return;
     auto sign = qm::spin::half::get_sign(axis);
     auto axus = qm::spin::half::get_axis_unsigned(axis);
@@ -294,7 +341,8 @@ void TensorsFinite::set_parity_shift_mpo_squared(std::string_view axis) {
     model->set_parity_shift_mpo_squared(sign, axus); // will ignore the sign on the axis string if present
 }
 
-std::optional<DebugStatus> get_status(TensorsFinite &tensors, std::string_view tag) {
+template<typename Scalar>
+std::optional<DebugStatus> get_status(TensorsFinite<Scalar> &tensors, std::string_view tag) {
     if constexpr(not settings::debug) return std::nullopt;
     tensors.model->clear_cache();
     tensors.measurements = MeasurementsTensorsFinite();
@@ -311,10 +359,12 @@ std::optional<DebugStatus> get_status(TensorsFinite &tensors, std::string_view t
     return deb;
 }
 
-void TensorsFinite::set_energy_shift_mpo(double energy_shift) {
-    if(std::isnan(energy_shift)) throw std::logic_error("TensorsFinite::set_energy_shift_mpo: got energy_shift == NAN");
-    if(std::abs(model->get_energy_shift_mpo() - energy_shift) <= std::numeric_limits<double>::epsilon()) {
-        tools::log->debug("MPO energy is already shifted by {:.16f}: No shift needed.", energy_shift);
+template<typename Scalar>
+void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
+    if(std::isnan(std::real(energy_shift))) throw std::logic_error("TensorsFinite<Scalar>::set_energy_shift_mpo: got std::real(energy_shift) == NAN");
+    if(std::isnan(std::imag(energy_shift))) throw std::logic_error("TensorsFinite<Scalar>::set_energy_shift_mpo: got std::imag(energy_shift) == NAN");
+    if(std::abs(model->get_energy_shift_mpo() - energy_shift) <= std::numeric_limits<RealScalar>::epsilon()) {
+        tools::log->debug("MPO energy is already shifted by {:.16f} {:+.16f}i : No shift needed.", fp(std::real(energy_shift)), fp(std::imag(energy_shift)));
         return;
     }
     std::vector<std::optional<DebugStatus>> debs;
@@ -323,13 +373,13 @@ void TensorsFinite::set_energy_shift_mpo(double energy_shift) {
     measurements = MeasurementsTensorsFinite(); // Resets model-related measurements but not state measurements, which can remain
     model->clear_cache();
 
-    tools::log->info("Shifting MPO energy: {:.16f}", energy_shift);
+    tools::log->info("Shifting MPO energy: {:.16f} {:+.16f}i", fp(std::real(energy_shift)), fp(std::imag(energy_shift)));
     model->set_energy_shift_mpo(energy_shift);
     model->assert_validity();
 
     debs.emplace_back(get_status(*this, "After shift"));
 
-    if(energy_shift != 0) {
+    if(energy_shift != Scalar(0.0)) {
         auto &bef = debs.front();
         auto &aft = debs.back();
         if(bef and aft) {
@@ -378,11 +428,21 @@ void TensorsFinite::set_energy_shift_mpo(double energy_shift) {
     }
 }
 
-std::tuple<OptRitz, int, std::string_view> TensorsFinite::get_parity_shift_mpo() { return model->get_parity_shift_mpo(); }
-std::pair<int, std::string_view>           TensorsFinite::get_parity_shift_mpo_squared() { return model->get_parity_shift_mpo_squared(); }
-double                                     TensorsFinite::get_energy_shift_mpo() { return model->get_energy_shift_mpo(); }
+template<typename Scalar>
+std::tuple<OptRitz, int, std::string_view> TensorsFinite<Scalar>::get_parity_shift_mpo() {
+    return model->get_parity_shift_mpo();
+}
+template<typename Scalar>
+std::pair<int, std::string_view> TensorsFinite<Scalar>::get_parity_shift_mpo_squared() {
+    return model->get_parity_shift_mpo_squared();
+}
+template<typename Scalar>
+Scalar TensorsFinite<Scalar>::get_energy_shift_mpo() {
+    return model->get_energy_shift_mpo();
+}
 
-void TensorsFinite::rebuild_mpo() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::rebuild_mpo() {
     if(model->has_mpo()) {
         tools::log->trace("rebuild_mpo: the model already has mpos.");
         return; // They should have been cleared before rebulding them
@@ -394,7 +454,8 @@ void TensorsFinite::rebuild_mpo() {
     if constexpr(settings::debug) model->assert_validity();
 }
 
-void TensorsFinite::rebuild_mpo_squared() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::rebuild_mpo_squared() {
     if(state->get_algorithm() == AlgorithmType::fLBIT) return;
     if(model->has_mpo_squared()) {
         tools::log->trace("rebuild_mpo_squared: the model already has mpos squared.");
@@ -407,7 +468,8 @@ void TensorsFinite::rebuild_mpo_squared() {
     if constexpr(settings::debug) model->assert_validity();
 }
 
-void TensorsFinite::compress_mpo_squared() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::compress_mpo_squared() {
     if(settings::precision::use_compressed_mpo_squared == MpoCompress::NONE) return;
 
     if(model->has_compressed_mpo_squared()) {
@@ -423,7 +485,8 @@ void TensorsFinite::compress_mpo_squared() {
 }
 
 // Active sites
-void TensorsFinite::sync_active_sites() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::sync_active_sites() {
     if(num::all_equal(active_sites, state->active_sites, model->active_sites, edges->active_sites)) return;
     if(not active_sites.empty())
         activate_sites(active_sites);
@@ -437,7 +500,8 @@ void TensorsFinite::sync_active_sites() {
         clear_active_sites();
 }
 
-void TensorsFinite::clear_active_sites() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::clear_active_sites() {
     if constexpr(settings::debug) tools::log->trace("Clearing active sites {}", active_sites);
     active_sites.clear();
     state->active_sites.clear();
@@ -445,7 +509,8 @@ void TensorsFinite::clear_active_sites() {
     edges->active_sites.clear();
 }
 
-void TensorsFinite::activate_sites(const std::vector<size_t> &sites) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::activate_sites(const std::vector<size_t> &sites) {
     tools::log->trace("Activating sites: {}", sites);
     if(num::all_equal(sites, active_sites, state->active_sites, model->active_sites, edges->active_sites)) return;
     active_sites        = sites;
@@ -456,7 +521,8 @@ void TensorsFinite::activate_sites(const std::vector<size_t> &sites) {
     clear_measurements();
 }
 
-void TensorsFinite::activate_sites() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::activate_sites() {
     sync_active_sites();
     if(active_sites.empty()) {
         if(position_is_at(-1)) throw except::logic_error("activate_sites: cannot activate a default site when pos == -1");
@@ -464,13 +530,21 @@ void TensorsFinite::activate_sites() {
     }
 }
 
-void TensorsFinite::activate_sites(long threshold, size_t max_sites, size_t min_sites) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::activate_sites(long threshold, size_t max_sites, size_t min_sites) {
     activate_sites(tools::finite::multisite::generate_site_list(*state, threshold, max_sites, min_sites));
 }
 
-std::array<long, 3> TensorsFinite::active_problem_dims() const { return tools::finite::multisite::get_dimensions(*state, active_sites); }
-long                TensorsFinite::active_problem_size() const { return tools::finite::multisite::get_problem_size(*state, active_sites); }
-bool                TensorsFinite::is_real() const {
+template<typename Scalar>
+std::array<long, 3> TensorsFinite<Scalar>::active_problem_dims() const {
+    return tools::finite::multisite::get_dimensions(*state, active_sites);
+}
+template<typename Scalar>
+long TensorsFinite<Scalar>::active_problem_size() const {
+    return tools::finite::multisite::get_problem_size(*state, active_sites);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::is_real() const {
     if(settings::model::model_type == ModelType::ising_sdual) {
         if(not state->is_real()) tools::log->critical("state has imaginary part");
         if(not model->is_real()) tools::log->critical("model has imaginary part");
@@ -478,13 +552,15 @@ bool                TensorsFinite::is_real() const {
     }
     return state->is_real() and model->is_real() and edges->is_real();
 }
-bool TensorsFinite::has_nan() const {
+template<typename Scalar>
+bool TensorsFinite<Scalar>::has_nan() const {
     if(state->has_nan()) tools::log->critical("state has nan");
     if(model->has_nan()) tools::log->critical("model has nan");
     if(edges->has_nan()) tools::log->critical("edges has nan");
     return state->has_nan() or model->has_nan() or edges->has_nan();
 }
-void TensorsFinite::assert_validity() const {
+template<typename Scalar>
+void TensorsFinite<Scalar>::assert_validity() const {
     if(settings::model::model_type == ModelType::ising_sdual) {
         if(not state->is_real()) throw except::runtime_error("state has imaginary part");
         if(not model->is_real()) throw except::runtime_error("model has imaginary part");
@@ -497,62 +573,105 @@ void TensorsFinite::assert_validity() const {
     assert_edges();
 }
 
-bool TensorsFinite::has_center_point() const { return state->has_center_point(); }
+template<typename Scalar>
+bool TensorsFinite<Scalar>::has_center_point() const {
+    return state->has_center_point();
+}
 
+template<typename Scalar>
 template<typename T>
-T TensorsFinite::get_length() const {
-    if(not num::all_equal(state->get_length<size_t>(), model->get_length(), edges->get_length()))
-        throw except::runtime_error("All lengths are not equal: state {} | model {} | edges {}", state->get_length<size_t>(), model->get_length(),
+T TensorsFinite<Scalar>::get_length() const {
+    if(not num::all_equal(state->template get_length<size_t>(), model->get_length(), edges->get_length()))
+        throw except::runtime_error("All lengths are not equal: state {} | model {} | edges {}", state->template get_length<size_t>(), model->get_length(),
                                     edges->get_length());
-    return state->get_length<T>();
+    return state->template get_length<T>();
 }
 
-template double TensorsFinite::get_length<double>() const;
-template size_t TensorsFinite::get_length<size_t>() const;
-template long   TensorsFinite::get_length<long>() const;
-template int    TensorsFinite::get_length<int>() const;
+template double TensorsFinite<>::get_length<double>() const;
+template size_t TensorsFinite<>::get_length<size_t>() const;
+template long   TensorsFinite<>::get_length<long>() const;
+template int    TensorsFinite<>::get_length<int>() const;
 
+template<typename Scalar>
 template<typename T>
-T TensorsFinite::get_position() const {
-    return state->get_position<T>();
+T TensorsFinite<Scalar>::get_position() const {
+    return state->template get_position<T>();
 }
-template size_t TensorsFinite::get_position<size_t>() const;
-template long   TensorsFinite::get_position<long>() const;
+template size_t TensorsFinite<>::get_position<size_t>() const;
+template long   TensorsFinite<>::get_position<long>() const;
 
-bool   TensorsFinite::position_is_the_middle() const { return state->position_is_the_middle(); }
-bool   TensorsFinite::position_is_the_middle_any_direction() const { return state->position_is_the_middle_any_direction(); }
-bool   TensorsFinite::position_is_outward_edge_left(size_t nsite) const { return state->position_is_outward_edge_left(nsite); }
-bool   TensorsFinite::position_is_outward_edge_right(size_t nsite) const { return state->position_is_outward_edge_right(nsite); }
-bool   TensorsFinite::position_is_outward_edge(size_t nsite) const { return state->position_is_outward_edge(nsite); }
-bool   TensorsFinite::position_is_inward_edge_left(size_t nsite) const { return state->position_is_inward_edge_left(nsite); }
-bool   TensorsFinite::position_is_inward_edge_right(size_t nsite) const { return state->position_is_inward_edge_right(nsite); }
-bool   TensorsFinite::position_is_inward_edge(size_t nsite) const { return state->position_is_inward_edge(nsite); }
-bool   TensorsFinite::position_is_at(long pos) const { return state->position_is_at(pos); }
-bool   TensorsFinite::position_is_at(long pos, int dir) const { return state->position_is_at(pos, dir); }
-bool   TensorsFinite::position_is_at(long pos, int dir, bool isCenter) const { return state->position_is_at(pos, dir, isCenter); }
-size_t TensorsFinite::move_center_point(std::optional<svd::config> svd_cfg) {
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_the_middle() const {
+    return state->position_is_the_middle();
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_the_middle_any_direction() const {
+    return state->position_is_the_middle_any_direction();
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_outward_edge_left(size_t nsite) const {
+    return state->position_is_outward_edge_left(nsite);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_outward_edge_right(size_t nsite) const {
+    return state->position_is_outward_edge_right(nsite);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_outward_edge(size_t nsite) const {
+    return state->position_is_outward_edge(nsite);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_inward_edge_left(size_t nsite) const {
+    return state->position_is_inward_edge_left(nsite);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_inward_edge_right(size_t nsite) const {
+    return state->position_is_inward_edge_right(nsite);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_inward_edge(size_t nsite) const {
+    return state->position_is_inward_edge(nsite);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_at(long pos) const {
+    return state->position_is_at(pos);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_at(long pos, int dir) const {
+    return state->position_is_at(pos, dir);
+}
+template<typename Scalar>
+bool TensorsFinite<Scalar>::position_is_at(long pos, int dir, bool isCenter) const {
+    return state->position_is_at(pos, dir, isCenter);
+}
+template<typename Scalar>
+size_t TensorsFinite<Scalar>::move_center_point(std::optional<svd::config> svd_cfg) {
     auto moves = tools::finite::mps::move_center_point_single_site(*state, svd_cfg);
     if(moves != 0) clear_active_sites();
     return moves;
 }
-size_t TensorsFinite::move_center_point_to_pos(long pos, std::optional<svd::config> svd_cfg) {
+template<typename Scalar>
+size_t TensorsFinite<Scalar>::move_center_point_to_pos(long pos, std::optional<svd::config> svd_cfg) {
     auto moves = tools::finite::mps::move_center_point_to_pos(*state, pos, svd_cfg);
     if(moves != 0) clear_active_sites();
     return moves;
 }
-size_t TensorsFinite::move_center_point_to_inward_edge(std::optional<svd::config> svd_cfg) {
+template<typename Scalar>
+size_t TensorsFinite<Scalar>::move_center_point_to_inward_edge(std::optional<svd::config> svd_cfg) {
     auto moves = tools::finite::mps::move_center_point_to_inward_edge(*state, svd_cfg);
     if(moves != 0) clear_active_sites();
     return moves;
 }
-size_t TensorsFinite::move_center_point_to_middle(std::optional<svd::config> svd_cfg) {
+template<typename Scalar>
+size_t TensorsFinite<Scalar>::move_center_point_to_middle(std::optional<svd::config> svd_cfg) {
     auto moves = tools::finite::mps::move_center_point_to_middle(*state, svd_cfg);
     if(moves != 0) clear_active_sites();
     return moves;
 }
 
-void TensorsFinite::merge_multisite_mps(const Eigen::Tensor<cx64, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg,
-                                        LogPolicy log_policy) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<cx64, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg,
+                                                LogPolicy log_policy) {
     // Make sure the active sites are the same everywhere
     auto t_merge = tid::tic_scope("merge");
     if(not num::all_equal(active_sites, state->active_sites, model->active_sites, edges->active_sites))
@@ -563,38 +682,41 @@ void TensorsFinite::merge_multisite_mps(const Eigen::Tensor<cx64, 3> &multisite_
     normalize_state(svd_cfg, NormPolicy::IFNEEDED);
 }
 
-EnvExpansionResult TensorsFinite::expand_environment(EnvExpandMode envExpandMode, OptAlgo algo, OptRitz ritz, size_t blocksize, svd::config svd_cfg) {
+template<typename Scalar>
+BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(const OptMeta &opt_meta) {
     // if(active_sites.empty()) throw except::runtime_error("No active sites for subspace expansion");
-    auto t_exp     = tid::tic_scope("exp_env");
-    auto expresult = EnvExpansionResult();
+    auto t_exp     = tid::tic_scope("bondexp");
+    auto expresult = BondExpansionResult<Scalar>();
     if(get_position<long>() < 0) {
         expresult.msg = "Negative position";
-        return {};
+        return expresult;
+    }
+    if(!opt_meta.svd_cfg.has_value()) {
+        expresult.msg = "svd not configured";
+        return expresult;
     }
     if(active_sites.empty()) activate_sites({get_position<size_t>()});
     rebuild_edges(); // Use fresh edges
     if constexpr(settings::debug) assert_validity();
-    if(!has_flag(envExpandMode, EnvExpandMode::SSITE) and !has_flag(envExpandMode, EnvExpandMode::NSITE)) envExpandMode |= EnvExpandMode::NSITE;
-
-    // TODO: It seems when the stuck algorithm goes into GDMRG, then SSITE does not work with H² expansion.
-    // TODO: Probably GDMRG needs SSITE|H1 expansion, (which seems to work fine).
-
-    if(has_flag(envExpandMode, EnvExpandMode::NSITE)) {
-        expresult = tools::finite::env::expand_environment_nsite(*state, *model, *edges, envExpandMode, algo, ritz, blocksize, svd_cfg);
-    } else if(has_flag(envExpandMode, EnvExpandMode::SSITE)) {
-        // Follows the subspace expansion technique explained in https://link.aps.org/doi/10.1103/PhysRevB.91.155115
-        // with improved mixing parameter selection
-        expresult = tools::finite::env::expand_environment_1site(*state, *model, *edges, envExpandMode, algo, ritz, svd_cfg);
+    if(has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::POSTOPT_1SITE) and opt_meta.optExit != OptExit::NONE) {
+        expresult = tools::finite::env::expand_bond_postopt_1site(*state, *model, *edges, opt_meta);
+    } else if(has_any_flags(opt_meta.bondexp_policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE)) {
+        expresult = tools::finite::env::expand_bond_preopt_nsite(*state, *model, *edges, opt_meta);
+    } else {
+        expresult.msg =
+            fmt::format("The policy does not allow bond expansion: {} | OptExit: {}", flag2str(opt_meta.bondexp_policy), flag2str(opt_meta.optExit));
+        return expresult;
     }
     if(expresult.ok) clear_measurements();
     if constexpr(settings::debug) assert_validity();
     return expresult;
 }
 
-void TensorsFinite::move_site_mps(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::optional<long> new_pos) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::move_site_mps(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::optional<long> new_pos) {
     if(sites_mps.size() != get_length<size_t>()) {
         sites_mps.clear();
-        for(const auto &mps : state->mps_sites) sites_mps.emplace_back(mps->get_position<size_t>());
+        for(const auto &mps : state->mps_sites) sites_mps.emplace_back(mps->template get_position<size_t>());
     }
     long dir = steps < 0l ? -1l : 1l;
 
@@ -620,7 +742,8 @@ void TensorsFinite::move_site_mps(const size_t site, const long steps, std::vect
     clear_measurements();
 }
 
-void TensorsFinite::move_site_mpo(const size_t site, const long steps, std::vector<size_t> &sites_mpo) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::move_site_mpo(const size_t site, const long steps, std::vector<size_t> &sites_mpo) {
     if(sites_mpo.size() != get_length<size_t>()) {
         sites_mpo.clear();
         for(const auto &mpo : model->MPO) sites_mpo.emplace_back(mpo->get_position());
@@ -642,10 +765,11 @@ void TensorsFinite::move_site_mpo(const size_t site, const long steps, std::vect
     clear_measurements();
 }
 
-void TensorsFinite::move_site_mps_to_pos(const size_t site, const long tgt_pos, std::vector<size_t> &sites_mps, std::optional<long> new_pos) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::move_site_mps_to_pos(const size_t site, const long tgt_pos, std::vector<size_t> &sites_mps, std::optional<long> new_pos) {
     if(sites_mps.size() != get_length<size_t>()) {
         sites_mps.clear();
-        for(const auto &mps : state->mps_sites) sites_mps.emplace_back(mps->get_position<size_t>());
+        for(const auto &mps : state->mps_sites) sites_mps.emplace_back(mps->template get_position<size_t>());
     }
     while(true) {
         // We must first find the src_pos of the given site in the list.
@@ -681,7 +805,8 @@ void TensorsFinite::move_site_mps_to_pos(const size_t site, const long tgt_pos, 
     clear_measurements();
 }
 
-void TensorsFinite::move_site_mpo_to_pos(const size_t site, const long tgt_pos, std::vector<size_t> &sites_mpo) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::move_site_mpo_to_pos(const size_t site, const long tgt_pos, std::vector<size_t> &sites_mpo) {
     if(sites_mpo.size() != get_length<size_t>()) {
         sites_mpo.clear();
         for(const auto &mpo : model->MPO) sites_mpo.emplace_back(mpo->get_position());
@@ -714,14 +839,16 @@ void TensorsFinite::move_site_mpo_to_pos(const size_t site, const long tgt_pos, 
     clear_measurements();
 }
 
-void TensorsFinite::move_site(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::vector<size_t> &sites_mpo,
-                              std::optional<long> new_pos) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::move_site(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::vector<size_t> &sites_mpo,
+                                      std::optional<long> new_pos) {
     move_site_mps(site, steps, sites_mps, new_pos);
     move_site_mpo(site, steps, sites_mpo);
 }
 
-void TensorsFinite::move_site_to_pos(const size_t site, const long tgt_pos, std::optional<std::vector<size_t>> &sites_mps,
-                                     std::optional<std::vector<size_t>> &sites_mpo, std::optional<long> new_pos) {
+template<typename Scalar>
+void TensorsFinite<Scalar>::move_site_to_pos(const size_t site, const long tgt_pos, std::optional<std::vector<size_t>> &sites_mps,
+                                             std::optional<std::vector<size_t>> &sites_mpo, std::optional<long> new_pos) {
     if(not sites_mps) sites_mps = std::vector<size_t>{};
     if(not sites_mpo) sites_mpo = std::vector<size_t>{};
     move_site_mps_to_pos(site, tgt_pos, sites_mps.value(), new_pos);
@@ -729,29 +856,43 @@ void TensorsFinite::move_site_to_pos(const size_t site, const long tgt_pos, std:
     if(sites_mps != sites_mpo) throw except::logic_error("sites mismatch \n sites_mps {}\n sites_mpo {}", sites_mps.value(), sites_mpo.value());
 }
 
-void TensorsFinite::assert_edges() const { tools::finite::env::assert_edges(*state, *model, *edges); }
-void TensorsFinite::assert_edges_ene() const { tools::finite::env::assert_edges_ene(*state, *model, *edges); }
-void TensorsFinite::assert_edges_var() const { tools::finite::env::assert_edges_var(*state, *model, *edges); }
-void TensorsFinite::rebuild_edges() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::assert_edges() const {
+    tools::finite::env::assert_edges(*state, *model, *edges);
+}
+template<typename Scalar>
+void TensorsFinite<Scalar>::assert_edges_ene() const {
+    tools::finite::env::assert_edges_ene(*state, *model, *edges);
+}
+template<typename Scalar>
+void TensorsFinite<Scalar>::assert_edges_var() const {
+    tools::finite::env::assert_edges_var(*state, *model, *edges);
+}
+template<typename Scalar>
+void TensorsFinite<Scalar>::rebuild_edges() {
     activate_sites();
     tools::finite::env::rebuild_edges(*state, *model, *edges);
 }
-void TensorsFinite::rebuild_edges_ene() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::rebuild_edges_ene() {
     activate_sites();
     tools::finite::env::rebuild_edges_ene(*state, *model, *edges);
 }
-void TensorsFinite::rebuild_edges_var() {
+template<typename Scalar>
+void TensorsFinite<Scalar>::rebuild_edges_var() {
     activate_sites();
     tools::finite::env::rebuild_edges_var(*state, *model, *edges);
 }
 
-void TensorsFinite::clear_measurements(LogPolicy logPolicy) const {
+template<typename Scalar>
+void TensorsFinite<Scalar>::clear_measurements(LogPolicy logPolicy) const {
     if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) tools::log->trace("Clearing tensors measurements");
     measurements = MeasurementsTensorsFinite();
     state->clear_measurements(logPolicy);
 }
 
-void TensorsFinite::clear_cache(LogPolicy logPolicy) const {
+template<typename Scalar>
+void TensorsFinite<Scalar>::clear_cache(LogPolicy logPolicy) const {
     if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) tools::log->trace("Clearing tensors cache");
     cache_fp32 = Cache<fp32>();
     cache_fp64 = Cache<fp64>();

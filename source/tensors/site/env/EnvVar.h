@@ -4,13 +4,26 @@
 /*! \brief Environment class with variance MPOs (i.e. double layer of energy MPOs) for environment blocks och type Left or Right corresponding to a single site.
  */
 
-class EnvVar final : public EnvBase {
+template<typename Scalar>
+class EnvVar final : public EnvBase<Scalar> {
     public:
-    using EnvBase::enlarge;
-    using EnvBase::EnvBase;
-    using EnvBase::set_edge_dims;
-    explicit EnvVar(std::string side_, const MpsSite &mps, const MpoSite &mpo);
-    [[nodiscard]] EnvVar enlarge(const MpsSite &mps, const MpoSite &mpo) const;
-    void                 refresh(const EnvVar &env, const MpsSite &mps, const MpoSite &mpo);
-    void                 set_edge_dims(const MpsSite &MPS, const MpoSite &MPO) final;
+    using EnvBase<Scalar>::enlarge;
+    using EnvBase<Scalar>::EnvBase;
+    using EnvBase<Scalar>::set_edge_dims;
+    using EnvBase<Scalar>::tag;
+    using EnvBase<Scalar>::side;
+    using EnvBase<Scalar>::get_position;
+    using EnvBase<Scalar>::block;
+    using EnvBase<Scalar>::has_block;
+    using EnvBase<Scalar>::build_block;
+    using EnvBase<Scalar>::get_unique_id;
+    using EnvBase<Scalar>::unique_id;
+    using EnvBase<Scalar>::unique_id_mpo;
+    using EnvBase<Scalar>::unique_id_env;
+    using EnvBase<Scalar>::unique_id_mps;
+
+    explicit EnvVar(std::string side_, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo);
+    [[nodiscard]] EnvVar enlarge(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) const;
+    void                 refresh(const EnvVar &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo);
+    void                 set_edge_dims(const MpsSite<Scalar> &MPS, const MpoSite<Scalar> &MPO) final;
 };

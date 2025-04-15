@@ -10,7 +10,7 @@ namespace tools::finite::opt {
 // * \brief Class that runs the finite DMRG algorithm.
  */
 
-class StateFinite;
+template<typename Scalar> class StateFinite;
 class fdmrg : public AlgorithmFinite {
     using OptMeta = tools::finite::opt::OptMeta;
 

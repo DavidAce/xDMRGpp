@@ -632,7 +632,7 @@ cx64 qm::lbit::get_lbit_2point_correlator2(const std::vector<std::vector<qm::Gat
                 if(not pos_out.empty()) {
                     // Trace positions outside the light cone intersection
                     g    = g.trace_pos(pos_out);
-                    g.op = g.op / g.op.constant(std::pow(2, pos_out.size())); // Normalize by dividing the trace of each 2x2 identity.
+                    g.op = g.op / g.op.constant(std::pow(2.0, pos_out.size())); // Normalize by dividing the trace of each 2x2 identity.
                     if constexpr(settings::verbose_circuit) story_str.append(fmt::format("trace{} ", pos_out));
                 }
             }
@@ -649,7 +649,7 @@ cx64 qm::lbit::get_lbit_2point_correlator2(const std::vector<std::vector<qm::Gat
     if(g.has_pos(szj_gate.pos)) {
         // Connect σ^z_j at the top
         log.push_back(fmt::format("insert σzj{} ", szj_gate.pos));
-        g = g.connect_below(szj_gate);
+        g                     = g.connect_below(szj_gate);
         std::string layer_str = empty_str;
         szj_gate.draw_pos(layer_str, "szj  :");
         net.push_back(layer_str);
@@ -1053,7 +1053,7 @@ cx64 qm::lbit::get_lbit_2point_correlator4(const std::vector<Eigen::Tensor<cx64,
             auto t_updntr = tid::tic_token("updntr");
             temp2.resize(mpo_dn_opi.dimension(1), mpo_up_opj.dimension(1));
             temp2.device(*threads->dev) = result.contract(mpo_dn_opi, tenx::idx({0}, {0})).contract(mpo_up_opj, tenx::idx({0, 3, 2}, {0, 2, 3}));
-            result                     = temp2 / temp2.constant(2.0); // Divide by two for each trace
+            result                      = temp2 / temp2.constant(2.0); // Divide by two for each trace
         }
     }
     //    tools::log->info("result {:+.16f}{:+.16f}i | time tot {:.3e}", std::real(result.coeff(0)), std::imag(result.coeff(0)), t_olap.get_last_interval());
@@ -1245,7 +1245,8 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix2(const std::vector<
     return lbit_corrmat.real();
 }
 
-Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<std::vector<qm::Gate>> &unitary_circuit, size_t sites, size_t max_num_states,
+template<typename Scalar>
+Eigen::Tensor<qm::lbit::RealScalar<Scalar>, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<std::vector<qm::Gate>> &unitary_circuit, size_t sites, size_t max_num_states,
                                                              double tol) {
     /*! \brief Calculates the correlation < τ^z_i σ^z_j > for a product state with spins aligned along +x = [(1,1)^T]^{\otimes L}
      *
@@ -1320,14 +1321,14 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<s
         tools::finite::mps::init::set_product_state_on_axis_using_pattern(state, StateInitType::REAL, "x", bstr);
         auto lbit_corrmat = Eigen::Tensor<cx64, 2>(ssites, ssites);
         lbit_corrmat.setZero();
-        StateFinite state_ud = state;
+        StateFinite<Scalar> state_ud = state;
         tools::finite::mps::apply_circuit(state_ud, unitary_circuit, CircuitOp::ADJ, false, GateMove::ON, svd_cfg); // Apply U† on state_ud
         bond_maxu = std::max<long>(bond_maxu, state_ud.get_largest_bond());
         t_r.toc();
 
         for(long i = 0; i < ssites; i++) {
             t_i.tic();
-            StateFinite state_i = state_ud;         // Make a copy of state_ud
+            StateFinite<Scalar> state_i = state_ud; // Make a copy of state_ud
             state_i.get_mps_site(i).apply_mpo(szi); // Apply σ^z_i on state_i
             t_i_u.tic();
 
@@ -1351,7 +1352,7 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<s
                     }
                 }
 
-                StateFinite state_j = state;
+                StateFinite<Scalar> state_j = state;
                 state_j.get_mps_site(j).apply_mpo(szj); // Apply σ^z_j on state j
                 bond_maxj          = std::max<long>(bond_maxj, state_j.get_largest_bond());
                 auto sziszj_ev     = tools::finite::ops::overlap(state_i, state_j);
@@ -1631,10 +1632,11 @@ qm::lbit::lbitSupportAnalysis qm::lbit::get_lbit_support_analysis(const UnitaryG
     return lbitSA;
 }
 
-StateFinite qm::lbit::transform_to_real_basis(const StateFinite &state_lbit, const std::vector<std::vector<qm::Gate>> &unitary_gates_2site_layers,
-                                              svd::config svd_cfg) {
-    auto        t_map      = tid::tic_scope("l2r");
-    StateFinite state_real = state_lbit; // Make a copy
+template<typename Scalar>
+StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar>                &state_lbit,
+                                                      const std::vector<std::vector<qm::Gate>> &unitary_gates_2site_layers, svd::config svd_cfg) {
+    auto                t_map      = tid::tic_scope("l2r");
+    StateFinite<Scalar> state_real = state_lbit; // Make a copy
     state_real.set_name("state_real");
     state_real.clear_cache();
     state_real.clear_measurements();
@@ -1662,12 +1664,12 @@ StateFinite qm::lbit::transform_to_real_basis(const StateFinite &state_lbit, con
     }
     return state_real;
 }
-
-StateFinite qm::lbit::transform_to_real_basis(const StateFinite &state_lbit, const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> &unitary_gates_mpo_layers,
-                                              const Eigen::Tensor<std::complex<double>, 1> &ledge, const Eigen::Tensor<std::complex<double>, 1> &redge,
-                                              svd::config svd_cfg) {
-    auto        t_map      = tid::tic_scope("l2r");
-    StateFinite state_real = state_lbit; // Make a copy
+template<typename Scalar>
+StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar>                                &state_lbit,
+                                                      const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &unitary_gates_mpo_layers,
+                                                      const Eigen::Tensor<Scalar, 1> &ledge, const Eigen::Tensor<Scalar, 1> &redge, svd::config svd_cfg) {
+    auto                t_map      = tid::tic_scope("l2r");
+    StateFinite<Scalar> state_real = state_lbit; // Make a copy
     state_real.set_name("state_real");
     state_real.clear_cache();
     state_real.clear_measurements();
@@ -1707,10 +1709,12 @@ StateFinite qm::lbit::transform_to_real_basis(const StateFinite &state_lbit, con
     }
     return state_real;
 }
-StateFinite qm::lbit::transform_to_lbit_basis(const StateFinite &state_real, const std::vector<std::vector<qm::Gate>> &unitary_gates_2site_layers,
-                                              svd::config svd_cfg) {
-    auto        t_map      = tid::tic_scope("r2l");
-    StateFinite state_lbit = state_real; // Make a copy
+
+template<typename Scalar>
+StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar>                &state_real,
+                                                      const std::vector<std::vector<qm::Gate>> &unitary_gates_2site_layers, svd::config svd_cfg) {
+    auto                t_map      = tid::tic_scope("r2l");
+    StateFinite<Scalar> state_lbit = state_real; // Make a copy
     state_lbit.set_name("state_lbit");
     state_lbit.clear_cache();
     state_lbit.clear_measurements();
@@ -1737,11 +1741,12 @@ StateFinite qm::lbit::transform_to_lbit_basis(const StateFinite &state_real, con
     }
     return state_lbit;
 }
-StateFinite qm::lbit::transform_to_lbit_basis(const StateFinite &state_real, const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> &unitary_gates_mpo_layers,
-                                              const Eigen::Tensor<std::complex<double>, 1> &ledge, const Eigen::Tensor<std::complex<double>, 1> &redge,
-                                              svd::config svd_cfg) {
-    auto        t_map      = tid::tic_scope("r2l");
-    StateFinite state_lbit = state_real; // Make a copy
+template<typename Scalar>
+StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar>                                &state_real,
+                                                      const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &unitary_gates_mpo_layers,
+                                                      const Eigen::Tensor<Scalar, 1> &ledge, const Eigen::Tensor<Scalar, 1> &redge, svd::config svd_cfg) {
+    auto                t_map      = tid::tic_scope("r2l");
+    StateFinite<Scalar> state_lbit = state_real; // Make a copy
     state_lbit.set_name("state_lbit");
     state_lbit.clear_cache();
     state_lbit.clear_measurements();

@@ -2,10 +2,10 @@
 
 #include "math/tenx/fwd_decl.h"
 
-class StateFinite;
-class ModelFinite;
-class EdgesFinite;
-class TensorsFinite;
+template<typename Scalar> class StateFinite;
+template<typename Scalar> class ModelFinite;
+template<typename Scalar> class EdgesFinite;
+template<typename Scalar> class TensorsFinite;
 class AlgorithmStatus;
 class ur;
 namespace eig {
@@ -13,5 +13,5 @@ namespace eig {
 }
 
 namespace tools::finite::ed {
-    extern StateFinite find_exact_state(const TensorsFinite &tensors, const AlgorithmStatus &status);
+    template<typename Scalar> extern StateFinite<Scalar> find_exact_state(const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status);
 }

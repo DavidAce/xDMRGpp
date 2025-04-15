@@ -8,7 +8,11 @@
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
 
-IsingRandomField::IsingRandomField(ModelType model_type_, size_t position_) : MpoSite(model_type_, position_) {
+template class IsingRandomField<cx64>;
+template class IsingRandomField<cx128>;
+
+template<typename Scalar>
+IsingRandomField<Scalar>::IsingRandomField(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {
     h5tb.param.J1           = settings::model::ising_tf_rf::J1;
     h5tb.param.J2           = settings::model::ising_tf_rf::J2;
     h5tb.param.h_tran       = settings::model::ising_tf_rf::h_tran;
@@ -27,12 +31,25 @@ IsingRandomField::IsingRandomField(ModelType model_type_, size_t position_) : Mp
         false; // There are no full lattice parameters, but we set it to true here since the model is not supposed to be randomized per site
 }
 
-double IsingRandomField::get_field() const { return h5tb.param.h_tran + h5tb.param.h_rand; }
-double IsingRandomField::get_coupling() const { return h5tb.param.J1; }
-void   IsingRandomField::print_parameter_names() const { h5tb.print_parameter_names(); }
-void   IsingRandomField::print_parameter_values() const { h5tb.print_parameter_values(); }
+template<typename Scalar>
+double IsingRandomField<Scalar>::get_field() const {
+    return h5tb.param.h_tran + h5tb.param.h_rand;
+}
+template<typename Scalar>
+double IsingRandomField<Scalar>::get_coupling() const {
+    return h5tb.param.J1;
+}
+template<typename Scalar>
+void IsingRandomField<Scalar>::print_parameter_names() const {
+    h5tb.print_parameter_names();
+}
+template<typename Scalar>
+void IsingRandomField<Scalar>::print_parameter_values() const {
+    h5tb.print_parameter_values();
+}
 
-void IsingRandomField::set_parameters(TableMap &parameters) {
+template<typename Scalar>
+void IsingRandomField<Scalar>::set_parameters(TableMap &parameters) {
     h5tb.param.J1           = std::any_cast<double>(parameters["J1"]);
     h5tb.param.J2           = std::any_cast<double>(parameters["J2"]);
     h5tb.param.h_tran       = std::any_cast<double>(parameters["h_tran"]);
@@ -46,7 +63,8 @@ void IsingRandomField::set_parameters(TableMap &parameters) {
     all_mpo_parameters_have_been_set = true;
 }
 
-IsingRandomField::TableMap IsingRandomField::get_parameters() const {
+template<typename Scalar>
+IsingRandomField<Scalar>::TableMap IsingRandomField<Scalar>::get_parameters() const {
     TableMap parameters;
     parameters["J1"]           = h5tb.param.J1;
     parameters["J2"]           = h5tb.param.J2;
@@ -59,7 +77,8 @@ IsingRandomField::TableMap IsingRandomField::get_parameters() const {
     return parameters;
 }
 
-std::any IsingRandomField::get_parameter(std::string_view name) const {
+template<typename Scalar>
+std::any IsingRandomField<Scalar>::get_parameter(std::string_view name) const {
     /* clang-format off */
    if     (name == "J1")            return  h5tb.param.J1;
    else if(name == "J2")            return  h5tb.param.J2;
@@ -73,7 +92,8 @@ std::any IsingRandomField::get_parameter(std::string_view name) const {
     throw except::logic_error("Invalid parameter name for IsingRandomField model: {}", name);
 }
 
-void IsingRandomField::set_parameter(const std::string_view name, std::any value) {
+template<typename Scalar>
+void IsingRandomField<Scalar>::set_parameter(const std::string_view name, std::any value) {
     /* clang-format off */
     if(name      == "J1")               h5tb.param.J1 = std::any_cast<decltype(h5tb.param.J1)>(value);
     else if(name == "J2")               h5tb.param.J2 = std::any_cast<decltype(h5tb.param.J2)>(value);
@@ -110,9 +130,9 @@ void IsingRandomField::set_parameter(const std::string_view name, std::any value
 //     return t*t.constant(static_cast<cx64>(lhs));
 // }
 
-Eigen::Tensor<cx64, 4> IsingRandomField::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                                 [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
-    using namespace qm::spin::half::tensor;
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> IsingRandomField<Scalar>::get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                                           [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
     tools::log->debug("mpo({}): building tf-rf ising mpo", get_position());
     if(not all_mpo_parameters_have_been_set)
         throw except::runtime_error("mpo({}): can't build mpo: full lattice parameters haven't been set yet.", get_position());
@@ -125,14 +145,13 @@ Eigen::Tensor<cx64, 4> IsingRandomField::get_mpo(cx64 energy_shift_per_site, std
             if(n == 2) J2 = 1.0;
         }
     }
-    Eigen::Tensor<cx64, 4> mpo_build;
+    Eigen::Tensor<Scalar, 4> mpo_build;
     mpo_build.resize(3, 3, h5tb.param.spin_dim, h5tb.param.spin_dim);
     mpo_build.setZero();
-    // mpo_build.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(id);
-    // mpo_build.slice(std::array<long, 4>{1, 0, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(sz);
-    // mpo_build.slice(std::array<long, 4>{2, 0, 0, 0}, extent4).reshape(extent2) = tenx::TensorCast(-J1 * get_field() * sx - energy_shift_per_site * id);
-    // mpo_build.slice(std::array<long, 4>{2, 1, 0, 0}, extent4).reshape(extent2) = tenx::TensorCast(-J2 * get_coupling() * sz);
-    // mpo_build.slice(std::array<long, 4>{2, 2, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(id);
+
+    auto id = tenx::asScalarType<Scalar>(qm::spin::half::tensor::id);
+    auto sz = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sz);
+    auto sx = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sx);
 
     mpo_build.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = id;
     mpo_build.slice(std::array<long, 4>{1, 0, 0, 0}, extent4).reshape(extent2) = sz;
@@ -147,7 +166,8 @@ Eigen::Tensor<cx64, 4> IsingRandomField::get_mpo(cx64 energy_shift_per_site, std
     return mpo_build;
 }
 
-void IsingRandomField::randomize_hamiltonian() {
+template<typename Scalar>
+void IsingRandomField<Scalar>::randomize_hamiltonian() {
     if(h5tb.param.distribution == "normal") {
         h5tb.param.h_rand = rnd::normal(h5tb.param.h_mean, h5tb.param.h_wdth);
     } else if(h5tb.param.distribution == "lognormal") {
@@ -163,11 +183,18 @@ void IsingRandomField::randomize_hamiltonian() {
     unique_id_sq                     = std::nullopt;
 }
 
-std::unique_ptr<MpoSite> IsingRandomField::clone() const { return std::make_unique<IsingRandomField>(*this); }
+template<typename Scalar>
+std::unique_ptr<MpoSite<Scalar>> IsingRandomField<Scalar>::clone() const {
+    return std::make_unique<IsingRandomField>(*this);
+}
 
-long IsingRandomField::get_spin_dimension() const { return h5tb.param.spin_dim; }
+template<typename Scalar>
+long IsingRandomField<Scalar>::get_spin_dimension() const {
+    return h5tb.param.spin_dim;
+}
 
-void IsingRandomField::set_averages([[maybe_unused]] std::vector<TableMap> lattice_parameters, bool infinite) {
+template<typename Scalar>
+void IsingRandomField<Scalar>::set_averages([[maybe_unused]] std::vector<TableMap> lattice_parameters, bool infinite) {
     if(not infinite) {
         lattice_parameters.back()["J1"]    = 0.0;
         lattice_parameters.back()["J2"]    = 0.0;
@@ -188,12 +215,14 @@ void IsingRandomField::set_averages([[maybe_unused]] std::vector<TableMap> latti
     set_parameters(lattice_parameters[get_position()]);
 }
 
-void IsingRandomField::save_hamiltonian(h5pp::File &file, std::string_view table_path) const {
+template<typename Scalar>
+void IsingRandomField<Scalar>::save_hamiltonian(h5pp::File &file, std::string_view table_path) const {
     if(not file.linkExists(table_path)) file.createTable(h5tb.get_h5_type(), table_path, "Transverse-field Ising");
     file.appendTableRecords(h5tb.param, table_path);
 }
 
-void IsingRandomField::load_hamiltonian(const h5pp::File &file, std::string_view model_prefix) {
+template<typename Scalar>
+void IsingRandomField<Scalar>::load_hamiltonian(const h5pp::File &file, std::string_view model_prefix) {
     auto ham_table = fmt::format("{}/hamiltonian", model_prefix);
     if(file.linkExists(ham_table)) {
         h5tb.param                       = file.readTableRecords<h5tb_ising_tf_rf::table>(ham_table, position);

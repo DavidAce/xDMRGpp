@@ -8,16 +8,19 @@
 #include <memory>
 #include <optional>
 
+template<typename Scalar>
 class EnvEne;
+template<typename Scalar>
 class EnvVar;
 
+template<typename Scalar = cx64>
 class EdgesInfinite {
     public:
     private:
-    std::unique_ptr<EnvEne> eneL;
-    std::unique_ptr<EnvEne> eneR;
-    std::unique_ptr<EnvVar> varL;
-    std::unique_ptr<EnvVar> varR;
+    std::unique_ptr<EnvEne<Scalar>> eneL;
+    std::unique_ptr<EnvEne<Scalar>> eneR;
+    std::unique_ptr<EnvVar<Scalar>> varL;
+    std::unique_ptr<EnvVar<Scalar>> varR;
 
     public:
     EdgesInfinite();
@@ -35,17 +38,17 @@ class EdgesInfinite {
     [[nodiscard]] bool   is_real() const;
     [[nodiscard]] bool   has_nan() const;
 
-    [[nodiscard]] env_pair<const EnvEne &> get_ene() const;
-    [[nodiscard]] env_pair<const EnvVar &> get_var() const;
-    [[nodiscard]] env_pair<EnvEne &>       get_ene();
-    [[nodiscard]] env_pair<EnvVar &>       get_var();
+    [[nodiscard]] env_pair<const EnvEne<Scalar> &> get_ene() const;
+    [[nodiscard]] env_pair<const EnvVar<Scalar> &> get_var() const;
+    [[nodiscard]] env_pair<EnvEne<Scalar> &>       get_ene();
+    [[nodiscard]] env_pair<EnvVar<Scalar> &>       get_var();
 
-    env_pair<const Eigen::Tensor<cx64, 3> &> get_env_ene_blk() const;
-    env_pair<const Eigen::Tensor<cx64, 3> &> get_env_var_blk() const;
-    env_pair<Eigen::Tensor<cx64, 3> &>       get_env_ene_blk();
-    env_pair<Eigen::Tensor<cx64, 3> &>       get_env_var_blk();
-    template<typename Scalar>
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>> get_env_ene_blk_as() const;
-    template<typename Scalar>
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>> get_env_var_blk_as() const;
+    env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_ene_blk() const;
+    env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_var_blk() const;
+    env_pair<Eigen::Tensor<Scalar, 3> &>       get_env_ene_blk();
+    env_pair<Eigen::Tensor<Scalar, 3> &>       get_env_var_blk();
+    template<typename T>
+    [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_ene_blk_as() const;
+    template<typename T>
+    [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_var_blk_as() const;
 };

@@ -34,7 +34,6 @@ namespace tools::finite::opt {
             if(y == nullptr) return;
             if(primme == nullptr) return;
             const auto H_ptr      = static_cast<MatVecMPOS<Scalar> *>(primme->matrix);
-            auto       t_precond  = tid::tic_scope(fmt::format("precFsJcb-{}", H_ptr->get_jcbMaxBlockSize()));
             H_ptr->preconditioner = eig::Preconditioner::JACOBI;
             H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
         }
@@ -237,10 +236,10 @@ namespace tools::finite::opt {
     void eigs_folded_spectrum_executor(eig::solver &solver, MatVecType &hamiltonian_squared, const TensorsFinite &tensors, const opt_mps &initial_mps,
                                        std::vector<opt_mps> &results, const OptMeta &meta) {
         using Scalar = typename MatVecType::Scalar;
-        if(std::is_same_v<Scalar, cx64> and meta.optType == OptType::REAL)
-            throw except::logic_error("eigs_folded_spectrum_executor error: Mixed Scalar:cx64 with OptType::REAL");
-        if(std::is_same_v<Scalar, fp64> and meta.optType == OptType::CPLX)
-            throw except::logic_error("eigs_folded_spectrum_executor error: Mixed Scalar:real with OptType::CPLX");
+        if(std::is_same_v<Scalar, cx64> and meta.optType == OptType::FP64)
+            throw except::logic_error("eigs_folded_spectrum_executor error: Mixed Scalar:cx64 with OptType::FP64");
+        if(std::is_same_v<Scalar, fp64> and meta.optType == OptType::CX64)
+            throw except::logic_error("eigs_folded_spectrum_executor error: Mixed Scalar:real with OptType::CX64");
 
         solver.config.primme_effective_ham_sq = &hamiltonian_squared;
         hamiltonian_squared.reset();
@@ -295,7 +294,7 @@ namespace tools::finite::opt {
             case OptRitz::LM: cfg.ritz = eig::Ritz::primme_largest_abs; break;
             case OptRitz::SM: {
                 cfg.ritz                = eig::Ritz::primme_closest_abs; // H² is positive definite!
-                cfg.primme_projection   = meta.primme_projection.value_or("primme_proj_refined");
+                cfg.primme_projection   = meta.primme_projection.value_or("primme_proj_default");
                 cfg.primme_targetShifts = {meta.eigv_target.value_or(0.0)};
                 break;
             }
@@ -303,8 +302,6 @@ namespace tools::finite::opt {
         }
         cfg.primme_preconditioner = folded_spectrum::preconditioner_jacobi<Scalar>;
         cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
-
-        cfg.primme_maxBlockSize = 16;
 
         const auto &mpos                  = tensors.get_model().get_mpo_active();
         const auto &envv                  = tensors.get_edges().get_var_active();
@@ -346,7 +343,20 @@ namespace tools::finite::opt {
 
     opt_mps internal::optimize_folded_spectrum(const TensorsFinite &tensors, const opt_mps &initial_mps, [[maybe_unused]] const AlgorithmStatus &status,
                                                OptMeta &meta) {
+        #pragma message "remove this test"
+        if(status.energy_variance_lowest < status.energy_variance_prec_limit) {
+            auto meta2 = meta;
+            meta2.optSolver = OptSolver::H1H2;
+            meta2.optType = OptType::FP128;
+            meta2.eigs_iter_max = 100;
+            meta2.eigs_ncv = 3;
+            return optimize_lanczos_h1h2(tensors, initial_mps, status, meta2);
+        }
+
         if(meta.optSolver == OptSolver::EIG) return optimize_folded_spectrum_eig(tensors, initial_mps, status, meta);
+
+
+
 
         using namespace internal;
         using namespace settings::precision;
@@ -356,8 +366,9 @@ namespace tools::finite::opt {
         auto                 t_var = tid::tic_scope("eigs-xdmrg", tid::level::higher);
         std::vector<opt_mps> results;
         switch(meta.optType) {
-            case OptType::REAL: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CPLX: eigs_manager_folded_spectrum<cx64>(tensors, initial_mps, results, meta); break;
+            case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
+            case OptType::CX64: eigs_manager_folded_spectrum<cx64>(tensors, initial_mps, results, meta); break;
+            default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
         }
         auto t_post = tid::tic_scope("post");
         if(results.empty()) {

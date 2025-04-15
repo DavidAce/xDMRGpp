@@ -228,15 +228,17 @@ void tools::finite::ops::apply_mpos_general(StateFinite &state, const std::vecto
 
         if(S_prev) mps_site.set_L(S_prev.value(), svd.get_truncation_error());
         if(S_prev and V_prev) {
-            mpo_mps = Eigen::Tensor<cx64, 3>(tenx::asDiagonal(S_prev.value())
-                                                 .contract(V_prev.value(), tenx::idx({1}, {0}))
-                                                 .contract(mpo_mps, tenx::idx({1}, {1}))
-                                                 .shuffle(tenx::array3{1, 0, 2}));
-            d0      = mpo_mps.dimension(0);
-            d1      = mpo_mps.dimension(1);
-            d2      = mpo_mps.dimension(2);
-            S_prev  = std::nullopt;
-            V_prev  = std::nullopt;
+            // mpo_mps = Eigen::Tensor<cx64, 3>(tenx::asDiagonal(S_prev.value())
+            // .contract(V_prev.value(), tenx::idx({1}, {0}))
+            // .contract(mpo_mps, tenx::idx({1}, {1}))
+            // .shuffle(tenx::array3{1, 0, 2}));
+            mpo_mps = Eigen::Tensor<cx64, 3>(
+                tenx::asDiagonalContract(S_prev.value(), V_prev.value(), 0).contract(mpo_mps, tenx::idx({1}, {1})).shuffle(tenx::array3{1, 0, 2}));
+            d0     = mpo_mps.dimension(0);
+            d1     = mpo_mps.dimension(1);
+            d2     = mpo_mps.dimension(2);
+            S_prev = std::nullopt;
+            V_prev = std::nullopt;
         }
 
         if(pos == pos_center) {
@@ -272,13 +274,13 @@ void tools::finite::ops::apply_mpos_general(StateFinite &state, const std::vecto
         Eigen::Tensor<cx64, 3> mpo_mps = mpo.contract(mps, tenx::idx({2}, {0})).shuffle(tenx::array5{2, 0, 3, 1, 4}).reshape(tenx::array3{d0, d1, d2});
         if(S_prev) mps_site.set_L(S_prev.value(), svd.get_truncation_error());
         if(U_prev and S_prev) {
-            mpo_mps =
-                Eigen::Tensor<cx64, 3>(mpo_mps.contract(U_prev.value(), tenx::idx({2}, {0})).contract(tenx::asDiagonal(S_prev.value()), tenx::idx({2}, {0})));
-            S_prev = std::nullopt;
-            U_prev = std::nullopt;
-            d0     = mpo_mps.dimension(0);
-            d1     = mpo_mps.dimension(1);
-            d2     = mpo_mps.dimension(2);
+            auto US_prev = tenx::asDiagonalContract(S_prev.value(), U_prev.value(), 1);
+            mpo_mps      = Eigen::Tensor<cx64, 3>(mpo_mps.contract(US_prev, tenx::idx({2}, {0})));
+            S_prev       = std::nullopt;
+            U_prev       = std::nullopt;
+            d0           = mpo_mps.dimension(0);
+            d1           = mpo_mps.dimension(1);
+            d2           = mpo_mps.dimension(2);
         }
 
         if(pos == pos_center + 1) {
@@ -300,12 +302,12 @@ void tools::finite::ops::apply_mpos_general(StateFinite &state, const std::vecto
      *
      */
 
-    long d0     = ASV.dimension(0) * ASV.dimension(1);
-    long d1     = USB.dimension(0) * USB.dimension(2);
-    auto ASVUSB = Eigen::Tensor<cx64, 2>(d0, d1);
-    auto &threads = tenx::threads::get();
+    long  d0                     = ASV.dimension(0) * ASV.dimension(1);
+    long  d1                     = USB.dimension(0) * USB.dimension(2);
+    auto  ASVUSB                 = Eigen::Tensor<cx64, 2>(d0, d1);
+    auto &threads                = tenx::threads::get();
     ASVUSB.device(*threads->dev) = ASV.contract(USB, tenx::idx({2}, {1})).reshape(tenx::array2{d0, d1});
-    auto [U, S, VT]                           = svd.decompose(ASVUSB, svd_cfg);
+    auto [U, S, VT]              = svd.decompose(ASVUSB, svd_cfg);
 
     auto &mpsL = state.get_mps_site(pos_center);
     auto &mpsR = state.get_mps_site(pos_center + 1);
@@ -457,13 +459,13 @@ auto tools::finite::ops::overlap(const StateFinite &state1, const StateFinite &s
     size_t pos   = 0;
     auto overlap = tools::common::contraction::contract_mps_mps_partial<std::array{0l, 1l}>(state1.get_mps_site(pos).get_M(), state2.get_mps_site(pos).get_M());
     Eigen::Tensor<cx64, 2> temp;
-    auto &threads = tenx::threads::get();
+    auto                  &threads = tenx::threads::get();
     for(pos = 1; pos < state1.get_length(); pos++) {
         const auto &M1 = state1.get_mps_site(pos).get_M();
         const auto &M2 = state2.get_mps_site(pos).get_M();
         temp.resize(M1.dimension(2), M2.dimension(2));
         temp.device(*threads->dev) = overlap.contract(M1.conjugate(), tenx::idx({0}, {1})).contract(M2, tenx::idx({0, 1}, {1, 0}));
-        overlap                                 = std::move(temp);
+        overlap                    = std::move(temp);
     }
 
     Eigen::Tensor<cx64, 0> norm_chain = overlap.trace();

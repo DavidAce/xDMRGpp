@@ -74,8 +74,9 @@ opt_mps tools::finite::opt::internal::optimize_overlap(const TensorsFinite &tens
 
     std::vector<opt_mps> subspace;
     switch(meta.optType) {
-        case OptType::CPLX: subspace = internal::subspace::find_subspace<cx64>(tensors, meta); break;
-        case OptType::REAL: subspace = internal::subspace::find_subspace<fp64>(tensors, meta); break;
+        case OptType::FP64: subspace = internal::subspace::find_subspace<fp64>(tensors, meta); break;
+        case OptType::CX64: subspace = internal::subspace::find_subspace<cx64>(tensors, meta); break;
+        default: throw except::runtime_error("optimize_overlap(): not implemented for type {}", enum2sv(meta.optType));
     }
 
     tools::log->trace("optimize_overlap: subspace found with {} eigenvectors", subspace.size());

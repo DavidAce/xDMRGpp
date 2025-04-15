@@ -1,9 +1,14 @@
 #pragma once
+template<typename Scalar>
 class StateInfinite;
+template<typename Scalar>
 class ModelInfinite;
+template<typename Scalar>
 class EdgesInfinite;
 
 namespace tools::infinite::env {
-    extern void reset_edges(const StateInfinite &state, const ModelInfinite &model, EdgesInfinite &edges);
-    extern void enlarge_edges(const StateInfinite &state, const ModelInfinite &model, EdgesInfinite &edges);
+    template<typename Scalar>
+    extern void reset_edges(const StateInfinite<Scalar> &state, const ModelInfinite<Scalar> &model, EdgesInfinite<Scalar> &edges);
+    template<typename Scalar>
+    extern void enlarge_edges(const StateInfinite<Scalar> &state, const ModelInfinite<Scalar> &model, EdgesInfinite<Scalar> &edges);
 }

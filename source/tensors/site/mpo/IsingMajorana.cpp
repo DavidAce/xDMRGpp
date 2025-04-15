@@ -7,13 +7,18 @@
 #include "qm/spin.h"
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
+#include <tools/infinite/mps.h>
+
+template class IsingMajorana<cx64>;
+template class IsingMajorana<cx128>;
 
 // double delta_to_J_mean(double delta) { return ;  }
 // double delta_to_h_mean(double delta) { return ;  }
 double delta_to_W_J(double delta) { return std::exp(delta / 2.0); }
 double delta_to_W_h(double delta) { return std::exp(-delta / 2.0); }
 
-IsingMajorana::IsingMajorana(ModelType model_type_, size_t position_) : MpoSite(model_type_, position_) {
+template<typename Scalar>
+IsingMajorana<Scalar>::IsingMajorana(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {
     h5tb.param.g            = settings::model::ising_majorana::g;
     h5tb.param.delta        = settings::model::ising_majorana::delta;
     h5tb.param.spin_dim     = settings::model::ising_majorana::spin_dim;
@@ -22,12 +27,25 @@ IsingMajorana::IsingMajorana(ModelType model_type_, size_t position_) : MpoSite(
     extent2                 = {h5tb.param.spin_dim, h5tb.param.spin_dim};
 }
 
-double IsingMajorana::get_coupling() const { return h5tb.param.J_rand; }
-double IsingMajorana::get_field() const { return h5tb.param.h_rand; }
-void   IsingMajorana::print_parameter_names() const { h5tb.print_parameter_names(); }
-void   IsingMajorana::print_parameter_values() const { h5tb.print_parameter_values(); }
+template<typename Scalar>
+double IsingMajorana<Scalar>::get_coupling() const {
+    return h5tb.param.J_rand;
+}
+template<typename Scalar>
+double IsingMajorana<Scalar>::get_field() const {
+    return h5tb.param.h_rand;
+}
+template<typename Scalar>
+void IsingMajorana<Scalar>::print_parameter_names() const {
+    h5tb.print_parameter_names();
+}
+template<typename Scalar>
+void IsingMajorana<Scalar>::print_parameter_values() const {
+    h5tb.print_parameter_values();
+}
 
-void IsingMajorana::set_parameters(TableMap &parameters) {
+template<typename Scalar>
+void IsingMajorana<Scalar>::set_parameters(TableMap &parameters) {
     h5tb.param.g                     = std::any_cast<decltype(h5tb.param.g)>(parameters["g"]);
     h5tb.param.delta                 = std::any_cast<decltype(h5tb.param.delta)>(parameters["delta"]);
     h5tb.param.J_rand                = std::any_cast<decltype(h5tb.param.J_rand)>(parameters["J_rand"]);
@@ -37,7 +55,8 @@ void IsingMajorana::set_parameters(TableMap &parameters) {
     all_mpo_parameters_have_been_set = true;
 }
 
-IsingMajorana::TableMap IsingMajorana::get_parameters() const {
+template<typename Scalar>
+typename IsingMajorana<Scalar>::TableMap IsingMajorana<Scalar>::get_parameters() const {
     /* clang-format off */
     TableMap parameters;
     parameters["g"]                             = h5tb.param.g;
@@ -51,7 +70,8 @@ IsingMajorana::TableMap IsingMajorana::get_parameters() const {
     /* clang-format on */
 }
 
-std::any IsingMajorana::get_parameter(const std::string_view name) const {
+template<typename Scalar>
+std::any IsingMajorana<Scalar>::get_parameter(const std::string_view name) const {
     /* clang-format off */
     if(name == "g")                 return  h5tb.param.g;
     else if(name == "delta")        return  h5tb.param.delta;
@@ -63,7 +83,8 @@ std::any IsingMajorana::get_parameter(const std::string_view name) const {
     throw except::logic_error("Invalid parameter name for the IsingMajorana model: {}", name);
 }
 
-void IsingMajorana::set_parameter(const std::string_view name, std::any value) {
+template<typename Scalar>
+void IsingMajorana<Scalar>::set_parameter(const std::string_view name, std::any value) {
     /* clang-format off */
     if(name == "g")                 h5tb.param.g = std::any_cast<decltype(h5tb.param.g)>(value);
     else if(name == "delta")        h5tb.param.delta = std::any_cast<decltype(h5tb.param.delta)>(value);
@@ -101,8 +122,9 @@ void IsingMajorana::set_parameter(const std::string_view name, std::any value) {
  *  delta = <ln J_i> - <ln h_i> =  2ln(W).
  *
  */
-Eigen::Tensor<cx64, 4> IsingMajorana::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                              [[maybe_unused]] std::optional<std::vector<size_t>> skip) const
+template<typename Scalar>
+Eigen::Tensor<cx64, 4> IsingMajorana<Scalar>::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                                      [[maybe_unused]] std::optional<std::vector<size_t>> skip) const
 
 {
     using namespace qm::spin::half::tensor;
@@ -129,8 +151,8 @@ Eigen::Tensor<cx64, 4> IsingMajorana::get_mpo(cx64 energy_shift_per_site, std::o
     mpo_build.slice(std::array<long, 4>{3, 1, 0, 0}, extent4).reshape(extent2) = id;
     mpo_build.slice(std::array<long, 4>{4, 0, 0, 0}, extent4).reshape(extent2) = J1 * get_field() * sz - energy_shift_per_site * id;
     mpo_build.slice(std::array<long, 4>{4, 1, 0, 0}, extent4).reshape(extent2) = J2 * get_coupling() * sx;
-    mpo_build.slice(std::array<long, 4>{4, 2, 0, 0}, extent4).reshape(extent2) = J2 * h5tb.param.g * sz;
-    mpo_build.slice(std::array<long, 4>{4, 3, 0, 0}, extent4).reshape(extent2) = J2 * h5tb.param.g * sx;
+    mpo_build.slice(std::array<long, 4>{4, 2, 0, 0}, extent4).reshape(extent2) = sz * (J2 * h5tb.param.g);
+    mpo_build.slice(std::array<long, 4>{4, 3, 0, 0}, extent4).reshape(extent2) = sx * (J2 * h5tb.param.g);
     mpo_build.slice(std::array<long, 4>{4, 4, 0, 0}, extent4).reshape(extent2) = id;
 
     if(tenx::hasNaN(mpo_build)) {
@@ -141,7 +163,8 @@ Eigen::Tensor<cx64, 4> IsingMajorana::get_mpo(cx64 energy_shift_per_site, std::o
     return mpo_build;
 }
 
-void IsingMajorana::randomize_hamiltonian() {
+template<typename Scalar>
+void IsingMajorana<Scalar>::randomize_hamiltonian() {
     if(h5tb.param.distribution != "uniform") throw except::runtime_error("IsingMajorana expects a uniform distribution. Got: {}", h5tb.param.distribution);
     h5tb.param.J_rand = rnd::uniform_double_box(0, delta_to_W_J(h5tb.param.delta));
     h5tb.param.h_rand = rnd::uniform_double_box(0, delta_to_W_h(h5tb.param.delta));
@@ -157,11 +180,18 @@ void IsingMajorana::randomize_hamiltonian() {
     unique_id_sq                     = std::nullopt;
 }
 
-std::unique_ptr<MpoSite> IsingMajorana::clone() const { return std::make_unique<IsingMajorana>(*this); }
+template<typename Scalar>
+std::unique_ptr<MpoSite<Scalar>> IsingMajorana<Scalar>::clone() const {
+    return std::make_unique<IsingMajorana<Scalar>>(*this);
+}
 
-long IsingMajorana::get_spin_dimension() const { return h5tb.param.spin_dim; }
+template<typename Scalar>
+long IsingMajorana<Scalar>::get_spin_dimension() const {
+    return h5tb.param.spin_dim;
+}
 
-void IsingMajorana::set_averages(std::vector<TableMap> all_parameters, bool infinite) {
+template<typename Scalar>
+void IsingMajorana<Scalar>::set_averages(std::vector<TableMap> all_parameters, bool infinite) {
     if(not infinite) { all_parameters.back()["J_rand"] = 0.0; }
     set_parameters(all_parameters[get_position()]);
     global_energy_upper_bound = 0.0;
@@ -172,12 +202,14 @@ void IsingMajorana::set_averages(std::vector<TableMap> all_parameters, bool infi
     }
 }
 
-void IsingMajorana::save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const {
+template<typename Scalar>
+void IsingMajorana<Scalar>::save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const {
     if(not file.linkExists(hamiltonian_table_path)) file.createTable(h5tb.get_h5_type(), hamiltonian_table_path, "Ising-Majorana");
     file.appendTableRecords(h5tb.param, hamiltonian_table_path);
 }
 
-void IsingMajorana::load_hamiltonian(const h5pp::File &file, std::string_view model_path) {
+template<typename Scalar>
+void IsingMajorana<Scalar>::load_hamiltonian(const h5pp::File &file, std::string_view model_path) {
     auto ham_table = fmt::format("{}/hamiltonian", model_path);
     if(file.linkExists(ham_table)) {
         h5tb.param                       = file.readTableRecords<h5tb_ising_majorana::table>(ham_table, position);

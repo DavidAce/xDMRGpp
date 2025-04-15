@@ -15,8 +15,9 @@
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
 namespace tools::finite::ed {
-    StateFinite find_exact_state(const TensorsFinite &tensors, const AlgorithmStatus &status) {
-        auto sites      = num::range<size_t>(0ul, tensors.get_length<size_t>());
+    template<typename Scalar>
+    StateFinite<Scalar> find_exact_state(const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status) {
+        auto sites      = num::range<size_t>(0ul, tensors.template get_length<size_t>());
         auto tensors_ed = tensors;
         tensors_ed.clear_cache();
         tensors_ed.clear_measurements();
@@ -26,11 +27,11 @@ namespace tools::finite::ed {
         tensors_ed.rebuild_edges();
         tensors_ed.activate_sites(sites);
         auto t_ham       = tid::tic_scope("get_ham");
-        auto hamiltonian = tensors_ed.model->get_multisite_ham<cx64>();
+        auto hamiltonian = tensors_ed.model->template get_multisite_ham<cx64>();
         t_ham.toc();
         auto t_tgt = tid::tic_scope("tgt_mps");
 
-        tools::finite::opt::opt_mps target_mps("target_mps", tensors_ed.state->get_multisite_mps<cx64>(), sites,
+        tools::finite::opt::opt_mps target_mps("target_mps", tensors_ed.state->template get_multisite_mps<cx64>(), sites,
                                                tools::finite::measure::energy_shift(tensors_ed),              // Energy shift for full system
                                                tools::finite::measure::energy_minus_energy_shift(tensors_ed), // Eigval
                                                tools::finite::measure::energy_variance(tensors_ed),
@@ -38,7 +39,7 @@ namespace tools::finite::ed {
                                                tensors_ed.get_length());
         t_tgt.toc();
         tools::finite::opt::OptMeta meta;
-        meta.optType      = OptType::CPLX;
+        meta.optType      = OptType::CX64;
         meta.problem_dims = target_mps.get_tensor().dimensions();
         meta.problem_size = target_mps.get_tensor().size();
 
@@ -55,9 +56,9 @@ namespace tools::finite::ed {
         auto comparator = [](const tools::finite::opt::opt_mps &lhs, const tools::finite::opt::opt_mps &rhs) { return lhs.get_overlap() > rhs.get_overlap(); };
         if(results.size() >= 2) std::sort(results.begin(), results.end(), comparator);
 
-        auto  spin_dims     = std::vector<long>(tensors_ed.get_length<size_t>(), 2l);
-        auto  positions     = num::range<size_t>(0, tensors_ed.get_length<size_t>());
-        auto  centerpos     = tensors_ed.get_position<long>();
+        auto  spin_dims     = std::vector<long>(tensors_ed.template get_length<size_t>(), 2l);
+        auto  positions     = num::range<size_t>(0, tensors_ed.template get_length<size_t>());
+        auto  centerpos     = tensors_ed.template get_position<long>();
         auto &state_ed      = *tensors_ed.state;
         auto &multisite_mps = results.front().get_tensor();
         auto  mps_list      = tools::common::split::split_mps(multisite_mps, spin_dims, positions, centerpos, std::nullopt); // No svd truncation

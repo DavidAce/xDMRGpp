@@ -8,27 +8,7 @@
 #include "tensors/state/StateFinite.h"
 #include "tensors/state/StateInfinite.h"
 
-// using namespace Textra;
-using Scalar = tools::common::views::Scalar;
-namespace tools::common::views {
-    Eigen::Tensor<Scalar, 4> theta                = Eigen::Tensor<Scalar, 4>();
-    Eigen::Tensor<Scalar, 4> theta_evn_normalized = Eigen::Tensor<Scalar, 4>();
-    Eigen::Tensor<Scalar, 4> theta_odd_normalized = Eigen::Tensor<Scalar, 4>();
-    Eigen::Tensor<Scalar, 4> theta_sw             = Eigen::Tensor<Scalar, 4>();
-    Eigen::Tensor<Scalar, 3> LAGA                 = Eigen::Tensor<Scalar, 3>();
-    Eigen::Tensor<Scalar, 3> LCGB                 = Eigen::Tensor<Scalar, 3>();
-    Eigen::Tensor<Scalar, 2> l_evn                = Eigen::Tensor<Scalar, 2>();
-    Eigen::Tensor<Scalar, 2> r_evn                = Eigen::Tensor<Scalar, 2>();
-    Eigen::Tensor<Scalar, 2> l_odd                = Eigen::Tensor<Scalar, 2>();
-    Eigen::Tensor<Scalar, 2> r_odd                = Eigen::Tensor<Scalar, 2>();
-    Eigen::Tensor<Scalar, 4> transfer_matrix_LAGA = Eigen::Tensor<Scalar, 4>();
-    Eigen::Tensor<Scalar, 4> transfer_matrix_LCGB = Eigen::Tensor<Scalar, 4>();
-    Eigen::Tensor<Scalar, 4> transfer_matrix_evn  = Eigen::Tensor<Scalar, 4>();
-    Eigen::Tensor<Scalar, 4> transfer_matrix_odd  = Eigen::Tensor<Scalar, 4>();
-    bool                     components_computed  = false;
-}
-
-template<eig::Side side>
+template<eig::Side side, typename Scalar>
 std::pair<Eigen::VectorXcd, Scalar> dominant_eig(const Eigen::Tensor<Scalar, 2> &transfer_mat, int L, int ncv) {
     eig::solver solver;
     solver.eigs(transfer_mat.data(), L, 1, ncv, eig::Ritz::LM, eig::Form::NSYM, side, std::nullopt, eig::Shinv::OFF, eig::Vecs::OFF, eig::Dephase::ON);
@@ -37,7 +17,8 @@ std::pair<Eigen::VectorXcd, Scalar> dominant_eig(const Eigen::Tensor<Scalar, 2> 
     return std::make_pair(eigvec, eigval);
 }
 
-void tools::common::views::compute_mps_components(const StateInfinite &state) {
+template<typename Scalar>
+void tools::common::views<Scalar>::compute_mps_components(const StateInfinite<Scalar> &state) {
     if(components_computed) return;
     // On even thetas we have  chiA = chiB on the outer bond
     // On odd thetas we have chiC on the outer bond.
@@ -133,7 +114,8 @@ void tools::common::views::compute_mps_components(const StateInfinite &state) {
     }
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_theta(const StateFinite &state, Scalar norm)
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_theta(const StateFinite<Scalar> &state, Scalar norm)
 /*!
  * Returns a two-site MPS
      @verbatim
@@ -151,7 +133,8 @@ Eigen::Tensor<Scalar, 4> tools::common::views::get_theta(const StateFinite &stat
     return mpsA.get_M().contract(mpsB.get_M(), tenx::idx({2}, {1})) / norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_theta(const StateInfinite &state, Scalar norm)
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_theta(const StateInfinite<Scalar> &state, Scalar norm)
 /*!
  * Returns a two-site MPS
      @verbatim
@@ -164,7 +147,8 @@ Eigen::Tensor<Scalar, 4> tools::common::views::get_theta(const StateInfinite &st
     return state.A().contract(state.B(), tenx::idx({2}, {1})) / norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_theta_swapped(const StateInfinite &state, Scalar norm)
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_theta_swapped(const StateInfinite<Scalar> &state, Scalar norm)
 /*!
  * Returns a two-site MPS with A and B swapped
      @verbatim
@@ -183,7 +167,8 @@ Eigen::Tensor<Scalar, 4> tools::common::views::get_theta_swapped(const StateInfi
            norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_theta_evn(const StateInfinite &state, Scalar norm)
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::views::get_theta_evn(const StateInfinite<Scalar> &state, Scalar norm)
 /*!
  * Returns a right normalized two-site MPS
      @verbatim
@@ -197,7 +182,8 @@ Eigen::Tensor<Scalar, 4> tools::common::views::get_theta_evn(const StateInfinite
     return state.A().contract(state.GB(), tenx::idx({2}, {1})) / norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_theta_odd(const StateInfinite &state, Scalar norm)
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_theta_odd(const StateInfinite<Scalar> &state, Scalar norm)
 /*!
  * Returns a two-site MPS with A and B swapped
      @verbatim
@@ -210,7 +196,8 @@ Eigen::Tensor<Scalar, 4> tools::common::views::get_theta_odd(const StateInfinite
     return state.LC_diag().contract(state.B(), tenx::idx({1}, {1})).contract(state.GA(), tenx::idx({2}, {1})).shuffle(tenx::array4{1, 0, 2, 3}) / norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_zero(const StateInfinite &state) {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_transfer_matrix_zero(const StateInfinite<Scalar> &state) {
     long                     dim = state.chiC();
     Eigen::Tensor<Scalar, 2> I   = tenx::asDiagonal(Eigen::Tensor<Scalar, 1>(dim));
     I.setConstant(1.0);
@@ -218,11 +205,13 @@ Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_zero(const St
     return I.contract(I, pair).shuffle(tenx::array4{0, 2, 1, 3});
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_LBGA(const StateInfinite &state, Scalar norm) {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_transfer_matrix_LBGA(const StateInfinite<Scalar> &state, Scalar norm) {
     return state.A().contract(state.A().conjugate(), tenx::idx({0}, {0})).shuffle(tenx::array4{0, 3, 1, 2}) / norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_GALC(const StateInfinite &state, Scalar norm) {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_transfer_matrix_GALC(const StateInfinite<Scalar> &state, Scalar norm) {
     return state.LC_diag()
                .contract(state.GA(), tenx::idx({2}, {0}))
                .contract(state.GA().conjugate(), tenx::idx({0}, {0}))
@@ -231,11 +220,13 @@ Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_GALC(const St
            norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_GBLB(const StateInfinite &state, Scalar norm) {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_transfer_matrix_GBLB(const StateInfinite<Scalar> &state, Scalar norm) {
     return state.B().contract(state.B().conjugate(), tenx::idx({0}, {0})).shuffle(tenx::array4{0, 2, 1, 3}) / norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_LCGB(const StateInfinite &state, Scalar norm) {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_transfer_matrix_LCGB(const StateInfinite<Scalar> &state, Scalar norm) {
     return state.LC_diag()
                .contract(state.GB(), tenx::idx({1}, {1}))
                .contract(state.GB().conjugate(), tenx::idx({1}, {0}))
@@ -244,16 +235,18 @@ Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_LCGB(const St
            norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_theta_evn(const StateInfinite &state, Scalar norm) {
-    using namespace tools::common::views;
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_transfer_matrix_theta_evn(const StateInfinite<Scalar> &state, Scalar norm) {
     return get_theta_evn(state).contract(get_theta_evn(state).conjugate(), tenx::idx({0, 2}, {0, 2})).shuffle(tenx::array4{0, 2, 1, 3}) / norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_theta_odd(const StateInfinite &state, Scalar norm) {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_transfer_matrix_theta_odd(const StateInfinite<Scalar> &state, Scalar norm) {
     return get_theta_odd(state).contract(get_theta_odd(state).conjugate(), tenx::idx({0, 2}, {0, 2})).shuffle(tenx::array4{0, 2, 1, 3}) / norm;
 }
 
-Eigen::Tensor<Scalar, 4> tools::common::views::get_transfer_matrix_AB(const StateInfinite &state, int p) {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 4> tools::common::views<Scalar>::get_transfer_matrix_AB(const StateInfinite<Scalar> &state, int p) {
     Eigen::Tensor<Scalar, 4> temp = get_transfer_matrix_zero(state);
     Eigen::Tensor<Scalar, 4> temp2;
     for(int i = 0; i < p - 2; i++) {

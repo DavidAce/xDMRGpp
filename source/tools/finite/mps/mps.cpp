@@ -31,6 +31,47 @@ namespace settings {
     inline constexpr bool verbose_moves = false;
 }
 
+template<typename Scalar>
+Eigen::Tensor<cx64, 1> tools::finite::mps::mps2tensor(const std::vector<std::unique_ptr<MpsSite>> &mps_sites, std::string_view name) {
+    if constexpr(std::is_same_v<Scalar, cx64>) {
+        bool all_real = std::all_of(mps_sites.begin(), mps_sites.end(), [](const auto &mps) -> bool { return mps->is_real(); });
+        if(all_real) return mps2tensor<fp64>(mps_sites, name);
+    }
+
+    auto spindims = std::vector<long>();
+    auto bonddims = std::vector<long>();
+    for(auto &mps : mps_sites) {
+        spindims.emplace_back(mps->spin_dim());
+        bonddims.emplace_back(num::prod(spindims) * mps->get_chiR());
+    }
+    long  memsize = bonddims.empty() ? 0 : *std::max_element(bonddims.begin(), bonddims.end());
+    auto  statev  = Eigen::Tensor<Scalar, 1>(memsize);
+    auto  off1    = std::array<long, 1>{0};
+    auto  ext1    = std::array<long, 1>{1};
+    auto  ext2    = std::array<long, 2>{1, 1};
+    auto &threads = tenx::threads::get();
+    statev.slice(off1, ext1).setConstant(1.0);
+    // For each site that we contract, the state vector grows by mps->spin_dim()
+    // If 4 spin1/2 have been contracted, the state vector could have size 16x7 if the last chi was 7.
+    // Then contracting the next site, with dimensions 2x7x9 will get you a 16x2x9 tensor.
+    // Lastly, one should reshape it back into a 32 x 9 state vector
+
+    for(auto &mps : mps_sites) {
+        auto temp = Eigen::Tensor<Scalar, 2>(statev.slice(off1, ext1).reshape(ext2)); // Make a temporary copy of the state vector
+        ext1      = {mps->spin_dim() * temp.dimension(0) * mps->get_chiR()};
+        ext2      = {mps->spin_dim() * temp.dimension(0), mps->get_chiR()};
+        if(ext1[0] > memsize) throw except::logic_error("mps2tensor [{}]: size of ext1[0] > memsize", name);
+        statev.slice(off1, ext1).device(*threads->dev) = temp.contract(mps->get_M_as<Scalar>(), tenx::idx({1}, {1})).reshape(ext1);
+    }
+    // Finally, we view a slice of known size 2^L
+    statev      = statev.slice(off1, ext1);
+    double norm = tenx::norm(statev);
+    if(std::abs(norm - 1.0) > settings::precision::max_norm_error) { tools::log->warn("mps2tensor [{}]: Norm far from unity: {:.16f}", name, norm); }
+    return statev.template cast<cx64>();
+}
+
+Eigen::Tensor<cx64, 1> tools::finite::mps::mps2tensor(const StateFinite &state) { return mps2tensor<cx64>(state.mps_sites, state.get_name()); }
+
 bool tools::finite::mps::init::bitfield_is_valid(size_t bitfield) { return bitfield != -1ul and init::used_bitfields.count(bitfield) == 0; }
 
 size_t tools::finite::mps::move_center_point_single_site(StateFinite &state, std::optional<svd::config> svd_cfg) {
@@ -65,7 +106,7 @@ size_t tools::finite::mps::move_center_point_single_site(StateFinite &state, std
             auto &mpsC    = state.get_mps_site(posC);    // This becomes the new AC (currently B)
             auto  trnc    = mpsC.get_truncation_error(); // Truncation error of the old B/new AC, i.e. bond to the right of posC,
             // Construct a single-site tensor. This is equivalent to state.get_multisite_mps(...) but avoid normalization checks.
-            auto onesite_tensor = tools::common::contraction::contract_bnd_mps_temp(LC, mpsC.get_M());
+            auto onesite_tensor = tools::common::contraction::contract_bnd_mps(LC, mpsC.get_M());
             tools::finite::mps::merge_multisite_mps(state, onesite_tensor, {posC_ul}, posC, MergeEvent::MOVE, svd_cfg, LogPolicy::SILENT);
             mpsC.set_truncation_error_LC(std::max(trnc, mpsC.get_truncation_error_LC()));
         } else if(state.get_direction() == -1) {
@@ -279,10 +320,11 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite &state, const Eigen::
 
     bool keepTruncationErrors = true;
     switch(mevent) {
-        case MergeEvent::MOVE:
-        case MergeEvent::NORM:
-        case MergeEvent::EXP:
+        case MergeEvent::MOVE: [[fallthrough]];
+        case MergeEvent::NORM: [[fallthrough]];
+        case MergeEvent::EXP: [[fallthrough]];
         case MergeEvent::SWAP: keepTruncationErrors = false; break;
+        case MergeEvent::OPT: keepTruncationErrors = true; break;
         default: break;
     }
 
@@ -290,9 +332,8 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite &state, const Eigen::
     for(auto &mps_src : mps_list) {
         auto  pos     = mps_src.get_position();
         auto &mps_tgt = state.get_mps_site(pos);
-
         if(!keepTruncationErrors) {
-            // The truncation errors are ignored by setting them to a negative value
+            // The truncation errors are ignored
             mps_src.unset_truncation_error();
             mps_src.unset_truncation_error_LC();
             mps_src.drop_stashed_errors();
@@ -301,10 +342,8 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite &state, const Eigen::
         // inject lc_move if there is any waiting
         if(lc_move and pos == lc_move->pos_dst) { mps_src.set_L(lc_move->data, lc_move->error); }
 
-
         mps_tgt.fuse_mps(mps_src);
         state.tag_site_normalized(pos, true); // Fused site is normalized
-
 
         // Now take stashes for neighboring sites
         // Note that if U or V are rectangular and pushed onto the next site, that next site loses its normalization, unless
@@ -405,6 +444,7 @@ void tools::finite::mps::initialize_state(StateFinite &state, StateInit init, St
         case StateInit::PRODUCT_STATE_NEEL_SHUFFLED: return init::set_product_state_neel_shuffled(state, type, axis, pattern);
         case StateInit::PRODUCT_STATE_NEEL_DISLOCATED: return init::set_product_state_neel_dislocated(state, type, axis, pattern);
         case StateInit::PRODUCT_STATE_PATTERN: return init::set_product_state_on_axis_using_pattern(state, type, axis, pattern);
+        case StateInit::SUM_OF_RANDOM_PRODUCT_STATES: return init::set_sum_of_random_product_states(state, type, axis, pattern);
     }
 }
 

@@ -4,20 +4,36 @@
 #include "MpoSite.h"
 #include <h5pp/details/h5ppHid.h>
 
-class LBit : public MpoSite {
+template<typename Scalar>
+class LBit : public MpoSite<Scalar> {
     private:
-    h5tb_lbit               h5tb;
-    Eigen::Tensor<cx64, 4>  get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                    std::optional<std::vector<size_t>> skip = std::nullopt) const final;
-    Eigen::Tensor<cx128, 4> get_mpo_q(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                      std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    h5tb_lbit                h5tb;
+    Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+                                     std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    Eigen::Tensor<cx128, 4>  get_mpo_q(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+                                       std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    using MpoSite<Scalar>::extent2;
+    using MpoSite<Scalar>::extent4;
+    using MpoSite<Scalar>::all_mpo_parameters_have_been_set;
+    using MpoSite<Scalar>::local_energy_upper_bound;
+    using MpoSite<Scalar>::global_energy_upper_bound;
+    using MpoSite<Scalar>::position;
+    using MpoSite<Scalar>::get_position;
+    using MpoSite<Scalar>::unique_id;
+    using MpoSite<Scalar>::unique_id_sq;
+    using MpoSite<Scalar>::mpo_internal;
+    using MpoSite<Scalar>::mpo_squared;
+    using MpoSite<Scalar>::build_mpo;
+    using MpoSite<Scalar>::build_mpo_squared;
+    using MpoSite<Scalar>::build_mpo_q;
+    using TableMap = typename MpoSite<Scalar>::TableMap;
 
     public:
     LBit(ModelType model_type_, size_t position_);
-    [[nodiscard]] std::unique_ptr<MpoSite> clone() const final;
-    [[nodiscard]] long                     get_spin_dimension() const final;
-    [[nodiscard]] TableMap                 get_parameters() const final;
-    [[nodiscard]] std::any                 get_parameter(std::string_view name) const final;
+    [[nodiscard]] std::unique_ptr<MpoSite<Scalar>> clone() const final;
+    [[nodiscard]] long                             get_spin_dimension() const final;
+    [[nodiscard]] TableMap                         get_parameters() const final;
+    [[nodiscard]] std::any                         get_parameter(std::string_view name) const final;
 
     //    [[nodiscard]] Eigen::MatrixXcd single_site_hamiltonian(size_t position, size_t sites, std::vector<Eigen::MatrixXcd> &SX, std::vector<Eigen::MatrixXcd>
     //    &SY,

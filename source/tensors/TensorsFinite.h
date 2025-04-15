@@ -11,12 +11,22 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 
 class TensorsLocal;
+template<typename Scalar>
 class StateFinite;
+template<typename Scalar>
 class ModelFinite;
+template<typename Scalar>
 class EdgesFinite;
-struct EnvExpansionResult;
-
+template<typename Scalar>
+struct BondExpansionResult;
+namespace tools::finite::opt {
+    struct OptMeta;
+}
+template<typename Scalar = cx64>
 class TensorsFinite {
+    using OptMeta    = tools::finite::opt::OptMeta;
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+
     private:
     template<typename T>
     struct Cache {
@@ -36,12 +46,12 @@ class TensorsFinite {
     Cache<T> &get_cache() const;
 
     public:
-    std::unique_ptr<StateFinite> state;
-    std::unique_ptr<ModelFinite> model;
-    std::unique_ptr<EdgesFinite> edges;
+    std::unique_ptr<StateFinite<Scalar>> state;
+    std::unique_ptr<ModelFinite<Scalar>> model;
+    std::unique_ptr<EdgesFinite<Scalar>> edges;
 
-    std::vector<size_t>               active_sites;
-    mutable MeasurementsTensorsFinite measurements;
+    std::vector<size_t>                       active_sites;
+    mutable MeasurementsTensorsFinite<Scalar> measurements;
 
     // This class should have these responsibilities:
     //  - Initialize/randomize the tensors
@@ -58,12 +68,12 @@ class TensorsFinite {
     TensorsFinite &operator=(const TensorsFinite &other); // copy assign
     TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position);
 
-    StateFinite       &get_state();
-    ModelFinite       &get_model();
-    EdgesFinite       &get_edges();
-    const StateFinite &get_state() const;
-    const ModelFinite &get_model() const;
-    const EdgesFinite &get_edges() const;
+    StateFinite<Scalar>       &get_state();
+    ModelFinite<Scalar>       &get_model();
+    EdgesFinite<Scalar>       &get_edges();
+    const StateFinite<Scalar> &get_state() const;
+    const ModelFinite<Scalar> &get_model() const;
+    const EdgesFinite<Scalar> &get_edges() const;
 
     void initialize(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position);
     void initialize_model();
@@ -71,24 +81,24 @@ class TensorsFinite {
                           std::string &pattern);
     void normalize_state(std::optional<svd::config> svd_cfg = std::nullopt, NormPolicy policy = NormPolicy::IFNEEDED);
     /* clang-format off */
-    template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 3>            &get_multisite_mps() const;
-    template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 4>            &get_multisite_mpo() const;
-    template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 4>            &get_multisite_mpo_squared() const;
-    [[nodiscard]]                           env_pair<const Eigen::Tensor<cx64, 3> &>   get_multisite_env_ene_blk() const;
-    [[nodiscard]]                           env_pair<const Eigen::Tensor<cx64, 3> &>   get_multisite_env_var_blk() const;
-    template<typename Scalar> [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>> get_multisite_env_ene_blk_as() const;
-    template<typename Scalar> [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>> get_multisite_env_var_blk_as() const;
-    template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 2> &get_effective_hamiltonian() const;
-    template<typename Scalar> [[nodiscard]] const Eigen::Tensor<Scalar, 2> &get_effective_hamiltonian_squared() const;
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 3>            &get_multisite_mps() const;
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo() const;
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo_squared() const;
+    [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_ene_blk() const;
+    [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_var_blk() const;
+    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_ene_blk_as() const;
+    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_var_blk_as() const;
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 2> &get_effective_hamiltonian() const;
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 2> &get_effective_hamiltonian_squared() const;
     /* clang-format on */
 
     void                                                     project_to_nearest_axis(std::string_view axis, std::optional<svd::config> svd_cfg = std::nullopt);
     void                                                     set_parity_shift_mpo(OptRitz ritz, std::string_view axis);
     void                                                     set_parity_shift_mpo_squared(std::string_view axis);
-    void                                                     set_energy_shift_mpo(double energy_shift);
+    void                                                     set_energy_shift_mpo(Scalar energy_shift);
     [[nodiscard]] std::tuple<OptRitz, int, std::string_view> get_parity_shift_mpo();
     [[nodiscard]] std::pair<int, std::string_view>           get_parity_shift_mpo_squared();
-    [[nodiscard]] double                                     get_energy_shift_mpo();
+    [[nodiscard]] Scalar                                     get_energy_shift_mpo();
 
     void rebuild_mpo();
     void rebuild_mpo_squared();
@@ -130,7 +140,7 @@ class TensorsFinite {
     void merge_multisite_mps(const Eigen::Tensor<cx64, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg = std::nullopt,
                              LogPolicy log_policy = LogPolicy::SILENT);
 
-    EnvExpansionResult expand_environment(EnvExpandMode envExpandMode, OptAlgo algo, OptRitz ritz, size_t blocksize, svd::config svd_cfg);
+    BondExpansionResult<Scalar> expand_bonds(const OptMeta &optMeta);
 
     void move_site_mps(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::optional<long> new_pos = std::nullopt);
     void move_site_mpo(const size_t site, const long steps, std::vector<size_t> &sites_mpo);

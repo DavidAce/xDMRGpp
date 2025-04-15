@@ -17,6 +17,12 @@ namespace tenx::sfinae {
     template<typename T1, typename T2>
     concept type_is = std::same_as<std::remove_cvref_t<T1>, T2>;
 
+    template<typename T, typename... Ts>
+    concept is_any_v = (type_is<T, Ts> || ...);
+
+    template<typename T, typename... Ts>
+    concept are_same_v = (type_is<T, Ts> && ...);
+
     template<typename T>
     concept has_value_type_v = requires { typename T::value_type; };
 
@@ -78,10 +84,10 @@ namespace tenx::sfinae {
 
     template<typename T>
     concept is_plain_tensor_v = is_eigen_tensor_v<T> and has_data_v<T> and has_dimensions_v<T> and !has_expression_v<T>;
-    //    static_assert(is_plain_tensor_v<Eigen::Tensor<double, 3>>);
-    //    static_assert(is_plain_tensor_v<Eigen::TensorMap<Eigen::Tensor<double, 3>>>);
-    //    static_assert(!is_plain_tensor_v<decltype(Eigen::Tensor<double, 3>().shuffle(std::array<long, 3>{0}))>);
-    //    static_assert(!is_plain_tensor_v<Eigen::TensorBase<Eigen::Tensor<double, 3>, Eigen::AccessorLevels::WriteAccessors>>);
+    static_assert(is_plain_tensor_v<Eigen::Tensor<double, 3>>);
+    static_assert(is_plain_tensor_v<Eigen::TensorMap<Eigen::Tensor<double, 3>>>);
+    static_assert(!is_plain_tensor_v<decltype(Eigen::Tensor<double, 3>().shuffle(std::array<long, 3>{0}))>);
+    static_assert(!is_plain_tensor_v<Eigen::TensorBase<Eigen::Tensor<double, 3>, Eigen::AccessorLevels::WriteAccessors>>);
 
     template<typename T>
     concept is_eigen_tensormap_v = requires(T m) {

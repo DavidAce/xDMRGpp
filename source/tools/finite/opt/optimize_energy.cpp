@@ -36,14 +36,14 @@ namespace tools::finite::opt {
         if(x == nullptr) return;
         if(y == nullptr) return;
         if(primme == nullptr) return;
-        auto t_precond = tid::tic_scope("prec_jcb");
+        auto       t_precond  = tid::tic_scope("prec_jcb");
         const auto H_ptr      = static_cast<MatVecMPOS<Scalar> *>(primme->matrix);
         H_ptr->preconditioner = eig::Preconditioner::JACOBI;
         H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
     }
 
     template<typename Scalar>
-    std::vector<opt_mps> eigs_energy_executor(const TensorsFinite &tensors, const opt_mps &initial_mps, const OptMeta &meta) {
+    std::vector<opt_mps> optimize_energy_eigs_executor(const TensorsFinite &tensors, const opt_mps &initial_mps, const OptMeta &meta) {
         if(meta.optAlgo != OptAlgo::DMRG)
             throw except::runtime_error("eigs_energy_executor: Expected OptCost [{}] | Got [{}]", enum2sv(OptAlgo::DMRG), enum2sv(meta.optAlgo));
 
@@ -55,7 +55,7 @@ namespace tools::finite::opt {
         const auto        &mpo = tensors.get_model().get_mpo_active();
         const auto        &env = tensors.get_edges().get_ene_active();
         MatVecMPOS<Scalar> hamiltonian(mpo, env);
-        hamiltonian.factorization           = eig::Factorization::LU; // H is not definite, so we can't use LLT or LDLT
+        hamiltonian.factorization = eig::Factorization::LU; // H is not definite, so we can't use LLT or LDLT
 
         // https://www.cs.wm.edu/~andreas/software/doc/appendix.html#c.primme_params.eps
         solver.config.tol                   = meta.eigs_tol.value_or(settings::precision::eigs_tol_min);
@@ -86,11 +86,11 @@ namespace tools::finite::opt {
         if(meta.optRitz == OptRitz::SM) {
             // This is used to find excited eigenstates of H
             if(meta.problem_size <= settings::precision::eigs_max_size_shift_invert) {
-                hamiltonian.factorization       = eig::Factorization::LU;
-                solver.config.ritz              = eig::Ritz::primme_largest_abs;
-                solver.config.sigma             = cx64(meta.eigv_target.value_or(0.0), 0.0);
-                solver.config.primme_projection = "primme_proj_default";
-                solver.config.primme_locking    = false;
+                hamiltonian.factorization           = eig::Factorization::LU;
+                solver.config.ritz                  = eig::Ritz::primme_largest_abs;
+                solver.config.sigma                 = cx64(meta.eigv_target.value_or(0.0), 0.0);
+                solver.config.primme_projection     = "primme_proj_default";
+                solver.config.primme_locking        = false;
                 solver.config.primme_preconditioner = preconditioner_jacobi<Scalar>;
                 solver.config.primme_preconditioner = preconditioner_jacobi<Scalar>;
                 solver.config.jcbMaxBlockSize       = meta.problem_size;
@@ -115,11 +115,9 @@ namespace tools::finite::opt {
         return results;
     }
 
-
     opt_mps internal::optimize_energy(const TensorsFinite &tensors, const opt_mps &initial_mps, const AlgorithmStatus &status, OptMeta &meta) {
         if(meta.optSolver == OptSolver::EIG) return optimize_energy_eig(tensors, initial_mps, status, meta);
-        tools::log->debug("optimize_energy_eigs: ritz {} | type {} | algo {}", enum2sv(meta.optRitz), enum2sv(meta.optType),
-                          enum2sv(meta.optAlgo));
+        tools::log->debug("optimize_energy_eigs: ritz {} | type {} | algo {}", enum2sv(meta.optRitz), enum2sv(meta.optType), enum2sv(meta.optAlgo));
 
         initial_mps.validate_initial_mps();
         // if(not tensors.model->is_shifted()) throw std::runtime_error("optimize_variance_eigs requires energy-shifted MPO²");
@@ -127,9 +125,11 @@ namespace tools::finite::opt {
 
         auto                 t_eigs = tid::tic_scope("eigs-ene", tid::higher);
         std::vector<opt_mps> results;
-        if(meta.optType == OptType::REAL) results = eigs_energy_executor<fp64>(tensors, initial_mps, meta);
-        if(meta.optType == OptType::CPLX) results = eigs_energy_executor<cx64>(tensors, initial_mps, meta);
-
+        switch(meta.optType) {
+            case OptType::FP64: results = optimize_energy_eigs_executor<fp64>(tensors, initial_mps, meta); break;
+            case OptType::CX64: results = optimize_energy_eigs_executor<cx64>(tensors, initial_mps, meta); break;
+            default: throw except::runtime_error("optimize_energy(): not implemented for type {}", enum2sv(meta.optType));
+        }
         auto t_post = tid::tic_scope("post");
         if(results.empty()) {
             meta.optExit = OptExit::FAIL_ERROR;

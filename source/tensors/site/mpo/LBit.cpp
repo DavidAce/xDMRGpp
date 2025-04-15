@@ -47,7 +47,12 @@ std::string format_mpo(const Eigen::Tensor<cx128, 4> &mpo, fp128 J1_rand, const 
     return str;
 }
 
-LBit::LBit(ModelType model_type_, size_t position_) : MpoSite(model_type_, position_) {
+
+template class LBit<cx64>;
+
+
+template<typename Scalar>
+LBit<Scalar>::LBit(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {
     h5tb.param.J1_mean  = settings::model::lbit::J1_mean;
     h5tb.param.J2_mean  = settings::model::lbit::J2_mean;
     h5tb.param.J3_mean  = settings::model::lbit::J3_mean;
@@ -67,12 +72,19 @@ LBit::LBit(ModelType model_type_, size_t position_) : MpoSite(model_type_, posit
         false; // There are no full lattice parameters on lbit, but we set it to false so we remember to call randomize on all sites in every model type
 }
 
-// double LBit::get_field() const { return h5tb.param.J1_rand; }
-// double LBit::get_coupling() const { return h5tb.param.J2_rand + h5tb.param.J3_rand; }
-void LBit::print_parameter_names() const { h5tb.print_parameter_names(); }
-void LBit::print_parameter_values() const { h5tb.print_parameter_values(); }
+// double LBit<Scalar>::get_field() const { return h5tb.param.J1_rand; }
+// double LBit<Scalar>::get_coupling() const { return h5tb.param.J2_rand + h5tb.param.J3_rand; }
+template<typename Scalar>
+void LBit<Scalar>::print_parameter_names() const {
+    h5tb.print_parameter_names();
+}
+template<typename Scalar>
+void LBit<Scalar>::print_parameter_values() const {
+    h5tb.print_parameter_values();
+}
 
-void LBit::set_parameters(TableMap &parameters) {
+template<typename Scalar>
+void LBit<Scalar>::set_parameters(TableMap &parameters) {
     h5tb.param.J1_rand      = std::any_cast<decltype(h5tb.param.J1_rand)>(parameters["J1_rand"]);
     h5tb.param.J2_rand      = std::any_cast<decltype(h5tb.param.J2_rand)>(parameters["J2_rand"]);
     h5tb.param.J3_rand      = std::any_cast<decltype(h5tb.param.J3_rand)>(parameters["J3_rand"]);
@@ -88,7 +100,8 @@ void LBit::set_parameters(TableMap &parameters) {
     all_mpo_parameters_have_been_set = true;
 }
 
-LBit::TableMap LBit::get_parameters() const {
+template<typename Scalar>
+LBit<Scalar>::TableMap LBit<Scalar>::get_parameters() const {
     /* clang-format off */
     TableMap parameters;
     parameters["J1_rand"]       = h5tb.param.J1_rand;
@@ -106,7 +119,8 @@ LBit::TableMap LBit::get_parameters() const {
     /* clang-format on */
 }
 
-std::any LBit::get_parameter(std::string_view name) const {
+template<typename Scalar>
+std::any LBit<Scalar>::get_parameter(std::string_view name) const {
     /* clang-format off */
     if     (name == "J1_rand")       return h5tb.param.J1_rand.to_floating_point<fp128>();
     else if(name == "J2_rand")       return h5tb.param.J2_rand.to_floating_point<fp128>();
@@ -123,7 +137,8 @@ std::any LBit::get_parameter(std::string_view name) const {
     throw except::logic_error("Invalid parameter name for LBIT model: {}", name);
 }
 
-void LBit::set_parameter(const std::string_view name, std::any value) {
+template<typename Scalar>
+void LBit<Scalar>::set_parameter(const std::string_view name, std::any value) {
     /* clang-format off */
     if(name      == "J1_rand")     h5tb.param.J1_rand = std::any_cast<decltype(h5tb.param.J1_rand)>(value);
     else if(name == "J2_rand")     h5tb.param.J2_rand = std::any_cast<decltype(h5tb.param.J2_rand)>(value);
@@ -230,7 +245,9 @@ void LBit::set_parameter(const std::string_view name, std::any value) {
             - M[F,F-1] = J3*n
 
   */
-Eigen::Tensor<cx128, 4> LBit::get_mpo_q(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const {
+template<typename Scalar>
+Eigen::Tensor<cx128, 4> LBit<Scalar>::get_mpo_q(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                                std::optional<std::vector<size_t>> skip) const {
     using namespace qm::spin::half;
     tools::log->debug("mpo({}): building lbit mpo", get_position());
     if(not all_mpo_parameters_have_been_set)
@@ -256,13 +273,13 @@ Eigen::Tensor<cx128, 4> LBit::get_mpo_q(cx64 energy_shift_per_site, std::optiona
         for(const auto &i : num::range<long>(2, R + 1)) { mpo_build_t.slice(tenx::array4{i, i - 1, 0, 0}, extent4).reshape(extent2) = I; }
 
     mpo_build_t.slice(tenx::array4{F - 1, 1, 0, 0}, extent4).reshape(extent2) = Z;
-    mpo_build_t.slice(tenx::array4{F, 0, 0, 0}, extent4).reshape(extent2)     = h5tb.param.J1_rand.to_floating_point<fp128>() * Z - eshift * I;
+    mpo_build_t.slice(tenx::array4{F, 0, 0, 0}, extent4).reshape(extent2)     = h5tb.param.J1_rand.to_floating_point<fp128>() * Z  -  eshift * I;
 
     if(R >= 1)
         for(const auto &i : num::range<long>(1, h5tb.param.J2_rand.size())) {
-            mpo_build_t.slice(tenx::array4{F, i, 0, 0}, extent4).reshape(extent2) = h5tb.param.J2_rand.at(safe_cast<size_t>(i)).to_floating_point<fp128>() * Z;
+            mpo_build_t.slice(tenx::array4{F, i, 0, 0}, extent4).reshape(extent2) = h5tb.param.J2_rand.at(safe_cast<size_t>(i)).to_floating_point<fp128>() * Z ;
         }
-    mpo_build_t.slice(tenx::array4{F, F - 1, 0, 0}, extent4).reshape(extent2) = h5tb.param.J3_rand.to_floating_point<fp128>() * Z;
+    mpo_build_t.slice(tenx::array4{F, F - 1, 0, 0}, extent4).reshape(extent2) = h5tb.param.J3_rand.to_floating_point<fp128>() * Z ;
 
     if(tenx::hasNaN(mpo_build_t)) {
         print_parameter_names();
@@ -379,13 +396,14 @@ Eigen::Tensor<cx128, 4> LBit::get_mpo_q(cx64 energy_shift_per_site, std::optiona
     return mpo_build_t;
 }
 
-Eigen::Tensor<cx64, 4> LBit::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                     [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
+template<typename Scalar>
+Eigen::Tensor<cx64, 4> LBit<Scalar>::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                             [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
     auto mpo_t = get_mpo_q(energy_shift_per_site, nbody, skip);
     return mpo_t.unaryExpr([](auto z) { return std::complex<fp64>(static_cast<fp64>(z.real()), static_cast<fp64>(z.imag())); });
 }
 
-// void LBit::build_mpo_q()
+// void LBit<Scalar>::build_mpo_q()
 //
 // /*
 //       Builds the MPO for the l-bit Hamiltonian as a rank-4 tensor.
@@ -513,7 +531,8 @@ Eigen::Tensor<cx64, 4> LBit::get_mpo(cx64 energy_shift_per_site, std::optional<s
 //     unique_id = std::nullopt;
 // }
 
-void LBit::randomize_hamiltonian() {
+template<typename Scalar>
+void LBit<Scalar>::randomize_hamiltonian() {
     // J1(i)     = Random(J1_mean, J2_width)
     // J2(i,j)   = Random(J2_mean, J2_width) * exp(-|i-j|/xi_Jcls) , where |i-j| = 1,2,3... L-1 and i < j
     // J3(i,j,k) = Random(J3_mean, J3_width) * exp(-|i-k|/xi_Jcls) , where |i-k| = 2, and i < j < k
@@ -555,9 +574,9 @@ void LBit::randomize_hamiltonian() {
     mpo_squared                      = std::nullopt;
 }
 
-// Eigen::Tensor<cx64, 4> LBit::MPO_energy_shifted_view() const { return MPO_energy_shifted_view(energy_shift_mpo); }
+// Eigen::Tensor<cx64, 4> LBit<Scalar>::MPO_energy_shifted_view() const { return MPO_energy_shifted_view(energy_shift_mpo); }
 //
-// Eigen::Tensor<cx64, 4> LBit::MPO_energy_shifted_view(double site_energy) const {
+// Eigen::Tensor<cx64, 4> LBit<Scalar>::MPO_energy_shifted_view(double site_energy) const {
 //     using namespace qm::spin::half;
 //     if(site_energy == 0) { return MPO(); }
 //     Eigen::Tensor<cx64, 4> temp                                        = MPO();
@@ -569,11 +588,18 @@ void LBit::randomize_hamiltonian() {
 //     I; return temp;
 // }
 
-std::unique_ptr<MpoSite> LBit::clone() const { return std::make_unique<LBit>(*this); }
+template<typename Scalar>
+std::unique_ptr<MpoSite<Scalar>> LBit<Scalar>::clone() const {
+    return std::make_unique<LBit>(*this);
+}
 
-long LBit::get_spin_dimension() const { return h5tb.param.spin_dim; }
+template<typename Scalar>
+long LBit<Scalar>::get_spin_dimension() const {
+    return h5tb.param.spin_dim;
+}
 
-void LBit::set_averages([[maybe_unused]] std::vector<TableMap> lattice_parameters, bool infinite) {
+template<typename Scalar>
+void LBit<Scalar>::set_averages([[maybe_unused]] std::vector<TableMap> lattice_parameters, bool infinite) {
     tools::log->debug("LBIT MPO ({}): Setting averages", get_position());
     if(not infinite) {
         lattice_parameters.back()["J2_rand"]    = decltype(h5tb.param.J2_rand){0.0};
@@ -583,12 +609,14 @@ void LBit::set_averages([[maybe_unused]] std::vector<TableMap> lattice_parameter
     set_parameters(lattice_parameters[get_position()]);
 }
 
-void LBit::save_hamiltonian(h5pp::File &file, std::string_view table_path) const {
+template<typename Scalar>
+void LBit<Scalar>::save_hamiltonian(h5pp::File &file, std::string_view table_path) const {
     if(not file.linkExists(table_path)) file.createTable(h5tb.get_h5_type(), table_path, "LBIT");
     file.appendTableRecords(h5tb.param, table_path);
 }
 
-void LBit::load_hamiltonian(const h5pp::File &file, std::string_view model_prefix) {
+template<typename Scalar>
+void LBit<Scalar>::load_hamiltonian(const h5pp::File &file, std::string_view model_prefix) {
     auto ham_table = fmt::format("{}/hamiltonian", model_prefix);
     if(file.linkExists(ham_table)) {
         h5tb.param                       = file.readTableRecords<h5tb_lbit::table>(ham_table, position);
@@ -599,16 +627,23 @@ void LBit::load_hamiltonian(const h5pp::File &file, std::string_view model_prefi
 
     // Check that we are on the same point of the phase diagram
     using namespace settings::model::lbit;
-    if(std::abs(h5tb.param.J1_mean - J1_mean) > 1e-6) throw except::runtime_error("J1_mean {:.16f} != {:.16f} lbit::J1_mean", h5tb.param.J1_mean, J1_mean);
-    if(std::abs(h5tb.param.J2_mean - J2_mean) > 1e-6) throw except::runtime_error("J2_mean {:.16f} != {:.16f} lbit::J2_mean", h5tb.param.J2_mean, J2_mean);
-    if(std::abs(h5tb.param.J3_mean - J3_mean) > 1e-6) throw except::runtime_error("J3_mean {:.16f} != {:.16f} lbit::J3_mean", h5tb.param.J3_mean, J3_mean);
-    if(std::abs(h5tb.param.J1_wdth - J1_wdth) > 1e-6) throw except::runtime_error("J1_wdth {:.16f} != {:.16f} lbit::J1_wdth", h5tb.param.J1_wdth, J1_wdth);
-    if(std::abs(h5tb.param.J2_wdth - J2_wdth) > 1e-6) throw except::runtime_error("J2_wdth {:.16f} != {:.16f} lbit::J2_wdth", h5tb.param.J2_wdth, J2_wdth);
-    if(std::abs(h5tb.param.J3_wdth - J3_wdth) > 1e-6) throw except::runtime_error("J3_wdth {:.16f} != {:.16f} lbit::J3_wdth", h5tb.param.J3_wdth, J3_wdth);
-    if(std::abs(h5tb.param.xi_Jcls - xi_Jcls) > 1e-6) throw except::runtime_error("xi_Jcls {:.16f} != {:.16f} lbit::xi_Jcls", h5tb.param.xi_Jcls, xi_Jcls);
+    if(std::abs(h5tb.param.J1_mean - J1_mean) > 1e-6)
+        throw except::runtime_error("J1_mean {:.16f} != {:.16f} LBit<Scalar>::J1_mean", h5tb.param.J1_mean, J1_mean);
+    if(std::abs(h5tb.param.J2_mean - J2_mean) > 1e-6)
+        throw except::runtime_error("J2_mean {:.16f} != {:.16f} LBit<Scalar>::J2_mean", h5tb.param.J2_mean, J2_mean);
+    if(std::abs(h5tb.param.J3_mean - J3_mean) > 1e-6)
+        throw except::runtime_error("J3_mean {:.16f} != {:.16f} LBit<Scalar>::J3_mean", h5tb.param.J3_mean, J3_mean);
+    if(std::abs(h5tb.param.J1_wdth - J1_wdth) > 1e-6)
+        throw except::runtime_error("J1_wdth {:.16f} != {:.16f} LBit<Scalar>::J1_wdth", h5tb.param.J1_wdth, J1_wdth);
+    if(std::abs(h5tb.param.J2_wdth - J2_wdth) > 1e-6)
+        throw except::runtime_error("J2_wdth {:.16f} != {:.16f} LBit<Scalar>::J2_wdth", h5tb.param.J2_wdth, J2_wdth);
+    if(std::abs(h5tb.param.J3_wdth - J3_wdth) > 1e-6)
+        throw except::runtime_error("J3_wdth {:.16f} != {:.16f} LBit<Scalar>::J3_wdth", h5tb.param.J3_wdth, J3_wdth);
+    if(std::abs(h5tb.param.xi_Jcls - xi_Jcls) > 1e-6)
+        throw except::runtime_error("xi_Jcls {:.16f} != {:.16f} LBit<Scalar>::xi_Jcls", h5tb.param.xi_Jcls, xi_Jcls);
     if(h5tb.param.distribution != distribution)
-        throw except::runtime_error("distribution [{}] != lbit::distribution [{}]", h5tb.param.distribution, distribution);
-    if(h5tb.param.J2_span != J2_span) throw except::runtime_error("J2_span {} != {} lbit::J2_span", h5tb.param.J2_span, J2_span);
+        throw except::runtime_error("distribution [{}] != LBit<Scalar>::distribution [{}]", h5tb.param.distribution, distribution);
+    if(h5tb.param.J2_span != J2_span) throw except::runtime_error("J2_span {} != {} LBit<Scalar>::J2_span", h5tb.param.J2_span, J2_span);
     build_mpo();
     build_mpo_q();
 }

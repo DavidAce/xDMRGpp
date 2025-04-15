@@ -7,10 +7,13 @@
 #include <set>
 #include <string>
 
+template<typename Scalar>
 class StateInfinite;
 namespace tools::infinite::mps {
-    using Scalar = std::complex<double>;
-    extern void merge_twosite_tensor(StateInfinite &state, const Eigen::Tensor<Scalar, 3> &twosite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg = std::nullopt);
-    extern void random_product_state(const StateInfinite &state, [[maybe_unused]] std::string_view sector, bool use_eigenspinors,
-                                     [[maybe_unused]] std::string & pattern);
+    template<typename Scalar>
+    extern void merge_twosite_tensor(StateInfinite<Scalar> &state, const Eigen::Tensor<Scalar, 3> &twosite_tensor, MergeEvent mevent,
+                                     std::optional<svd::config> svd_cfg = std::nullopt);
+    template<typename Scalar>
+    extern void random_product_state(const StateInfinite<Scalar> &state, [[maybe_unused]] std::string_view sector, bool use_eigenspinors,
+                                     [[maybe_unused]] std::string &pattern);
 }

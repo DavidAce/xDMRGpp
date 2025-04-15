@@ -96,8 +96,9 @@ namespace tools::finite::opt::internal {
         auto                 t_var = tid::tic_scope("eig-xdmrg", tid::level::higher);
         std::vector<opt_mps> results;
         switch(meta.optType) {
-            case OptType::REAL: optimize_folded_spectrum_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CPLX: optimize_folded_spectrum_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+            case OptType::FP64: optimize_folded_spectrum_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
+            case OptType::CX64: optimize_folded_spectrum_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+            default: throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
         }
         auto t_post = tid::tic_scope("post");
         if(results.empty()) {

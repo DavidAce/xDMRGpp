@@ -249,29 +249,19 @@ namespace tools::common::contraction {
         contract_bnd_mps(res_ref.data(), res_ref.dimensions(), bnd_eval.data(), bnd_eval.dimensions(), mps_eval.data(), mps_eval.dimensions());
     }
 
+
     template<typename mps_type, typename bnd_type>
-    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_mps_bnd_temp(const TensorRead<mps_type> &mps, const TensorRead<bnd_type> &bnd,
-                                                                                    Eigen::Tensor<typename mps_type::Scalar, 3> &temp) {
-        contract_mps_bnd(temp, mps, bnd);
-        return temp;
-    }
-    template<typename mps_type, typename bnd_type>
-    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_mps_bnd_temp(const TensorRead<mps_type> &mps, const TensorRead<bnd_type> &bnd) {
-        Eigen::Tensor<typename mps_type::Scalar, 3> temp;
-        return contract_mps_bnd_temp(mps, bnd, temp);
+    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_mps_bnd(const TensorRead<mps_type> &mps, const TensorRead<bnd_type> &bnd) {
+        Eigen::Tensor<typename mps_type::Scalar, 3> res;
+        contract_mps_bnd(res, mps, bnd);
+        return res;
     }
 
     template<typename bnd_type, typename mps_type>
-    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_bnd_mps_temp(const TensorRead<bnd_type> &bnd, const TensorRead<mps_type> &mps,
-                                                                                    Eigen::Tensor<typename mps_type::Scalar, 3> &temp) {
-        contract_bnd_mps(temp, bnd, mps);
-        return temp;
-    }
-
-    template<typename bnd_type, typename mps_type>
-    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_bnd_mps_temp(const TensorRead<bnd_type> &bnd, const TensorRead<mps_type> &mps) {
-        Eigen::Tensor<typename mps_type::Scalar, 3> temp;
-        return contract_bnd_mps_temp(bnd, mps, temp);
+    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_bnd_mps(const TensorRead<bnd_type> &bnd, const TensorRead<mps_type> &mps) {
+        Eigen::Tensor<typename mps_type::Scalar, 3> res;
+        contract_bnd_mps(res, bnd, mps);
+        return res;
     }
 
     template<typename mps_type>
@@ -288,17 +278,12 @@ namespace tools::common::contraction {
         contract_mps_mps(res_ref.data(), res_ref.dimensions(), mpsL_eval.data(), mpsL_eval.dimensions(), mpsR_eval.data(), mpsR_eval.dimensions());
     }
 
-    template<typename mps_type>
-    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_mps_mps_temp(const TensorRead<mps_type> &mpsL, const TensorRead<mps_type> &mpsR,
-                                                                                    Eigen::Tensor<typename mps_type::Scalar, 3> &temp) {
-        contract_mps_mps(temp, mpsL, mpsR);
-        return temp;
-    }
 
     template<typename mps_type>
-    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_mps_mps_temp(const TensorRead<mps_type> &mpsL, const TensorRead<mps_type> &mpsR) {
-        Eigen::Tensor<typename mps_type::Scalar, 3> temp;
-        return contract_mps_mps_temp(mpsL, mpsR, temp);
+    [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_mps_mps(const TensorRead<mps_type> &mpsL, const TensorRead<mps_type> &mpsR) {
+        Eigen::Tensor<typename mps_type::Scalar, 3> res;
+        contract_mps_mps(res, mpsL, mpsR);
+        return res;
     }
 
     template<typename Scalar>

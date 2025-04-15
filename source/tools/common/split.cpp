@@ -17,10 +17,10 @@ namespace settings {
     inline constexpr bool debug_split = false;
 }
 
-template<typename Scalar>
-std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                     const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg) {
-    /*  Here we split an mps containing multiple sites into its consituent sites.
+template<typename Scalar, typename T>
+std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor<T, 3> &multisite_mps, const std::vector<long> &spin_dims,
+                                                             const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg) {
+    /*  Here we split multiple sites.
      *  Consider a case with 3 sites:
      *  spin_dims = {2,2,2}
      *  positions = {6,7,8}
@@ -106,13 +106,15 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
      *
      *
      */
-    if constexpr(std::is_same_v<Scalar, cx64>) {
+    if constexpr(sfinae::is_std_complex_v<T>) {
         auto chiL = multisite_mps.dimension(1);
         auto chiR = multisite_mps.dimension(2);
         if(chiL * chiR > 512 * 512 and tenx::isReal(multisite_mps)) {
             auto t_real = tid::tic_scope("isReal", tid::level::highest);
             tools::log->debug("split_mps: converting to real: chiL({}) * chiR({}) > 512 * 512", chiL, chiR);
-            return split_mps<fp64>(multisite_mps.real(), spin_dims, positions, center_position, svd_cfg);
+            using RealScalar                                = typename Eigen::NumTraits<T>::Real;
+            Eigen::Tensor<RealScalar, 3> multisite_mps_real = multisite_mps.real();
+            return split_mps<Scalar>(multisite_mps_real, spin_dims, positions, center_position, svd_cfg);
         }
     }
 
@@ -168,12 +170,12 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
         if(dL == spin_dims.front()) {
             auto [U3, S1, V3] = svd.schmidt_multisite(multisite_mps, d0, 1, d1, d2, svd_cfg.value());
             if(static_cast<long>(pos) == center_position) {
-                auto mps_site = MpsSite(U3, pos, "AC"); // Single site
+                auto mps_site = MpsSite<Scalar>(U3, pos, "AC"); // Single site AC = USV -> A = U, C = S, stash V and the truncation error is on LC.
                 mps_site.set_LC(S1, svd.get_truncation_error());
                 mps_site.stash_V(V3, pos + 1);
                 return {mps_site};
             } else {
-                auto mps_site = MpsSite(U3, pos, "A"); // Single site
+                auto mps_site = MpsSite<Scalar>(U3, pos, "A"); // Single site
                 mps_site.stash_S(S1, svd.get_truncation_error(), pos + 1);
                 mps_site.stash_V(V3, pos + 1);
                 return {mps_site};
@@ -181,7 +183,7 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
 
         } else if(dR == spin_dims.front()) {
             auto [U3, S1, V3] = svd.schmidt_multisite(multisite_mps, 1, d0, d1, d2, svd_cfg.value());
-            auto mps_site     = MpsSite(V3, positions.front(), "B"); // Single site
+            auto mps_site     = MpsSite<Scalar>(V3, positions.front(), "B"); // Single site
             if(static_cast<long>(pos) == center_position + 1) {
                 mps_site.stash_C(S1, svd.get_truncation_error(), static_cast<size_t>(center_position)); // The site to the left is a center, S1 belongs to it
             } else {
@@ -193,8 +195,8 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
     }
 
     // Initialize the new mps_sites
-    std::vector<MpsSite> mps_sites_As;
-    std::deque<MpsSite>  mps_sites_Bs;
+    std::vector<MpsSite<Scalar>> mps_sites_As;
+    std::deque<MpsSite<Scalar>>  mps_sites_Bs;
     // Initialize the left/right unitary matrices
     //    Eigen::Tensor<Scalar, 3> U, V;
     //    Eigen::Tensor<Scalar, 1> S;
@@ -213,11 +215,11 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
     if(positions.size() == positions_left.size()) {
         if constexpr(settings::debug_split) tools::log->trace("split: option 1");
         auto t_o1    = tid::tic_scope("o1", tid::level::highest);
-        mps_sites_As = internal::split_mps_into_As(multisite_mps, spin_dims_left, positions_left, center_position, svd_cfg.value());
+        mps_sites_As = internal::split_mps_into_As<Scalar>(multisite_mps, spin_dims_left, positions_left, center_position, svd_cfg.value());
         // Remnant stash
         auto &mps     = mps_sites_As.back();
         auto &S_stash = mps.get_S_stash();
-        auto  pos     = mps.get_position<long>();
+        auto  pos     = mps.template get_position<long>();
         if(pos == center_position and S_stash) { // Steal LC from stash
             mps.set_LC(S_stash->data, S_stash->error);
             S_stash.reset();
@@ -232,12 +234,12 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
     } else if(positions.size() == positions_right.size()) {
         if constexpr(settings::debug_split) tools::log->trace("split: option 2 - sites {} become B's", positions);
         auto t_o2    = tid::tic_scope("o2", tid::level::highest);
-        mps_sites_Bs = internal::split_mps_into_Bs(multisite_mps, spin_dims_right, positions_right, center_position, svd_cfg.value());
+        mps_sites_Bs = internal::split_mps_into_Bs<Scalar>(multisite_mps, spin_dims_right, positions_right, center_position, svd_cfg.value());
         // Take care of stash
         auto &mps     = mps_sites_Bs.front();
         auto &U_stash = mps.get_U_stash();
         auto &S_stash = mps.get_S_stash();
-        auto  pos     = mps.get_position<long>();
+        auto  pos     = mps.template get_position<long>();
         if constexpr(settings::debug_split) {
             if(S_stash) {
                 if(not tenx::isReal(S_stash->data)) throw except::runtime_error("S_stash is not real:\n{}", linalg::tensor::to_string(S_stash->data, 16, 18));
@@ -266,19 +268,19 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
     } else if(positions_left.size() >= positions_right.size()) {
         if constexpr(settings::debug_split) tools::log->trace("split: option 4");
         auto t_o4    = tid::tic_scope("o4", tid::level::highest);
-        mps_sites_As = internal::split_mps_into_As(multisite_mps, spin_dims_left, positions_left, center_position, svd_cfg.value());
+        mps_sites_As = internal::split_mps_into_As<Scalar>(multisite_mps, spin_dims_left, positions_left, center_position, svd_cfg.value());
         // We expect stashed S and V. Merge these and send onward to B's
         auto &V_stash = mps_sites_As.back().get_V_stash();
         auto &S_stash = mps_sites_As.back().get_S_stash();
         if(V_stash and S_stash) {
             auto V = Eigen::Tensor<Scalar, 3>();
             if constexpr(std::is_same_v<Scalar, fp64>)
-                V = tools::common::contraction::contract_bnd_mps_temp(S_stash->data, V_stash->data).real();
+                V = tools::common::contraction::contract_bnd_mps(S_stash->data, V_stash->data).real();
             else
-                V = tools::common::contraction::contract_bnd_mps_temp(S_stash->data, V_stash->data);
+                V = tools::common::contraction::contract_bnd_mps(S_stash->data, V_stash->data);
             V_stash.reset();
             S_stash.reset();
-            mps_sites_Bs = internal::split_mps_into_Bs(V, spin_dims_right, positions_right, center_position, svd_cfg.value());
+            mps_sites_Bs = internal::split_mps_into_Bs<Scalar>(V, spin_dims_right, positions_right, center_position, svd_cfg.value());
             // Remnant S is now an LC for the last A
             auto &LC_stash = mps_sites_Bs.front().get_S_stash();
             auto &mpsA     = mps_sites_As.back();
@@ -290,20 +292,20 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
     } else if(positions_left.size() < positions_right.size()) {
         if constexpr(settings::debug_split) tools::log->trace("split: option 5");
         auto t_o5    = tid::tic_scope("o5", tid::level::highest);
-        mps_sites_Bs = internal::split_mps_into_Bs(multisite_mps, spin_dims_right, positions_right, center_position, svd_cfg.value());
+        mps_sites_Bs = internal::split_mps_into_Bs<Scalar>(multisite_mps, spin_dims_right, positions_right, center_position, svd_cfg.value());
         // We expect stashed U and S. Merge these and send onward to A's
         auto &U_stash = mps_sites_Bs.front().get_U_stash();
         auto &S_stash = mps_sites_Bs.front().get_S_stash();
         if(U_stash and S_stash) {
             auto U = Eigen::Tensor<Scalar, 3>();
             if constexpr(std::is_same_v<Scalar, fp64>)
-                U = tools::common::contraction::contract_mps_bnd_temp(U_stash->data, S_stash->data).real();
+                U = tools::common::contraction::contract_mps_bnd(U_stash->data, S_stash->data).real();
             else
-                U = tools::common::contraction::contract_mps_bnd_temp(U_stash->data, S_stash->data);
+                U = tools::common::contraction::contract_mps_bnd(U_stash->data, S_stash->data);
 
             U_stash.reset();
             S_stash.reset();
-            mps_sites_As = internal::split_mps_into_As(U, spin_dims_left, positions_left, center_position, svd_cfg.value());
+            mps_sites_As = internal::split_mps_into_As<Scalar>(U, spin_dims_left, positions_left, center_position, svd_cfg.value());
             // Remnant S is now an LC for the last A
             auto &LC_stash = mps_sites_As.back().get_S_stash();
             auto &mpsA     = mps_sites_As.back();
@@ -340,16 +342,27 @@ std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<Scalar,
     // Return the all the positions including the bond matrix
     return mps_sites_As;
 }
+/* clang-format off */
+template std::vector<MpsSite<cx64>>  tools::common::split::split_mps(const Eigen::Tensor<fp32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx64>>  tools::common::split::split_mps(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx64>>  tools::common::split::split_mps(const Eigen::Tensor<fp128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx64>>  tools::common::split::split_mps(const Eigen::Tensor<cx32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx64>>  tools::common::split::split_mps(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx64>>  tools::common::split::split_mps(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
 
-template std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                              const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
-template std::vector<MpsSite> tools::common::split::split_mps(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                              const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx128>>  tools::common::split::split_mps(const Eigen::Tensor<fp32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx128>>  tools::common::split::split_mps(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx128>>  tools::common::split::split_mps(const Eigen::Tensor<fp128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx128>>  tools::common::split::split_mps(const Eigen::Tensor<cx32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx128>>  tools::common::split::split_mps(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+template std::vector<MpsSite<cx128>>  tools::common::split::split_mps(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, std::optional<svd::config> svd_cfg);
+/* clang-format on */
 
-template<typename Scalar>
-std::vector<MpsSite> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<Scalar, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                                       const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg) {
-    /*  Here we split an mps containing multiple sites into its consituent sites from the left.
+template<typename Scalar, typename T>
+std::vector<MpsSite<Scalar>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<T, 3> &multisite_mps, const std::vector<long> &spin_dims,
+                                                                               const std::vector<size_t> &positions, long center_position,
+                                                                               svd::config &svd_cfg) {
+    /*  Here we split multiple sites from the left.
      *  Consider a case with 3 sites and
      *  spin_dims = {2,2,2}
      *  sites = {6,7,8}
@@ -395,7 +408,7 @@ std::vector<MpsSite> tools::common::split::internal::split_mps_into_As(const Eig
     if(positions.empty()) return {};
     auto t_to_a = tid::tic_scope("to_a", tid::level::highest);
     // Initialize the resulting container of split sites
-    std::vector<MpsSite> mps_sites;
+    std::vector<MpsSite<Scalar>> mps_sites;
 
     // Now we have multiple spin dimensions
 
@@ -403,12 +416,11 @@ std::vector<MpsSite> tools::common::split::internal::split_mps_into_As(const Eig
     svd::solver svd(svd_cfg);
 
     // Declare the tensors that will catch the schmidt (SVD) decompositions
-    Eigen::Tensor<Scalar, 3>                U;                           // This will become the first site to be extracted
-    Eigen::Tensor<Scalar, 1>                S;                           // The singular values
-    Eigen::Tensor<Scalar, 3>                V = multisite_mps;           // This side contains all the remaining sites
-    Eigen::Tensor<Scalar, 3>                SV_temp;                     // Temporary for contracting S*V
-    std::optional<Eigen::Tensor<Scalar, 1>> S_prev       = std::nullopt; // Starts out empty, carries the schmidt values from the previous iteration
-    double                                  S_prev_error = -1.0;         // Truncation error from the previous iteration
+    Eigen::Tensor<T, 3>                U;                            // This will become the first site to be extracted
+    Eigen::Tensor<T, 1>                S;                            // The singular values
+    Eigen::Tensor<T, 3>                V            = multisite_mps; // This side contains all the remaining sites
+    std::optional<Eigen::Tensor<T, 1>> S_prev       = std::nullopt;  // Starts out empty, carries the schmidt values from the previous iteration
+    double                             S_prev_error = -1.0;          // Truncation error from the previous iteration
     for(const auto &[idx, spin_dim] : iter::enumerate(spin_dims)) {
         /* The schmidt decomposition gives us the 3 matrices to the right of the line |:
          *                       |
@@ -425,7 +437,7 @@ std::vector<MpsSite> tools::common::split::internal::split_mps_into_As(const Eig
         if(S_prev) {
             auto t_sv = tid::tic_token("contract_sv", tid::level::highest);
             // Let V absorb S from the previous SVD (see note below)
-            V = tools::common::contraction::contract_bnd_mps_temp(S_prev.value(), V, SV_temp);
+            V = tools::common::contraction::contract_bnd_mps(S_prev.value(), V);
         }
         if(&spin_dim == &spin_dims.back()                          // Reached last site in spin_dims
            and spin_dim == V.dimension(0)                          // V has one site left
@@ -460,18 +472,28 @@ std::vector<MpsSite> tools::common::split::internal::split_mps_into_As(const Eig
     mps.stash_V(V, pos + 1);
     return mps_sites;
 }
+/* clang-format off */
+template std::vector<MpsSite<cx64>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<fp32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx64>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx64>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<fp128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx64>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<cx32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx64>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx64>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
 
-template std::vector<MpsSite> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                                                const std::vector<size_t> &positions, long center_position,
-                                                                                svd::config &svd_cfg);
-template std::vector<MpsSite> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                                                const std::vector<size_t> &positions, long center_position,
-                                                                                svd::config &svd_cfg);
+template std::vector<MpsSite<cx128>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<fp32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx128>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx128>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<fp128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx128>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<cx32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx128>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::vector<MpsSite<cx128>> tools::common::split::internal::split_mps_into_As(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
 
-template<typename Scalar>
-std::deque<MpsSite> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<Scalar, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                                      const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg) {
-    /*  Here we split an mps containing multiple sites into its consituent sites from the right
+/* clang-format on */
+
+template<typename Scalar, typename T>
+std::deque<MpsSite<Scalar>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<T, 3> &multisite_mps, const std::vector<long> &spin_dims,
+                                                                              const std::vector<size_t> &positions, long center_position,
+                                                                              svd::config &svd_cfg) {
+    /*  Here we split multiple sites from the right
      *  Consider a case with 3 sites and
      *  spin_dims = {2,2,2}
      *  sites = {6,7,8}
@@ -518,19 +540,18 @@ std::deque<MpsSite> tools::common::split::internal::split_mps_into_Bs(const Eige
     auto t_to_b = tid::tic_scope("to_b", tid::level::highest);
 
     // Initialize the resulting container of split sites
-    std::deque<MpsSite> mps_sites;
+    std::deque<MpsSite<Scalar>> mps_sites;
     // Now we have multiple spin dimensions
 
     // Set up the SVD
     svd::solver svd(svd_cfg);
 
     // Declare the tensors that will catch the schmidt (SVD) decompositions
-    Eigen::Tensor<Scalar, 3>                U = multisite_mps;              // This side contains all the sites
-    Eigen::Tensor<Scalar, 1>                S;                              // The singular values
-    Eigen::Tensor<Scalar, 3>                V;                              // This will become the first site extracted
-    Eigen::Tensor<Scalar, 3>                US_temp;                        // Temporary for contracting U*S
-    std::optional<Eigen::Tensor<Scalar, 1>> S_prev       = std::nullopt;    // Starts out empty, needs to be checked outside this split
-    double                                  S_prev_error = -1.0;            // Truncation error from the previous iteration
+    Eigen::Tensor<T, 3>                U = multisite_mps;                   // This side contains all the sites
+    Eigen::Tensor<T, 1>                S;                                   // The singular values
+    Eigen::Tensor<T, 3>                V;                                   // This will become the first site extracted
+    std::optional<Eigen::Tensor<T, 1>> S_prev       = std::nullopt;         // Starts out empty, needs to be checked outside this split
+    double                             S_prev_error = -1.0;                 // Truncation error from the previous iteration
     for(const auto &[idx, spin_dim] : iter::enumerate_reverse(spin_dims)) { // Iterate in reverse order
         /* The schmidt decomposition gives us the 3 matrices to the left of the line |:
          *                                                      |
@@ -545,7 +566,7 @@ std::deque<MpsSite> tools::common::split::internal::split_mps_into_Bs(const Eige
         if(S_prev) {
             auto t_sv = tid::tic_token("contract_us", tid::level::highest);
             // Let U absorb S from the previous SVD (see note below)
-            U = tools::common::contraction::contract_mps_bnd_temp(U, S_prev.value(), US_temp);
+            U = tools::common::contraction::contract_mps_bnd(U, S_prev.value());
         }
         if(&spin_dim == &spin_dims.front()                             // Reached the first site in spin_dims
            and spin_dim == U.dimension(0)                              // U has one site left
@@ -582,10 +603,19 @@ std::deque<MpsSite> tools::common::split::internal::split_mps_into_Bs(const Eige
     }
     return mps_sites;
 }
+/* clang-format off */
+template std::deque<MpsSite<cx64>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<fp32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx64>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx64>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<fp128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx64>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<cx32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx64>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx64>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
 
-template std::deque<MpsSite> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                                               const std::vector<size_t> &positions, long center_position,
-                                                                               svd::config &svd_cfg);
-template std::deque<MpsSite> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims,
-                                                                               const std::vector<size_t> &positions, long center_position,
-                                                                               svd::config &svd_cfg);
+template std::deque<MpsSite<cx128>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<fp32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx128>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<fp64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx128>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<fp128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx128>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<cx32, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx128>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+template std::deque<MpsSite<cx128>> tools::common::split::internal::split_mps_into_Bs(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<long> &spin_dims, const std::vector<size_t> &positions, long center_position, svd::config &svd_cfg);
+
+/* clang-format on */

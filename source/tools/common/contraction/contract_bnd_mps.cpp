@@ -7,6 +7,8 @@
 /* clang-format off */
 using namespace tools::common::contraction;
 
+
+
 template<typename Scalar>
 void  tools::common::contraction::contract_bnd_mps(      Scalar * res_ptr      , std::array<long,3> res_dims,
                                                    const Scalar * const bnd_ptr, std::array<long,1> bnd_dims,
@@ -16,8 +18,7 @@ void  tools::common::contraction::contract_bnd_mps(      Scalar * res_ptr      ,
     auto bnd = Eigen::TensorMap<const Eigen::Tensor<Scalar,1>>(bnd_ptr,bnd_dims);
     if(mps_dims[1] != bnd_dims[0]) throw except::runtime_error("Dimension mismatch mps {} (idx 1) and bnd {} (idx 0)", mps_dims, bnd_dims);
     if(mps_dims != res_dims) throw except::runtime_error("Dimension mismatch mps {} and res {}", mps_dims, res_dims);
-    auto &threads = tenx::threads::get();
-    res.device(*threads->dev) = tenx::asDiagonal(bnd).contract(mps, tenx::idx({1}, {1})).shuffle(tenx::array3{1, 0, 2});
+    tenx::asDiagonalContract(res, bnd, mps , 1);
 }
 
 template void tools::common::contraction::contract_bnd_mps(      fp32 *       res_ptr, std::array<long,3> res_dims,

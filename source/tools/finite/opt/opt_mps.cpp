@@ -41,23 +41,6 @@ const Eigen::Tensor<cx64, 3> &opt_mps::get_tensor() const {
         throw except::runtime_error("opt_mps: tensor not set");
 }
 
-template<typename T>
-Eigen::Tensor<T, 3> opt_mps::get_tensor_as() const {
-    if constexpr(std::is_same_v<T, fp32> or std::is_same_v<T, fp64>) {
-        return get_tensor().real().template cast<T>();
-    } else if constexpr(std::is_same_v<T, cx32>) {
-        return get_tensor().template cast<T>();
-    } else if constexpr(std::is_same_v<T, cx64>) {
-        return get_tensor();
-    }
-    throw except::runtime_error("get_tensor(): invalid type <{}>", sfinae::type_name<T>());
-}
-
-template Eigen::Tensor<fp32, 3> opt_mps::get_tensor_as() const;
-template Eigen::Tensor<fp64, 3> opt_mps::get_tensor_as() const;
-template Eigen::Tensor<cx32, 3> opt_mps::get_tensor_as() const;
-template Eigen::Tensor<cx64, 3> opt_mps::get_tensor_as() const;
-
 const Eigen::Tensor<cx64, 2> &opt_mps::get_bond() const {
     if(bond)
         return bond.value();
@@ -85,13 +68,14 @@ template<OptType optType>
     tensor_extended.topRows(size_old) = Eigen::Map<const Eigen::VectorXcd>(tensor.value().data(), tensor.value().size());
     tensor_extended.bottomRows(2)[0]  = 0; // Norm
     tensor_extended.bottomRows(2)[1]  = 0; // Residual norm
-    if constexpr(optType == OptType::REAL) { return Eigen::Map<const Eigen::VectorXcd>(tensor_extended.data(), tensor_extended.size()).real(); }
-    if constexpr(optType == OptType::CPLX) {
+    static_assert(optType == OptType::FP64 or optType == OptType::CX64);
+    if constexpr(optType == OptType::FP64) { return Eigen::Map<const Eigen::VectorXcd>(tensor_extended.data(), tensor_extended.size()).real(); }
+    if constexpr(optType == OptType::CX64) {
         return Eigen::Map<Eigen::VectorXd>(reinterpret_cast<double *>(tensor_extended.data()), 2 * tensor_extended.size());
     }
 }
-template Eigen::VectorXd opt_mps::get_initial_state_with_lagrange_multiplier<OptType::REAL>() const;
-template Eigen::VectorXd opt_mps::get_initial_state_with_lagrange_multiplier<OptType::CPLX>() const;
+template Eigen::VectorXd opt_mps::get_initial_state_with_lagrange_multiplier<OptType::FP64>() const;
+template Eigen::VectorXd opt_mps::get_initial_state_with_lagrange_multiplier<OptType::CX64>() const;
 
 template<OptType optType>
 [[nodiscard]] std::vector<double> opt_mps::get_stl_initial_state_with_lagrange_multiplier() const {
@@ -102,17 +86,18 @@ template<OptType optType>
     tensor_extended.topRows(size_old) = Eigen::Map<const Eigen::VectorXcd>(tensor.value().data(), tensor.value().size());
     tensor_extended.bottomRows(2)[0]  = 0; // Norm
     tensor_extended.bottomRows(2)[1]  = 0; // Residual norm
-    if constexpr(optType == OptType::REAL) {
+    static_assert(optType == OptType::FP64 or optType == OptType::CX64);
+    if constexpr(optType == OptType::FP64) {
         Eigen::VectorXd tensor_map = Eigen::Map<const Eigen::VectorXcd>(tensor_extended.data(), tensor_extended.size()).real();
         return {tensor_map.begin(), tensor_map.end()};
     }
-    if constexpr(optType == OptType::CPLX) {
+    if constexpr(optType == OptType::CX64) {
         auto tensor_map = Eigen::Map<Eigen::VectorXd>(reinterpret_cast<double *>(tensor_extended.data()), 2 * tensor_extended.size());
         return {tensor_map.begin(), tensor_map.end()};
     }
 }
-template std::vector<double> opt_mps::get_stl_initial_state_with_lagrange_multiplier<OptType::REAL>() const;
-template std::vector<double> opt_mps::get_stl_initial_state_with_lagrange_multiplier<OptType::CPLX>() const;
+template std::vector<double> opt_mps::get_stl_initial_state_with_lagrange_multiplier<OptType::FP64>() const;
+template std::vector<double> opt_mps::get_stl_initial_state_with_lagrange_multiplier<OptType::CX64>() const;
 
 const std::vector<size_t> &opt_mps::get_sites() const {
     if(not sites) throw except::runtime_error("opt_mps: sites not set");

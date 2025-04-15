@@ -345,8 +345,8 @@ void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFini
     if(type == StateInitType::REAL and axus == "y") throw except::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     if(pattern.empty()) throw except::runtime_error("Initial state pattern is an empty string.");
     using namespace qm::spin::half::tensor;
-    Eigen::Tensor<cx64, 3> spin_up = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
-    Eigen::Tensor<cx64, 3> spin_dn = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
+    Eigen::Tensor<cx64, 3> spin_up  = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
+    Eigen::Tensor<cx64, 3> spin_dn  = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
     auto                   bitfield = tools::get_bitfield(state.get_length(), pattern);
 
     Eigen::Tensor<cx64, 1> L(1);
@@ -364,6 +364,28 @@ void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFini
     tools::log->debug("Initial state on axis {}: {}", axis, bitfield);
     pattern        = fmt::format("b{}", bitfield);
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
+    state.clear_measurements();
+    state.clear_cache();
+    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
+}
+
+void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite &state, StateInitType type, std::string_view axis, std::string &pattern) {
+    auto axus = qm::spin::half::get_axis_unsigned(axis);
+    if(type == StateInitType::REAL and axus == "y") throw except::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    using namespace qm::spin::half::tensor;
+
+    size_t                   nsum = state.get_length<size_t>();
+    std::vector<std::string> patterns(nsum);
+    set_product_state_neel_shuffled(state, type, axis, patterns[0]);
+
+    auto other = StateFinite(state.get_algorithm(), state.get_length<size_t>(), state.get_position<long>(), state.get_spin_dim());
+    for(size_t n = 1; n < nsum; ++n) {
+        set_product_state_neel_shuffled(other, type, axis, patterns[n]);
+        tools::log->info("{}", patterns[n]);
+        state = add_states(state, other);
+    }
+    pattern = patterns.back();
+
     state.clear_measurements();
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
@@ -423,14 +445,10 @@ void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite &sta
     auto axus = qm::spin::half::get_axis_unsigned(axis);
     tools::log->debug("Setting random product state on axis {} using linear combinations of eigenspinors a|+> + b|-> of the pauli matrix σ{}", axus, axus);
     if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
-    auto        spinor_up = qm::spin::half::get_spinor(axus, -1);
-    auto        spinor_dn = qm::spin::half::get_spinor(axus, 1);
-    #pragma message "set_random_product_state_on_axis: decide if -1 or 1 is up/down"
-    // using namespace qm::spin::half::tensor;
-    // Eigen::Tensor<cx64, 3> spin_up = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
-    // Eigen::Tensor<cx64, 3> spin_dn = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
+    auto spinor_up = qm::spin::half::get_spinor(axus, +1);
+    auto spinor_dn = qm::spin::half::get_spinor(axus, -1);
 
-    std::string label     = "A";
+    std::string label = "A";
     for(auto &mps_ptr : state.mps_sites) {
         auto            &mps = *mps_ptr;
         Eigen::Vector2cd ab;

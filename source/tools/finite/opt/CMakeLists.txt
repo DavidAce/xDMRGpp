@@ -10,6 +10,7 @@ add_source_target(xdmrg++-tools-finite-opt
             optimize_folded_spectrum_eig.cpp
             optimize_generalized_shift_invert.cpp
             optimize_generalized_shift_invert_eig.cpp
+            optimize_lanczos_h1h2.cpp
             opt.cpp
             opt_mps.cpp
             opt_meta.cpp

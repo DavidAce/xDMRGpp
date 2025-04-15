@@ -22,7 +22,8 @@
 
 namespace tools::finite::h5 {
     // Load model, state and simulation status from HDF5
-    void load::simulation(const h5pp::File &h5file, std::string_view state_prefix, TensorsFinite &tensors, AlgorithmStatus &status, AlgorithmType algo_type) {
+    template<typename Scalar>
+    void load::simulation(const h5pp::File &h5file, std::string_view state_prefix, TensorsFinite<Scalar> &tensors, AlgorithmStatus &status, AlgorithmType algo_type) {
         try {
             if(algo_type == AlgorithmType::fLBIT) {
                 // To successfully load a simulation there has to be a clearly defined initial state, either a pattern or an initial state selection
@@ -48,7 +49,8 @@ namespace tools::finite::h5 {
         } catch(const std::exception &ex) { throw except::load_error("error loading from state prefix [{}]: {}", state_prefix, ex.what()); }
     }
 
-    void load::state(const h5pp::File &h5file, std::string_view state_prefix, StateFinite &state, MpsInfo &info) {
+    template<typename Scalar>
+    void load::state(const h5pp::File &h5file, std::string_view state_prefix, StateFinite<Scalar> &state, MpsInfo &info) {
         using cx64 = std::complex<double>;
         try {
             // To successfully load a state there has to be an MPS with StorageLevel::FULL
@@ -71,13 +73,13 @@ namespace tools::finite::h5 {
                     auto L     = h5file.readAttribute<Eigen::Tensor<double, 1>>(dset_M_name, "L");
                     auto error = h5file.readAttribute<double>(dset_M_name, "truncation_error");
                     auto label = h5file.readAttribute<std::string>(dset_M_name, "label");
-                    state.mps_sites.emplace_back(std::make_unique<MpsSite>(M, L, position, error, label));
+                    state.mps_sites.emplace_back(std::make_unique<MpsSite<Scalar>>(M, L, position, error, label));
                 } else {
                     auto M     = h5file.readDataset<Eigen::Tensor<cx64, 3>>(dset_M_name);
                     auto L     = h5file.readAttribute<Eigen::Tensor<double, 1>>(dset_M_name, "L");
                     auto error = h5file.readAttribute<double>(dset_M_name, "truncation_error");
                     auto label = h5file.readAttribute<std::string>(dset_M_name, "label");
-                    state.mps_sites.emplace_back(std::make_unique<MpsSite>(M, L, position, error, label));
+                    state.mps_sites.emplace_back(std::make_unique<MpsSite<Scalar>>(M, L, position, error, label));
                 }
 
                 auto isCenter = h5file.readAttribute<bool>(dset_M_name, "isCenter");
@@ -91,8 +93,8 @@ namespace tools::finite::h5 {
             state.set_positions();
         } catch(const std::exception &ex) { throw except::load_error("load state error: {}", ex.what()); }
     }
-
-    void load::model(const h5pp::File &h5file, AlgorithmType algo_type, ModelFinite &model) {
+    template<typename Scalar>
+    void load::model(const h5pp::File &h5file, AlgorithmType algo_type, ModelFinite<Scalar> &model) {
         auto model_path = fmt::format("{}/model", enum2sv(algo_type));
         try {
             // Find the path to the model
@@ -125,13 +127,13 @@ namespace tools::finite::h5 {
             tools::log->debug("{} matches measurement on file: {:.16f} == {:.16f} | diff = {:.16f} | tol = {:.16f}", tag, val1, val2, std::abs(val1 - val2),
                               tol);
     }
-
-    void load::validate(const h5pp::File &h5file, std::string_view state_prefix, TensorsFinite &tensors, AlgorithmStatus &status, AlgorithmType algo_type) {
+    template<typename Scalar>
+    void load::validate(const h5pp::File &h5file, std::string_view state_prefix, TensorsFinite<Scalar> &tensors, AlgorithmStatus &status, AlgorithmType algo_type) {
         auto t_val = tid::tic_scope("validate");
         tools::log->info("Validating state: [{}]", state_prefix);
         tensors.rebuild_mpo();
         tensors.rebuild_mpo_squared();
-        tensors.activate_sites({tensors.get_position<size_t>()});
+        tensors.activate_sites({tensors.template get_position<size_t>()});
         tensors.rebuild_edges();
         tools::log->debug("State labels: {}", tensors.state->get_labels());
         tensors.state->clear_cache();

@@ -65,11 +65,11 @@ namespace eig {
         template<Form form = Form::SYMM, typename Scalar>
         void eig(Scalar *matrixA, Scalar *matrixB, size_type L, Vecs compute_eigvecs = Vecs::ON, Dephase remove_phase_ = Dephase::OFF);
 
-        template<Form form = Form::SYMM, typename Scalar>
-        void eig(Scalar *matrix, size_type L, char range, int il, int iu, double vl, double vu, Vecs compute_eigvecs = Vecs::ON,
+        template<Form form = Form::SYMM, typename Scalar, typename RealScalar>
+        void eig(Scalar *matrix, size_type L, char range, int il, int iu, RealScalar vl, RealScalar vu, Vecs compute_eigvecs = Vecs::ON,
                  Dephase remove_phase_ = Dephase::OFF);
-        template<Form form = Form::SYMM, typename Scalar>
-        void eig(Scalar *matrixA, Scalar *matrixB, size_type L, char range, int il, int iu, double vl, double vu, Vecs compute_eigvecs = Vecs::ON,
+        template<Form form = Form::SYMM, typename Scalar, typename RealScalar>
+        void eig(Scalar *matrixA, Scalar *matrixB, size_type L, char range, int il, int iu, RealScalar vl, RealScalar vu, Vecs compute_eigvecs = Vecs::ON,
                  Dephase remove_phase_ = Dephase::OFF);
 
         // Functions for few eigensolutions

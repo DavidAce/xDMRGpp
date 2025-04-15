@@ -51,32 +51,32 @@ enum class MergeEvent {
 };
 
 /*! \brief Policy to determine the number of sites (the block size) involved in either
- *  a dmrg update (optimization) step, and/or an environment expansion step.
+ *  a dmrg update (optimization) step, and/or the bond expansion step.
  *  We can either use a fixed number or use one of the information lattice metrics, and enable the increased
  *  block size conditionally if the algorithm has entered a special status.
  */
 enum class BlockSizePolicy {
-    MIN         = 0,                   /*!< Block size = settings::strategy::dmrg_min_blocksize */
-    MAX         = 1 << 0,              /*!< Block size = settings::strategy::dmrg_max_blocksize */
-    ICOM        = 1 << 1,              /*!< Block size = ceil of "information_center_of_mass"*/
-    ICOMPLUS1   = 1 << 2,              /*!< Block size = ceil of "information_center_of_mass + 1.00" */
-    ICOM150     = 1 << 3,              /*!< Block size = ceil of "information_center_of_mass * 1.50" */
-    ICOM200     = 1 << 4,              /*!< Block size = ceil of "information_center_of_mass * 2.00" */
-    BIT_ONE     = 1 << 5,              /*!< Block size = scale to find at least one bit in the information lattice.*/
-    BIT_TWO     = 1 << 6,              /*!< Block size = scale to find at least two bits in the information lattice.*/
-    BIT_MID     = 1 << 7,              /*!< Block size = scale to find L/2 bits in the information lattice. */
-    BIT_PEN     = 1 << 8,              /*!< Block size = scale to find L-1 (up to PENultimate) bits in the information lattice. */
-    BIT_ALL     = 1 << 9,              /*!< Block size = scale to find L (all) bits in the information lattice. */
-    IF_SAT_ENT  = 1 << 10,             /*!< Set the block size if the entanglement entropy has saturated */
-    IF_SAT_INFO = 1 << 11,             /*!< Set the block size if the information center of mass has saturated */
-    IF_SAT_VAR  = 1 << 12,             /*!< Set the block size if the energy variance has saturated */
-    IF_SAT_ALGO = 1 << 13,             /*!< Set the block size if the algorithm status == saturated (implies all other saturations) */
-    IF_STK_ALGO = 1 << 14,             /*!< Set the block size if the algorithm status == stuck ( */
-    IF_FIN_BOND = 1 << 15,             /*!< Require that the bond dimension has reached its final (maximum) value before increasing the block size */
-    IF_FIN_TRNC = 1 << 16,             /*!< Require that the truncation error has reached its final (minimum) value before increasing the block size   */
-    ON_ENVEXP   = 1 << 17,             /*!< Enable the selected blocksize during environment expansion (otherwise default to dmrg_min_blocksize)  */
-    ON_UPDATE   = 1 << 18,             /*!< Enable the selected blocksize during the dmrg update step (otherwise default to dmrg_min_blocksize) */
-    DEFAULT     = BIT_ONE | ON_ENVEXP, /*!< The default choice usually works well */
+    MIN         = 0,       /*!< Block size = settings::strategy::dmrg_min_blocksize */
+    MAX         = 1 << 0,  /*!< Block size = settings::strategy::dmrg_max_blocksize */
+    ICOM        = 1 << 1,  /*!< Block size = ceil of "information_center_of_mass"*/
+    ICOMPLUS1   = 1 << 2,  /*!< Block size = ceil of "information_center_of_mass + 1.00" */
+    ICOM150     = 1 << 3,  /*!< Block size = ceil of "information_center_of_mass * 1.50" */
+    ICOM200     = 1 << 4,  /*!< Block size = ceil of "information_center_of_mass * 2.00" */
+    BIT_ONE     = 1 << 5,  /*!< Block size = scale to find at least one bit in the information lattice.*/
+    BIT_TWO     = 1 << 6,  /*!< Block size = scale to find at least two bits in the information lattice.*/
+    BIT_MID     = 1 << 7,  /*!< Block size = scale to find L/2 bits in the information lattice. */
+    BIT_PEN     = 1 << 8,  /*!< Block size = scale to find L-1 (up to PENultimate) bits in the information lattice. */
+    BIT_ALL     = 1 << 9,  /*!< Block size = scale to find L (all) bits in the information lattice. */
+    IF_SAT_ENTR = 1 << 10, /*!< Set the block size if the entanglement entropy has saturated */
+    IF_SAT_INFO = 1 << 11, /*!< Set the block size if the information center of mass has saturated */
+    IF_SAT_EVAR = 1 << 12, /*!< Set the block size if the energy variance has saturated */
+    IF_SAT_ALGO = 1 << 13, /*!< Set the block size if the algorithm status == saturated (implies all other saturations) */
+    IF_STK_ALGO = 1 << 14, /*!< Set the block size if the algorithm status == stuck ( */
+    IF_FIN_BOND = 1 << 15, /*!< Require that the bond dimension has reached its final (maximum) value before increasing the block size */
+    IF_FIN_TRNC = 1 << 16, /*!< Require that the truncation error has reached its final (minimum) value before increasing the block size   */
+    ON_BONDEXP  = 1 << 17, /*!< Enable the selected blocksize during bond expansion (otherwise default to dmrg_min_blocksize)  */
+    ON_UPDATE   = 1 << 18, /*!< Enable the selected blocksize during the dmrg update step (otherwise default to dmrg_min_blocksize) */
+    DEFAULT     = MIN,     /*!< The default choice usually works well */
     allow_bitops
 };
 
@@ -89,7 +89,7 @@ enum class GainPolicy : int {
     NEVER     = 0,  /*!< Never increase eigs iterations  */
     HALFSWEEP = 1,  /*!< every halfsweep    */
     FULLSWEEP = 2,  /*!< every halfsweep    */
-    SAT_VAR   = 4,  /*!< when the energy variance has saturated  */
+    SAT_EVAR  = 4,  /*!< when the energy variance has saturated  */
     SAT_ALGO  = 8,  /*!< when the algorithm has saturated  */
     STK_ALGO  = 16, /*!< when the algorithm is stuck  */
     FIN_BOND  = 32, /*!< only when the bond dimension has reached its maximum   */
@@ -103,7 +103,7 @@ enum class UpdatePolicy {
     HALFSWEEP = 2,  /*!< Update every iteration */
     FULLSWEEP = 4,  /*!< Update every second iteration (left to right + right to left sweep) */
     TRUNCATED = 8,  /*!< Update whenever the state is truncated */
-    SAT_VAR   = 16, /*!< when the algorithm has saturated  <*/
+    SAT_EVAR  = 16, /*!< when the energy variance has saturated  <*/
     SAT_ALGO  = 32, /*!< Update when the algorithm is saturated */
     STK_ALGO  = 64, /*!< Update when the algorithm is stuck */
     allow_bitops
@@ -245,15 +245,35 @@ enum class StoragePolicy : int {
 enum class CopyPolicy { FORCE, TRY, OFF };
 enum class ResetReason { INIT, FIND_WINDOW, SATURATED, NEW_STATE, BOND_UPDATE };
 
-enum class EnvExpandMode : int {
-    NONE    = 0,  /*!< No environment expansion */
-    H1      = 1,  /*!< environment expansion using H (valid with SSITE, ignored otherwise) */
-    H2      = 2,  /*!< environment expansion using H²  (valid with SSITE, ignored otherwise)  */
-    SSITE   = 4,  /*!< strictly single site expansion */
-    NSITE   = 8,  /*!< nsite expansion (given by the local info scale "icom") */
-    REAR    = 16, /*!< Expand the rear environment as in the original DMRG3S algorithm */
-    FORE    = 32, /*!< Expand the fore environment before optimization */
-    DEFAULT = H1 | H2 | NSITE | REAR | FORE,
+/*! Select the bond expansion policies.
+    While this is most useful for single-site DMRG, it can help in multisite DMRG as well due to
+    the added noise (POSTOPT_1SITE in particular), which helps the algorithm escape local minima.
+
+    The POSTOPT_1SITE is identical to the DMRG3S method up to the choice of mixing factor:
+        - the expansion occurs after the optimization step, before moving
+        - the current site is enriched as  Ψ' =  (P⁰ + P¹ + P²)Ψ , where:
+              - P⁰ = α₀ = sqrt(1-α₁²-α₂²),
+              - P¹ = α₁H¹Ψ, α₁ = |(H¹ - <H¹>)Ψ| (residual norm wrt H¹)
+              - P² = α₂H²Ψ, α₂ = |(H² - <H²>)Ψ| (residual norm wrt H²)
+              - H¹,H²,Ψ denote the local "effective" parts of the MPS/MPO corresponding to the current site.
+        - the next site ahead is zero-padded to match the new dimensions.
+        - this works well because the residuals vanish as we approach an eigenstate.
+    For PREOPT_NSITE_REAR and PREOPT_NSITE_FORE:
+        - the expansion occurs just before the main DMRG optimization step.
+        - the expansion involves [active sites] plus sites behind or ahead.
+        - at least two sites are used, the upper limit depends on dmrg_blocksize
+        - on these sites, we find α that minimizes f(Ψ'), where Ψ' = (α₀ + α₁ H¹ + α₂ H²)Ψ, and f is
+          the relevant objective function (energy, variance or <H>/<H²>).
+        - note that no zero-padding is used here.
+ */
+enum class BondExpansionPolicy : int {
+    NONE              = 0,  /*!< No bond expansion (strictly for multisite DMRG, but not recommended anyway) */
+    POSTOPT_1SITE     = 1,  /*!< Strictly single-site expansion of 1 bond ahead, after optimization (as in DMRG3S), using the residual norm as mixing factor */
+    PREOPT_NSITE_REAR = 2,  /*!< Multisite expansion with optimal mixing factors before optimization of [active sites] plus sites behind.  */
+    PREOPT_NSITE_FORE = 4,  /*!< Multisite expansion with optimal mixing factors before optimization, of [active sites] plus sites ahead. */
+    H1                = 8,  /*!< Enable bond expansion using H¹ */
+    H2                = 16, /*!< Enable bond expansion using H² */
+    DEFAULT           = POSTOPT_1SITE | H1 | H2,
     allow_bitops
 };
 
@@ -280,7 +300,7 @@ enum class LogPolicy {
     VERBOSE /*!< Always log */
 };
 enum class RandomizerMode { SHUFFLE, SELECT1, ASIS };
-enum class OptType { REAL, CPLX };
+enum class OptType { FP32, FP64, FP128, CX32, CX64, CX128 };
 
 /*! Choose the algorithm for the optimization.
  *
@@ -295,8 +315,9 @@ enum class OptAlgo {
 };
 
 enum class OptSolver {
-    EIG, /*!< Apply the eigensolver directly on H|psi> or (H-E)^2|psi> */
-    EIGS /*!< Apply the eigensolver directly on H|psi> or (H-E)^2|psi> */
+    EIG,  /*!< Use an exact solver */
+    EIGS, /*!< Use an iterative solver (e.g. PRIMME or Arpack) */
+    H1H2  /*!< Lanczos iterations using the local effective {H¹, H²}|Ψ> as Krylov subspace (can use higher than double precision) */
 };
 
 /*! Choose the target eigenpair */
@@ -351,6 +372,7 @@ enum class StateInit {
     PRODUCT_STATE_NEEL_SHUFFLED,
     PRODUCT_STATE_NEEL_DISLOCATED,
     PRODUCT_STATE_PATTERN,
+    SUM_OF_RANDOM_PRODUCT_STATES,
 };
 
 enum class fdmrg_task {
@@ -465,6 +487,14 @@ bool has_any_flags(E target, Args &&...check) {
     using U = std::underlying_type_t<E>;
     return (((static_cast<U>(target) & static_cast<U>(check)) == static_cast<U>(check)) || ...);
 }
+
+template<typename E, typename... Args>
+requires std::conjunction_v<std::is_same<E, Args>...>
+bool has_none_of_flags(E target, Args &&...check) {
+    using U = std::underlying_type_t<E>;
+    return !(((static_cast<U>(target) & static_cast<U>(check)) == static_cast<U>(check)) || ...);
+}
+
 template<typename E, typename... Args>
 requires std::conjunction_v<std::is_same<E, Args>...>
 bool has_all_flags(E target, Args &&...check) {
@@ -498,7 +528,7 @@ std::vector<std::string_view> enum2sv(const std::vector<T> &items) noexcept {
 template<typename T>
 std::string flag2str(const T &item) noexcept {
     static_assert(enum_sfinae::is_any_v<T, OptExit, OptWhen, GainPolicy, StoragePolicy, BlockSizePolicy, UpdatePolicy, SaturationPolicy, ProjectionPolicy,
-                                        CachePolicy, EnvExpandMode>);
+                                        CachePolicy, BondExpansionPolicy>);
 
     std::vector<std::string> v;
     if constexpr(std::is_same_v<T, OptExit>) {
@@ -549,14 +579,14 @@ std::string flag2str(const T &item) noexcept {
         if(has_flag(item, BlockSizePolicy::BIT_MID)) v.emplace_back("BIT_MID");
         if(has_flag(item, BlockSizePolicy::BIT_PEN)) v.emplace_back("BIT_PEN");
         if(has_flag(item, BlockSizePolicy::BIT_ALL)) v.emplace_back("BIT_ALL");
-        if(has_flag(item, BlockSizePolicy::IF_SAT_ENT)) v.emplace_back("IF_SAT_ENT");
+        if(has_flag(item, BlockSizePolicy::IF_SAT_ENTR)) v.emplace_back("IF_SAT_ENTR");
         if(has_flag(item, BlockSizePolicy::IF_SAT_INFO)) v.emplace_back("IF_SAT_INFO");
-        if(has_flag(item, BlockSizePolicy::IF_SAT_VAR)) v.emplace_back("IF_SAT_VAR");
+        if(has_flag(item, BlockSizePolicy::IF_SAT_EVAR)) v.emplace_back("IF_SAT_EVAR");
         if(has_flag(item, BlockSizePolicy::IF_SAT_ALGO)) v.emplace_back("IF_SAT_ALGO");
         if(has_flag(item, BlockSizePolicy::IF_STK_ALGO)) v.emplace_back("IF_STK_ALGO");
         if(has_flag(item, BlockSizePolicy::IF_FIN_BOND)) v.emplace_back("IF_FIN_BOND");
         if(has_flag(item, BlockSizePolicy::IF_FIN_TRNC)) v.emplace_back("IF_FIN_TRNC");
-        if(has_flag(item, BlockSizePolicy::ON_ENVEXP)) v.emplace_back("ON_ENVEXP");
+        if(has_flag(item, BlockSizePolicy::ON_BONDEXP)) v.emplace_back("ON_BONDEXP");
         if(has_flag(item, BlockSizePolicy::ON_UPDATE)) v.emplace_back("ON_UPDATE");
         if(has_flag(item, BlockSizePolicy::DEFAULT)) v.emplace_back("DEFAULT");
         if(v.empty()) return "MIN";
@@ -566,7 +596,7 @@ std::string flag2str(const T &item) noexcept {
         if(has_flag(item, UpdatePolicy::HALFSWEEP)) v.emplace_back("HALFSWEEP");
         if(has_flag(item, UpdatePolicy::FULLSWEEP)) v.emplace_back("FULLSWEEP");
         if(has_flag(item, UpdatePolicy::TRUNCATED)) v.emplace_back("TRUNCATED");
-        if(has_flag(item, UpdatePolicy::SAT_VAR)) v.emplace_back("SAT_VAR");
+        if(has_flag(item, UpdatePolicy::SAT_EVAR)) v.emplace_back("SAT_EVAR");
         if(has_flag(item, UpdatePolicy::SAT_ALGO)) v.emplace_back("SAT_ALGO");
         if(has_flag(item, UpdatePolicy::STK_ALGO)) v.emplace_back("STK_ALGO");
         if(v.empty()) return "NEVER";
@@ -597,20 +627,19 @@ std::string flag2str(const T &item) noexcept {
         if(has_flag(item, CachePolicy::WRITE)) v.emplace_back("WRITE");
         if(v.empty()) return "NONE";
     }
-    if constexpr(std::is_same_v<T, EnvExpandMode>) {
-        if(has_flag(item, EnvExpandMode::H1)) v.emplace_back("H1");
-        if(has_flag(item, EnvExpandMode::H2)) v.emplace_back("H2");
-        if(has_flag(item, EnvExpandMode::SSITE)) v.emplace_back("SSITE");
-        if(has_flag(item, EnvExpandMode::NSITE)) v.emplace_back("NSITE");
-        if(has_flag(item, EnvExpandMode::REAR)) v.emplace_back("REAR");
-        if(has_flag(item, EnvExpandMode::FORE)) v.emplace_back("FORE");
-        if(has_flag(item, EnvExpandMode::DEFAULT)) v.emplace_back("DEFAULT");
+    if constexpr(std::is_same_v<T, BondExpansionPolicy>) {
+        if(has_flag(item, BondExpansionPolicy::POSTOPT_1SITE)) v.emplace_back("POSTOPT_1SITE");
+        if(has_flag(item, BondExpansionPolicy::PREOPT_NSITE_REAR)) v.emplace_back("PREOPT_NSITE_REAR");
+        if(has_flag(item, BondExpansionPolicy::PREOPT_NSITE_FORE)) v.emplace_back("PREOPT_NSITE_FORE");
+        if(has_flag(item, BondExpansionPolicy::H1)) v.emplace_back("H1");
+        if(has_flag(item, BondExpansionPolicy::H2)) v.emplace_back("H2");
+        if(has_flag(item, BondExpansionPolicy::DEFAULT)) v.emplace_back("DEFAULT");
         if(v.empty()) return "NONE";
     }
     if constexpr(std::is_same_v<T, GainPolicy>) {
         if(has_flag(item, GainPolicy::HALFSWEEP)) v.emplace_back("HALFSWEEP");
         if(has_flag(item, GainPolicy::FULLSWEEP)) v.emplace_back("FULLSWEEP");
-        if(has_flag(item, GainPolicy::SAT_VAR)) v.emplace_back("SAT_VAR");
+        if(has_flag(item, GainPolicy::SAT_EVAR)) v.emplace_back("SAT_EVAR");
         if(has_flag(item, GainPolicy::SAT_ALGO)) v.emplace_back("SAT_ALGO");
         if(has_flag(item, GainPolicy::STK_ALGO)) v.emplace_back("STK_ALGO");
         if(has_flag(item, GainPolicy::FIN_BOND)) v.emplace_back("FIN_BOND");
@@ -651,7 +680,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         StoragePolicy,
         CopyPolicy,
         ResetReason,
-        EnvExpandMode,
+        BondExpansionPolicy,
         NormPolicy,
         ResumePolicy,
         FileCollisionPolicy,
@@ -705,14 +734,14 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         case BlockSizePolicy::BIT_MID :                          return "BIT_MID";
         case BlockSizePolicy::BIT_PEN:                           return "BIT_PEN";
         case BlockSizePolicy::BIT_ALL:                           return "BIT_ALL";
-        case BlockSizePolicy::IF_SAT_ENT:                        return "IF_SAT_ENT";
+        case BlockSizePolicy::IF_SAT_ENTR:                       return "IF_SAT_ENTR";
         case BlockSizePolicy::IF_SAT_INFO:                       return "IF_SAT_INFO";
-        case BlockSizePolicy::IF_SAT_VAR:                        return "IF_SAT_VAR";
+        case BlockSizePolicy::IF_SAT_EVAR:                       return "IF_SAT_EVAR";
         case BlockSizePolicy::IF_SAT_ALGO:                       return "IF_SAT_ALGO";
         case BlockSizePolicy::IF_STK_ALGO:                       return "IF_STK_ALGO";
         case BlockSizePolicy::IF_FIN_BOND:                       return "IF_FIN_BOND";
         case BlockSizePolicy::IF_FIN_TRNC:                       return "IF_FIN_TRNC";
-        case BlockSizePolicy::ON_ENVEXP:                         return "ON_ENVEXP";
+        case BlockSizePolicy::ON_BONDEXP:                        return "ON_BONDEXP";
         case BlockSizePolicy::ON_UPDATE:                         return "ON_UPDATE";
         case BlockSizePolicy::DEFAULT:                           return "DEFAULT";
         default: return "BlockSizePolicy::BITFLAG";
@@ -737,7 +766,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == UpdatePolicy::HALFSWEEP)                      return "HALFSWEEP";
         if(item == UpdatePolicy::FULLSWEEP)                      return "FULLSWEEP";
         if(item == UpdatePolicy::TRUNCATED)                      return "TRUNCATED";
-        if(item == UpdatePolicy::SAT_VAR)                        return "SAT_VAR";
+        if(item == UpdatePolicy::SAT_EVAR)                        return "SAT_EVAR";
         if(item == UpdatePolicy::SAT_ALGO)                       return "SAT_ALGO";
         if(item == UpdatePolicy::STK_ALGO)                       return "STK_ALGO";
     }
@@ -836,15 +865,14 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == ResetReason::NEW_STATE)                              return "NEW_STATE";
         if(item == ResetReason::BOND_UPDATE)                            return "BOND_UPDATE";
     }
-    if constexpr(std::is_same_v<T, EnvExpandMode>) {
-        if(item == EnvExpandMode::NONE)                                 return "NONE";
-        if(item == EnvExpandMode::H1)                                   return "H1";
-        if(item == EnvExpandMode::H2)                                   return "H2";
-        if(item == EnvExpandMode::SSITE)                                return "SSITE";
-        if(item == EnvExpandMode::NSITE)                                return "NSITE";
-        if(item == EnvExpandMode::REAR)                                 return "REAR";
-        if(item == EnvExpandMode::FORE)                                 return "FORE";
-        if(item == EnvExpandMode::DEFAULT)                              return "DEFAULT";
+    if constexpr(std::is_same_v<T, BondExpansionPolicy>) {
+        if(item == BondExpansionPolicy::NONE)                           return "NONE";
+        if(item == BondExpansionPolicy::POSTOPT_1SITE)                  return "POSTOPT_1SITE";
+        if(item == BondExpansionPolicy::PREOPT_NSITE_REAR)              return "PREOPT_NSITE_REAR";
+        if(item == BondExpansionPolicy::PREOPT_NSITE_FORE)              return "PREOPT_NSITE_FORE";
+        if(item == BondExpansionPolicy::H1)                             return "H1";
+        if(item == BondExpansionPolicy::H2)                             return "H2";
+        if(item == BondExpansionPolicy::DEFAULT)                        return "DEFAULT";
     }
     if constexpr(std::is_same_v<T, NormPolicy>) {
         if(item == NormPolicy::ALWAYS)                                  return "ALWAYS";
@@ -898,6 +926,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == StateInit::PRODUCT_STATE_NEEL_SHUFFLED)              return "PRODUCT_STATE_NEEL_SHUFFLED";
         if(item == StateInit::PRODUCT_STATE_NEEL_DISLOCATED)            return "PRODUCT_STATE_NEEL_DISLOCATED";
         if(item == StateInit::PRODUCT_STATE_PATTERN)                    return "PRODUCT_STATE_PATTERN";
+        if(item == StateInit::SUM_OF_RANDOM_PRODUCT_STATES)             return "SUM_OF_RANDOM_PRODUCT_STATES";
     }
     if constexpr(std::is_same_v<T, StateInitType>) {
         if(item == StateInitType::REAL)   return "REAL";
@@ -995,8 +1024,12 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == RandomizerMode::ASIS)                               return "ASIS";
     }
     if constexpr(std::is_same_v<T,OptType>){
-        if(item == OptType::REAL)                                      return "REAL";
-        if(item == OptType::CPLX)                                      return "CPLX";
+        if(item == OptType::FP32)                                      return "FP32";
+        if(item == OptType::FP64)                                      return "FP64";
+        if(item == OptType::FP128)                                     return "FP128";
+        if(item == OptType::CX32)                                      return "CX32";
+        if(item == OptType::CX64)                                      return "CX64";
+        if(item == OptType::CX128)                                     return "CX128";
     }
     if constexpr(std::is_same_v<T,OptAlgo>){
         if(item == OptAlgo::DMRG)                                      return "DMRG";
@@ -1008,6 +1041,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
     if constexpr(std::is_same_v<T,OptSolver>){
         if(item == OptSolver::EIG)                                     return "EIG";
         if(item == OptSolver::EIGS)                                    return "EIGS";
+        if(item == OptSolver::H1H2)                                    return "H1H2";
     }
     if constexpr(std::is_same_v<T,OptWhen>){
         if(item == OptWhen::NEVER)                                     return "NEVER";
@@ -1037,7 +1071,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == GainPolicy::NEVER)                                  return "NEVER";
         if(item == GainPolicy::HALFSWEEP)                              return "HALFSWEEP";
         if(item == GainPolicy::FULLSWEEP)                              return "FULLSWEEP";
-        if(item == GainPolicy::SAT_VAR)                                return "SAT_VAR";
+        if(item == GainPolicy::SAT_EVAR)                                return "SAT_EVAR";
         if(item == GainPolicy::SAT_ALGO)                               return "SAT_ALGO";
         if(item == GainPolicy::STK_ALGO)                               return "STK_ALGO";
         if(item == GainPolicy::FIN_BOND)                               return "FIN_BOND";
@@ -1080,7 +1114,7 @@ constexpr auto sv2enum(std::string_view item) {
         StoragePolicy,
         CopyPolicy,
         ResetReason,
-        EnvExpandMode,
+        BondExpansionPolicy,
         NormPolicy,
         ResumePolicy,
         FileCollisionPolicy,
@@ -1124,7 +1158,7 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "ON")                                    return MposWithEdges::ON;
     }
     if constexpr(std::is_same_v<T, BlockSizePolicy>) {
-        check_item_is_valid("BlockSizePolicy", item, {"MIN", "MAX", "ICOM", "ICOMPLUS1", "ICOM150", "ICOM200", "BIT_ONE", "BIT_TWO", "BIT_MID", "BIT_PEN", "BIT_ALL", "IF_SAT_ENT", "IF_SAT_INFO", "IF_SAT_VAR", "IF_SAT_ALGO", "IF_STK_ALGO", "IF_FIN_BOND", "IF_FIN_TRNC", "ON_ENVEXP", "ON_UPDATE", "DEFAULT"});
+        check_item_is_valid("BlockSizePolicy", item, {"MIN", "MAX", "ICOM", "ICOMPLUS1", "ICOM150", "ICOM200", "BIT_ONE", "BIT_TWO", "BIT_MID", "BIT_PEN", "BIT_ALL", "IF_SAT_ENTR", "IF_SAT_INFO", "IF_SAT_EVAR", "IF_SAT_ALGO", "IF_STK_ALGO", "IF_FIN_BOND", "IF_FIN_TRNC", "ON_BONDEXP", "ON_UPDATE", "DEFAULT"});
         auto policy = BlockSizePolicy::MIN;
         if(item.find("MAX")           != std::string_view::npos)  policy |= BlockSizePolicy::MAX;
         if(item.find("ICOM")          != std::string_view::npos)  policy |= BlockSizePolicy::ICOM;
@@ -1136,24 +1170,24 @@ constexpr auto sv2enum(std::string_view item) {
         if(item.find("BIT_MID")       != std::string_view::npos)  policy |= BlockSizePolicy::BIT_MID;
         if(item.find("BIT_PEN")       != std::string_view::npos)  policy |= BlockSizePolicy::BIT_PEN;
         if(item.find("BIT_ALL")       != std::string_view::npos)  policy |= BlockSizePolicy::BIT_ALL;
-        if(item.find("IF_SAT_ENT")    != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_ENT;
+        if(item.find("IF_SAT_ENTR")    != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_ENTR;
         if(item.find("IF_SAT_INFO")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_INFO;
-        if(item.find("IF_SAT_VAR")    != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_VAR;
+        if(item.find("IF_SAT_EVAR")    != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_EVAR;
         if(item.find("IF_SAT_ALGO")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_SAT_ALGO;
         if(item.find("IF_STK_ALGO")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_STK_ALGO;
         if(item.find("IF_FIN_BOND")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_FIN_BOND;
         if(item.find("IF_FIN_TRNC")   != std::string_view::npos)  policy |= BlockSizePolicy::IF_FIN_TRNC;
-        if(item.find("ON_ENVEXP")     != std::string_view::npos)  policy |= BlockSizePolicy::ON_ENVEXP;
+        if(item.find("ON_BONDEXP")    != std::string_view::npos)  policy |= BlockSizePolicy::ON_BONDEXP;
         if(item.find("ON_UPDATE")     != std::string_view::npos)  policy |= BlockSizePolicy::ON_UPDATE;
         if(item.find("DEFAULT")       != std::string_view::npos)  policy |= BlockSizePolicy::DEFAULT;
         return policy;
     }
     if constexpr(std::is_same_v<T,GainPolicy>){
-        check_item_is_valid("GainPolicy", item, {"NEVER", "HALFSWEEP", "FULLSWEEP", "SAT_VAR", "SAT_ALGO", "STK_ALGO", "FIN_BOND", "FIN_TRNC"});
+        check_item_is_valid("GainPolicy", item, {"NEVER", "HALFSWEEP", "FULLSWEEP", "SAT_EVAR", "SAT_ALGO", "STK_ALGO", "FIN_BOND", "FIN_TRNC"});
         auto policy = GainPolicy::NEVER;
         if(item.find("HALFSWEEP")   != std::string_view::npos) policy |= GainPolicy::HALFSWEEP;
         if(item.find("FULLSWEEP")   != std::string_view::npos) policy |= GainPolicy::FULLSWEEP;
-        if(item.find("SAT_VAR")     != std::string_view::npos) policy |= GainPolicy::SAT_VAR;
+        if(item.find("SAT_EVAR")     != std::string_view::npos) policy |= GainPolicy::SAT_EVAR;
         if(item.find("SAT_ALGO")    != std::string_view::npos) policy |= GainPolicy::SAT_ALGO;
         if(item.find("STK_ALGO")    != std::string_view::npos) policy |= GainPolicy::STK_ALGO;
         if(item.find("FIN_BOND")    != std::string_view::npos) policy |= GainPolicy::FIN_BOND;
@@ -1179,13 +1213,13 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "RSVD")                                  return SVDLibrary::RSVD;
     }
     if constexpr(std::is_same_v<T, UpdatePolicy>) {
-        check_item_is_valid("UpdatePolicy", item, {"NEVER","WARMUP","HALFSWEEP","FULLSWEEP", "TRUNCATED", "SAT_VAR", "SAT_ALGO", "STK_ALGO"});
+        check_item_is_valid("UpdatePolicy", item, {"NEVER","WARMUP","HALFSWEEP","FULLSWEEP", "TRUNCATED", "SAT_EVAR", "SAT_ALGO", "STK_ALGO"});
         auto policy = UpdatePolicy::NEVER;
         if(item.find("WARMUP")     != std::string_view::npos) policy |= UpdatePolicy::WARMUP;
         if(item.find("HALFSWEEP")  != std::string_view::npos) policy |= UpdatePolicy::HALFSWEEP;
         if(item.find("FULLSWEEP")  != std::string_view::npos) policy |= UpdatePolicy::FULLSWEEP;
         if(item.find("TRUNCATED")  != std::string_view::npos) policy |= UpdatePolicy::TRUNCATED;
-        if(item.find("SAT_VAR")    != std::string_view::npos) policy |= UpdatePolicy::SAT_VAR;
+        if(item.find("SAT_EVAR")    != std::string_view::npos) policy |= UpdatePolicy::SAT_EVAR;
         if(item.find("SAT_ALGO")   != std::string_view::npos) policy |= UpdatePolicy::SAT_ALGO;
         if(item.find("STK_ALGO")   != std::string_view::npos) policy |= UpdatePolicy::STK_ALGO;
         return policy;
@@ -1291,15 +1325,14 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "NEW_STATE")                             return ResetReason::NEW_STATE;
         if(item == "BOND_UPDATE")                           return ResetReason::BOND_UPDATE;
     }
-    if constexpr(std::is_same_v<T, EnvExpandMode>) {
-        auto policy = EnvExpandMode::NONE;
-        if(item.find("H1")       != std::string_view::npos) policy |= EnvExpandMode::H1;
-        if(item.find("H2")       != std::string_view::npos) policy |= EnvExpandMode::H2;
-        if(item.find("SSITE")    != std::string_view::npos) policy |= EnvExpandMode::SSITE;
-        if(item.find("NSITE")    != std::string_view::npos) policy |= EnvExpandMode::NSITE;
-        if(item.find("REAR")     != std::string_view::npos) policy |= EnvExpandMode::REAR;
-        if(item.find("FORE")  != std::string_view::npos) policy |= EnvExpandMode::FORE;
-        if(item.find("DEFAULT")  != std::string_view::npos) policy |= EnvExpandMode::DEFAULT;
+    if constexpr(std::is_same_v<T, BondExpansionPolicy>) {
+        auto policy = BondExpansionPolicy::NONE;
+        if(item.find("POSTOPT_1SITE")        != std::string_view::npos) policy |= BondExpansionPolicy::POSTOPT_1SITE;
+        if(item.find("PREOPT_NSITE_REAR")    != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_NSITE_REAR;
+        if(item.find("PREOPT_NSITE_FORE")    != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_NSITE_FORE;
+        if(item.find("H1")                   != std::string_view::npos) policy |= BondExpansionPolicy::H1;
+        if(item.find("H2")                   != std::string_view::npos) policy |= BondExpansionPolicy::H2;
+        if(item.find("DEFAULT")              != std::string_view::npos) policy |= BondExpansionPolicy::DEFAULT;
         return policy;
     }
     if constexpr(std::is_same_v<T, NormPolicy>) {
@@ -1354,6 +1387,7 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "PRODUCT_STATE_NEEL_SHUFFLED")           return StateInit::PRODUCT_STATE_NEEL_SHUFFLED;
         if(item == "PRODUCT_STATE_NEEL_DISLOCATED")         return StateInit::PRODUCT_STATE_NEEL_DISLOCATED;
         if(item == "PRODUCT_STATE_PATTERN")                 return StateInit::PRODUCT_STATE_PATTERN;
+        if(item == "SUM_OF_RANDOM_PRODUCT_STATES")          return StateInit::SUM_OF_RANDOM_PRODUCT_STATES;
     }
     if constexpr(std::is_same_v<T, StateInitType>) {
         if(item ==  "REAL")                                 return StateInitType::REAL;
@@ -1456,8 +1490,12 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "ASIS")                                  return RandomizerMode::ASIS;
     }
     if constexpr(std::is_same_v<T,OptType>){
-        if(item == "REAL")                                  return OptType::REAL;
-        if(item == "CPLX")                                  return OptType::CPLX;
+        if(item == "FP32")                                  return OptType::FP32;
+        if(item == "FP64")                                  return OptType::FP64;
+        if(item == "FP128")                                  return OptType::FP128;
+        if(item == "CX32")                                  return OptType::CX32;
+        if(item == "CX64")                                  return OptType::CX64;
+        if(item == "CX128")                                  return OptType::CX128;
     }
 
     if constexpr(std::is_same_v<T,OptAlgo>){
@@ -1470,6 +1508,7 @@ constexpr auto sv2enum(std::string_view item) {
     if constexpr(std::is_same_v<T,OptSolver>){
         if(item == "EIG")                                   return OptSolver::EIG;
         if(item == "EIGS")                                  return OptSolver::EIGS;
+        if(item == "H1H2")                                  return OptSolver::H1H2;
     }
     if constexpr(std::is_same_v<T,OptWhen>){
         if(item == "NEVER")                                 return OptWhen::NEVER;
