@@ -2,16 +2,14 @@
 
 #include "math/tenx/fwd_decl.h"
 #include "MpoSite.h"
+#include <general/sfinae.h>
 #include <h5pp/details/h5ppHid.h>
 
 template<typename Scalar>
 class LBit : public MpoSite<Scalar> {
     private:
-    h5tb_lbit                h5tb;
-    Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                     std::optional<std::vector<size_t>> skip = std::nullopt) const final;
-    Eigen::Tensor<cx128, 4>  get_mpo_q(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                       std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    using RealScalar = typename MpoSite<Scalar>::RealScalar;
+    using QuadScalar = std::conditional_t<sfinae::is_std_complex_v<Scalar>, cx128, fp128>;
     using MpoSite<Scalar>::extent2;
     using MpoSite<Scalar>::extent4;
     using MpoSite<Scalar>::all_mpo_parameters_have_been_set;
@@ -27,6 +25,12 @@ class LBit : public MpoSite<Scalar> {
     using MpoSite<Scalar>::build_mpo_squared;
     using MpoSite<Scalar>::build_mpo_q;
     using TableMap = typename MpoSite<Scalar>::TableMap;
+
+    h5tb_lbit                    h5tb;
+    Eigen::Tensor<Scalar, 4>     get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+                                         std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    Eigen::Tensor<QuadScalar, 4> get_mpo_q(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+                                           std::optional<std::vector<size_t>> skip = std::nullopt) const final;
 
     public:
     LBit(ModelType model_type_, size_t position_);

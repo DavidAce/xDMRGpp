@@ -8,6 +8,10 @@
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
 
+template class IsingRandomField<fp32>;
+template class IsingRandomField<fp64>;
+template class IsingRandomField<fp128>;
+template class IsingRandomField<cx32>;
 template class IsingRandomField<cx64>;
 template class IsingRandomField<cx128>;
 
@@ -136,27 +140,30 @@ Eigen::Tensor<Scalar, 4> IsingRandomField<Scalar>::get_mpo(Scalar energy_shift_p
     tools::log->debug("mpo({}): building tf-rf ising mpo", get_position());
     if(not all_mpo_parameters_have_been_set)
         throw except::runtime_error("mpo({}): can't build mpo: full lattice parameters haven't been set yet.", get_position());
-    double J1 = 1.0, J2 = 1.0;
+
+    auto J1 = static_cast<RealScalar>(1.0);
+    auto J2 = static_cast<RealScalar>(1.0);
     if(nbody.has_value()) {
-        J1 = 0;
-        J2 = 0;
+        J1 = static_cast<RealScalar>(0.0);
+        J2 = static_cast<RealScalar>(0.0);
         for(const auto &n : nbody.value()) {
-            if(n == 1) J1 = 1.0;
-            if(n == 2) J2 = 1.0;
+            if(n == 1) J1 = static_cast<RealScalar>(1.0);
+            if(n == 2) J2 = static_cast<RealScalar>(1.0);
         }
     }
+    auto id = tenx::asScalarType<Scalar>(qm::spin::half::tensor::id);
+    auto sx = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sx);
+    auto sz = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sz);
+
     Eigen::Tensor<Scalar, 4> mpo_build;
     mpo_build.resize(3, 3, h5tb.param.spin_dim, h5tb.param.spin_dim);
     mpo_build.setZero();
 
-    auto id = tenx::asScalarType<Scalar>(qm::spin::half::tensor::id);
-    auto sz = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sz);
-    auto sx = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sx);
 
     mpo_build.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = id;
     mpo_build.slice(std::array<long, 4>{1, 0, 0, 0}, extent4).reshape(extent2) = sz;
-    mpo_build.slice(std::array<long, 4>{2, 0, 0, 0}, extent4).reshape(extent2) = -J1 * get_field() * sx - energy_shift_per_site * id;
-    mpo_build.slice(std::array<long, 4>{2, 1, 0, 0}, extent4).reshape(extent2) = -J2 * get_coupling() * sz;
+    mpo_build.slice(std::array<long, 4>{2, 0, 0, 0}, extent4).reshape(extent2) = -J1 * static_cast<RealScalar>(get_field()) * sx - energy_shift_per_site * id;
+    mpo_build.slice(std::array<long, 4>{2, 1, 0, 0}, extent4).reshape(extent2) = -J2 * static_cast<RealScalar>(get_coupling()) * sz;
     mpo_build.slice(std::array<long, 4>{2, 2, 0, 0}, extent4).reshape(extent2) = id;
     if(tenx::hasNaN(mpo_internal)) {
         print_parameter_names();

@@ -1,5 +1,6 @@
 // #define DMRG_ENABLE_TBLIS
 #include "matvec_mpos.h"
+#include "matvec_mpos.impl.h"
 #include "../log.h"
 #include "config/settings.h"
 #include "debug/info.h"
@@ -10,10 +11,6 @@
 #include "math/linalg/tensor.h"
 #include "math/svd.h"
 #include "math/tenx.h"
-#include "tensors/edges/EdgesFinite.h"
-#include "tensors/site/env/EnvEne.h"
-#include "tensors/site/env/EnvVar.h"
-#include "tensors/site/mpo/MpoSite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include <Eigen/Cholesky>
@@ -39,141 +36,22 @@ namespace eig {
 #endif
 }
 
-template<typename T>
-template<typename EnvType>
-MatVecMPOS<T>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, /*!< The Hamiltonian MPO's  */
-                          const env_pair<const EnvType &>                          &envs_  /*!< The left and right environments.  */
-) {
-    static_assert(sfinae::is_any_v<EnvType, EnvEne, EnvVar>);
-    mpos_A.reserve(mpos_.size());
-    fullsystem = envs_.L.get_sites() == 0 and envs_.R.get_sites() == 0; //  mpos.size() == settings::model::model_size;
+// Explicit instantiations
+template class MatVecMPOS<fp32>;
+template class MatVecMPOS<fp64>;
+template class MatVecMPOS<fp128>;
+template class MatVecMPOS<cx32>;
+template class MatVecMPOS<cx64>;
+template class MatVecMPOS<cx128>;
 
-    if constexpr(std::is_same_v<EnvType, EnvEne>) {
-        for(const auto &mpo_ : mpos_) mpos_A.emplace_back(mpo_.get().MPO_as<T>());
-    }
-    if constexpr(std::is_same_v<EnvType, EnvVar>) {
-        for(const auto &mpo_ : mpos_) mpos_A.emplace_back(mpo_.get().MPO2_as<T>());
-    }
-    envL_A = envs_.L.template get_block_as<T>();
-    envR_A = envs_.R.template get_block_as<T>();
 
-    long spin_dim = 1;
-    for(const auto &mpo : mpos_A) spin_dim *= mpo.dimension(2);
-    spindims.reserve(mpos_A.size());
-    for(const auto &mpo : mpos_A) spindims.emplace_back(mpo.dimension(2));
-
-    shape_mps = {spin_dim, envL_A.dimension(0), envR_A.dimension(0)};
-    size_mps  = spin_dim * envL_A.dimension(0) * envR_A.dimension(0);
-
-    // if(mpos.size() == settings::model::model_size) {
-    //     auto t_spm = tid::ur("t_spm");
-    //     t_spm.tic();
-    //     eig::log->info("making sparse matrix ... ", t_spm.get_last_interval());
-    //     sparseMatrix = get_sparse_matrix();
-    //     t_spm.toc();
-    //     eig::log->info("making sparse matrix ... {:.3e} s | nnz {} / {} = {:.16f}", t_spm.get_last_interval(), sparseMatrix.nonZeros(), sparseMatrix.size(),
-    //                    static_cast<double>(sparseMatrix.nonZeros()) / static_cast<double>(sparseMatrix.size()));
-    // }
-
-    // If we have 5 or fewer mpos, it is faster to just merge them once and apply them in one contraction.
-    if(mpos_A.size() <= 5) {
-        constexpr auto contract_idx    = tenx::idx({1}, {0});
-        constexpr auto shuffle_idx     = tenx::array6{0, 3, 1, 4, 2, 5};
-        auto          &threads         = tenx::threads::get();
-        auto           contracted_mpos = mpos_A.front();
-        for(size_t idx = 0; idx + 1 < mpos_A.size(); ++idx) {
-            const auto &mpoL = idx == 0 ? mpos_A[idx] : contracted_mpos;
-            const auto &mpoR = mpos_A[idx + 1];
-            auto new_dims    = std::array{mpoL.dimension(0), mpoR.dimension(1), mpoL.dimension(2) * mpoR.dimension(2), mpoL.dimension(3) * mpoR.dimension(3)};
-            auto temp        = Eigen::Tensor<T, 4>(new_dims);
-            temp.device(*threads->dev) = mpoL.contract(mpoR, contract_idx).shuffle(shuffle_idx).reshape(new_dims);
-            contracted_mpos            = std::move(temp);
-        }
-        mpos_A   = {contracted_mpos}; // Replace by a single pre-contracted mpo
-        spindims = {mpos_A.front().dimension(2)};
-    } else {
-        // We pre-shuffle each mpo to speed up the sequential contraction
-        for(const auto &mpo : mpos_A) mpos_A_shf.emplace_back(mpo.shuffle(tenx::array4{2, 3, 0, 1}));
-    }
-
-    t_factorOP = std::make_unique<tid::ur>("Time FactorOp");
-    t_genMat   = std::make_unique<tid::ur>("Time genMat");
-    t_multOPv  = std::make_unique<tid::ur>("Time MultOpv");
-    t_multAx   = std::make_unique<tid::ur>("Time MultAx");
-    t_multPc   = std::make_unique<tid::ur>("Time MultPc");
-}
-template MatVecMPOS<fp32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-template MatVecMPOS<fp128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-template MatVecMPOS<cx32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-template MatVecMPOS<cx128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-
-template MatVecMPOS<fp32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
-template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
-template MatVecMPOS<fp128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
-template MatVecMPOS<cx32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
-template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
-template MatVecMPOS<cx128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
-
-template<typename T>
-template<typename EnvTypeA, typename EnvTypeB>
-MatVecMPOS<T>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, /*!< The Hamiltonian MPO's  */
-                          const env_pair<const EnvTypeA &>                         &enva_, /*!< The left and right environments.  */
-                          const env_pair<const EnvTypeB &>                         &envb_)
-    : MatVecMPOS(mpos_, enva_) {
-    // static_assert(sfinae::is_any_v<EnvTypeA, EnvVar>);
-    // static_assert(sfinae::is_any_v<EnvTypeB, EnvEne>);
-    if constexpr(std::is_same_v<EnvTypeB, EnvEne>) {
-        for(const auto &mpo_ : mpos_) mpos_B.emplace_back(mpo_.get().MPO_as<T>());
-    }
-    if constexpr(std::is_same_v<EnvTypeB, EnvVar>) {
-        for(const auto &mpo_ : mpos_) mpos_B.emplace_back(mpo_.get().MPO2_as<T>());
-    }
-    envL_B = envb_.L.template get_block_as<T>();
-    envR_B = envb_.R.template get_block_as<T>();
-
-    if(mpos_B.size() <= 5) {
-        constexpr auto contract_idx    = tenx::idx({1}, {0});
-        constexpr auto shuffle_idx     = tenx::array6{0, 3, 1, 4, 2, 5};
-        auto          &threads         = tenx::threads::get();
-        auto           contracted_mpos = mpos_B.front();
-        for(size_t idx = 0; idx + 1 < mpos_B.size(); ++idx) {
-            const auto &mpoL = idx == 0 ? mpos_B[idx] : contracted_mpos;
-            const auto &mpoR = mpos_B[idx + 1];
-            auto new_dims    = std::array{mpoL.dimension(0), mpoR.dimension(1), mpoL.dimension(2) * mpoR.dimension(2), mpoL.dimension(3) * mpoR.dimension(3)};
-            auto temp        = Eigen::Tensor<T, 4>(new_dims);
-            temp.device(*threads->dev) = mpoL.contract(mpoR, contract_idx).shuffle(shuffle_idx).reshape(new_dims);
-            contracted_mpos            = std::move(temp);
-        }
-        mpos_B = {contracted_mpos}; // Replace by a single pre-contracted mpo
-    } else {
-        // We pre-shuffle each mpo to speed up the sequential contraction
-        for(const auto &mpo : mpos_B) mpos_B_shf.emplace_back(mpo.shuffle(tenx::array4{2, 3, 0, 1}));
-    }
-}
-
-template MatVecMPOS<fp32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
-template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
-template MatVecMPOS<fp128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
-template MatVecMPOS<cx32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
-template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
-template MatVecMPOS<cx128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &enva_, const env_pair<const EnvEne &> &envb);
-
-template MatVecMPOS<fp32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
-template MatVecMPOS<fp64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
-template MatVecMPOS<fp128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
-template MatVecMPOS<cx32>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
-template MatVecMPOS<cx64>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
-template MatVecMPOS<cx128>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &enva_, const env_pair<const EnvVar &> &envb);
-
-template<typename T>
-int MatVecMPOS<T>::rows() const {
+template<typename Scalar>
+int MatVecMPOS<Scalar>::rows() const {
     return safe_cast<int>(size_mps);
 }
 
-template<typename T>
-int MatVecMPOS<T>::cols() const {
+template<typename Scalar>
+int MatVecMPOS<Scalar>::cols() const {
     return safe_cast<int>(size_mps);
 }
 
@@ -205,8 +83,8 @@ std::vector<long> get_offset(long flatindex, size_t rank, const std::vector<long
     return indices;
 }
 //
-// template<typename T>
-// void MatVecMPOS<T>::thomas(long size, T *x, T *const dl, T *const dm, T *const du) {
+// template<typename Scalar>
+// void MatVecMPOS<Scalar>::thomas(long size, Scalar *x, Scalar *const dl, Scalar *const dm, Scalar *const du) {
 //     /*
 //      solves Ax = d, where A is a tridiagonal matrix consisting of vectors a, b, c
 //      X = number of equations
@@ -234,8 +112,8 @@ std::vector<long> get_offset(long flatindex, size_t rank, const std::vector<long
 //     for(long ix = size - 2; ix >= 0; ix--) x[ix] -= t[ix] * x[ix + 1];
 // }
 //
-// template<typename T>
-// void MatVecMPOS<T>::thomas2(long size, T *x, T *const a, T *const b, T *const c) {
+// template<typename Scalar>
+// void MatVecMPOS<Scalar>::thomas2(long size, Scalar *x, Scalar *const a, Scalar *const b, Scalar *const c) {
 //     /*
 //     // size is the number of unknowns
 //
@@ -269,14 +147,14 @@ TI HammingDist(TI x, TI y) {
     return dist;
 }
 
-template<typename T>
-T MatVecMPOS<T>::get_matrix_element(long I, long J, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-                                    const Eigen::Tensor<T, 3> &ENVR) const {
+template<typename Scalar>
+Scalar MatVecMPOS<Scalar>::get_matrix_element(long I, long J, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
+                                              const Eigen::Tensor<Scalar, 3> &ENVR) const {
     if(I < 0 or I >= size_mps) return 0;
     if(J < 0 or J >= size_mps) return 0;
 
     if(MPOS.empty()) {
-        return I == J ? T(1.0) : T(0.0); // Assume an identity matrix
+        return I == J ? Scalar(1.0) : Scalar(0.0); // Assume an identity matrix
     }
 
     auto rowindices = std::array<long, 3>{};
@@ -328,7 +206,7 @@ T MatVecMPOS<T>::get_matrix_element(long I, long J, const std::vector<Eigen::Ten
         auto        ext = std::array<long, 4>{dim[0], dim[1], 1, 1};
         if(mdx == 0) {
             mpo_i = mpo.slice(off, ext);
-            if(tenx::isZero(mpo_i, std::numeric_limits<RealScalar>::epsilon())) { return T{0.0}; }
+            if(tenx::isZero(mpo_i, std::numeric_limits<RealScalar>::epsilon())) { return Scalar{0.0}; }
             continue;
         }
         auto shp = std::array<long, 4>{mpo_i.dimension(0), dim[1], 1, 1};
@@ -338,12 +216,12 @@ T MatVecMPOS<T>::get_matrix_element(long I, long J, const std::vector<Eigen::Ten
         if(tenx::isZero(mpo_i, std::numeric_limits<RealScalar>::epsilon())) {
             // eig::log->info("({}, {}) = < {} | {} > = 0 (mdx {}, pr {}, pc {}, pd {}, hd {})", I, J, irxs, icxs, mdx, pr, pc, pd,
             // HammingDist(static_cast<size_t>(ir), static_cast<size_t>(ic)));
-            return T{0.0};
+            return Scalar{0.0};
         }
     }
 
     if(fullsystem and mpo_i.size() == 1) {
-        if(mpo_i.coeff(0) != T{0.0} and shouldBeZero) {
+        if(mpo_i.coeff(0) != Scalar{0.0} and shouldBeZero) {
             auto valmsg = std::format("{:.16f}{:+.16f}i", std::real(mpo_i.coeff(0)), std::imag(mpo_i.coeff(0)));
             eig::log->info("({}, {}) = < {} | {} > = {}", I, J, irxs, icxs, valmsg);
         }
@@ -370,9 +248,9 @@ T MatVecMPOS<T>::get_matrix_element(long I, long J, const std::vector<Eigen::Ten
     // return elem.coeff(0);
 }
 
-template<typename T>
-typename MatVecMPOS<T>::VectorType MatVecMPOS<T>::get_diagonal_new(long offset, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-                                                                   const Eigen::Tensor<T, 3> &ENVR) const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::get_diagonal_new(long offset, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS,
+                                                                             const Eigen::Tensor<Scalar, 3> &ENVL, const Eigen::Tensor<Scalar, 3> &ENVR) const {
     if(MPOS.empty()) return VectorType::Ones(size_mps); // Assume an identity matrix
     auto res = VectorType(size_mps);
 #pragma omp parallel for
@@ -448,9 +326,10 @@ long round_up(long num, long multiple) {
     return num + multiple - remainder;
 }
 
-template<typename T>
-typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset, long extent, const std::vector<Eigen::Tensor<T, 4>> &MPOS,
-                                                                     const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_diagonal_block(long offset, long extent, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS,
+                                                                               const Eigen::Tensor<Scalar, 3> &ENVL,
+                                                                               const Eigen::Tensor<Scalar, 3> &ENVR) const {
     if(MPOS.empty()) return MatrixType::Identity(extent, extent);
     extent = std::min(extent, size_mps - offset);
     if(offset >= size_mps) { return {}; }
@@ -468,7 +347,7 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
                 // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
                 auto elem = get_matrix_element(I + offset, J + offset, MPOS, ENVL, ENVR);
                 res(I, J) = elem;
-                if constexpr(std::is_same_v<T, cx64>)
+                if constexpr(std::is_same_v<Scalar, cx64>)
                     res(J, I) = std::conj(elem);
                 else
                     res(J, I) = elem;
@@ -513,8 +392,8 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
             auto off_res  = std::array<long, 2>{IX - offset, JY - offset};
             auto ext_res  = std::array<long, 2>{IN - IX + 1, CN - C0 + 1};
 
-            auto get_subblock = [&](const std::vector<Eigen::Tensor<T, 4>> &mpos_, const Eigen::Tensor<T, 3> &envl_,
-                                    const Eigen::Tensor<T, 3> &envr_) -> MatrixType {
+            auto get_subblock = [&](const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_, const Eigen::Tensor<Scalar, 3> &envl_,
+                                    const Eigen::Tensor<Scalar, 3> &envr_) -> MatrixType {
                 if(mpos_.empty()) {
                     auto subblock = MatrixType(ext_res[0], ext_res[1]);
                     subblock.setZero();
@@ -535,7 +414,7 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
                 std::array<long, 3> ext_envr = {R_ext[2], C_ext[2], mpos_.front().dimension(1)};
                 std::array<long, 4> off_mpos = {off_envl[2], off_envr[2], R0_ijk[0], C0_ijk[0]};
                 std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
-                auto                block    = Eigen::Tensor<T, 2>(ext_blk2);
+                auto                block    = Eigen::Tensor<Scalar, 2>(ext_blk2);
                 if(envl_.dimension(0) <= envr_.dimension(0)) {
                     block.device(*threads->dev) = envl_.slice(off_envl, ext_envl)
                                                       .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
@@ -568,11 +447,12 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
     }
 }
 
-template<typename T>
-typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A,
-                                                                     const Eigen::Tensor<T, 3> &ENVL_A, const Eigen::Tensor<T, 3> &ENVR_A,
-                                                                     const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
-                                                                     const Eigen::Tensor<T, 3> &ENVR_B) const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType
+    MatVecMPOS<Scalar>::get_diagonal_block(long offset, long extent, Scalar shift, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_A,
+                                           const Eigen::Tensor<Scalar, 3> &ENVL_A, const Eigen::Tensor<Scalar, 3> &ENVR_A,
+                                           const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_B, const Eigen::Tensor<Scalar, 3> &ENVL_B,
+                                           const Eigen::Tensor<Scalar, 3> &ENVR_B) const {
     if(MPOS_A.empty()) return MatrixType::Identity(extent, extent);
     extent = std::min(extent, size_mps - offset);
     if(offset >= size_mps) { return {}; }
@@ -588,11 +468,11 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
                 if(I + offset >= size_mps) continue;
                 if(J + offset >= size_mps) continue;
                 // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
-                T elemA   = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
-                T elemB   = shift != T{0.0} ? get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B) : T{0.0};
-                T elem    = elemA - shift * elemB;
-                res(I, J) = elem;
-                if constexpr(std::is_same_v<T, cx64>)
+                Scalar elemA = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
+                Scalar elemB = shift != Scalar{0.0} ? get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B) : Scalar{0.0};
+                Scalar elem  = elemA - shift * elemB;
+                res(I, J)    = elem;
+                if constexpr(std::is_same_v<Scalar, cx64>)
                     res(J, I) = std::conj(elem);
                 else
                     res(J, I) = elem;
@@ -637,8 +517,8 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
             auto off_res  = std::array<long, 2>{IX - offset, JY - offset};
             auto ext_res  = std::array<long, 2>{IN - IX + 1, CN - C0 + 1};
 
-            auto get_subblock = [&](const std::vector<Eigen::Tensor<T, 4>> &mpos_, const Eigen::Tensor<T, 3> &envl_,
-                                    const Eigen::Tensor<T, 3> &envr_) -> MatrixType {
+            auto get_subblock = [&](const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_, const Eigen::Tensor<Scalar, 3> &envl_,
+                                    const Eigen::Tensor<Scalar, 3> &envr_) -> MatrixType {
                 if(mpos_.empty()) {
                     auto subblock = MatrixType(ext_res[0], ext_res[1]);
                     subblock.setZero();
@@ -647,7 +527,7 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
                         for(long C = 0; C < subblock.cols(); ++C) {
                             long I = IX - R;
                             long J = JY - C;
-                            if(I == J) subblock(R, C) = T{1.0};
+                            if(I == J) subblock(R, C) = Scalar{1.0};
                         }
                     }
 
@@ -659,7 +539,7 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
                 std::array<long, 3> ext_envr = {R_ext[2], C_ext[2], mpos_.front().dimension(1)};
                 std::array<long, 4> off_mpos = {off_envl[2], off_envr[2], R0_ijk[0], C0_ijk[0]};
                 std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
-                auto                block    = Eigen::Tensor<T, 2>(ext_blk2);
+                auto                block    = Eigen::Tensor<Scalar, 2>(ext_blk2);
                 if(envl_.dimension(0) <= envr_.dimension(0)) {
                     block.device(*threads->dev) = envl_.slice(off_envl, ext_envl)
                                                       .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
@@ -677,7 +557,7 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
             };
 
             res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) = get_subblock(MPOS_A, ENVL_A, ENVR_A);
-            if(shift != T{0.0}) res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) -= get_subblock(MPOS_B, ENVL_B, ENVR_B) * shift;
+            if(shift != Scalar{0.0}) res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) -= get_subblock(MPOS_B, ENVL_B, ENVR_B) * shift;
             MatrixType blkres = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // MatrixType blkdbg = dbg.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // if(!blkres.isApprox(blkdbg)) {
@@ -693,11 +573,12 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
     }
 }
 
-// template<typename T>
-// typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block_old(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A,
-//                                                                          const Eigen::Tensor<T, 3> &ENVL_A, const Eigen::Tensor<T, 3> &ENVR_A,
-//                                                                          const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
-//                                                                          const Eigen::Tensor<T, 3> &ENVR_B) const {
+// template<typename Scalar>
+// typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_diagonal_block_old(long offset, long extent, Scalar shift, const
+// std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_A,
+//                                                                          const Eigen::Tensor<Scalar, 3> &ENVL_A, const Eigen::Tensor<Scalar, 3> &ENVR_A,
+//                                                                          const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_B, const Eigen::Tensor<Scalar, 3>
+//                                                                          &ENVL_B, const Eigen::Tensor<Scalar, 3> &ENVR_B) const {
 //     if(MPOS_A.empty()) return MatrixType::Identity(extent, extent);
 //     extent = std::min(extent, size_mps - offset);
 //     if(offset >= size_mps) { return {}; }
@@ -717,7 +598,7 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
 //                 auto elemB = get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B);
 //                 auto elem  = elemA - shift * elemB;
 //                 res(I, J)  = elem;
-//                 if constexpr(std::is_same_v<T, cx64>)
+//                 if constexpr(std::is_same_v<Scalar, cx64>)
 //                     res(J, I) = std::conj(elem);
 //                 else
 //                     res(J, I) = elem;
@@ -739,7 +620,7 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
 //         //         auto elemB = get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B);
 //         //         auto elem  = elemA - shift * elemB;
 //         //         dbg(I, J)  = elem;
-//         //         if constexpr(std::is_same_v<T, cx64>)
+//         //         if constexpr(std::is_same_v<Scalar, cx64>)
 //         //             dbg(J, I) = std::conj(elem);
 //         //         else
 //         //             dbg(J, I) = elem;
@@ -774,8 +655,8 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
 //             auto off_res  = std::array<long, 2>{I0 - offset, JY - offset};
 //             auto ext_res  = std::array<long, 2>{IN - I0 + 1, CN - C0 + 1};
 //
-//             auto get_tile2 = [&](const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) ->
-//             MatrixType {
+//             auto get_tile2 = [&](const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL, const Eigen::Tensor<Scalar, 3>
+//             &ENVR) -> MatrixType {
 //                 if(MPOS.empty()) {
 //                     auto block = MatrixType(ext_res[0], ext_res[1]);
 //                     block.setZero();
@@ -797,7 +678,7 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
 //                 std::array<long, 4> off_mpos = {off_envl[2], off_envr[2], R0_ijk[0], C0_ijk[0]};
 //                 std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
 //
-//                 auto  block   = Eigen::Tensor<T, 2>(ext_blk2);
+//                 auto  block   = Eigen::Tensor<Scalar, 2>(ext_blk2);
 //                 auto &threads = tenx::threads::get();
 //
 //                 block.device(*threads->dev) = ENVL.slice(off_envl, ext_envl)
@@ -852,26 +733,26 @@ typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_diagonal_block(long offset
 //     }
 // }
 
-template<typename T>
-typename MatVecMPOS<T>::VectorType MatVecMPOS<T>::get_row(long row_idx, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-                                                          const Eigen::Tensor<T, 3> &ENVR) const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::get_row(long row_idx, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS,
+                                                                    const Eigen::Tensor<Scalar, 3> &ENVL, const Eigen::Tensor<Scalar, 3> &ENVR) const {
     auto res = VectorType(size_mps);
 #pragma omp parallel for
     for(long J = 0; J < size_mps; ++J) { res[J] = get_matrix_element(row_idx, J, MPOS, ENVL, ENVR); }
     return res;
 }
-template<typename T>
-typename MatVecMPOS<T>::VectorType MatVecMPOS<T>::get_col(long col_idx, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-                                                          const Eigen::Tensor<T, 3> &ENVR) const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::get_col(long col_idx, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS,
+                                                                    const Eigen::Tensor<Scalar, 3> &ENVL, const Eigen::Tensor<Scalar, 3> &ENVR) const {
     auto res = VectorType(size_mps);
 #pragma omp parallel for
     for(long I = 0; I < size_mps; ++I) { res[I] = get_matrix_element(I, col_idx, MPOS, ENVL, ENVR); }
     return res;
 }
 
-// template<typename T>
-// typename MatVecMPOS<T>::VectorType MatVecMPOS<T>::get_diagonal(long offset, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-// const Eigen::Tensor<T, 3> &ENVR) const {
+// template<typename Scalar>
+// typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::get_diagonal(long offset, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const
+// Eigen::Tensor<Scalar, 3> &ENVL, const Eigen::Tensor<Scalar, 3> &ENVR) const {
 //     // auto &threads = tenx::threads::get();
 //     auto res   = VectorType(size_mps);
 //     auto ext_j = std::array<long, 3>{1, 1, envL_A.dimension(2)};
@@ -961,13 +842,13 @@ typename MatVecMPOS<T>::VectorType MatVecMPOS<T>::get_col(long col_idx, const st
 //     return res;
 // }
 
-// template<typename T>
-// void MatVecMPOS<T>::FactorOP() {
-//     throw except::runtime_error("MatVecMPOS<T>::FactorOP(): not implemented");
+// template<typename Scalar>
+// void MatVecMPOS<Scalar>::FactorOP() {
+//     throw except::runtime_error("MatVecMPOS<Scalar>::FactorOP(): not implemented");
 // }
 
-template<typename T>
-void MatVecMPOS<T>::FactorOP() {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::FactorOP() {
     auto t_token = t_factorOP->tic_token();
     if(readyFactorOp) { return; }
     if(factorization == eig::Factorization::NONE) {
@@ -975,7 +856,7 @@ void MatVecMPOS<T>::FactorOP() {
         return;
     }
     MatrixType A_matrix = get_matrix();
-    if(not readyShift and std::abs(get_shift()) != T{0.0}) { A_matrix.diagonal() -= VectorType::Constant(rows(), get_shift()); }
+    if(not readyShift and std::abs(get_shift()) != Scalar{0.0}) { A_matrix.diagonal() -= VectorType::Constant(rows(), get_shift()); }
 
     if(factorization == eig::Factorization::LDLT) {
         eig::log->debug("LDLT Factorization");
@@ -994,24 +875,24 @@ void MatVecMPOS<T>::FactorOP() {
     readyFactorOp = true;
 }
 
-template<typename T>
-void MatVecMPOS<T>::MultOPv([[maybe_unused]] T *mps_in_, [[maybe_unused]] T *mps_out_) {
-    throw except::runtime_error("void MatVecMPOS<T>::MultOPv(...) not implemented");
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultOPv([[maybe_unused]] Scalar *mps_in_, [[maybe_unused]] Scalar *mps_out_) {
+    throw except::runtime_error("void MatVecMPOS<Scalar>::MultOPv(...) not implemented");
 }
 
-// template<typename T>
-// void MatVecMPOS<T>::MultOPv([[maybe_unused]] void *x, [[maybe_unused]] int *ldx, [[maybe_unused]] void *y, [[maybe_unused]] int *ldy,
+// template<typename Scalar>
+// void MatVecMPOS<Scalar>::MultOPv([[maybe_unused]] void *x, [[maybe_unused]] int *ldx, [[maybe_unused]] void *y, [[maybe_unused]] int *ldy,
 //                             [[maybe_unused]] int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) {
-//     throw except::runtime_error("MatVecMPOS<T>::MultOPv(...): not implemented");
+//     throw except::runtime_error("MatVecMPOS<Scalar>::MultOPv(...): not implemented");
 // }
-template<typename T>
-void MatVecMPOS<T>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, int *err) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, int *err) {
     auto token = t_multOPv->tic_token();
     switch(side) {
         case eig::Side::R: {
             for(int i = 0; i < *blockSize; i++) {
-                T *x_ptr = static_cast<T *>(x) + *ldx * i;
-                T *y_ptr = static_cast<T *>(y) + *ldy * i;
+                Scalar *x_ptr = static_cast<Scalar *>(x) + *ldx * i;
+                Scalar *y_ptr = static_cast<Scalar *>(y) + *ldy * i;
                 if(factorization == eig::Factorization::LDLT) {
                     Eigen::Map<VectorType> x_map(x_ptr, *ldx);
                     Eigen::Map<VectorType> y_map(y_ptr, *ldy);
@@ -1042,11 +923,11 @@ void MatVecMPOS<T>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize
     *err = 0;
 }
 
-template<typename T>
-void MatVecMPOS<T>::MultAx(T *mps_in_, T *mps_out_) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultAx(Scalar *mps_in_, Scalar *mps_out_) {
     auto token   = t_multAx->tic_token();
-    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<T, 3>>(mps_in_, shape_mps);
-    auto mps_out = Eigen::TensorMap<Eigen::Tensor<T, 3>>(mps_out_, shape_mps);
+    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(mps_in_, shape_mps);
+    auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
     if(mpos_A.size() == 1) {
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A.front(), envL_A, envR_A);
     } else {
@@ -1054,11 +935,11 @@ void MatVecMPOS<T>::MultAx(T *mps_in_, T *mps_out_) {
     }
     num_mv++;
 }
-template<typename T>
-void MatVecMPOS<T>::MultAx(const T *mps_in_, T *mps_out_) const {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultAx(const Scalar *mps_in_, Scalar *mps_out_) const {
     auto token   = t_multAx->tic_token();
-    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<T, 3>>(mps_in_, shape_mps);
-    auto mps_out = Eigen::TensorMap<Eigen::Tensor<T, 3>>(mps_out_, shape_mps);
+    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(mps_in_, shape_mps);
+    auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
     if(mpos_A.size() == 1) {
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A.front(), envL_A, envR_A);
     } else {
@@ -1066,24 +947,30 @@ void MatVecMPOS<T>::MultAx(const T *mps_in_, T *mps_out_) const {
     }
     num_mv++;
 }
-template<typename T>
-void MatVecMPOS<T>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::perform_op(const Scalar *mps_in_, Scalar *mps_out_) const {
+    MultAx(mps_in_, mps_out_);
+}
+
+
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
     for(int i = 0; i < *blockSize; i++) {
-        T *mps_in_ptr  = static_cast<T *>(x) + *ldx * i;
-        T *mps_out_ptr = static_cast<T *>(y) + *ldy * i;
+        Scalar *mps_in_ptr  = static_cast<Scalar *>(x) + *ldx * i;
+        Scalar *mps_out_ptr = static_cast<Scalar *>(y) + *ldy * i;
         MultAx(mps_in_ptr, mps_out_ptr);
     }
     *err = 0;
 }
 
-template<typename T>
-void MatVecMPOS<T>::MultBx(T *mps_in_, T *mps_out_) const {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultBx(Scalar *mps_in_, Scalar *mps_out_) const {
     if(mpos_B.empty() and mpos_B_shf.empty()) return;
     auto token = t_multAx->tic_token();
 
-    auto mps_in  = Eigen::TensorMap<Eigen::Tensor<T, 3>>(mps_in_, shape_mps);
-    auto mps_out = Eigen::TensorMap<Eigen::Tensor<T, 3>>(mps_out_, shape_mps);
-    auto tmp_mps = Eigen::Tensor<T, 3>(shape_mps);
+    auto mps_in  = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_in_, shape_mps);
+    auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
+    auto tmp_mps = Eigen::Tensor<Scalar, 3>(shape_mps);
     if(mpos_B.size() == 1) {
         // tools::common::contraction::matrix_vector_product(tmp_mps, mps_in, mpos_B.front(), envL_B, envR_B);
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_B.front(), envL_B, envR_B);
@@ -1101,20 +988,20 @@ void MatVecMPOS<T>::MultBx(T *mps_in_, T *mps_out_) const {
     num_mv++;
 }
 
-template<typename T>
-void MatVecMPOS<T>::MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
     for(int i = 0; i < *blockSize; i++) {
-        T *mps_in_ptr  = static_cast<T *>(x) + *ldx * i;
-        T *mps_out_ptr = static_cast<T *>(y) + *ldy * i;
+        Scalar *mps_in_ptr  = static_cast<Scalar *>(x) + *ldx * i;
+        Scalar *mps_out_ptr = static_cast<Scalar *>(y) + *ldy * i;
         MultBx(mps_in_ptr, mps_out_ptr);
     }
     *err = 0;
 }
 
-// template<typename T>
-// std::vector<std::pair<T, long>> MatVecMPOS<T>::get_k_smallest(const VectorType &vec, size_t k) const {
+// template<typename Scalar>
+// std::vector<std::pair<Scalar, long>> MatVecMPOS<Scalar>::get_k_smallest(const VectorType &vec, size_t k) const {
 //     using idx_pair = std::pair<Scalar, long>;
-//     std::priority_queue<T> pq;
+//     std::priority_queue<Scalar> pq;
 //     for(auto d : vec) {
 //         if(pq.size() >= k && pq.top() > d) {
 //             pq.push(d);
@@ -1130,9 +1017,9 @@ void MatVecMPOS<T>::MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize,
 //     return result;
 // }
 
-// template<typename T>
-// std::vector<long> MatVecMPOS<T>::get_k_smallest(const VectorType &vec, size_t k) const {
-//     std::priority_queue<T> pq;
+// template<typename Scalar>
+// std::vector<long> MatVecMPOS<Scalar>::get_k_smallest(const VectorType &vec, size_t k) const {
+//     std::priority_queue<Scalar> pq;
 //     for(auto d : vec) {
 //         if(pq.size() >= k && pq.top() > d) {
 //             pq.push(d);
@@ -1148,8 +1035,8 @@ void MatVecMPOS<T>::MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize,
 //     return result;
 // }
 //
-// template<typename T>
-// std::vector<long> MatVecMPOS<T>::get_k_largest(const VectorType &vec, size_t k) const {
+// template<typename Scalar>
+// std::vector<long> MatVecMPOS<Scalar>::get_k_largest(const VectorType &vec, size_t k) const {
 //     using idx_pair = std::pair<Scalar, long>;
 //     std::priority_queue<idx_pair, std::vector<idx_pair>, std::greater<idx_pair>> q;
 //     for(long i = 0; i < vec.size(); ++i) {
@@ -1169,22 +1056,22 @@ void MatVecMPOS<T>::MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize,
 //     return res;
 // }
 
-template<typename T>
-Eigen::Tensor<T, 3> MatVecMPOS<T>::operator*(const Eigen::Tensor<T, 3> &x) const {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 3> MatVecMPOS<Scalar>::operator*(const Eigen::Tensor<Scalar, 3> &x) const {
     assert(x.size() == get_size());
-    Eigen::Tensor<T, 3> y(x.dimensions());
+    Eigen::Tensor<Scalar, 3> y(x.dimensions());
     MultAx(x.data(), y.data());
     return y;
 }
-template<typename T>
-Eigen::Tensor<T, 1> MatVecMPOS<T>::operator*(const Eigen::Tensor<T, 1> &x) const {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 1> MatVecMPOS<Scalar>::operator*(const Eigen::Tensor<Scalar, 1> &x) const {
     assert(x.size() == get_size());
-    Eigen::Tensor<T, 1> y(x.size());
+    Eigen::Tensor<Scalar, 1> y(x.size());
     MultAx(x.data(), y.data());
     return y;
 }
-template<typename T>
-typename MatVecMPOS<T>::VectorType MatVecMPOS<T>::operator*(const VectorType &x) const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::operator*(const VectorType &x) const {
     assert(x.size() == get_size());
     VectorType y(x.size());
     MultAx(x.data(), y.data());
@@ -1198,12 +1085,12 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> cond(const Eigen::MatrixBase<Derived> &
     return solver.singularValues().head(rank);
 }
 
-template<typename T>
-void MatVecMPOS<T>::CalcPc(T shift) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
     // if(readyCalcPc) return;
     if(lockCalcPc) return;
     if(preconditioner == eig::Preconditioner::NONE) {
-        eig::log->info("MatVecMPOS<T>::CalcPc(): no preconditioner chosen");
+        eig::log->info("MatVecMPOS<Scalar>::CalcPc(): no preconditioner chosen");
         return;
     }
     if(jcbShift.has_value()) {
@@ -1216,15 +1103,15 @@ void MatVecMPOS<T>::CalcPc(T shift) {
     long jcbBlockSize = jcbMaxBlockSize;
     if(jcbBlockSize == 1) {
         if(jcbDiagA.size() + jcbDiagB.size() > 0) return; // We only need to do this once
-        eig::log->trace("MatVecMPOS<T>::CalcPc(): calculating the jacobi preconditioner ... (shift = {:.16f})", static_cast<fp64>(std::real(shift)));
+        eig::log->trace("MatVecMPOS<Scalar>::CalcPc(): calculating the jacobi preconditioner ... (shift = {:.16f})", static_cast<fp64>(std::real(shift)));
         jcbDiagA   = get_diagonal_new(0, mpos_A, envL_A, envR_A);
         jcbDiagB   = get_diagonal_new(0, mpos_B, envL_B, envR_B);
         lockCalcPc = true;
-        eig::log->debug("MatVecMPOS<T>::CalcPc(): calculating the jacobi preconditioner ... done (shift = {:.16f})", static_cast<fp64>(std::real(shift)));
+        eig::log->debug("MatVecMPOS<Scalar>::CalcPc(): calculating the jacobi preconditioner ... done (shift = {:.16f})", static_cast<fp64>(std::real(shift)));
     } else if(jcbBlockSize > 1) {
         long nblocks = 1 + ((size_mps - 1) / jcbBlockSize); // ceil: note that the last block may be smaller than blocksize!
 
-        eig::log->debug("MatVecMPOS<T>::CalcPc(): calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} ...",
+        eig::log->debug("MatVecMPOS<Scalar>::CalcPc(): calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} ...",
                         eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks);
         std::vector<fp64> sparsity;
         auto              m_rss = debug::mem_hwm_in_mb();
@@ -1456,19 +1343,19 @@ void MatVecMPOS<T>::CalcPc(T shift) {
         }
         t_jcb.toc();
         auto spavg = std::accumulate(sparsity.begin(), sparsity.end(), 0.0) / static_cast<double>(sparsity.size());
-        eig::log->debug(
-            "MatVecMPOS<T>::CalcPc(): calculating the block jacobi preconditioner | size {} | diagonal blocksize {} | nblocks {} ... done | t {:.3e} s | avg "
-            "sparsity {:.3e} | mem +{:.3e} MB",
-            size_mps, jcbBlockSize, nblocks, t_jcb.get_last_interval(), spavg, debug::mem_hwm_in_mb() - m_rss);
+        eig::log->debug("MatVecMPOS<Scalar>::CalcPc(): calculating the block jacobi preconditioner | size {} | diagonal blocksize {} | nblocks {} ... done | t "
+                        "{:.3e} s | avg "
+                        "sparsity {:.3e} | mem +{:.3e} MB",
+                        size_mps, jcbBlockSize, nblocks, t_jcb.get_last_interval(), spavg, debug::mem_hwm_in_mb() - m_rss);
     }
     readyCalcPc = true;
 }
 
-template<typename T>
-void MatVecMPOS<T>::MultPc([[maybe_unused]] void *x, [[maybe_unused]] int *ldx, [[maybe_unused]] void *y, [[maybe_unused]] int *ldy,
-                           [[maybe_unused]] int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] void *x, [[maybe_unused]] int *ldx, [[maybe_unused]] void *y, [[maybe_unused]] int *ldy,
+                                [[maybe_unused]] int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) {
     for(int i = 0; i < *blockSize; i++) {
-        T shift = static_cast<T>(primme->ShiftsForPreconditioner[i]);
+        Scalar shift = static_cast<Scalar>(primme->ShiftsForPreconditioner[i]);
         // if(!mpos_B.empty())
         //     shift = std::abs(primme->stats.estimateMaxEVal) > std::abs(primme->stats.estimateMinEVal) ? primme->stats.estimateMaxEVal
         //                                                                                               : primme->stats.estimateMinEVal;
@@ -1476,16 +1363,16 @@ void MatVecMPOS<T>::MultPc([[maybe_unused]] void *x, [[maybe_unused]] int *ldx, 
         // eig::log->info("primme->stats.estimateMaxEVal     : {:.16f}", primme->stats.estimateMaxEVal);
         // eig::log->info("primme->stats.estimateMinEval     : {:.16f}", primme->stats.estimateMinEVal);
         // eig::log->info("primme->ShiftsForPreconditioner[i]: {:.16f}", primme->ShiftsForPreconditioner[i]);
-        T *mps_in_ptr  = static_cast<T *>(x) + *ldx * i;
-        T *mps_out_ptr = static_cast<T *>(y) + *ldy * i;
+        Scalar *mps_in_ptr  = static_cast<Scalar *>(x) + *ldx * i;
+        Scalar *mps_out_ptr = static_cast<Scalar *>(y) + *ldy * i;
         MultPc(mps_in_ptr, mps_out_ptr, shift);
         // MultPc(mps_in_ptr, mps_out_ptr, primme->ShiftsForPreconditioner[i]);
     }
     *err = 0;
 }
 
-template<typename T>
-void MatVecMPOS<T>::MultPc([[maybe_unused]] T *mps_in_, [[maybe_unused]] T *mps_out_, T shift) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] Scalar *mps_in_, [[maybe_unused]] Scalar *mps_out_, Scalar shift) {
     if(preconditioner == eig::Preconditioner::NONE) return;
     auto mps_in  = Eigen::Map<VectorType>(mps_in_, size_mps);
     auto mps_out = Eigen::Map<VectorType>(mps_out_, size_mps);
@@ -1551,11 +1438,11 @@ void MatVecMPOS<T>::MultPc([[maybe_unused]] T *mps_in_, [[maybe_unused]] T *mps_
     }
 }
 
-template<typename T>
-void MatVecMPOS<T>::print() const {}
+template<typename Scalar>
+void MatVecMPOS<Scalar>::print() const {}
 
-template<typename T>
-void MatVecMPOS<T>::reset() {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::reset() {
     if(t_factorOP) t_factorOP->reset();
     if(t_multOPv) t_multOPv->reset();
     if(t_genMat) t_genMat->reset();
@@ -1566,8 +1453,8 @@ void MatVecMPOS<T>::reset() {
     num_pc = 0;
 }
 
-template<typename T>
-void MatVecMPOS<T>::set_shift(CplxScalar shift) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::set_shift(CplxScalar shift) {
     // Here we set an energy shift directly on the MPO.
     // This only works if the MPO is not compressed already.
     if(readyShift) return;
@@ -1590,9 +1477,9 @@ void MatVecMPOS<T>::set_shift(CplxScalar shift) {
         std::array<long, 4> offset4{offset1, 0, 0, 0};
         std::array<long, 4> extent4{1, 1, spindim, spindim};
         std::array<long, 2> extent2{spindim, spindim};
-        auto                id = tenx::TensorIdentity<T>(spindim);
+        auto                id = tenx::TensorIdentity<Scalar>(spindim);
         // We undo the previous sigma and then subtract the new one. We are aiming for [A - I*shift]
-        if constexpr(tenx::sfinae::is_std_complex_v<T>)
+        if constexpr(tenx::sfinae::is_std_complex_v<Scalar>)
             mpo.slice(offset4, extent4).reshape(extent2) += id * (sigma_per_mpo - shift_per_mpo);
         else
             mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma_per_mpo - shift_per_mpo);
@@ -1607,16 +1494,16 @@ void MatVecMPOS<T>::set_shift(CplxScalar shift) {
     readyShift = true;
 }
 
-template<typename T>
-void MatVecMPOS<T>::set_mode(const eig::Form form_) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::set_mode(const eig::Form form_) {
     form = form_;
 }
-template<typename T>
-void MatVecMPOS<T>::set_side(const eig::Side side_) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::set_side(const eig::Side side_) {
     side = side_;
 }
-template<typename T>
-void MatVecMPOS<T>::set_jcbMaxBlockSize(std::optional<long> size) {
+template<typename Scalar>
+void MatVecMPOS<Scalar>::set_jcbMaxBlockSize(std::optional<long> size) {
     if(size.has_value()) {
         // We want the block sizes to be roughly equal, so we reduce the block size until the remainder is zero or larger than 80% of the block size
         // This ensures that the last block isn't too much smaller than the other ones
@@ -1639,131 +1526,122 @@ void MatVecMPOS<T>::set_jcbMaxBlockSize(std::optional<long> size) {
     }
 }
 
-template<typename T>
-T MatVecMPOS<T>::get_shift() const {
-    if constexpr(tenx::sfinae::is_std_complex_v<T>)
+template<typename Scalar>
+Scalar MatVecMPOS<Scalar>::get_shift() const {
+    if constexpr(tenx::sfinae::is_std_complex_v<Scalar>)
         return sigma;
     else
         return std::real(sigma);
 }
 
-template<typename T>
-eig::Form MatVecMPOS<T>::get_form() const {
+template<typename Scalar>
+eig::Form MatVecMPOS<Scalar>::get_form() const {
     return form;
 }
-template<typename T>
-eig::Side MatVecMPOS<T>::get_side() const {
+template<typename Scalar>
+eig::Side MatVecMPOS<Scalar>::get_side() const {
     return side;
 }
-template<typename T>
-eig::Type MatVecMPOS<T>::get_type() const {
-    if constexpr(std::is_same_v<T, fp64>)
-        return eig::Type::FP64;
-    else if constexpr(std::is_same_v<T, cx64>)
-        return eig::Type::CX64;
-    else
-        throw std::runtime_error("Unsupported type");
-}
 
-template<typename T>
-const std::vector<Eigen::Tensor<T, 4>> &MatVecMPOS<T>::get_mpos() const {
+template<typename Scalar>
+const std::vector<Eigen::Tensor<Scalar, 4>> &MatVecMPOS<Scalar>::get_mpos() const {
     return mpos_A;
 }
-template<typename T>
-const Eigen::Tensor<T, 3> &MatVecMPOS<T>::get_envL() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 3> &MatVecMPOS<Scalar>::get_envL() const {
     return envL_A;
 }
-template<typename T>
-const Eigen::Tensor<T, 3> &MatVecMPOS<T>::get_envR() const {
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 3> &MatVecMPOS<Scalar>::get_envR() const {
     return envR_A;
 }
 
-template<typename T>
-long MatVecMPOS<T>::get_size() const {
+template<typename Scalar>
+long MatVecMPOS<Scalar>::get_size() const {
     return size_mps;
 }
 
-template<typename T>
-std::array<long, 3> MatVecMPOS<T>::get_shape_mps() const {
+template<typename Scalar>
+std::array<long, 3> MatVecMPOS<Scalar>::get_shape_mps() const {
     return shape_mps;
 }
-template<typename T>
-std::vector<std::array<long, 4>> MatVecMPOS<T>::get_shape_mpo() const {
+template<typename Scalar>
+std::vector<std::array<long, 4>> MatVecMPOS<Scalar>::get_shape_mpo() const {
     std::vector<std::array<long, 4>> shapes;
     for(const auto &mpo : mpos_A) shapes.emplace_back(mpo.dimensions());
     return shapes;
 }
 
-template<typename T>
-std::array<long, 3> MatVecMPOS<T>::get_shape_envL() const {
+template<typename Scalar>
+std::array<long, 3> MatVecMPOS<Scalar>::get_shape_envL() const {
     return envL_A.dimensions();
 }
-template<typename T>
-std::array<long, 3> MatVecMPOS<T>::get_shape_envR() const {
+template<typename Scalar>
+std::array<long, 3> MatVecMPOS<Scalar>::get_shape_envR() const {
     return envR_A.dimensions();
 }
 
-template<typename T>
-Eigen::Tensor<T, 6> MatVecMPOS<T>::get_tensor() const {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 6> MatVecMPOS<Scalar>::get_tensor() const {
     if(mpos_A.size() == 1) {
         auto t_token = t_genMat->tic_token();
         eig::log->debug("Generating tensor");
 
-        auto                d0      = shape_mps[0];
-        auto                d1      = shape_mps[1];
-        auto                d2      = shape_mps[2];
-        auto               &threads = tenx::threads::get();
-        Eigen::Tensor<T, 6> tensor;
+        auto                     d0      = shape_mps[0];
+        auto                     d1      = shape_mps[1];
+        auto                     d2      = shape_mps[2];
+        auto                    &threads = tenx::threads::get();
+        Eigen::Tensor<Scalar, 6> tensor;
         tensor.resize(tenx::array6{d0, d1, d2, d0, d1, d2});
         tensor.device(*threads->dev) =
             envL_A.contract(mpos_A.front(), tenx::idx({2}, {0})).contract(envR_A, tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5});
 
         return tensor;
     }
-    throw std::runtime_error("MatVecMPOS<T>::get_tensor(): Not implemented for mpos.size() > 1");
+    throw std::runtime_error("MatVecMPOS<Scalar>::get_tensor(): Not implemented for mpos.size() > 1");
 }
-template<typename T>
-Eigen::Tensor<T, 6> MatVecMPOS<T>::get_tensor_shf() const {
-    Eigen::Tensor<T, 6> tensor = get_tensor();
+template<typename Scalar>
+Eigen::Tensor<Scalar, 6> MatVecMPOS<Scalar>::get_tensor_shf() const {
+    Eigen::Tensor<Scalar, 6> tensor = get_tensor();
     return tensor.shuffle(tenx::array6{1, 2, 0, 4, 5, 3});
 }
 
-template<typename T>
-Eigen::Tensor<T, 6> MatVecMPOS<T>::get_tensor_ene() const {
+template<typename Scalar>
+Eigen::Tensor<Scalar, 6> MatVecMPOS<Scalar>::get_tensor_ene() const {
     if(mpos_B.size() == 1) {
         auto t_token = t_genMat->tic_token();
         eig::log->debug("Generating tensor");
 
-        auto                d0      = shape_mps[0];
-        auto                d1      = shape_mps[1];
-        auto                d2      = shape_mps[2];
-        auto               &threads = tenx::threads::get();
-        Eigen::Tensor<T, 6> tensor;
+        auto                     d0      = shape_mps[0];
+        auto                     d1      = shape_mps[1];
+        auto                     d2      = shape_mps[2];
+        auto                    &threads = tenx::threads::get();
+        Eigen::Tensor<Scalar, 6> tensor;
         tensor.resize(tenx::array6{d0, d1, d2, d0, d1, d2});
         tensor.device(*threads->dev) =
             envL_B.contract(mpos_B.front(), tenx::idx({2}, {0})).contract(envR_B, tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5});
         return tensor;
     }
-    throw std::runtime_error("MatVecMPOS<T>::get_tensor_ene(): Not implemented for mpos.size() > 1");
+    throw std::runtime_error("MatVecMPOS<Scalar>::get_tensor_ene(): Not implemented for mpos.size() > 1");
 }
 
-template<typename T>
-typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_matrix() const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_matrix() const {
     return tenx::MatrixCast(get_tensor(), rows(), cols());
 }
-template<typename T>
-typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_matrix_shf() const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_matrix_shf() const {
     return tenx::MatrixCast(get_tensor_shf(), rows(), cols());
 }
-template<typename T>
-typename MatVecMPOS<T>::MatrixType MatVecMPOS<T>::get_matrix_ene() const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_matrix_ene() const {
     return tenx::MatrixCast(get_tensor_ene(), rows(), cols());
 }
 
-template<typename T>
-typename MatVecMPOS<T>::SparseType MatVecMPOS<T>::get_sparse_matrix() const {
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::SparseType MatVecMPOS<Scalar>::get_sparse_matrix() const {
     // Fill lower
-    std::vector<Eigen::Triplet<T, long>> trip;
+    std::vector<Eigen::Triplet<Scalar, long>> trip;
     trip.reserve(static_cast<size_t>(size_mps));
     // #pragma omp parallel for collapse(2)
     for(long J = 0; J < size_mps; J++) {
@@ -1772,7 +1650,7 @@ typename MatVecMPOS<T>::SparseType MatVecMPOS<T>::get_sparse_matrix() const {
             auto elem = get_matrix_element(I, J, mpos_A, envL_A, envR_A);
             if(std::abs(elem) > std::numeric_limits<RealScalar>::epsilon()) {
 #pragma omp critical
-                { trip.emplace_back(Eigen::Triplet<T, long>{I, J, elem}); }
+                { trip.emplace_back(Eigen::Triplet<Scalar, long>{I, J, elem}); }
             }
         }
     }
@@ -1781,36 +1659,28 @@ typename MatVecMPOS<T>::SparseType MatVecMPOS<T>::get_sparse_matrix() const {
     return sparseMatrix;
 }
 
-template<typename T>
-double MatVecMPOS<T>::get_sparsity() const {
+template<typename Scalar>
+double MatVecMPOS<Scalar>::get_sparsity() const {
     auto sp = get_sparse_matrix();
     auto n  = static_cast<double>(size_mps);
     return (static_cast<double>(sp.nonZeros()) * 2.0 - n) / (n * n);
 }
-template<typename T>
-long MatVecMPOS<T>::get_non_zeros() const {
+template<typename Scalar>
+long MatVecMPOS<Scalar>::get_non_zeros() const {
     auto sp = get_sparse_matrix();
     return sp.nonZeros();
 }
 
-template<typename T>
-long MatVecMPOS<T>::get_jcbMaxBlockSize() const {
+template<typename Scalar>
+long MatVecMPOS<Scalar>::get_jcbMaxBlockSize() const {
     return jcbMaxBlockSize;
 }
 
-template<typename T>
-bool MatVecMPOS<T>::isReadyFactorOp() const {
+template<typename Scalar>
+bool MatVecMPOS<Scalar>::isReadyFactorOp() const {
     return readyFactorOp;
 }
-template<typename T>
-bool MatVecMPOS<T>::isReadyShift() const {
+template<typename Scalar>
+bool MatVecMPOS<Scalar>::isReadyShift() const {
     return readyShift;
 }
-
-// Explicit instantiations
-template class MatVecMPOS<fp32>;
-template class MatVecMPOS<fp64>;
-template class MatVecMPOS<fp128>;
-template class MatVecMPOS<cx32>;
-template class MatVecMPOS<cx64>;
-template class MatVecMPOS<cx128>;

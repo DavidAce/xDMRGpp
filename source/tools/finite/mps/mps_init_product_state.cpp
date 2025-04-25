@@ -13,6 +13,8 @@
 #include <bitset>
 #include <fmt/ranges.h>
 
+bool tools::finite::mps::init::bitfield_is_valid(size_t bitfield) { return bitfield != -1ul and init::used_bitfields.count(bitfield) == 0; }
+
 std::string tools::get_bitfield(size_t nbits, const std::string &pattern, BitOrder bitOrder) {
     if(pattern.empty()) return {};
     std::string bitfield;
@@ -50,7 +52,7 @@ std::string tools::get_bitfield(size_t nbits, size_t pattern, BitOrder bitOrder)
     return bitfield;
 }
 
-void tools::finite::mps::init::random_product_state(StateFinite &state, StateInitType type, std::string_view axis, bool use_eigenspinors, std::string &pattern)
+
 /*!
  * There are many ways to generate an initial product state based on the
  * arguments (axis ,use_eigenspinors, pattern) = (string,bool,std::string).
@@ -80,7 +82,9 @@ void tools::finite::mps::init::random_product_state(StateFinite &state, StateIni
 
  * Note: we "use" the bitfield only once. Subsequent calls do not keep resetting the seed.
 */
-{
+template<typename Scalar>
+void tools::finite::mps::init::random_product_state(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, bool use_eigenspinors,
+                                                    std::string &pattern){
     tools::log->debug("Setting random product state of type {} on axis {}", enum2sv(type), axis);
     state.clear_measurements();
     state.clear_cache();
@@ -97,33 +101,17 @@ void tools::finite::mps::init::random_product_state(StateFinite &state, StateIni
         throw except::runtime_error("Expected initial axis string (+ or -)x,y,z,i, or id (e.g., -z). Got {}", axis);
     }
 }
-namespace test {
-    template<typename Derived, typename T, auto rank>
-    Eigen::Tensor<typename Derived::Scalar, rank> TensorCast(const Eigen::EigenBase<Derived> &matrix, const std::array<T, rank> &dims) {
-        // static_assert(is_dynamic_size_v<Derived>);
-        if constexpr(tenx::is_plain_object_v<Derived>) {
-            assert(matrix.size() == Eigen::internal::array_prod(dims));
-            return Eigen::TensorMap<const Eigen::Tensor<const typename Derived::Scalar, rank>>(matrix.derived().data(), dims);
-        } else {
-            return Eigen::TensorMap<const Eigen::Tensor<const typename Derived::Scalar, rank>>(matrix.derived().eval().data(), dims);
-        }
-    }
-    template<typename Derived>
-    auto TensorCast(const Eigen::EigenBase<Derived> &matrix) {
-        if constexpr(Derived::ColsAtCompileTime == 1 or Derived::RowsAtCompileTime == 1) {
-            return TensorCast(matrix, std::array<Eigen::Index, 1>{matrix.size()});
-        } else {
-            return TensorCast(matrix, std::array<Eigen::Index, 2>{matrix.rows(), matrix.cols()});
-        }
-    }
-    // Helpful overload
-    template<typename Derived, typename... Dims>
-    auto TensorCast(const Eigen::EigenBase<Derived> &matrix, const Dims... dims) {
-        static_assert(sizeof...(Dims) > 0, "TensorCast: sizeof... (Dims) must be larger than 0");
-        return TensorCast(matrix, std::array<Eigen::Index, sizeof...(Dims)>{dims...});
-    }
-}
-void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite &state, StateInitType type, std::string_view axis, std::string &pattern) {
+/* clang-format off */
+template void tools::finite::mps::init::random_product_state(StateFinite<fp32> &state, StateInitType type, std::string_view axis, bool use_eigenspinors, std::string &pattern);
+template void tools::finite::mps::init::random_product_state(StateFinite<fp64> &state, StateInitType type, std::string_view axis, bool use_eigenspinors, std::string &pattern);
+template void tools::finite::mps::init::random_product_state(StateFinite<fp128> &state, StateInitType type, std::string_view axis, bool use_eigenspinors, std::string &pattern);
+template void tools::finite::mps::init::random_product_state(StateFinite<cx32> &state, StateInitType type, std::string_view axis, bool use_eigenspinors, std::string &pattern);
+template void tools::finite::mps::init::random_product_state(StateFinite<cx64> &state, StateInitType type, std::string_view axis, bool use_eigenspinors, std::string &pattern);
+template void tools::finite::mps::init::random_product_state(StateFinite<cx128> &state, StateInitType type, std::string_view axis, bool use_eigenspinors, std::string &pattern);
+/* clang-format on */
+
+template<typename Scalar>
+void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     tools::log->debug("Setting randomly shuffled Néel state of type {} on axis {} {}", enum2sv(type), axis,
                       pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
     Eigen::Tensor<cx64, 1> L(1);
@@ -157,8 +145,17 @@ void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite &stat
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite &state, StateInitType type, std::string_view axis, std::string &pattern) {
+template<typename Scalar>
+void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     tools::log->debug("Setting a dislocated Néel state of type {} on axis {} {}", enum2sv(type), axis,
                       pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
 
@@ -201,8 +198,18 @@ void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite &st
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
     tools::log->debug("Initial state: {}", bitfield);
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_product_state_domain_wall(StateFinite &state, StateInitType type, std::string_view axis, std::string &pattern) {
+
+template<typename Scalar>
+void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     tools::log->debug("Setting domain-wall initial state of type {} on axis {} {}", enum2sv(type), axis,
                       pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
 
@@ -237,8 +244,18 @@ void tools::finite::mps::init::set_product_state_domain_wall(StateFinite &state,
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_product_state_aligned(StateFinite &state, StateInitType type, std::string_view axis, [[maybe_unused]] std::string &pattern) {
+template<typename Scalar>
+void tools::finite::mps::init::set_product_state_aligned(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
+                                                         [[maybe_unused]] std::string &pattern) {
     tools::log->debug("Setting Néel state of type {} on axis {} {}", enum2sv(type), axis, pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
@@ -253,7 +270,7 @@ void tools::finite::mps::init::set_product_state_aligned(StateFinite &state, Sta
 
     tools::log->debug("Setting product state aligned using the |{}> eigenspinor of the pauli matrix σ{} on all sites", sign, axis);
     std::string label = "A";
-    std::string bitfield(state.get_length<size_t>(), sign >= 0 ? '0' : '1');
+    std::string bitfield(state.template get_length<size_t>(), sign >= 0 ? '0' : '1');
     for(const auto &mps_ptr : state.mps_sites) {
         auto &mps = *mps_ptr;
         mps.set_mps(spinor, L, 0, label);
@@ -271,8 +288,17 @@ void tools::finite::mps::init::set_product_state_aligned(StateFinite &state, Sta
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
     tools::log->debug("Initial state: {}", bitfield);
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_product_state_aligned(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_aligned(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_aligned(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_aligned(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_aligned(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_aligned(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_product_state_neel(StateFinite &state, StateInitType type, std::string_view axis, std::string &pattern) {
+template<typename Scalar>
+void tools::finite::mps::init::set_product_state_neel(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     tools::log->debug("Setting Néel state of type {} on axis {} {}", enum2sv(type), axis, pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
 
     Eigen::Tensor<cx64, 1> L(1);
@@ -311,7 +337,15 @@ void tools::finite::mps::init::set_product_state_neel(StateFinite &state, StateI
     tools::log->debug("Initial state: {}", bitfield);
 }
 
-void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite &state, StateInitType type, std::string &pattern) {
+template void tools::finite::mps::init::set_product_state_neel(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_neel(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+
+template<typename Scalar>
+void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<Scalar> &state, StateInitType type, std::string &pattern) {
     tools::log->debug("Setting random product state with spinors in C²");
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
@@ -332,8 +366,18 @@ void tools::finite::mps::init::set_random_product_state_with_random_spinors(Stat
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<fp32> &state, StateInitType type, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<fp64> &state, StateInitType type, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<fp128> &state, StateInitType type, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<cx32> &state, StateInitType type, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<cx64> &state, StateInitType type, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<cx128> &state, StateInitType type, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite &state, StateInitType type, std::string_view axis, std::string &pattern) {
+template<typename Scalar>
+void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
+                                                                       std::string &pattern) {
     /* The pattern is a string containing either an unsigned number or a binary string. Binary strings are preceded by the character 'b'.
      * For example
      *      pattern == "536" for L=16 sites is interpreted with fmt as "{:0>16b}": 0000001000011000
@@ -368,17 +412,26 @@ void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFini
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite &state, StateInitType type, std::string_view axis, std::string &pattern) {
+template<typename Scalar>
+void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     auto axus = qm::spin::half::get_axis_unsigned(axis);
     if(type == StateInitType::REAL and axus == "y") throw except::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
 
-    size_t                   nsum = state.get_length<size_t>();
+    size_t                   nsum = state.template get_length<size_t>();
     std::vector<std::string> patterns(nsum);
     set_product_state_neel_shuffled(state, type, axis, patterns[0]);
 
-    auto other = StateFinite(state.get_algorithm(), state.get_length<size_t>(), state.get_position<long>(), state.get_spin_dim());
+    auto other = StateFinite<Scalar>(state.get_algorithm(), state.template get_length<size_t>(), state.template get_position<long>(), state.get_spin_dim());
     for(size_t n = 1; n < nsum; ++n) {
         set_product_state_neel_shuffled(other, type, axis, patterns[n]);
         tools::log->info("{}", patterns[n]);
@@ -390,8 +443,17 @@ void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite &sta
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite &state, StateInitType type, std::string_view axis,
+template<typename Scalar>
+void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
                                                                                    std::string &pattern) {
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
@@ -421,7 +483,7 @@ void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspino
 
     for(auto &mps_ptr : state.mps_sites) {
         auto &mps = *mps_ptr;
-        auto  pos = mps.get_position<size_t>();
+        auto  pos = mps.template get_position<size_t>();
         mps.set_mps(bitfield.at(pos) == '0' ? spin_up : spin_dn, L, 0, label);
 
         if(mps.isCenter()) {
@@ -437,9 +499,17 @@ void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspino
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite &state, StateInitType type, std::string_view axis,
-                                                                [[maybe_unused]] std::string &pattern) {
+template<typename Scalar>
+void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, [[maybe_unused]] std::string &pattern) {
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
     auto axus = qm::spin::half::get_axis_unsigned(axis);
@@ -469,3 +539,12 @@ void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite &sta
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+
+/* clang-format off */
+template void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */

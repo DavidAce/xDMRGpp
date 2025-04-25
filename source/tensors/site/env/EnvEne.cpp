@@ -9,16 +9,21 @@
 #include "tools/common/log.h"
 #include <utility>
 
+
+template class EnvEne<fp32>;
+template class EnvEne<fp64>;
+template class EnvEne<fp128>;
+template class EnvEne<cx32>;
 template class EnvEne<cx64>;
 template class EnvEne<cx128>;
 
 template<typename Scalar>
-EnvEne<Scalar>::EnvEne(std::string side_, const MpsSite<Scalar>&mps, const MpoSite<Scalar> &mpo) : EnvBase<Scalar>(std::move(side_), "ene", mps, mpo) {
+EnvEne<Scalar>::EnvEne(std::string side_, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) : EnvBase<Scalar>(std::move(side_), "ene", mps, mpo) {
     set_edge_dims(mps, mpo);
 }
 
 template<typename Scalar>
-EnvEne<Scalar> EnvEne<Scalar>::enlarge(const MpsSite<Scalar>&mps, const MpoSite<Scalar> &mpo) const {
+EnvEne<Scalar> EnvEne<Scalar>::enlarge(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) const {
     tools::log->trace("EnvEne<Scalar>::enlarge: {}{}[{}]", tag, side, get_position());
     // enlarge() uses "this" block together with mps and mpo to generate a new environment block corresponding to a neighboring site
     if constexpr(settings::debug)
@@ -56,7 +61,7 @@ EnvEne<Scalar> EnvEne<Scalar>::enlarge(const MpsSite<Scalar>&mps, const MpoSite<
 }
 
 template<typename Scalar>
-void EnvEne<Scalar>::refresh(const EnvEne &env, const MpsSite<Scalar>&mps, const MpoSite<Scalar> &mpo) {
+void EnvEne<Scalar>::refresh(const EnvEne &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) {
     // If side == L, env,mps and mpo are all corresponding to the neighbor on the left
     // If side == R, env,mps and mpo are all corresponding to the neighbor on the right
     if constexpr(settings::debug)
@@ -129,10 +134,10 @@ void EnvEne<Scalar>::refresh(const EnvEne &env, const MpsSite<Scalar>&mps, const
 }
 
 template<typename Scalar>
-void EnvEne<Scalar>::set_edge_dims(const MpsSite<Scalar>&mps, const MpoSite<Scalar> &mpo) {
+void EnvEne<Scalar>::set_edge_dims(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) {
     Eigen::Tensor<Scalar, 1> edge;
-    if(side == "L") edge = tenx::asScalarType<Scalar>(mpo.get_MPO_edge_left());
-    if(side == "R") edge = tenx::asScalarType<Scalar>(mpo.get_MPO_edge_right());
+    if(side == "L") edge = mpo.template get_MPO_edge_left<Scalar>();
+    if(side == "R") edge = mpo.template get_MPO_edge_right<Scalar>();
     std::size_t unique_id_edge = hash::hash_buffer(edge.data(), safe_cast<size_t>(edge.size()));
     if(unique_id_env and unique_id_env.value() == unique_id_edge) return;
     if constexpr(settings::debug)

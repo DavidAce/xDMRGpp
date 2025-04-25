@@ -3,10 +3,8 @@
 #include <complex>
 #include <vector>
 
-template<typename Scalar>
-class MpoSite;
+template<typename Scalar> class MpoSite;
 template<typename Scalar> class TensorsFinite;
-// class StateLocal;
 template<typename Scalar>
 class ModelLocal {
     public:

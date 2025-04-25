@@ -16,25 +16,27 @@
 #include <fmt/ranges.h>
 #include <tensors/model/ModelFinite.h>
 
-void tools::finite::opt::internal::extract_results(const TensorsFinite &tensors, const opt_mps &initial_mps, const OptMeta &meta, const eig::solver &solver,
-                                                   std::vector<opt_mps> &results, bool converged_only, std::optional<std::vector<long>> indices) {
+template<typename Scalar>
+void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, const OptMeta &meta,
+                                                   const eig::solver &solver, std::vector<opt_mps<Scalar>> &results, bool converged_only,
+                                                   std::optional<std::vector<long>> indices) {
     auto t_ext    = tid::tic_scope("extract");
     auto dims_mps = initial_mps.get_tensor().dimensions();
     if(solver.result.meta.eigvals_found and solver.result.meta.eigvecsR_found) {
-        auto eigvecs = eig::view::get_eigvecs<cx64>(solver.result, eig::Side::R, converged_only);
-        auto eigvals = eig::view::get_eigvals<fp64>(solver.result, converged_only);
+        auto eigvecs = eig::view::get_eigvecs<Scalar>(solver.result, eig::Side::R, converged_only);
+        auto eigvals = eig::view::get_eigvals<RealScalar<Scalar>>(solver.result, converged_only);
 
         if(eigvecs.cols() == eigvals.size()) /* Checks if eigenvectors converged for each eigenvalue */ {
-            [[maybe_unused]] double overlap_sq_sum = 0;
-            [[maybe_unused]] size_t num_solutions  = 0;
+            [[maybe_unused]] RealScalar<Scalar> overlap_sq_sum = 0;
+            [[maybe_unused]] size_t             num_solutions  = 0;
             // Eigenvalues are normally sorted small to large, so we reverse when looking for large.
             for(const auto &idx : indices.value_or(num::range<long>(0, eigvals.size()))) {
                 if(idx >= eigvals.size()) throw except::logic_error("idx ({}) >= eigvals.size() ({})", idx, eigvals.size());
                 auto udx = safe_cast<size_t>(idx);
-                results.emplace_back(opt_mps());
+                results.emplace_back(opt_mps<Scalar>());
                 auto &mps           = results.back();
                 mps.is_basis_vector = true;
-                if constexpr(settings::debug) tools::log->trace("Extracting result: idx {} | eigval {:.16f}", idx, eigvals(idx));
+                if constexpr(settings::debug) tools::log->trace("Extracting result: idx {} | eigval {:.16f}", idx, fp(eigvals(idx)));
                 mps.set_name(fmt::format("eigenvector {} [{:^8}]", idx, solver.config.tag));
                 mps.set_tensor(eigvecs.col(idx).normalized(), dims_mps); // eigvecs are not always well normalized when we get them from eig::solver
                 mps.set_sites(initial_mps.get_sites());
@@ -71,8 +73,8 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite &tensors,
                 // so it looks like an exact degeneracy. This is probably a bug somewhere (maybe in PRIMME).
                 mps.set_eigs_eigval(eigvals[idx]);
 
-                double energy   = std::real(vh1v) + tensors.get_model().get_energy_shift_mpo();
-                double variance = std::real(vh2v) - std::abs(vh1v * vh1v);
+                RealScalar<Scalar> energy   = std::real(vh1v + tensors.get_model().get_energy_shift_mpo());
+                RealScalar<Scalar> variance = std::real(vh2v) - std::abs(vh1v * vh1v);
 
                 mps.set_energy(energy);
                 mps.set_energy_shifted(std::real(vh1v));
@@ -89,21 +91,31 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite &tensors,
         }
     }
 }
+/* clang-format off */
+template void tools::finite::opt::internal::extract_results(const TensorsFinite<fp32> &tensors, const opt_mps<fp32> &initial_mps, const OptMeta &meta, const eig::solver &solver, std::vector<opt_mps<fp32>> &results, bool converged_only, std::optional<std::vector<long>> indices);
+template void tools::finite::opt::internal::extract_results(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps, const OptMeta &meta, const eig::solver &solver, std::vector<opt_mps<fp64>> &results, bool converged_only, std::optional<std::vector<long>> indices);
+template void tools::finite::opt::internal::extract_results(const TensorsFinite<fp128> &tensors, const opt_mps<fp128> &initial_mps, const OptMeta &meta, const eig::solver &solver, std::vector<opt_mps<fp128>> &results, bool converged_only, std::optional<std::vector<long>> indices);
+template void tools::finite::opt::internal::extract_results(const TensorsFinite<cx32> &tensors, const opt_mps<cx32> &initial_mps, const OptMeta &meta, const eig::solver &solver, std::vector<opt_mps<cx32>> &results, bool converged_only, std::optional<std::vector<long>> indices);
+template void tools::finite::opt::internal::extract_results(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps, const OptMeta &meta, const eig::solver &solver, std::vector<opt_mps<cx64>> &results, bool converged_only, std::optional<std::vector<long>> indices);
+template void tools::finite::opt::internal::extract_results(const TensorsFinite<cx128> &tensors, const opt_mps<cx128> &initial_mps, const OptMeta &meta, const eig::solver &solver, std::vector<opt_mps<cx128>> &results, bool converged_only, std::optional<std::vector<long>> indices);
+/* clang-format on */
 
-void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite &tensors, const opt_mps &initial_mps, const OptMeta &meta,
-                                                            const eig::solver &solver, const std::vector<opt_mps> &subspace_mps,
-                                                            std::vector<opt_mps> &results) {
+template<typename Scalar>
+void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, const OptMeta &meta,
+                                                            const eig::solver &solver, const std::vector<opt_mps<Scalar>> &subspace_mps,
+                                                            std::vector<opt_mps<Scalar>> &results) {
     auto t_ext    = tid::tic_scope("extract");
     auto dims_mps = initial_mps.get_tensor().dimensions();
     if(solver.result.meta.eigvals_found and solver.result.meta.eigvecsR_found) {
-        auto eigvecs = eig::view::get_eigvecs<cx64>(solver.result, eig::Side::R);
-        auto eigvals = eig::view::get_eigvals<fp64>(solver.result);
+        using Real = RealScalar<Scalar>;
+        auto eigvecs = eig::view::get_eigvecs<Scalar>(solver.result, eig::Side::R);
+        auto eigvals = eig::view::get_eigvals<Real>(solver.result);
         if(eigvecs.cols() == eigvals.size()) /* Checks if eigenvectors converged for each eigenvalue */ {
             auto indices = num::range<long>(0, eigvals.size());
             // Eigenvalues are normally sorted small to large, so we reverse when looking for large.
             if(meta.optRitz == OptRitz::LR) std::reverse(indices.begin(), indices.end());
             for(const auto &idx : indices) {
-                results.emplace_back(opt_mps());
+                results.emplace_back(opt_mps<Scalar>());
                 auto  udx           = safe_cast<size_t>(idx);
                 auto &mps           = results.back();
                 mps.is_basis_vector = false;
@@ -146,8 +158,8 @@ void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite 
                 // so it looks like an exact degeneracy. This is probably a bug somewhere (maybe in PRIMME).
                 mps.set_eigs_eigval(eigvals[idx]);
 
-                double energy   = std::real(vh1v) + tensors.get_model().get_energy_shift_mpo();
-                double variance = std::real(vh2v) - std::abs(vh1v * vh1v);
+                RealScalar<Scalar> energy   = std::real(vh1v + tensors.get_model().get_energy_shift_mpo());
+                RealScalar<Scalar> variance = std::real(vh2v) - std::abs(vh1v * vh1v);
 
                 mps.set_energy(energy);
                 mps.set_energy_shifted(std::real(vh1v));
@@ -161,3 +173,11 @@ void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite 
         }
     }
 }
+/* clang-format off */
+template void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<fp32> &tensors, const opt_mps<fp32> &initial_mps, const OptMeta &meta, const eig::solver &solver, const std::vector<opt_mps<fp32>> &subspace_mps, std::vector<opt_mps<fp32>> &results);
+template void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps, const OptMeta &meta, const eig::solver &solver, const std::vector<opt_mps<fp64>> &subspace_mps, std::vector<opt_mps<fp64>> &results);
+template void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<fp128> &tensors, const opt_mps<fp128> &initial_mps, const OptMeta &meta, const eig::solver &solver, const std::vector<opt_mps<fp128>> &subspace_mps, std::vector<opt_mps<fp128>> &results);
+template void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<cx32> &tensors, const opt_mps<cx32> &initial_mps, const OptMeta &meta, const eig::solver &solver, const std::vector<opt_mps<cx32>> &subspace_mps, std::vector<opt_mps<cx32>> &results);
+template void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps, const OptMeta &meta, const eig::solver &solver, const std::vector<opt_mps<cx64>> &subspace_mps, std::vector<opt_mps<cx64>> &results);
+template void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<cx128> &tensors, const opt_mps<cx128> &initial_mps, const OptMeta &meta, const eig::solver &solver, const std::vector<opt_mps<cx128>> &subspace_mps, std::vector<opt_mps<cx128>> &results);
+/* clang-format on */

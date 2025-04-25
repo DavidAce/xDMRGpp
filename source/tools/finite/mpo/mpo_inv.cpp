@@ -677,7 +677,7 @@ std::vector<Eigen::Tensor<cx64, 4>> get_inverted_mpos_internal(const std::vector
         auto Nd                        = tenx::VectorMap(Ndtensor);
 
         if constexpr(std::is_same_v<Scalar, fp64>) {
-            auto B     = get_B(impos, pos);
+            auto B = get_B(impos, pos);
             // int  niter = 0;
             // solver.compute(M);
             // B = solver.solve(N);
@@ -740,7 +740,8 @@ std::vector<Eigen::Tensor<cx64, 4>> get_inverted_mpos_internal(const std::vector
     }
 }
 
-std::vector<Eigen::Tensor<cx64, 4>> tools::finite::mpo::get_inverted_mpos(const std::vector<Eigen::Tensor<cx64, 4>> &mpos) {
+template<typename Scalar>
+std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_inverted_mpos(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos) {
     fmt::print("INIT: num_threads: {} | omp_in_parallel {} \n", tenx::threads::getNumThreads(), omp_in_parallel());
     static bool googleLogginghasInitialized = false;
     if(not googleLogginghasInitialized) {
@@ -768,3 +769,5 @@ std::vector<Eigen::Tensor<cx64, 4>> tools::finite::mpo::get_inverted_mpos(const 
         return get_inverted_mpos_internal<fp64>(mpos_real);
     }
 }
+
+template std::vector<Eigen::Tensor<cx64, 4>> tools::finite::mpo::get_inverted_mpos(const std::vector<Eigen::Tensor<cx64, 4>> &mpos);

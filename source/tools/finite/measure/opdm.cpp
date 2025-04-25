@@ -8,7 +8,9 @@
 #include "tensors/state/StateFinite.h"
 #include "tools/common/log.h"
 
-Eigen::Tensor<cx64, 2> tools::finite::measure::opdm(const StateFinite &state) {
+using tools::finite::measure::RealScalar;
+template<typename Scalar>
+Eigen::Tensor<Scalar, 2> tools::finite::measure::opdm(const StateFinite<Scalar> &state) {
     /* We create a matrix of the form
      *
      *
@@ -28,17 +30,22 @@ Eigen::Tensor<cx64, 2> tools::finite::measure::opdm(const StateFinite &state) {
      */
     if(state.measurements.opdm) return state.measurements.opdm.value();
     tools::log->trace("Measuring the one-particle density matrix (OPDM)");
-    long L   = state.get_length<long>();
-    auto R   = Eigen::MatrixXcd(2 * L, 2 * L); // Allocate the full rho matrix "R"
-    auto rpp = R.topLeftCorner(L, L);          // One quadrant of R: rho++
-    auto rpm = R.topRightCorner(L, L);         // One quadrant of R: rho+-
-    auto rmp = R.bottomLeftCorner(L, L);       // One quadrant of R: rho-+
-    auto rmm = R.bottomRightCorner(L, L);      // One quadrant of R: rho--
+    using RealT      = typename Eigen::NumTraits<Scalar>::Real;
+    using CplxT      = std::complex<RealT>;
+    using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    long L           = state.template get_length<long>();
+    auto R           = MatrixType(2 * L, 2 * L);  // Allocate the full rho matrix "R"
+    auto rpp         = R.topLeftCorner(L, L);     // One quadrant of R: rho++
+    auto rpm         = R.topRightCorner(L, L);    // One quadrant of R: rho+-
+    auto rmp         = R.bottomLeftCorner(L, L);  // One quadrant of R: rho-+
+    auto rmm         = R.bottomRightCorner(L, L); // One quadrant of R: rho--
 
-    using namespace qm::spin::half::tensor;
+    auto sp = tenx::asScalarType<CplxT>(qm::spin::half::tensor::sp);
+    auto sm = tenx::asScalarType<CplxT>(qm::spin::half::tensor::sm);
+    auto sz = tenx::asScalarType<CplxT>(qm::spin::half::tensor::sz);
 
     // Shorthand types
-    using op_t       = LocalObservableOp<cx64>;
+    using op_t       = LocalObservableOp<CplxT>;
     using opstring_t = std::vector<op_t>;
     for(long pos_i = 0; pos_i < L; ++pos_i) {
         for(long pos_j = pos_i; pos_j < L; ++pos_j) {
@@ -64,17 +71,24 @@ Eigen::Tensor<cx64, 2> tools::finite::measure::opdm(const StateFinite &state) {
             omm.emplace_back(op_t{sp, pos_j}); // adds  s+_j
 
             // Calculate the expectation value of the operator string
-            rpp(pos_i, pos_j) = expectation_value<cx64>(state, opp);
-            rpm(pos_i, pos_j) = expectation_value<cx64>(state, opm);
-            rmp(pos_i, pos_j) = expectation_value<cx64>(state, omp);
-            rmm(pos_i, pos_j) = expectation_value<cx64>(state, omm);
+            rpp(pos_i, pos_j) = expectation_value<Scalar>(state, opp);
+            rpm(pos_i, pos_j) = expectation_value<Scalar>(state, opm);
+            rmp(pos_i, pos_j) = expectation_value<Scalar>(state, omp);
+            rmm(pos_i, pos_j) = expectation_value<Scalar>(state, omm);
 
             // Set the Hermitian conjugates on the opposite side
             if(pos_i != pos_j) {
-                rpp(pos_j, pos_i) = std::conj(rpp(pos_i, pos_j));
-                rpm(pos_j, pos_i) = std::conj(rmp(pos_i, pos_j)); // Mix pm <-> mp
-                rmp(pos_j, pos_i) = std::conj(rpm(pos_i, pos_j)); // Mix mp <-> pm
-                rmm(pos_j, pos_i) = std::conj(rmm(pos_i, pos_j));
+                if constexpr(sfinae::is_std_complex_v<Scalar>) {
+                    rpp(pos_j, pos_i) = std::conj(rpp(pos_i, pos_j));
+                    rpm(pos_j, pos_i) = std::conj(rmp(pos_i, pos_j)); // Mix pm <-> mp
+                    rmp(pos_j, pos_i) = std::conj(rpm(pos_i, pos_j)); // Mix mp <-> pm
+                    rmm(pos_j, pos_i) = std::conj(rmm(pos_i, pos_j));
+                } else {
+                    rpp(pos_j, pos_i) = rpp(pos_i, pos_j);
+                    rpm(pos_j, pos_i) = rmp(pos_i, pos_j); // Mix pm <-> mp
+                    rmp(pos_j, pos_i) = rpm(pos_i, pos_j); // Mix mp <-> pm
+                    rmm(pos_j, pos_i) = rmm(pos_i, pos_j);
+                }
             }
         }
     }
@@ -84,19 +98,39 @@ Eigen::Tensor<cx64, 2> tools::finite::measure::opdm(const StateFinite &state) {
     //    tools::log->info("rho--: trace {:.16f}\n{}", rmm.trace(), linalg::matrix::to_string(rmm, 8));
     // tools::log->debug("R    : trace {:.16f}", R.trace());
     if(not R.isApprox(R.conjugate().transpose())) throw except::logic_error("R is not hermitian");
-    if(std::abs(R.trace() - static_cast<double>(L)) > 1e-8) throw std::runtime_error("R.trace() != L");
+    if(std::abs(R.trace() - static_cast<RealT>(L)) > RealT{1e-8f}) throw std::runtime_error("R.trace() != L");
     state.measurements.opdm = tenx::TensorMap(R);
     return state.measurements.opdm.value();
 }
+template Eigen::Tensor<fp32, 2>  tools::finite::measure::opdm(const StateFinite<fp32> &state);
+template Eigen::Tensor<fp64, 2>  tools::finite::measure::opdm(const StateFinite<fp64> &state);
+template Eigen::Tensor<fp128, 2> tools::finite::measure::opdm(const StateFinite<fp128> &state);
+template Eigen::Tensor<cx32, 2>  tools::finite::measure::opdm(const StateFinite<cx32> &state);
+template Eigen::Tensor<cx64, 2>  tools::finite::measure::opdm(const StateFinite<cx64> &state);
+template Eigen::Tensor<cx128, 2> tools::finite::measure::opdm(const StateFinite<cx128> &state);
 
-Eigen::Tensor<double, 1> tools::finite::measure::opdm_spectrum(const StateFinite &state) {
+template<typename Scalar>
+Eigen::Tensor<RealScalar<Scalar>, 1> tools::finite::measure::opdm_spectrum(const StateFinite<Scalar> &state) {
     if(not state.measurements.opdm) state.measurements.opdm = opdm(state);
     if(not state.measurements.opdm_spectrum) {
+        // auto                  &opdm      = state.measurements.opdm.value();
+        // auto                   solver    = eig::solver();
+        // Eigen::Tensor<cx64, 2> opdm_cx64 = tenx::asScalarType<cx64>(opdm);
+        // solver.eig<eig::Form::SYMM>(opdm_cx64.data(), opdm.dimension(0), eig::Vecs::OFF);
+        // Eigen::Tensor<fp64, 1> opdm_spectrum_fp64 = tenx::TensorCast(eig::view::get_eigvals<fp64>(solver.result));
+        // state.measurements.opdm_spectrum          = tenx::asScalarType<RealScalar<Scalar>>(opdm_spectrum_fp64);
+        using RealT  = typename Eigen::NumTraits<Scalar>::Real;
         auto &opdm   = state.measurements.opdm.value();
         auto  solver = eig::solver();
         solver.eig<eig::Form::SYMM>(opdm.data(), opdm.dimension(0), eig::Vecs::OFF);
-        state.measurements.opdm_spectrum = tenx::TensorCast(eig::view::get_eigvals<double>(solver.result));
-        // tools::log->debug("OPDM spectrum: {::+9.4e}", tenx::span(state.measurements.opdm_spectrum.value()));
+        Eigen::Tensor<RealT, 1> opdm_spectrum_fp64 = tenx::TensorCast(eig::view::get_eigvals<RealT>(solver.result));
+        state.measurements.opdm_spectrum           = opdm_spectrum_fp64;
     }
     return state.measurements.opdm_spectrum.value();
 }
+template Eigen::Tensor<fp32, 1>  tools::finite::measure::opdm_spectrum(const StateFinite<fp32> &state);
+template Eigen::Tensor<fp64, 1>  tools::finite::measure::opdm_spectrum(const StateFinite<fp64> &state);
+template Eigen::Tensor<fp128, 1> tools::finite::measure::opdm_spectrum(const StateFinite<fp128> &state);
+template Eigen::Tensor<fp32, 1>  tools::finite::measure::opdm_spectrum(const StateFinite<cx32> &state);
+template Eigen::Tensor<fp64, 1>  tools::finite::measure::opdm_spectrum(const StateFinite<cx64> &state);
+template Eigen::Tensor<fp128, 1> tools::finite::measure::opdm_spectrum(const StateFinite<cx128> &state);

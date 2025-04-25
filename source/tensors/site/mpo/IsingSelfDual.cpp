@@ -8,7 +8,12 @@
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
 
+template class IsingSelfDual<fp32>;
+template class IsingSelfDual<fp64>;
+template class IsingSelfDual<fp128>;
+template class IsingSelfDual<cx32>;
 template class IsingSelfDual<cx64>;
+template class IsingSelfDual<cx128>;
 
 double delta_to_J_mean(double delta) { return std::min(1.0, std::exp(delta)); }
 double delta_to_h_mean(double delta) { return std::min(1.0, std::exp(-delta)); }
@@ -133,35 +138,40 @@ void IsingSelfDual<Scalar>::set_parameter(const std::string_view name, std::any 
  *
  */
 template<typename Scalar>
-Eigen::Tensor<cx64, 4> IsingSelfDual<Scalar>::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                                      [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
-    using namespace qm::spin::half::matrix;
+Eigen::Tensor<Scalar, 4> IsingSelfDual<Scalar>::get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                                        [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
     tools::log->debug("mpo({}): building ising-selfdual mpo", get_position());
     if(not all_mpo_parameters_have_been_set)
         throw except::runtime_error("mpo({}): can't build mpo: full lattice parameters haven't been set yet.", get_position());
 
-    double J1 = 1.0, J2 = 1.0;
+    auto J1 = static_cast<RealScalar>(1.0);
+    auto J2 = static_cast<RealScalar>(1.0);
     if(nbody.has_value()) {
-        J1 = 0;
-        J2 = 0;
+        J1 = static_cast<RealScalar>(0.0);
+        J2 = static_cast<RealScalar>(0.0);
         for(const auto &n : nbody.value()) {
-            if(n == 1) J1 = 1.0;
-            if(n == 2) J2 = 1.0;
+            if(n == 1) J1 = static_cast<RealScalar>(1.0);
+            if(n == 2) J2 = static_cast<RealScalar>(1.0);
         }
     }
+    auto id = tenx::asScalarType<Scalar>(qm::spin::half::tensor::id);
+    auto sx = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sx);
+    auto sz = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sz);
 
-    Eigen::Tensor<cx64, 4> mpo_build;
+    Eigen::Tensor<Scalar, 4> mpo_build;
     mpo_build.resize(5, 5, h5tb.param.spin_dim, h5tb.param.spin_dim);
     mpo_build.setZero();
-    mpo_build.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(id);
-    mpo_build.slice(std::array<long, 4>{1, 0, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(sx);
-    mpo_build.slice(std::array<long, 4>{2, 0, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(sz);
-    mpo_build.slice(std::array<long, 4>{3, 1, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(id);
-    mpo_build.slice(std::array<long, 4>{4, 0, 0, 0}, extent4).reshape(extent2) = tenx::TensorCast(J1 * h5tb.param.h_rand * sz - energy_shift_per_site * id);
-    mpo_build.slice(std::array<long, 4>{4, 1, 0, 0}, extent4).reshape(extent2) = tenx::TensorCast(J2 * h5tb.param.J_rand * sx);
-    mpo_build.slice(std::array<long, 4>{4, 2, 0, 0}, extent4).reshape(extent2) = tenx::TensorCast(J2 * h5tb.param.h_mean * h5tb.param.lambda * sz);
-    mpo_build.slice(std::array<long, 4>{4, 3, 0, 0}, extent4).reshape(extent2) = tenx::TensorCast(J2 * h5tb.param.J_mean * h5tb.param.lambda * sx);
-    mpo_build.slice(std::array<long, 4>{4, 4, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(id);
+    /* clang-format off */
+    mpo_build.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = id;
+    mpo_build.slice(std::array<long, 4>{1, 0, 0, 0}, extent4).reshape(extent2) = sx;
+    mpo_build.slice(std::array<long, 4>{2, 0, 0, 0}, extent4).reshape(extent2) = sz;
+    mpo_build.slice(std::array<long, 4>{3, 1, 0, 0}, extent4).reshape(extent2) = id;
+    mpo_build.slice(std::array<long, 4>{4, 0, 0, 0}, extent4).reshape(extent2) = J1 * static_cast<RealScalar>(h5tb.param.h_rand) * sz - energy_shift_per_site * id;
+    mpo_build.slice(std::array<long, 4>{4, 1, 0, 0}, extent4).reshape(extent2) = J2 * static_cast<RealScalar>(h5tb.param.J_rand) * sx;
+    mpo_build.slice(std::array<long, 4>{4, 2, 0, 0}, extent4).reshape(extent2) = J2 * static_cast<RealScalar>(h5tb.param.h_mean * h5tb.param.lambda) * sz;
+    mpo_build.slice(std::array<long, 4>{4, 3, 0, 0}, extent4).reshape(extent2) = J2 * static_cast<RealScalar>(h5tb.param.J_mean * h5tb.param.lambda) * sx;
+    mpo_build.slice(std::array<long, 4>{4, 4, 0, 0}, extent4).reshape(extent2) = id;
+    /* clang-format on */
     if(tenx::hasNaN(mpo_internal)) {
         print_parameter_names();
         print_parameter_values();

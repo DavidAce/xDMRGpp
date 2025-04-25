@@ -26,13 +26,21 @@
 #include "tools/finite/print.h"
 #include <h5pp/h5pp.h>
 
-AlgorithmFinite::AlgorithmFinite(OptRitz opt_ritz, AlgorithmType algo_type) : AlgorithmBase(opt_ritz, algo_type) {
+template class AlgorithmFinite<fp32>;
+template class AlgorithmFinite<cx32>;
+template class AlgorithmFinite<fp64>;
+template class AlgorithmFinite<cx64>;
+template class AlgorithmFinite<fp128>;
+template class AlgorithmFinite<cx128>;
+
+template<typename Scalar>
+AlgorithmFinite<Scalar>::AlgorithmFinite(OptRitz opt_ritz, AlgorithmType algo_type) : AlgorithmBase(opt_ritz, algo_type) {
     tools::log->trace("Constructing class_algorithm_finite");
     tensors.initialize(algo_type, settings::model::model_type, settings::model::model_size, 0);
     dmrg_eigs_tol = settings::precision::eigs_tol_max;
 }
-
-AlgorithmFinite::AlgorithmFinite(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz opt_ritz, AlgorithmType algo_type)
+template<typename Scalar>
+AlgorithmFinite<Scalar>::AlgorithmFinite(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz opt_ritz, AlgorithmType algo_type)
     : AlgorithmBase(std::move(h5ppFile_), opt_ritz, algo_type) {
     tools::log->trace("Constructing class_algorithm_finite");
     tensors.initialize(algo_type, settings::model::model_type, settings::model::model_size, 0);
@@ -46,8 +54,8 @@ AlgorithmFinite::AlgorithmFinite(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz 
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
 // class_algorithm_finite::~class_algorithm_finite() = default;
-
-void AlgorithmFinite::run()
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::run()
 /*!
  * \brief Dispatches finite DMRG stages.
  * This function manages the stages of simulation differently depending on whether
@@ -98,7 +106,8 @@ void AlgorithmFinite::run()
     }
 }
 
-void AlgorithmFinite::run_rbds_analysis() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::run_rbds_analysis() {
     if(settings::strategy::rbds_rate == 0) return;
     last_optsolver = std::nullopt;
     tools::log     = tools::Logger::setLogger(fmt::format("{}-rbds", status.algo_type_sv()), settings::console::loglevel, settings::console::timestamp);
@@ -111,7 +120,7 @@ void AlgorithmFinite::run_rbds_analysis() {
     tensors.activate_sites({tensors.get_position()});
     tensors.rebuild_edges();
     // Generate a list of bond dimension limits
-    auto bond_max    = std::min(settings::get_bond_max(status.algo_type), safe_cast<long>(std::pow(2.0, tensors.get_length<double>() / 2)));
+    auto bond_max    = std::min(settings::get_bond_max(status.algo_type), safe_cast<long>(std::pow(2.0, tensors.template get_length<double>() / 2)));
     auto bond_limits = std::vector<long>();
 
     if(settings::strategy::rbds_rate < 1)
@@ -125,7 +134,7 @@ void AlgorithmFinite::run_rbds_analysis() {
         status.bond_lim = bond_lim;
         if(bond_lim < tensors.state->get_largest_bond()) {
             // Cut down the bond dimension with SVDs only
-            tools::finite::mps::normalize_state(*tensors.state, svd::config(bond_lim, status.trnc_min), NormPolicy::ALWAYS);
+            tools::finite::mps::normalize_state(tensors.get_state(), svd::config(bond_lim, status.trnc_min), NormPolicy::ALWAYS);
             tensors.clear_cache();
             tensors.clear_measurements();
             tensors.rebuild_edges();
@@ -145,7 +154,8 @@ void AlgorithmFinite::run_rbds_analysis() {
     status     = status_backup;
 }
 
-void AlgorithmFinite::run_rtes_analysis() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::run_rtes_analysis() {
     if(settings::strategy::rtes_rate <= 1.0) return;
     last_optsolver = std::nullopt;
     tools::log     = tools::Logger::setLogger(fmt::format("{}-rtes", status.algo_type_sv()), settings::console::loglevel, settings::console::timestamp);
@@ -166,7 +176,7 @@ void AlgorithmFinite::run_rtes_analysis() {
         status.trnc_lim = trnc_lim;
         if(trnc_lim > tensors.state->get_smallest_schmidt_value()) {
             // Cut down the bond dimension with SVDs only
-            tools::finite::mps::normalize_state(*tensors.state, svd::config(status.bond_max, trnc_lim), NormPolicy::ALWAYS);
+            tools::finite::mps::normalize_state(tensors.get_state(), svd::config(status.bond_max, trnc_lim), NormPolicy::ALWAYS);
             tensors.clear_cache();
             tensors.clear_measurements();
             tensors.rebuild_edges();
@@ -186,7 +196,8 @@ void AlgorithmFinite::run_rtes_analysis() {
     status     = status_backup;
 }
 
-void AlgorithmFinite::run_postprocessing() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::run_postprocessing() {
     tools::log->info("Running default postprocessing for {}", status.algo_type_sv());
     auto tic = tid::tic_scope("post");
     if(has_flag(settings::strategy::projection_policy, ProjectionPolicy::FINISHED)) {
@@ -200,7 +211,8 @@ void AlgorithmFinite::run_postprocessing() {
     tools::log->info("Finished default postprocessing for {}", status.algo_type_sv());
 }
 
-int AlgorithmFinite::get_eigs_iter_max() const {
+template<typename Scalar>
+int AlgorithmFinite<Scalar>::get_eigs_iter_max() const {
     using namespace settings::precision;
     auto iter_min = std::min(safe_cast<double>(eigs_iter_min), safe_cast<double>(eigs_iter_max));
     auto iter_max = std::max(safe_cast<double>(eigs_iter_min), safe_cast<double>(eigs_iter_max));
@@ -226,7 +238,8 @@ int AlgorithmFinite::get_eigs_iter_max() const {
     return safe_cast<int>(result);
 }
 
-AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
+template<typename Scalar>
+AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta() {
     tools::log->trace("get_opt_meta: configuring optimization step");
     OptMeta m1;
 
@@ -258,14 +271,14 @@ AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
     // bool var_isconverged = status.variance_mpo_converged_for > 0 or var_latest < var_conv_thresh;
 
     // Set up the dmrg block size
-    m1.min_sites = std::min(tensors.get_length<size_t>(), settings::strategy::dmrg_min_blocksize);
+    m1.min_sites = std::min(tensors.template get_length<size_t>(), settings::strategy::dmrg_min_blocksize);
     m1.max_sites = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_UPDATE) ? std::max(m1.min_sites, dmrg_blocksize) : m1.min_sites;
 
     // Set up the problem size and select the dmrg sites
     m1.max_problem_size = settings::strategy::dmrg_max_prob_size;
-    m1.chosen_sites     = tools::finite::multisite::generate_site_list(*tensors.state, m1.max_problem_size, m1.max_sites, m1.min_sites, m1.label);
-    m1.problem_dims     = tools::finite::multisite::get_dimensions(*tensors.state, m1.chosen_sites);
-    m1.problem_size     = tools::finite::multisite::get_problem_size(*tensors.state, m1.chosen_sites);
+    m1.chosen_sites     = tools::finite::multisite::generate_site_list(tensors.get_state(), m1.max_problem_size, m1.max_sites, m1.min_sites, m1.label);
+    m1.problem_dims     = tools::finite::multisite::get_dimensions(tensors.get_state(), m1.chosen_sites);
+    m1.problem_size     = tools::finite::multisite::get_problem_size(tensors.get_state(), m1.chosen_sites);
 
     // Set up the bond expansion (aka subspace expansion)
     m1.bondexp_policy    = settings::strategy::dmrg_bond_expansion_policy;
@@ -293,9 +306,9 @@ AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
     // m1.eigs_tol      = settings::precision::eigs_tol_min;
     if(settings::strategy::etol_decrease_when == UpdatePolicy::NEVER) {
         // Increase the precision of the eigenvalue solver as variance decreases, and when stuck
-        double matrix_norm = std::max(1.0, eigval_upper_bound);
-        double target_tol  = var_latest / matrix_norm;
-        if(status.algorithm_saturated_for > 0) { target_tol = var_latest / matrix_norm; }
+        double matrix_norm = std::max<double>(1.0, static_cast<double>(eigval_upper_bound));
+        double target_tol  = static_cast<double>(var_latest) / matrix_norm;
+        if(status.algorithm_saturated_for > 0) { target_tol = static_cast<double>(var_latest) / matrix_norm; }
         if(status.algorithm_has_stuck_for > 0) { target_tol = status.energy_variance_lowest / matrix_norm; }
         if(status.algorithm_has_stuck_for > 2) target_tol = settings::precision::eigs_tol_min;
         target_tol  = std::clamp(target_tol, settings::precision::eigs_tol_min, settings::precision::eigs_tol_max);
@@ -326,7 +339,8 @@ AlgorithmFinite::OptMeta AlgorithmFinite::get_opt_meta() {
     return m1;
 }
 
-void AlgorithmFinite::expand_bonds(OptMeta &opt_meta) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::expand_bonds(OptMeta &opt_meta) {
     // Set a good initial value to start with
     if(opt_meta.bondexp_policy == BondExpansionPolicy::NONE) return;
     bool has_preopt       = has_any_flags(opt_meta.bondexp_policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE);
@@ -345,16 +359,17 @@ void AlgorithmFinite::expand_bonds(OptMeta &opt_meta) {
         return;
     }
     tools::log->debug("Expanded environment {} block [{}-{}] | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f}",
-                      flag2str(opt_meta.bondexp_policy), res.posL, res.posR, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, res.var_old, res.var_new, res.ene_old,
-                      res.ene_new);
+                      flag2str(opt_meta.bondexp_policy), res.posL, res.posR, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, fp(res.var_old), fp(res.var_new),
+                      fp(res.ene_old), fp(res.ene_new));
     using namespace settings::strategy;
     status.bond_expansion_alpha = !std::isnan(res.alpha_h1v) ? res.alpha_h1v : res.alpha_h2v;
-    opt_meta.problem_dims       = tools::finite::multisite::get_dimensions(*tensors.state);
-    opt_meta.problem_size       = tools::finite::multisite::get_problem_size(*tensors.state);
+    opt_meta.problem_dims       = tools::finite::multisite::get_dimensions(tensors.get_state());
+    opt_meta.problem_size       = tools::finite::multisite::get_problem_size(tensors.get_state());
     opt_meta.optSolver          = opt_meta.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
 }
 
-void AlgorithmFinite::expand_bonds(BondExpansionPolicy bep, OptAlgo algo, OptRitz ritz, std::optional<svd::config> svd_cfg) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::expand_bonds(BondExpansionPolicy bep, OptAlgo algo, OptRitz ritz, std::optional<svd::config> svd_cfg) {
     OptMeta opt_meta;
     opt_meta.bondexp_policy    = bep;
     opt_meta.bondexp_maxiter   = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
@@ -371,16 +386,17 @@ void AlgorithmFinite::expand_bonds(BondExpansionPolicy bep, OptAlgo algo, OptRit
     expand_bonds(opt_meta);
 }
 
-void AlgorithmFinite::move_center_point(std::optional<long> num_moves) {
-    auto var_before_move = 0.0;
-    if(tensors.state->get_position<long>() >= 0) { var_before_move = tools::finite::measure::energy_variance(tensors); }
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::move_center_point(std::optional<long> num_moves) {
+    RealScalar var_before_move = 0;
+    if(tensors.state->template get_position<long>() >= 0) { var_before_move = tools::finite::measure::energy_variance(tensors); }
     auto old_pos = status.position;
     if(not num_moves.has_value()) {
         if(tensors.active_sites.empty())
             num_moves = 1;
         else {
             long posL_edge     = 0;
-            long posR_edge     = tensors.get_length<long>() - 1;
+            long posR_edge     = tensors.template get_length<long>() - 1;
             long posL_active   = safe_cast<long>(tensors.active_sites.front());
             long posR_active   = safe_cast<long>(tensors.active_sites.back());
             long num_active    = safe_cast<long>(tensors.active_sites.size());
@@ -414,7 +430,8 @@ void AlgorithmFinite::move_center_point(std::optional<long> num_moves) {
         long moves = 0;
         while(num_moves > moves++) {
             if(tensors.position_is_outward_edge()) status.iter++;
-            tools::log->trace("Moving center position | step {} | pos {} | dir {} ", status.step, tensors.get_position<long>(), tensors.state->get_direction());
+            tools::log->trace("Moving center position | step {} | pos {} | dir {} ", status.step, tensors.template get_position<long>(),
+                              tensors.state->get_direction());
             status.step += tensors.move_center_point(svd::config(status.bond_lim, status.trnc_lim));
             // Do not go past the edge if you aren't there already!
             // It's important to stay at the inward edge, so we can do convergence checks and so on
@@ -422,38 +439,42 @@ void AlgorithmFinite::move_center_point(std::optional<long> num_moves) {
         }
         // if(tensors.position_is_outward_edge())
         // throw except::logic_error("Invalid position after moving {} steps: the position is outward edge: pos {} | dir {}", num_moves,
-        // tensors.get_position<long>(), tensors.state->get_direction());
+        // tensors.template get_position<long>(), tensors.state->get_direction());
         tensors.clear_active_sites();
     } catch(std::exception &e) {
         tools::finite::print::dimensions(tensors);
         throw except::runtime_error("Failed to move center point: {}", e.what());
     }
-    status.position  = tensors.state->get_position<long>();
-    status.direction = tensors.state->get_direction();
+    status.position  = tensors.template get_position<long>();
+    status.direction = tensors.get_state().get_direction();
     if(status.position >= 0) {
         tensors.rebuild_edges();
-        tensors.activate_sites({tensors.get_position<size_t>()});
+        tensors.activate_sites({tensors.template get_position<size_t>()});
         auto var_after_move = tools::finite::measure::energy_variance(tensors);
-        tools::log->debug("Moved center position {} -> {} | var {:.2e} -> {:.2e}", old_pos, status.position, var_before_move, var_after_move);
+        tools::log->debug("Moved center position {} -> {} | var {:.2e} -> {:.2e}", old_pos, status.position, fp(var_before_move), fp(var_after_move));
     }
 }
 
-void AlgorithmFinite::set_energy_shift_mpo() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::set_energy_shift_mpo() {
     if(not settings::precision::use_energy_shifted_mpo) return;
     if(not tensors.position_is_inward_edge()) return;
-    auto threshold = std::min(1e-14, settings::precision::variance_convergence_threshold);
-    if(var_latest < std::min(1e-14, settings::precision::variance_convergence_threshold)) {
+    constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
+
+    auto threshold = std::min<RealScalar>(100 * eps, static_cast<RealScalar>(settings::precision::variance_convergence_threshold));
+    if(var_latest < threshold) {
         // No need to improve precision further.
         // The quotient <H-eshift>/<(H-eshift)²> risks being imprecise when both numerator and denominator ar close to zero.
         // In the worst case, (H-eshift)² ceases to be positive definite.
-        tools::log->debug("Skipped the MPO energy shift because the variance ({:.3e}) is already below the threshold {:.3e}", var_latest, threshold);
+        tools::log->debug("Skipped the MPO energy shift because the variance ({:.3e}) is already below the threshold {:.3e}", fp(var_latest), fp(threshold));
         return;
     }
     auto energy_shift = tools::finite::measure::energy(tensors);
     tensors.set_energy_shift_mpo(energy_shift); // Avoid catastrophic cancellation by shifting energy on each mpo by E/L
 }
 
-void AlgorithmFinite::rebuild_tensors() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::rebuild_tensors() {
     if(not tensors.position_is_inward_edge()) return;
     tensors.rebuild_mpo();          // The shift clears our squared mpo's. So we have to rebuild them.
     tensors.rebuild_mpo_squared();  // The shift clears our squared mpo's. So we have to rebuild them.
@@ -462,7 +483,8 @@ void AlgorithmFinite::rebuild_tensors() {
     if constexpr(settings::debug) tensors.assert_validity();
 }
 
-void AlgorithmFinite::try_moving_sites() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::try_moving_sites() {
     if(not settings::strategy::move_sites_when_stuck) return;
     if(not tensors.position_is_inward_edge()) return;
     if(status.algorithm_has_stuck_for == 0) return;
@@ -478,8 +500,8 @@ void AlgorithmFinite::try_moving_sites() {
     settings::precision::eigs_tol_min  = std::min(1e-14, settings::precision::eigs_tol_min);
     settings::precision::eigs_ncv      = std::max(35, settings::precision::eigs_ncv);
 
-    auto len      = tensors.get_length<long>();
-    auto pos      = tensors.get_position<long>();
+    auto len      = tensors.template get_length<long>();
+    auto pos      = tensors.template get_position<long>();
     auto dir      = pos > len / 2 ? -1l : 1l;
     auto site_seq = dir > 0 ? num::range<long>(0, len - 1, 1) : num::range<long>(1, len, -1);
 
@@ -500,7 +522,7 @@ void AlgorithmFinite::try_moving_sites() {
             if(sites_mps)
                 report.emplace_back(fmt::format("sites [{:2}, {:2}] @ pos [{:2}, {:2}] | variance {:.5e}", sites_mps->at(tensors.active_sites.front()),
                                                 sites_mps->at(tensors.active_sites.back()), tensors.active_sites.front(), tensors.active_sites.back(),
-                                                tools::finite::measure::energy_variance(tensors)));
+                                                fp(tools::finite::measure::energy_variance(tensors))));
             status.step += 1;
             tensors.move_site_to_pos(safe_cast<size_t>(site), tgt_pos, sites_mps, sites_mpo, tgt_pos);
             tools::log->debug("Labels    : {}", tensors.state->get_labels());
@@ -522,8 +544,8 @@ void AlgorithmFinite::try_moving_sites() {
     clear_convergence_status();
     tools::log->info("Finished moving sites");
     for(const auto &r : report) tools::log->info("{}", r);
-    tools::log->info("Energy    {:.16f} --> {:.16f}", ene_old, tools::finite::measure::energy(tensors));
-    tools::log->info("Variance  {:9.3e} --> {:9.3e}", var_old, tools::finite::measure::energy_variance(tensors));
+    tools::log->info("Energy    {:.16f} --> {:.16f}", fp(ene_old), fp(tools::finite::measure::energy(tensors)));
+    tools::log->info("Variance  {:9.3e} --> {:9.3e}", fp(var_old), fp(tools::finite::measure::energy_variance(tensors)));
 
     if(not tensors.position_is_inward_edge())
         throw except::logic_error("Position {} and direction {} is not an inward edge", tensors.get_position(), tensors.state->get_direction());
@@ -533,7 +555,8 @@ void AlgorithmFinite::try_moving_sites() {
     dmrg_blocksize                     = dmrg_blocksize_backup;
 }
 
-void AlgorithmFinite::update_precision_limit(std::optional<double> energy_upper_bound) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::update_precision_limit(std::optional<double> energy_upper_bound) {
     if(not tensors.position_is_inward_edge()) return;
     // The variance precision limit depends on the Hamiltonian operator norm ~ largest eigenvalue.
     // We can get a rough order of magnitude estimate of the largest eigenvalue by adding the absolute value of all the
@@ -560,7 +583,8 @@ void AlgorithmFinite::update_precision_limit(std::optional<double> energy_upper_
                      energy_upper_bound.value());
 }
 
-void AlgorithmFinite::update_bond_dimension_limit() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
     if(not tensors.position_is_inward_edge()) return;
     status.bond_limit_has_reached_max = status.bond_lim >= status.bond_max;
 
@@ -591,10 +615,10 @@ void AlgorithmFinite::update_bond_dimension_limit() {
             size_t bond_at_lim_count    = tensors.state->num_bonds_at_limit(status.bond_lim);
             tools::log->trace("Truncation threshold  : {:<.8e}", truncation_threshold);
             tools::log->trace("Truncation errors     : {}", tensors.state->get_truncation_errors());
-            tools::log->trace("Bond dimensions       : {}", tools::finite::measure::bond_dimensions(*tensors.state));
+            tools::log->trace("Bond dimensions       : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
             tools::log->trace("Truncated bond count  : {} ", trunc_bond_count);
             tools::log->trace("Bonds at limit  count : {} ", bond_at_lim_count);
-            tools::log->trace("Entanglement entropies: {} ", tools::finite::measure::entanglement_entropies(*tensors.state));
+            tools::log->trace("Entanglement entropies: {} ", fv(tools::finite::measure::entanglement_entropies(tensors.get_state())));
         }
     }
     // If we got here we want to increase the bond dimension limit progressively during the simulation
@@ -648,7 +672,8 @@ void AlgorithmFinite::update_bond_dimension_limit() {
     if(status.bond_lim > status.bond_max) throw except::logic_error("bond_lim is larger than get_bond_max! {} > {}", status.bond_lim, status.bond_max);
 }
 
-void AlgorithmFinite::reduce_bond_dimension_limit(double rate, UpdatePolicy when, StorageEvent storage_event) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::reduce_bond_dimension_limit(double rate, UpdatePolicy when, StorageEvent storage_event) {
     // We reduce the bond dimension limit during RBDS whenever entanglement has stopped changing
     if(not tensors.position_is_inward_edge()) return;
     if(when == UpdatePolicy::NEVER) return;
@@ -679,7 +704,8 @@ void AlgorithmFinite::reduce_bond_dimension_limit(double rate, UpdatePolicy when
     }
 }
 
-void AlgorithmFinite::update_truncation_error_limit() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if(not tensors.position_is_inward_edge()) return;
     if(status.trnc_lim == 0.0) throw std::runtime_error("trnc_lim is zero!");
     status.trnc_limit_has_reached_min = status.trnc_lim <= status.trnc_min;
@@ -704,9 +730,9 @@ void AlgorithmFinite::update_truncation_error_limit() {
             size_t trunc_bond_count     = tensors.state->num_sites_truncated(truncation_threshold);
             tools::log->trace("Truncation threshold  : {:<.8e}", truncation_threshold);
             tools::log->trace("Truncation errors     : {}", tensors.state->get_truncation_errors());
-            tools::log->trace("Bond dimensions       : {}", tools::finite::measure::bond_dimensions(*tensors.state));
+            tools::log->trace("Bond dimensions       : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
             tools::log->trace("Truncated bond count  : {} ", trunc_bond_count);
-            tools::log->trace("Entanglement entropies: {} ", tools::finite::measure::entanglement_entropies(*tensors.state));
+            tools::log->trace("Entanglement entropies: {} ", fv(tools::finite::measure::entanglement_entropies(tensors.get_state())));
         }
     }
 
@@ -753,7 +779,8 @@ void AlgorithmFinite::update_truncation_error_limit() {
     if(status.trnc_lim < status.trnc_min) throw except::logic_error("trnc_lim is smaller than trnc_min ! {:8.2e} > {:8.2e}", status.trnc_lim, status.trnc_min);
 }
 
-void AlgorithmFinite::update_dmrg_blocksize() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
     auto old_bsize = dmrg_blocksize;
     if(settings::strategy::dmrg_blocksize_policy == BlockSizePolicy::MIN) {
         dmrg_blocksize = safe_cast<size_t>(settings::strategy::dmrg_min_blocksize);
@@ -787,7 +814,7 @@ void AlgorithmFinite::update_dmrg_blocksize() {
     if(not tensors.position_is_inward_edge()) return;
     using namespace settings::strategy;
     tools::log->trace("Updating blocksize | policy: {}", flag2str(dmrg_blocksize_policy));
-    bool has_converged = status.algorithm_converged_for > 0 or var_latest <= settings::precision::variance_convergence_threshold;
+    bool has_converged = status.algorithm_converged_for > 0 or var_latest <= static_cast<RealScalar>(settings::precision::variance_convergence_threshold);
     bool has_sat_ent   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_ENTR) and status.entanglement_saturated_for > 0 and not has_converged;
     bool has_sat_icom  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_INFO) and infocom_saturated_for > 0 and not has_converged;
     bool has_sat_var   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_EVAR) and status.variance_mpo_saturated_for > 0 and not has_converged;
@@ -835,7 +862,7 @@ void AlgorithmFinite::update_dmrg_blocksize() {
                                            .svd_max_size   = 1024,
                                            .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
                                            .precision      = Precision::SINGLE};
-        auto        ia        = tools::finite::measure::information_lattice_analysis(*tensors.state, ip);
+        auto        ia        = tools::finite::measure::information_lattice_analysis(tensors.get_state(), ip);
         double      icom      = ia.icom;
         double      blocksize = std::max(1.0, icom);
         std::string tag;
@@ -862,7 +889,8 @@ void AlgorithmFinite::update_dmrg_blocksize() {
     }
 }
 
-void AlgorithmFinite::update_eigs_tolerance() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     using namespace settings::precision;
     if(not tensors.position_is_inward_edge()) return;
     dmrg_eigs_tol = std::clamp(dmrg_eigs_tol, eigs_tol_min, eigs_tol_max);
@@ -916,16 +944,18 @@ void AlgorithmFinite::update_eigs_tolerance() {
     if(dmrg_eigs_tol < eigs_tol_min) throw except::logic_error("dmrg_eigs_tol is smaller than eigs_tol_min ! {:8.2e} > {:8.2e}", dmrg_eigs_tol, eigs_tol_min);
 }
 
-void AlgorithmFinite::initialize_model() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::initialize_model() {
     tools::log->info("Initializing model");
     tensors.initialize_model();
     clear_convergence_status();
-    tools::finite::print::model(*tensors.model);
+    tools::finite::print::model(tensors.get_model());
 }
 
-void AlgorithmFinite::initialize_state(ResetReason reason, StateInit state_init, std::optional<StateInitType> state_type, std::optional<std::string> axis,
-                                       std::optional<bool> use_eigenspinors, std::optional<std::string> pattern, std::optional<long> bond_lim,
-                                       std::optional<double> trnc_lim) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit state_init, std::optional<StateInitType> state_type,
+                                               std::optional<std::string> axis, std::optional<bool> use_eigenspinors, std::optional<std::string> pattern,
+                                               std::optional<long> bond_lim, std::optional<double> trnc_lim) {
     auto t_rnd = tid::tic_scope("rnd_state", tid::level::higher);
     if(not state_type) state_type = tensors.state->is_real() ? StateInitType::REAL : StateInitType::CPLX;
     if(not axis) axis = settings::strategy::initial_axis;
@@ -947,7 +977,7 @@ void AlgorithmFinite::initialize_state(ResetReason reason, StateInit state_init,
     tensors.normalize_state(svd::config(bond_lim, trnc_lim), NormPolicy::ALWAYS);
     if(has_flag(settings::strategy::projection_policy, ProjectionPolicy::INIT) and qm::spin::half::is_valid_axis(axis.value())) {
         tools::log->info("Projecting state | target sector {} | norm {:.16f} | spin components: {::+.16f}", axis.value(),
-                         tools::finite::measure::norm(*tensors.state), tools::finite::measure::spin_components(*tensors.state));
+                         fp(tools::finite::measure::norm(tensors.get_state())), fv(tools::finite::measure::spin_components(tensors.get_state())));
         tensors.project_to_nearest_axis(axis.value(), svd::config(bond_lim, trnc_lim));
         tensors.rebuild_edges();
         // Note! After running this function we should rebuild edges! However, there are usually no sites active at this point, so we do it further down.
@@ -957,8 +987,8 @@ void AlgorithmFinite::initialize_state(ResetReason reason, StateInit state_init,
     status.reset();
     status.iter      = 0;
     status.step      = 0;
-    status.position  = tensors.state->get_position<long>();
-    status.direction = tensors.state->get_direction();
+    status.position  = tensors.template get_position<long>();
+    status.direction = tensors.get_state().get_direction();
     status.algo_stop = AlgorithmStop::NONE;
     if(settings::strategy::bond_increase_when != UpdatePolicy::NEVER) status.bond_lim = bond_lim.value();
     if(tensors.state->get_largest_bond() > bond_lim.value())
@@ -975,20 +1005,23 @@ void AlgorithmFinite::initialize_state(ResetReason reason, StateInit state_init,
     tools::log->info("-- axis          : {}", axis.value());
     tools::log->info("-- pattern       : {}", settings::strategy::initial_pattern);
     tools::log->info("-- labels        : {}", tensors.state->get_labels());
-    tools::log->info("-- norm          : {:.16f}", tools::finite::measure::norm(*tensors.state));
-    tools::log->info("-- spin (X,Y,Z)  : {::.16f}", tools::finite::measure::spin_components(*tensors.state));
-    tools::log->info("-- bond dimensions          : {}", tools::finite::measure::bond_dimensions(*tensors.state));
+    tools::log->info("-- norm          : {:.16f}", fp(tools::finite::measure::norm(tensors.get_state())));
+    tools::log->info("-- spin (X,Y,Z)  : {::.16f}", fv(tools::finite::measure::spin_components(tensors.get_state())));
+    tools::log->info("-- bond dimensions          : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
 
     if(status.algo_type != AlgorithmType::fLBIT) {
-        tools::log->info("-- energy                   : {}", tools::finite::measure::energy(tensors));
+        tools::log->info("-- energy                   : {}", fp(tools::finite::measure::energy(tensors)));
         if(!std::isnan(status.energy_min + status.energy_max))
-            tools::log->info("-- energy density           : {}", tools::finite::measure::energy_normalized(tensors, status.energy_min, status.energy_max));
-        tools::log->info("-- energy variance          : {:8.2e}", tools::finite::measure::energy_variance(tensors));
+            tools::log->info(
+                "-- energy density           : {}",
+                fp(tools::finite::measure::energy_normalized(tensors, static_cast<RealScalar>(status.energy_min), static_cast<RealScalar>(status.energy_max))));
+        tools::log->info("-- energy variance          : {:8.2e}", fp(tools::finite::measure::energy_variance(tensors)));
     }
     write_to_file(StorageEvent::INIT);
 }
 
-void AlgorithmFinite::try_projection(std::optional<std::string> target_axis) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::try_projection(std::optional<std::string> target_axis) {
     if(not tensors.position_is_inward_edge()) return;
     if(settings::strategy::projection_policy == ProjectionPolicy::NEVER) return;
     // if(status.spin_parity_has_converged) {
@@ -1020,13 +1053,13 @@ void AlgorithmFinite::try_projection(std::optional<std::string> target_axis) {
         auto sector_sign   = qm::spin::half::get_sign(target_axis.value());
         auto energy_old    = tools::finite::measure::energy(tensors);
         auto variance_old  = tools::finite::measure::energy_variance(tensors);
-        auto spincomp_old  = tools::finite::measure::spin_components(*tensors.state);
-        auto entropies_old = tools::finite::measure::entanglement_entropies(*tensors.state);
+        auto spincomp_old  = tools::finite::measure::spin_components(tensors.get_state());
+        auto entropies_old = tools::finite::measure::entanglement_entropies(tensors.get_state());
         auto svd_cfg       = svd::config(status.bond_lim, status.trnc_lim);
         if(sector_sign != 0) {
             tensors.project_to_nearest_axis(target_axis.value(), svd_cfg);
             tensors.rebuild_edges();
-            auto spincomp_new = tools::finite::measure::spin_components(*tensors.state);
+            auto spincomp_new = tools::finite::measure::spin_components(tensors.get_state());
             if(spincomp_new != spincomp_old) {
                 if(target_axis.value() == settings::strategy::target_axis) projected_iter = status.iter;
                 write_to_file(StorageEvent::PROJECTION, CopyPolicy::OFF);
@@ -1039,16 +1072,16 @@ void AlgorithmFinite::try_projection(std::optional<std::string> target_axis) {
             // projecting to the other sector will zero the norm. So we can only make this
             // decision if the |spin spin_component_along_requested_axis| < 1, otherwise we loose all precision.
             // We choose |spin_component_along_requested_axis| < 0.7 here, but this choice is arbitrary.
-            auto spin_component_along_requested_axis = tools::finite::measure::spin_component(*tensors.state, target_axis.value());
-            tools::log->debug("Spin component along {} = {:.16f}", target_axis.value(), spin_component_along_requested_axis);
-            if(std::abs(spin_component_along_requested_axis) < 0.7) {
+            auto spin_component_along_requested_axis = tools::finite::measure::spin_component(tensors.get_state(), target_axis.value());
+            tools::log->debug("Spin component along {} = {:.16f}", target_axis.value(), fp(spin_component_along_requested_axis));
+            if(std::abs(spin_component_along_requested_axis) < static_cast<RealScalar>(0.7)) {
                 // Here we deem the spin component undecided enough to make a safe projection to both sides for comparison
                 auto tensors_neg  = tensors;
                 auto tensors_pos  = tensors;
-                auto energy_neg   = std::numeric_limits<double>::quiet_NaN();
-                auto energy_pos   = std::numeric_limits<double>::quiet_NaN();
-                auto variance_neg = std::numeric_limits<double>::quiet_NaN();
-                auto variance_pos = std::numeric_limits<double>::quiet_NaN();
+                auto energy_neg   = std::numeric_limits<RealScalar>::quiet_NaN();
+                auto energy_pos   = std::numeric_limits<RealScalar>::quiet_NaN();
+                auto variance_neg = std::numeric_limits<RealScalar>::quiet_NaN();
+                auto variance_pos = std::numeric_limits<RealScalar>::quiet_NaN();
                 try {
                     tools::log->debug("Trying projection to -{}", target_axis.value());
                     auto target_neg = fmt::format("-{}", target_axis.value());
@@ -1068,8 +1101,8 @@ void AlgorithmFinite::try_projection(std::optional<std::string> target_axis) {
                     variance_pos = tools::finite::measure::energy_variance(tensors_pos);
                 } catch(const std::exception &ex) { throw except::runtime_error("Projection to +{} failed: {}", target_axis.value(), ex.what()); }
 
-                tools::log->debug("Projection to -{}: Energy: {:.16f} | Variance {:.3e}", target_axis.value(), energy_neg, variance_neg);
-                tools::log->debug("Projection to +{}: Energy: {:.16f} | Variance {:.3e}", target_axis.value(), energy_pos, variance_pos);
+                tools::log->debug("Projection to -{}: Energy: {:.16f} | Variance {:.3e}", target_axis.value(), fp(energy_neg), fp(variance_neg));
+                tools::log->debug("Projection to +{}: Energy: {:.16f} | Variance {:.3e}", target_axis.value(), fp(energy_pos), fp(variance_pos));
                 if(std::isnan(variance_neg) and std::isnan(variance_pos))
                     tools::log->warn("Both -{0} and +{0} projections failed to yield a valid variance", target_axis.value());
 
@@ -1127,15 +1160,15 @@ void AlgorithmFinite::try_projection(std::optional<std::string> target_axis) {
             tensors.rebuild_edges();
             auto energy_new    = tools::finite::measure::energy(tensors);
             auto variance_new  = tools::finite::measure::energy_variance(tensors);
-            auto spincomp_new  = tools::finite::measure::spin_components(*tensors.state);
-            auto entropies_new = tools::finite::measure::entanglement_entropies(*tensors.state);
+            auto spincomp_new  = tools::finite::measure::spin_components(tensors.get_state());
+            auto entropies_new = tools::finite::measure::entanglement_entropies(tensors.get_state());
             if(spincomp_new != spincomp_old) {
-                tools::log->info("Projection result: energy {:.16f} -> {:.16f} variance {:.4e} -> {:.4e}  | spin components {:.16f} -> {:.16f}", energy_old,
-                                 energy_new, variance_old, variance_new, fmt::join(spincomp_old, ", "), fmt::join(spincomp_new, ", "));
+                tools::log->info("Projection result: energy {:.16f} -> {:.16f} variance {:.4e} -> {:.4e}  | spin components {::.16f} -> {::.16f}",
+                                 fp(energy_old), fp(energy_new), fp(variance_old), fp(variance_new), fv(spincomp_old), fv(spincomp_new));
                 if(tools::log->level() <= spdlog::level::debug)
                     for(const auto &[i, e] : iter::enumerate(entropies_old)) {
-                        tools::log->debug("entropy [{:>2}] = {:>8.6f} --> {:>8.6f} | change {:8.5e}", static_cast<long>(i), e, entropies_new[i],
-                                          entropies_new[i] - e);
+                        tools::log->debug("entropy [{:>2}] = {:>8.6f} --> {:>8.6f} | change {:8.5e}", static_cast<long>(i), fp(e), fp(entropies_new[i]),
+                                          fp(entropies_new[i] - e));
                     }
                 if(target_axis.value() == settings::strategy::target_axis) projected_iter = status.iter;
                 write_to_file(StorageEvent::PROJECTION, CopyPolicy::OFF);
@@ -1144,7 +1177,8 @@ void AlgorithmFinite::try_projection(std::optional<std::string> target_axis) {
     }
 }
 
-void AlgorithmFinite::set_parity_shift_mpo(std::optional<std::string> target_axis) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::set_parity_shift_mpo(std::optional<std::string> target_axis) {
     if(not settings::precision::use_parity_shifted_mpo) return;
     if(not tensors.position_is_inward_edge()) return;
     target_axis = target_axis.value_or(settings::strategy::target_axis);
@@ -1167,14 +1201,16 @@ void AlgorithmFinite::set_parity_shift_mpo(std::optional<std::string> target_axi
     tensors.set_parity_shift_mpo(ritz, target_axis.value());
 }
 
-void AlgorithmFinite::set_parity_shift_mpo_squared(std::optional<std::string> target_axis) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::set_parity_shift_mpo_squared(std::optional<std::string> target_axis) {
     if(not settings::precision::use_parity_shifted_mpo_squared) return;
     if(not tensors.position_is_inward_edge()) return;
     target_axis = target_axis.value_or(settings::strategy::target_axis);
     tensors.set_parity_shift_mpo_squared(target_axis.value());
 }
 
-void AlgorithmFinite::check_convergence() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::check_convergence() {
     if(not tensors.position_is_inward_edge()) return;
     auto t_con = tid::tic_scope("conv");
 
@@ -1257,10 +1293,12 @@ void AlgorithmFinite::check_convergence() {
     }
 }
 
-AlgorithmFinite::log_entry::log_entry(const AlgorithmStatus &s, const TensorsFinite &t) : entropies(tools::finite::measure::entanglement_entropies(*t.state)) {
+template<typename Scalar>
+AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const TensorsFinite<Scalar> &t)
+    : entropies(tools::finite::measure::entanglement_entropies(t.get_state())) {
     status    = s;
-    energy    = status.algo_type == AlgorithmType::fLBIT ? 0.0 : tools::finite::measure::energy(t);
-    variance  = status.algo_type == AlgorithmType::fLBIT ? 0.0 : tools::finite::measure::energy_variance(t);
+    energy    = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy(t);
+    variance  = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy_variance(t);
     entropies = tools::finite::measure::entanglement_entropies(*t.state);
     time      = status.wall_time;
     auto ip   = InfoPolicy{.bits_max_error = -0.5,
@@ -1270,13 +1308,14 @@ AlgorithmFinite::log_entry::log_entry(const AlgorithmStatus &s, const TensorsFin
                            .precision      = Precision::SINGLE};
     icom      = 0.0;
     if(settings::precision::infocom_saturation_sensitivity > 0.0 and status.algo_type != AlgorithmType::fLBIT) {
-        icom = tools::finite::measure::information_center_of_mass(*t.state, ip);
+        icom = tools::finite::measure::information_center_of_mass(t.get_state(), ip);
     }
 }
 
-void AlgorithmFinite::check_convergence_variance(std::optional<double> threshold, std::optional<double> saturation_sensitivity) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScalar> threshold, std::optional<RealScalar> saturation_sensitivity) {
     if(not tensors.position_is_inward_edge()) return;
-    if(not saturation_sensitivity) saturation_sensitivity = settings::precision::variance_saturation_sensitivity;
+    if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::variance_saturation_sensitivity);
     if(saturation_sensitivity <= 0) return;
     if(not threshold) {
         if(status.variance_mpo_saturated_for > 0)
@@ -1284,10 +1323,11 @@ void AlgorithmFinite::check_convergence_variance(std::optional<double> threshold
         else
             threshold = std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
     }
-    threshold              = 1e-15; // std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
-    saturation_sensitivity = std::max(saturation_sensitivity.value(), std::sqrt(status.trnc_lim)); // Large trnc causes noise that never saturates
-    tools::log->trace("Checking convergence of variance mpo | convergence threshold {:.2e} | sensitivity {:.2e}", threshold.value(),
-                      saturation_sensitivity.value());
+    threshold = 1e-15; // std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
+    saturation_sensitivity =
+        std::max(saturation_sensitivity.value(), static_cast<RealScalar>(std::sqrt(status.trnc_lim))); // Large trnc causes noise that never saturates
+    tools::log->trace("Checking convergence of variance mpo | convergence threshold {:.2e} | sensitivity {:.2e}", fp(threshold.value()),
+                      fp(saturation_sensitivity.value()));
 
     if(algorithm_history.empty() or algorithm_history.back().status.step < status.step)
         algorithm_history.emplace_back(status, tensors);
@@ -1295,9 +1335,9 @@ void AlgorithmFinite::check_convergence_variance(std::optional<double> threshold
         algorithm_history.back() = log_entry(status, tensors);
 
     // Gather the variance history
-    std::vector<double> var_mpo_iter;
+    std::vector<RealScalar> var_mpo_iter;
     std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(var_mpo_iter),
-                   [](const log_entry &h) -> double { return h.variance; });
+                   [](const log_entry &h) -> RealScalar { return h.variance; });
     //    var_mpo_iter.emplace_back(tools::finite::measure::energy_variance(tensors));
     auto report = check_saturation(var_mpo_iter, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::log);
     if(report.has_computed) {
@@ -1310,48 +1350,49 @@ void AlgorithmFinite::check_convergence_variance(std::optional<double> threshold
             tools::log->debug("Energy variance convergence: converged {} | saturated {} (since {})", status.variance_mpo_converged_for, report.saturated_count,
                               report.saturated_point);
         if(tools::log->level() <= spdlog::level::trace) {
-            std::vector<double> times;
-            std::vector<double> energies;
-            std::vector<double> eigvals;
+            std::vector<double>     times;
+            std::vector<RealScalar> energies;
+            std::vector<RealScalar> eigvals;
             std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
             std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(energies),
-                           [](const log_entry &h) -> double { return h.energy; });
+                           [](const log_entry &h) -> RealScalar { return h.energy; });
             std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(eigvals),
-                           [](const log_entry &h) -> double { return h.variance - h.energy * h.energy; });
+                           [](const log_entry &h) -> RealScalar { return h.variance - h.energy * h.energy; });
             tools::log->trace("Energy variance convergence details:");
-            tools::log->trace(" -- sensitivity     = {:7.4e}", saturation_sensitivity.value());
-            tools::log->trace(" -- threshold       = {:7.4e}", threshold.value());
+            tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
+            tools::log->trace(" -- threshold       = {:7.4e}", fp(threshold.value()));
             tools::log->trace(" -- saturated point = {} ", report.saturated_point);
             tools::log->trace(" -- saturated count = {} ", report.saturated_count);
             tools::log->trace(" -- converged count = {} ", status.variance_mpo_converged_for);
             tools::log->trace(" -- sat             = {}", report.Y_sat);
-            tools::log->trace(" -- val             = {::7.4e}", report.Y_vec);
-            tools::log->trace(" -- ene             = {::7.4e}", energies);
-            tools::log->trace(" -- eig             = {::7.4e}", eigvals);
+            tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
+            tools::log->trace(" -- ene             = {::7.4e}", fv(energies));
+            tools::log->trace(" -- eig             = {::7.4e}", fv(eigvals));
             tools::log->trace(" -- time            = {::7.4e}", times);
-            tools::log->trace(" -- avg             = {::7.4e}", report.Y_avg);
-            tools::log->trace(" -- med             = {::7.4e}", report.Y_med);
-            tools::log->trace(" -- min             = {::7.4e}", report.Y_min);
-            tools::log->trace(" -- max             = {::7.4e}", report.Y_max);
-            tools::log->trace(" -- mid             = {::7.4e}", report.Y_mid);
-            tools::log->trace(" -- dif             = {::7.4e}", report.Y_dif);
-            tools::log->trace(" -- std_val         = {::7.4e}", report.Y_vec_std);
-            tools::log->trace(" -- std_avg         = {::7.4e}", report.Y_avg_std);
-            tools::log->trace(" -- std_med         = {::7.4e}", report.Y_med_std);
-            tools::log->trace(" -- std_min         = {::7.4e}", report.Y_min_std);
-            tools::log->trace(" -- std_max         = {::7.4e}", report.Y_max_std);
-            tools::log->trace(" -- std_mid         = {::7.4e}", report.Y_mid_std);
-            tools::log->trace(" -- dif_avg         = {::7.4e}", report.Y_dif_avg);
-            tools::log->trace(" -- std_mov         = {::7.4e}", report.Y_mov_std);
+            tools::log->trace(" -- avg             = {::7.4e}", fv(report.Y_avg));
+            tools::log->trace(" -- med             = {::7.4e}", fv(report.Y_med));
+            tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
+            tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
+            tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
+            tools::log->trace(" -- dif             = {::7.4e}", fv(report.Y_dif));
+            tools::log->trace(" -- std_val         = {::7.4e}", fv(report.Y_vec_std));
+            tools::log->trace(" -- std_avg         = {::7.4e}", fv(report.Y_avg_std));
+            tools::log->trace(" -- std_med         = {::7.4e}", fv(report.Y_med_std));
+            tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+            tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+            tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+            tools::log->trace(" -- dif_avg         = {::7.4e}", fv(report.Y_dif_avg));
+            tools::log->trace(" -- std_mov         = {::7.4e}", fv(report.Y_mov_std));
         }
     }
 }
 
-void AlgorithmFinite::check_convergence_icom(std::optional<double> saturation_sensitivity) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::check_convergence_icom(std::optional<RealScalar> saturation_sensitivity) {
     if(not tensors.position_is_inward_edge()) return;
-    if(not saturation_sensitivity) saturation_sensitivity = settings::precision::infocom_saturation_sensitivity;
+    if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::infocom_saturation_sensitivity);
     if(saturation_sensitivity <= 0) return;
-    tools::log->trace("Checking convergence of icom | sensitivity {:.2e}", saturation_sensitivity.value());
+    tools::log->trace("Checking convergence of icom | sensitivity {:.2e}", fp(saturation_sensitivity.value()));
 
     if(algorithm_history.empty() or algorithm_history.back().status.step < status.step)
         algorithm_history.emplace_back(status, tensors);
@@ -1359,8 +1400,9 @@ void AlgorithmFinite::check_convergence_icom(std::optional<double> saturation_se
         algorithm_history.back() = log_entry(status, tensors);
 
     // Gather the information center of mass history
-    std::vector<double> infocom_iter;
-    std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(infocom_iter), [](const log_entry &h) -> double { return h.icom; });
+    std::vector<RealScalar> infocom_iter;
+    std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(infocom_iter),
+                   [](const log_entry &h) -> RealScalar { return h.icom; });
 
     //    var_mpo_iter.emplace_back(tools::finite::measure::energy_variance(tensors));
     auto report = check_saturation(infocom_iter, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::mov);
@@ -1373,26 +1415,27 @@ void AlgorithmFinite::check_convergence_icom(std::optional<double> saturation_se
             std::vector<double> times;
             std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
             tools::log->trace("ICOM saturation details:");
-            tools::log->trace(" -- sensitivity     = {:7.4e}", saturation_sensitivity.value());
+            tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
             tools::log->trace(" -- saturated point = {} ", report.saturated_point);
             tools::log->trace(" -- saturated count = {} ", report.saturated_count);
             tools::log->trace(" -- converged count = {} ", status.variance_mpo_converged_for);
             tools::log->trace(" -- sat             = {}", report.Y_sat);
-            tools::log->trace(" -- val             = {::7.4e}", report.Y_vec);
-            tools::log->trace(" -- min             = {::7.4e}", report.Y_min);
-            tools::log->trace(" -- max             = {::7.4e}", report.Y_max);
-            tools::log->trace(" -- mid             = {::7.4e}", report.Y_mid);
-            tools::log->trace(" -- std_var         = {::7.4e}", report.Y_vec_std);
-            tools::log->trace(" -- std_min         = {::7.4e}", report.Y_min_std);
-            tools::log->trace(" -- std_max         = {::7.4e}", report.Y_max_std);
-            tools::log->trace(" -- std_mid         = {::7.4e}", report.Y_mid_std);
-            tools::log->trace(" -- ste_mov         = {::7.4e}", report.Y_mov_std);
+            tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
+            tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
+            tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
+            tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
+            tools::log->trace(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
+            tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+            tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+            tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+            tools::log->trace(" -- ste_mov         = {::7.4e}", fv(report.Y_mov_std));
             tools::log->trace(" -- time            = {::7.4e}", times);
         }
     }
 }
 
-void AlgorithmFinite::check_convergence_entg_entropy(std::optional<double> saturation_sensitivity) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::check_convergence_entg_entropy(std::optional<RealScalar> saturation_sensitivity) {
     if(not tensors.position_is_inward_edge()) return;
     if(not saturation_sensitivity) saturation_sensitivity = settings::precision::entropy_saturation_sensitivity;
     if(saturation_sensitivity <= 0) return;
@@ -1411,27 +1454,29 @@ void AlgorithmFinite::check_convergence_entg_entropy(std::optional<double> satur
     }
 
     // Gather the entropy history
-    size_t                           entropies_size = tensors.get_length() + 1;
-    std::vector<SaturationReport>    reports(entropies_size);
-    std::vector<std::vector<double>> entropy_iter(entropies_size);
+    size_t                                    entropies_size = tensors.get_length() + 1;
+    std::vector<SaturationReport<RealScalar>> reports(entropies_size);
+    std::vector<std::vector<RealScalar>>      entropy_iter(entropies_size);
 
     for(size_t site = 0; site < entropies_size; site++) {
         std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(entropy_iter[site]),
-                       [entropies_size, site](const log_entry &h) -> double {
+                       [entropies_size, site](const log_entry &h) -> RealScalar {
                            if(h.entropies.empty()) throw except::runtime_error("Entanglement entropies are missing from algorithm history entry");
                            if(h.entropies.size() != entropies_size)
                                throw except::runtime_error("Entanglement entropies have the wrong size {} != {}", h.entropies.size(), entropies_size);
                            return h.entropies[site];
                        });
-        reports[site] = check_saturation(entropy_iter[site], saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mov);
+        reports[site] =
+            check_saturation(entropy_iter[site], static_cast<RealScalar>(saturation_sensitivity.value()), SaturationPolicy::val | SaturationPolicy::mov);
     }
 
-    bool all_computed = std::all_of(reports.begin(), reports.end(), [](const SaturationReport &r) { return r.has_computed; });
+    bool all_computed = std::all_of(reports.begin(), reports.end(), [](const SaturationReport<RealScalar> &r) { return r.has_computed; });
     if(all_computed) {
         // Find the report which saturated last
-        auto last_saturated_itr = std::min_element(reports.begin(), reports.end(), [](const SaturationReport &r1, const SaturationReport &r2) -> bool {
-            return r1.saturated_count < r2.saturated_count;
-        });
+        auto last_saturated_itr =
+            std::min_element(reports.begin(), reports.end(), [](const SaturationReport<RealScalar> &r1, const SaturationReport<RealScalar> &r2) -> bool {
+                return r1.saturated_count < r2.saturated_count;
+            });
         if(last_saturated_itr != reports.end()) {
             auto  last_saturated_site         = safe_cast<size_t>(std::distance(reports.begin(), last_saturated_itr));
             auto &report                      = reports[last_saturated_site];
@@ -1442,18 +1487,18 @@ void AlgorithmFinite::check_convergence_entg_entropy(std::optional<double> satur
             if(tools::log->level() <= spdlog::level::trace) {
                 tools::log->trace("Entanglement convergence details:");
                 tools::log->trace(" -- site            = {}", last_saturated_site);
-                tools::log->trace(" -- sensitivity     = {:7.4e}", saturation_sensitivity.value());
+                tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
                 tools::log->trace(" -- saturated point = {} ", report.saturated_point);
                 tools::log->trace(" -- saturated count = {} ", report.saturated_count);
-                tools::log->trace(" -- val             = {::7.4e}", report.Y_vec);
-                tools::log->trace(" -- min             = {::7.4e}", report.Y_min);
-                tools::log->trace(" -- max             = {::7.4e}", report.Y_max);
-                tools::log->trace(" -- mid             = {::7.4e}", report.Y_mid);
-                tools::log->trace(" -- std_var         = {::7.4e}", report.Y_vec_std);
-                tools::log->trace(" -- std_min         = {::7.4e}", report.Y_min_std);
-                tools::log->trace(" -- std_max         = {::7.4e}", report.Y_max_std);
-                tools::log->trace(" -- std_mid         = {::7.4e}", report.Y_mid_std);
-                tools::log->trace(" -- ste_mov         = {::7.4e}", report.Y_mov_std);
+                tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
+                tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
+                tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
+                tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
+                tools::log->trace(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
+                tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+                tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+                tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+                tools::log->trace(" -- ste_mov         = {::7.4e}", fv(report.Y_mov_std));
             }
         }
     }
@@ -1462,21 +1507,22 @@ void AlgorithmFinite::check_convergence_entg_entropy(std::optional<double> satur
     algorithm_history.back().status.entanglement_saturated_for = status.entanglement_saturated_for;
 }
 
-void AlgorithmFinite::check_convergence_spin_parity_sector(std::string_view target_axis, double threshold) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::check_convergence_spin_parity_sector(std::string_view target_axis, double threshold) {
     static constexpr std::array<std::string_view, 9> valid_axes    = {"x", "+x", "-x", "y", "+y", "-y", "z", "+z", "-z"};
     bool                                             axis_is_valid = std::find(valid_axes.begin(), valid_axes.end(), target_axis) != valid_axes.end();
     if(axis_is_valid) {
         tools::log->trace("Checking convergence of spin components");
         auto target_axus               = qm::spin::half::get_axis_unsigned(target_axis);
         auto target_sign               = qm::spin::half::get_sign(target_axis);
-        auto spin_components           = tools::finite::measure::spin_components(*tensors.state);
-        auto spin_component_along_axus = tools::finite::measure::spin_component(*tensors.state, target_axus);
-        bool spin_along_axus_near_abs1 = std::abs(std::abs(spin_component_along_axus) - 1) <= threshold;
-        auto spin_sign_along_axus      = tools::finite::measure::spin_sign(*tensors.state, target_axus);
+        auto spin_components           = tools::finite::measure::spin_components(tensors.get_state());
+        auto spin_component_along_axus = tools::finite::measure::spin_component(tensors.get_state(), target_axus);
+        bool spin_along_axus_near_abs1 = std::abs(std::abs(spin_component_along_axus) - 1) <= RealScalar(threshold);
+        auto spin_sign_along_axus      = tools::finite::measure::spin_sign(tensors.get_state(), target_axus);
         tools::log->info("target_axus                : {}", target_axus);
         tools::log->info("target_sign                : {}", target_sign);
-        tools::log->info("spin_components            : {}", spin_components);
-        tools::log->info("spin_component_along_axus  : {}", spin_component_along_axus);
+        tools::log->info("spin_components            : {}", fv(spin_components));
+        tools::log->info("spin_component_along_axus  : {}", fp(spin_component_along_axus));
         tools::log->info("spin_along_axus_near_abs1  : {}", spin_along_axus_near_abs1);
         tools::log->info("spin_sign_along_axus       : {}", spin_sign_along_axus);
         // We may have shifted the spin parity sector in the MPO or MPO².
@@ -1499,7 +1545,7 @@ void AlgorithmFinite::check_convergence_spin_parity_sector(std::string_view targ
 
         if(!msg.empty()) {
             tools::log->warn("check_convergence_spin_parity_sector: mismatch: target {} | spin parity shift:{} | spin components: {::.16f}", target_axis, msg,
-                             spin_components);
+                             fv(spin_components));
             if(spin_along_axus_near_abs1) {
                 // We seem to have converged in the opposite parity sector.
                 // The algorithm will likely not be able to escape the current sector, so we might as well set it as the target.
@@ -1514,20 +1560,21 @@ void AlgorithmFinite::check_convergence_spin_parity_sector(std::string_view targ
         status.spin_parity_has_converged = target_axus_ok and target_sign_ok and spin_along_axus_near_abs1;
 
         if(status.spin_parity_has_converged and spin_component_along_axus * target_sign < 0)
-            tools::log->warn("Spin components: {::.16f} | {} converged ({} requested) | threshold {:8.2}", spin_components, target_axus, target_axis,
+            tools::log->warn("Spin components: {::.16f} | {} converged ({} requested) | threshold {:8.2}", fv(spin_components), target_axus, target_axis,
                              threshold);
         if(not status.spin_parity_has_converged) {
-            tools::log->info("Spin components: {::.16f} | {} not converged ({} requested) | threshold {:8.2e}", spin_components, target_axus, target_axis,
+            tools::log->info("Spin components: {::.16f} | {} not converged ({} requested) | threshold {:8.2e}", fv(spin_components), target_axus, target_axis,
                              threshold);
         } else {
-            tools::log->debug("Spin components: {::.16f} | {} converged ({} requested) | threshold {:8.2e}", spin_components, target_axus, target_axis,
+            tools::log->debug("Spin components: {::.16f} | {} converged ({} requested) | threshold {:8.2e}", fv(spin_components), target_axus, target_axis,
                               threshold);
         }
     } else
         status.spin_parity_has_converged = true; // Probably no sector was specified
 }
 
-void AlgorithmFinite::clear_convergence_status() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::clear_convergence_status() {
     tools::log->trace("Clearing convergence status");
     algorithm_history.clear();
     status.algo_stop                  = AlgorithmStop::NONE;
@@ -1550,7 +1597,8 @@ void AlgorithmFinite::clear_convergence_status() {
     // status.bond_expansion_alpha        = 0.0;
 }
 
-void AlgorithmFinite::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
     if(not h5file) return;
     status.event = storage_event;
     tools::finite::h5::save::simulation(*h5file, tensors, status, copy_policy);
@@ -1558,20 +1606,21 @@ void AlgorithmFinite::write_to_file(StorageEvent storage_event, CopyPolicy copy_
 }
 
 template<typename Scalar>
-void AlgorithmFinite::write_to_file(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
-                                    StorageEvent storage_event, CopyPolicy copy_policy) {
+template<typename T>
+void AlgorithmFinite<Scalar>::write_to_file(const StateFinite<T> &state, const ModelFinite<T> &model, const EdgesFinite<T> &edges, StorageEvent storage_event,
+                                            CopyPolicy copy_policy) {
     if(not h5file) return;
     status.event = storage_event;
     tools::finite::h5::save::simulation(*h5file, state, model, edges, status, copy_policy);
     status.event = StorageEvent::NONE;
 }
-template void AlgorithmFinite::write_to_file(const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges,
-                                             StorageEvent storage_event, CopyPolicy copy_policy);
-template void AlgorithmFinite::write_to_file(const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges,
-                                             StorageEvent storage_event, CopyPolicy copy_policy);
-
+// template void AlgorithmFinite<Scalar>::write_to_file(const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges,
+//                                              StorageEvent storage_event, CopyPolicy copy_policy);
+// template void AlgorithmFinite<Scalar>::write_to_file(const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges,
+//                                              StorageEvent storage_event, CopyPolicy copy_policy);
+template<typename Scalar>
 template<typename T>
-void AlgorithmFinite::write_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy) {
+void AlgorithmFinite<Scalar>::write_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy) {
     if(not h5file) return;
     status.event = storage_event;
     auto sinfo   = StorageInfo(status, tensors.state->get_name());
@@ -1579,11 +1628,14 @@ void AlgorithmFinite::write_to_file(const T &data, std::string_view name, Storag
     status.event = StorageEvent::NONE;
 }
 
-template void AlgorithmFinite::write_to_file(const Eigen::Tensor<fp64, 3> &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy);
-template void AlgorithmFinite::write_to_file(const Eigen::Tensor<cx64, 2> &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy);
-template void AlgorithmFinite::write_to_file(const Eigen::Tensor<cx64, 1> &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy);
-template void AlgorithmFinite::write_to_file(const Eigen::Tensor<fp64, 1> &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy);
-void          AlgorithmFinite::print_status() {
+// template void AlgorithmFinite<Scalar>::write_to_file(const Eigen::Tensor<fp64, 3> &data, std::string_view name, StorageEvent storage_event, CopyPolicy
+// copy_policy); template void AlgorithmFinite<Scalar>::write_to_file(const Eigen::Tensor<cx64, 2> &data, std::string_view name, StorageEvent storage_event,
+// CopyPolicy copy_policy); template void AlgorithmFinite<Scalar>::write_to_file(const Eigen::Tensor<cx64, 1> &data, std::string_view name, StorageEvent
+// storage_event, CopyPolicy copy_policy); template void AlgorithmFinite<Scalar>::write_to_file(const Eigen::Tensor<fp64, 1> &data, std::string_view name,
+// StorageEvent storage_event, CopyPolicy copy_policy);
+
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::print_status() {
     if(num::mod(status.step, settings::print_freq(status.algo_type)) != 0) return;
     if(settings::print_freq(status.algo_type) == 0) return;
     std::string report;
@@ -1593,7 +1645,7 @@ void          AlgorithmFinite::print_status() {
     report += fmt::format("step:{:<5} ", status.step);
     report += fmt::format("L:{} ", tensors.get_length());
     std::string site_str;
-    if(tensors.active_sites.empty()) site_str = fmt::format("{:^6}", tensors.state->get_position<long>());
+    if(tensors.active_sites.empty()) site_str = fmt::format("{:^6}", tensors.template get_position<long>());
     if(tensors.active_sites.size() == 1) {
         if(tensors.state->get_direction() > 0) {
             site_str = fmt::format("{:^6}", tensors.active_sites.front());
@@ -1618,14 +1670,15 @@ void          AlgorithmFinite::print_status() {
     }
 
     if(status.algo_type == AlgorithmType::xDMRG and !std::isnan(status.energy_dens)) { report += fmt::format("e:{:<5.3f} ", status.energy_dens); }
-    double ene = tensors.active_sites.empty() ? std::numeric_limits<double>::quiet_NaN() : tools::finite::measure::energy(tensors);
-    double var = tensors.active_sites.empty() ? std::numeric_limits<double>::quiet_NaN() : tools::finite::measure::energy_variance(tensors);
-    double hsq = tensors.active_sites.empty() ? std::numeric_limits<double>::quiet_NaN() : tools::finite::measure::expval_hamiltonian_squared<fp64>(tensors);
-    report += fmt::format("E:{:<20.16f} ", ene);
-    report += fmt::format("σ²H:{:<8.2e} [{:<8.2e}] ", var, status.energy_variance_lowest);
-    report += fmt::format("H²:{:<10.4e} ", hsq);
-    report +=
-        fmt::format("Sₑ({:>2}):{:<10.8f} ", tensors.state->get_position<long>(), tools::finite::measure::entanglement_entropy_current(tensors.get_state()));
+    RealScalar ene = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : tools::finite::measure::energy(tensors);
+    RealScalar var = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : tools::finite::measure::energy_variance(tensors);
+    RealScalar hsq =
+        tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : std::real(tools::finite::measure::expval_hamiltonian_squared(tensors));
+    report += fmt::format("E:{:<20.16f} ", fp(ene));
+    report += fmt::format("σ²H:{:<8.2e} [{:<8.2e}] ", fp(var), status.energy_variance_lowest);
+    report += fmt::format("H²:{:<10.4e} ", fp(hsq));
+    report += fmt::format("Sₑ({:>2}):{:<10.8f} ", tensors.template get_position<long>(),
+                          fp(tools::finite::measure::entanglement_entropy_current(tensors.get_state())));
 
     report += fmt::format("ε:{:<8.2e} ", tensors.state->get_truncation_error_active_max());
     // report += fmt::format("α:{:<8.2e} ", status.bond_expansion_alpha);
@@ -1634,9 +1687,9 @@ void          AlgorithmFinite::print_status() {
     } else {
         report += fmt::format("χ:{:<3}|{:<3}|", status.bond_max, status.bond_lim);
     }
-    auto bonds_msites = std::clamp(settings::strategy::dmrg_min_blocksize - 1, 1ul, tensors.get_length<size_t>());
+    auto bonds_msites = std::clamp(settings::strategy::dmrg_min_blocksize - 1, 1ul, tensors.template get_length<size_t>());
     auto bonds_maxims = std::vector<long>(bonds_msites, status.bond_max);
-    auto bonds_merged = tools::finite::measure::bond_dimensions_active(*tensors.state);
+    auto bonds_merged = tools::finite::measure::bond_dimensions_active(tensors.get_state());
     auto bonds_padlen = fmt::format("{}", bonds_maxims).size();
     auto bonds_string = fmt::format("{}", bonds_merged);
     report += fmt::format("{0:<{1}} ", bonds_string, bonds_padlen);
@@ -1672,7 +1725,8 @@ void          AlgorithmFinite::print_status() {
     tools::log->info(report);
 }
 
-void AlgorithmFinite::print_status_full() {
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::print_status_full() {
     tensors.clear_cache();
     tensors.clear_measurements();
     tools::log->info("{:=^60}", "");
@@ -1688,36 +1742,37 @@ void AlgorithmFinite::print_status_full() {
                      tid::get_unscoped("t_tot").get_time() / 60);
 
     if(status.algo_type != AlgorithmType::fLBIT) {
-        double energy = tensors.active_sites.empty() ? std::numeric_limits<double>::quiet_NaN() : tools::finite::measure::energy(tensors);
-        tools::log->info("Energy          E                  = {:<.16f}", energy);
+        RealScalar energy = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : tools::finite::measure::energy(tensors);
+        tools::log->info("Energy          E                  = {:<.16f}", fp(energy));
         if(status.algo_type == AlgorithmType::xDMRG)
-            tools::log->info("Energy density (rescaled 0 to 1) ε = {:<6.4f}",
-                             tools::finite::measure::energy_normalized(tensors, status.energy_min, status.energy_max));
-        double variance = tensors.active_sites.empty() ? std::numeric_limits<double>::quiet_NaN() : tools::finite::measure::energy_variance(tensors);
-        tools::log->info("Energy variance σ²(H)              = {:<8.2e}", variance);
+            tools::log->info(
+                "Energy density (rescaled 0 to 1) ε = {:<6.4f}",
+                fp(tools::finite::measure::energy_normalized(tensors, static_cast<RealScalar>(status.energy_min), static_cast<RealScalar>(status.energy_max))));
+        RealScalar variance = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : tools::finite::measure::energy_variance(tensors);
+        tools::log->info("Energy variance σ²(H)              = {:<8.2e}", fp(variance));
     }
     tools::log->info("Bond dimension maximum χmax        = {}", status.bond_max);
-    tools::log->info("Bond dimensions χ                  = {}", tools::finite::measure::bond_dimensions(*tensors.state));
-    tools::log->info("Bond dimension  χ (mid)            = {}", tools::finite::measure::bond_dimension_midchain(*tensors.state));
-    tools::log->info("Entanglement entropies Sₑ          = {::8.2e}", tools::finite::measure::entanglement_entropies(*tensors.state));
-    tools::log->info("Entanglement entropy   Sₑ (mid)    = {:8.2e}", tools::finite::measure::entanglement_entropy_midchain(*tensors.state));
+    tools::log->info("Bond dimensions χ                  = {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
+    tools::log->info("Bond dimension  χ (mid)            = {}", tools::finite::measure::bond_dimension_midchain(tensors.get_state()));
+    tools::log->info("Entanglement entropies Sₑ          = {::8.2e}", fv(tools::finite::measure::entanglement_entropies(tensors.get_state())));
+    tools::log->info("Entanglement entropy   Sₑ (mid)    = {:8.2e}", fp(tools::finite::measure::entanglement_entropy_midchain(tensors.get_state())));
     if(status.algo_type == AlgorithmType::fLBIT) {
-        tools::log->info("Number entropies Sₙ                = {::8.2e}", tools::finite::measure::number_entropies(*tensors.state));
-        tools::log->info("Number entropy   Sₙ (mid)          = {:8.2e}", tools::finite::measure::number_entropy_midchain(*tensors.state));
+        tools::log->info("Number entropies Sₙ                = {::8.2e}", fv(tools::finite::measure::number_entropies(tensors.get_state())));
+        tools::log->info("Number entropy   Sₙ (mid)          = {:8.2e}", fp(tools::finite::measure::number_entropy_midchain(tensors.get_state())));
     }
-    tools::log->info("Spin components (global X,Y,Z)     = {::.16f}", tools::finite::measure::spin_components(*tensors.state));
+    tools::log->info("Spin components (global X,Y,Z)     = {::.16f}", fv(tools::finite::measure::spin_components(tensors.get_state())));
 
     if(status.algo_type == AlgorithmType::xDMRG) {
-        auto expectation_values_xyz = tools::finite::measure::expectation_values_xyz(*tensors.state);
-        auto structure_factor_xyz   = tools::finite::measure::structure_factor_xyz(*tensors.state);
-        auto opdm_spectrum          = tools::finite::measure::opdm_spectrum(*tensors.state);
-        tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", tenx::span(expectation_values_xyz[0]));
-        tools::log->info("Expectation values ⟨σy⟩            = {::+9.6f}", tenx::span(expectation_values_xyz[1]));
-        tools::log->info("Expectation values ⟨σz⟩            = {::+9.6f}", tenx::span(expectation_values_xyz[2]));
-        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σx_i σx_j⟩² = {:+.16f}", structure_factor_xyz[0]);
-        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σy_i σy_j⟩² = {:+.16f}", structure_factor_xyz[1]);
-        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σz_i σz_j⟩² = {:+.16f}", structure_factor_xyz[2]);
-        tools::log->info("OPDM spectrum ⟨σ+..σz..σ-⟩         = {:.8f}", fmt::join(tenx::span(opdm_spectrum), ", "));
+        auto expectation_values_xyz = tools::finite::measure::expectation_values_xyz(tensors.get_state());
+        auto structure_factor_xyz   = tools::finite::measure::structure_factor_xyz(tensors.get_state());
+        auto opdm_spectrum          = tools::finite::measure::opdm_spectrum(tensors.get_state());
+        tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", fv(expectation_values_xyz[0]));
+        tools::log->info("Expectation values ⟨σy⟩            = {::+9.6f}", fv(expectation_values_xyz[1]));
+        tools::log->info("Expectation values ⟨σz⟩            = {::+9.6f}", fv(expectation_values_xyz[2]));
+        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σx_i σx_j⟩² = {:+.16f}", fp(structure_factor_xyz[0]));
+        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σy_i σy_j⟩² = {:+.16f}", fp(structure_factor_xyz[1]));
+        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σz_i σz_j⟩² = {:+.16f}", fp(structure_factor_xyz[2]));
+        tools::log->info("OPDM spectrum ⟨σ+..σz..σ-⟩         = {::.8f}", fv(opdm_spectrum));
     }
 
     tools::log->info("Truncation Error limit             = {:8.2e}", status.trnc_lim);

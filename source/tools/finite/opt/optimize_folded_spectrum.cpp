@@ -28,17 +28,17 @@
 
 namespace tools::finite::opt {
     namespace folded_spectrum {
-        template<typename Scalar>
+        template<typename CalcType>
         void preconditioner_jacobi(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *ierr) {
             if(x == nullptr) return;
             if(y == nullptr) return;
             if(primme == nullptr) return;
-            const auto H_ptr      = static_cast<MatVecMPOS<Scalar> *>(primme->matrix);
+            const auto H_ptr      = static_cast<MatVecMPOS<CalcType> *>(primme->matrix);
             H_ptr->preconditioner = eig::Preconditioner::JACOBI;
             H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
         }
 
-        template<typename Scalar>
+        template<typename CalcType>
         void convTestFun([[maybe_unused]] double *eval, [[maybe_unused]] void *evec, double *rNorm, int *isconv, struct primme_params *primme, int *ierr) {
             if(rNorm == nullptr) return;
             if(primme == nullptr) return;
@@ -102,60 +102,48 @@ namespace tools::finite::opt {
             Eigen::Tensor<Scalar, 2> bond = {};
             long                     idx  = 0;
         };
-        template<typename Scalar>
-        Eigen::Tensor<Scalar, 3> get_initial_guess(const opt_mps &initial_mps, const std::vector<opt_mps> &results) {
+        template<typename CalcType, typename Scalar>
+        Eigen::Tensor<Scalar, 3> get_initial_guess(const opt_mps<Scalar> &initial_mps, const std::vector<opt_mps<Scalar>> &results) {
             if(results.empty()) {
-                if constexpr(std::is_same_v<Scalar, fp64>)
-                    return initial_mps.get_tensor().real();
-                else
-                    return initial_mps.get_tensor();
+                return initial_mps.template get_tensor_as<CalcType>();
             } else {
                 // Return whichever of initial_mps or results that has the lowest variance
                 auto it = std::min_element(results.begin(), results.end(), internal::comparator::variance);
-                if(it == results.end()) return get_initial_guess<Scalar>(initial_mps, {});
+                if(it == results.end()) return get_initial_guess<CalcType>(initial_mps, {});
 
                 if(it->get_variance() < initial_mps.get_variance()) {
                     tools::log->debug("Previous result is a good initial guess: {} | var {:8.2e}", it->get_name(), it->get_variance());
-                    return get_initial_guess<Scalar>(*it, {});
+                    return get_initial_guess<CalcType>(*it, {});
                 } else
-                    return get_initial_guess<Scalar>(initial_mps, {});
+                    return get_initial_guess<CalcType>(initial_mps, {});
             }
         }
 
-        template<typename Scalar>
-        std::vector<opt_mps_init_t<Scalar>> get_initial_guess_mps(const opt_mps &initial_mps, const std::vector<opt_mps> &results, long nev) {
-            std::vector<opt_mps_init_t<Scalar>> init;
+        template<typename CalcType, typename Scalar>
+        std::vector<opt_mps_init_t<CalcType>> get_initial_guess_mps(const opt_mps<Scalar> &initial_mps, const std::vector<opt_mps<Scalar>> &results, long nev) {
+            std::vector<opt_mps_init_t<CalcType>> init;
             if(results.empty()) {
-                if constexpr(std::is_same_v<Scalar, fp64>)
-                    init.push_back({initial_mps.get_tensor().real(), 0});
-                else
-                    init.push_back({initial_mps.get_tensor(), 0});
+                init.push_back({initial_mps.template get_tensor_as<CalcType>(), 0});
             } else {
                 for(long n = 0; n < nev; n++) {
                     // Take the latest result with idx == n
 
                     // Start by collecting the results with the correct index
-                    std::vector<std::reference_wrapper<const opt_mps>> results_idx_n;
+                    std::vector<std::reference_wrapper<const opt_mps<Scalar>>> results_idx_n;
                     for(const auto &r : results) {
                         if(r.get_eigs_idx() == n) results_idx_n.emplace_back(r);
                     }
-                    if(not results_idx_n.empty()) {
-                        if constexpr(std::is_same_v<Scalar, fp64>) {
-                            init.push_back({results_idx_n.back().get().get_tensor().real(), n});
-                        } else {
-                            init.push_back({results_idx_n.back().get().get_tensor(), n});
-                        }
-                    }
+                    if(not results_idx_n.empty()) { init.push_back({results_idx_n.back().get().template get_tensor_as<CalcType>(), n}); }
                 }
             }
             if(init.size() > safe_cast<size_t>(nev)) throw except::logic_error("Found too many initial guesses");
             return init;
         }
 
-        template<typename Scalar>
-        double get_largest_eigenvalue_hamiltonian_squared(const TensorsFinite &tensors) {
-            auto env2                = tensors.edges->get_multisite_env_var_blk_as<Scalar>();
-            auto hamiltonian_squared = MatVecMPO<Scalar>(env2.L, env2.R, tensors.get_multisite_mpo_squared<Scalar>());
+        template<typename CalcType, typename Scalar>
+        RealScalar<CalcType> get_largest_eigenvalue_hamiltonian_squared(const TensorsFinite<Scalar> &tensors) {
+            auto env2                = tensors.edges->template get_multisite_env_var_blk_as<CalcType>();
+            auto hamiltonian_squared = MatVecMPO<CalcType>(env2.L, env2.R, tensors.template get_multisite_mpo_squared<CalcType>());
             tools::log->trace("Finding largest-magnitude eigenvalue");
             eig::solver solver; // Define a solver just to find the maximum eigenvalue
             solver.config.tol             = settings::precision::eigs_tol_min;
@@ -167,7 +155,7 @@ namespace tools::finite::opt {
             solver.config.ritz            = eig::Ritz::LM;
             solver.setLogLevel(2);
             solver.eigs(hamiltonian_squared);
-            return eig::view::get_eigvals<double>(solver.result).cwiseAbs().maxCoeff();
+            return eig::view::get_eigvals<RealScalar<CalcType>>(solver.result).cwiseAbs().maxCoeff();
         }
 
         // template<typename Scalar>
@@ -190,7 +178,7 @@ namespace tools::finite::opt {
         //     return grad.template lpNorm<Eigen::Infinity>();
         // }
         //
-        // double max_gradient(const Eigen::Tensor<cx64, 3> &mps, const TensorsFinite &tensors) {
+        // double max_gradient(const Eigen::Tensor<cx64, 3> &mps, const TensorsFinite<Scalar> &tensors) {
         //     auto t_grad = tid::tic_token("grad");
         //
         //     if(tensors.is_real()) {
@@ -232,13 +220,13 @@ namespace tools::finite::opt {
 
     }
 
-    template<typename MatVecType>
-    void eigs_folded_spectrum_executor(eig::solver &solver, MatVecType &hamiltonian_squared, const TensorsFinite &tensors, const opt_mps &initial_mps,
-                                       std::vector<opt_mps> &results, const OptMeta &meta) {
-        using Scalar = typename MatVecType::Scalar;
-        if(std::is_same_v<Scalar, cx64> and meta.optType == OptType::FP64)
+    template<typename MatVecType, typename Scalar>
+    void eigs_folded_spectrum_executor(eig::solver &solver, MatVecType &hamiltonian_squared, const TensorsFinite<Scalar> &tensors,
+                                       const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results, const OptMeta &meta) {
+        using CalcType = typename MatVecType::Scalar;
+        if(std::is_same_v<CalcType, cx64> and meta.optType == OptType::FP64)
             throw except::logic_error("eigs_folded_spectrum_executor error: Mixed Scalar:cx64 with OptType::FP64");
-        if(std::is_same_v<Scalar, fp64> and meta.optType == OptType::CX64)
+        if(std::is_same_v<CalcType, fp64> and meta.optType == OptType::CX64)
             throw except::logic_error("eigs_folded_spectrum_executor error: Mixed Scalar:real with OptType::CX64");
 
         solver.config.primme_effective_ham_sq = &hamiltonian_squared;
@@ -250,7 +238,7 @@ namespace tools::finite::opt {
             if(tensors.model->has_compressed_mpo_squared()) throw std::runtime_error("optimize_folded_spectrum_eigs with ARPACK requires non-compressed MPO²");
             if(not solver.config.ritz) solver.config.ritz = eig::Ritz::LM;
             if(not solver.config.sigma)
-                solver.config.sigma = folded_spectrum::get_largest_eigenvalue_hamiltonian_squared<Scalar>(tensors) + 1.0; // Add one to shift enough
+                solver.config.sigma = folded_spectrum::get_largest_eigenvalue_hamiltonian_squared<CalcType>(tensors) + 1.0; // Add one to shift enough
         } else if(solver.config.lib == eig::Lib::PRIMME) {
             if(not solver.config.ritz) solver.config.ritz = eig::Ritz::SM;
             if(solver.config.sigma and solver.config.sigma.value() != 0.0 and tensors.model->has_compressed_mpo_squared())
@@ -263,15 +251,16 @@ namespace tools::finite::opt {
             solver.config.maxIter.value(), solver.config.tol.value(), hamiltonian_squared.rows(), hamiltonian_squared.get_shape_mps(),
             solver.config.jcbMaxBlockSize);
 
-        auto init =
-            folded_spectrum::get_initial_guess_mps<Scalar>(initial_mps, results, solver.config.maxNev.value()); // Init holds the data in memory for this scope
+        auto init = folded_spectrum::get_initial_guess_mps<CalcType>(initial_mps, results,
+                                                                     solver.config.maxNev.value()); // Init holds the data in memory for this scope
         for(auto &i : init) solver.config.initial_guess.push_back({i.mps.data(), i.idx});
         solver.eigs(hamiltonian_squared);
         internal::extract_results(tensors, initial_mps, meta, solver, results, false);
     }
 
-    template<typename Scalar>
-    void eigs_manager_folded_spectrum(const TensorsFinite &tensors, const opt_mps &initial_mps, std::vector<opt_mps> &results, const OptMeta &meta) {
+    template<typename CalcType, typename Scalar>
+    void eigs_manager_folded_spectrum(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results,
+                                      const OptMeta &meta) {
         eig::solver solver;
         auto       &cfg           = solver.config;
         cfg.loglevel              = 2;
@@ -300,12 +289,12 @@ namespace tools::finite::opt {
             }
             default: throw except::logic_error("undhandled ritz: {}", enum2sv(meta.optRitz));
         }
-        cfg.primme_preconditioner = folded_spectrum::preconditioner_jacobi<Scalar>;
+        cfg.primme_preconditioner = folded_spectrum::preconditioner_jacobi<CalcType>;
         cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
 
         const auto &mpos                  = tensors.get_model().get_mpo_active();
         const auto &envv                  = tensors.get_edges().get_var_active();
-        auto        hamiltonian_squared   = MatVecMPOS<Scalar>(mpos, envv);
+        auto        hamiltonian_squared   = MatVecMPOS<CalcType>(mpos, envv);
         hamiltonian_squared.factorization = eig::Factorization::LLT; // H² is positive definite so this should work for the preconditioner
 
         // if(tensors.active_problem_size() >= 4096 and tensors.state->get_direction() == 1) {
@@ -340,36 +329,45 @@ namespace tools::finite::opt {
 
         eigs_folded_spectrum_executor(solver, hamiltonian_squared, tensors, initial_mps, results, meta);
     }
-
-    opt_mps internal::optimize_folded_spectrum(const TensorsFinite &tensors, const opt_mps &initial_mps, [[maybe_unused]] const AlgorithmStatus &status,
-                                               OptMeta &meta) {
-        #pragma message "remove this test"
+    template<typename Scalar>
+    opt_mps<Scalar> internal::optimize_folded_spectrum(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
+                                                       [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+        if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
+            throw except::runtime_error("optimize_folded_spectrum(): not implemented for type {}", enum2sv(meta.optType));
+        }
+#pragma message "remove this test"
         if(status.energy_variance_lowest < status.energy_variance_prec_limit) {
-            auto meta2 = meta;
-            meta2.optSolver = OptSolver::H1H2;
-            meta2.optType = OptType::FP128;
+            auto meta2          = meta;
+            meta2.optSolver     = OptSolver::H1H2;
+            meta2.optType       = OptType::FP128;
             meta2.eigs_iter_max = 100;
-            meta2.eigs_ncv = 3;
-            return optimize_lanczos_h1h2(tensors, initial_mps, status, meta2);
+            meta2.eigs_ncv      = 3;
+            return optimize_lanczos_h1h2(tensors, initial_mps, status, meta2, elog);
         }
 
-        if(meta.optSolver == OptSolver::EIG) return optimize_folded_spectrum_eig(tensors, initial_mps, status, meta);
-
-
-
+        if(meta.optSolver == OptSolver::EIG) return optimize_folded_spectrum_eig(tensors, initial_mps, status, meta, elog);
 
         using namespace internal;
         using namespace settings::precision;
         initial_mps.validate_initial_mps();
-        reports::eigs_add_entry(initial_mps, spdlog::level::debug);
+        elog.eigs_add_entry(initial_mps, spdlog::level::debug);
 
-        auto                 t_var = tid::tic_scope("eigs-xdmrg", tid::level::higher);
-        std::vector<opt_mps> results;
-        switch(meta.optType) {
-            case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CX64: eigs_manager_folded_spectrum<cx64>(tensors, initial_mps, results, meta); break;
-            default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
+        auto                         t_var = tid::tic_scope("eigs-xdmrg", tid::level::higher);
+        std::vector<opt_mps<Scalar>> results;
+        if constexpr(sfinae::is_std_complex_v<Scalar>) {
+            switch(meta.optType) {
+                case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
+                case OptType::CX64: eigs_manager_folded_spectrum<cx64>(tensors, initial_mps, results, meta); break;
+                default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
+            }
+        } else {
+            switch(meta.optType) {
+                case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
+                case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
+                default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
+            }
         }
+
         auto t_post = tid::tic_scope("post");
         if(results.empty()) {
             meta.optExit = OptExit::FAIL_ERROR;
@@ -377,9 +375,19 @@ namespace tools::finite::opt {
         }
 
         // Sort results
-        if(results.size() > 1) { std::sort(results.begin(), results.end(), internal::Comparator(meta)); }
-        for(const auto &result : results) reports::eigs_add_entry(result, spdlog::level::debug);
+        if(results.size() > 1) { std::sort(results.begin(), results.end(), internal::Comparator<Scalar>(meta)); }
+        for(const auto &result : results) elog.eigs_add_entry(result, spdlog::level::debug);
 
         return results.front();
     }
+
+    /* clang-format off */
+    template opt_mps<fp32>  internal::optimize_folded_spectrum(const TensorsFinite<fp32> &tensors, const opt_mps<fp32> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp32> &elog);
+    template opt_mps<fp64>  internal::optimize_folded_spectrum(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp64> &elog);
+    template opt_mps<fp128> internal::optimize_folded_spectrum(const TensorsFinite<fp128> &tensors, const opt_mps<fp128> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp128> &elog);
+    template opt_mps<cx32>  internal::optimize_folded_spectrum(const TensorsFinite<cx32> &tensors, const opt_mps<cx32> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx32> &elog);
+    template opt_mps<cx64>  internal::optimize_folded_spectrum(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx64> &elog);
+    template opt_mps<cx128> internal::optimize_folded_spectrum(const TensorsFinite<cx128> &tensors, const opt_mps<cx128> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx128> &elog);
+    /* clang-format on */
+
 }

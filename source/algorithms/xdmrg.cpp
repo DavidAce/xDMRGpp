@@ -29,12 +29,21 @@
 #include "tools/finite/print.h"
 #include <h5pp/details/h5ppFile.h>
 
-xdmrg::xdmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmFinite(std::move(h5ppFile_), settings::xdmrg::ritz, AlgorithmType::xDMRG) {
+template class xdmrg<fp32>;
+template class xdmrg<fp64>;
+template class xdmrg<fp128>;
+template class xdmrg<cx32>;
+template class xdmrg<cx64>;
+template class xdmrg<cx128>;
+
+template<typename Scalar>
+xdmrg<Scalar>::xdmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmFinite<Scalar>(std::move(h5ppFile_), settings::xdmrg::ritz, AlgorithmType::xDMRG) {
     tools::log->trace("Constructing class_xdmrg");
     tensors.state->set_name("state_emid");
 }
 
-void xdmrg::resume() {
+template<typename Scalar>
+void xdmrg<Scalar>::resume() {
     // Resume can imply many things
     // 1) Resume a simulation which terminated prematurely
     // 2) Resume a previously successful simulation. This may be desireable if the config
@@ -102,7 +111,8 @@ void xdmrg::resume() {
     }
 }
 
-void xdmrg::run_default_task_list() {
+template<typename Scalar>
+void xdmrg<Scalar>::run_default_task_list() {
     std::deque<xdmrg_task> default_task_list = {
         xdmrg_task::INIT_DEFAULT,
         xdmrg_task::FIND_EXCITED_STATE,
@@ -112,7 +122,8 @@ void xdmrg::run_default_task_list() {
     run_task_list(default_task_list);
 }
 
-void xdmrg::run_task_list(std::deque<xdmrg_task> &task_list) {
+template<typename Scalar>
+void xdmrg<Scalar>::run_task_list(std::deque<xdmrg_task> &task_list) {
     while(not task_list.empty()) {
         auto task = task_list.front();
         switch(task) {
@@ -149,7 +160,8 @@ void xdmrg::run_task_list(std::deque<xdmrg_task> &task_list) {
     }
 }
 
-void xdmrg::init_energy_target(std::optional<double> energy_density_target) {
+template<typename Scalar>
+void xdmrg<Scalar>::init_energy_target(std::optional<double> energy_density_target) {
     switch(status.opt_ritz) {
         case OptRitz::NONE: throw std::logic_error("status.opt_ritz == OptRitz::NONE is invalid under xdmrg");
         case OptRitz::SR: {
@@ -177,7 +189,7 @@ void xdmrg::init_energy_target(std::optional<double> energy_density_target) {
             break;
         }
         case OptRitz::IS: {
-            status.energy_tgt = tools::finite::measure::energy(tensors); // Should take the energy from the initial state
+            status.energy_tgt = static_cast<double>(tools::finite::measure::energy(tensors)); // Should take the energy from the initial state
             break;
         }
         case OptRitz::TE: {
@@ -202,7 +214,8 @@ void xdmrg::init_energy_target(std::optional<double> energy_density_target) {
     }
 }
 
-void xdmrg::run_preprocessing() {
+template<typename Scalar>
+void xdmrg<Scalar>::run_preprocessing() {
     tools::log->info("Running {} preprocessing", status.algo_type_sv());
     auto t_pre = tid::tic_scope("pre");
     status.clear();
@@ -222,14 +235,14 @@ void xdmrg::run_preprocessing() {
 
     // auto imodel = tools::finite::mpo::get_inverted_mpos(tensors.model->get_all_mpo_tensors(MposWithEdges::ON));
 
-    if(tensors.get_length<long>() <= 4) {
+    if(tensors.template get_length<long>() <= 4) {
         // Print the spectrum if small
         // tensors.clear_cache();
         auto svd_solver = svd::solver();
-        auto L          = tensors.get_length<long>();
+        auto L          = tensors.template get_length<long>();
         auto sites      = num::range<size_t>(0, L);
-        auto ham1       = tensors.model->get_multisite_ham<cx64>(sites);
-        auto ham2       = tensors.model->get_multisite_ham_squared<cx64>(sites);
+        auto ham1       = tensors.model->template get_multisite_ham<Scalar>(sites);
+        auto ham2       = tensors.model->template get_multisite_ham_squared<Scalar>(sites);
         auto norm_est   = tensors.model->get_energy_upper_bound();
         // auto        ham1i      = svd_solver.pseudo_inverse(ham1_);
         eig::solver solver1, solver2;
@@ -237,25 +250,25 @@ void xdmrg::run_preprocessing() {
         solver2.eig<eig::Form::SYMM>(ham2.data(), ham2.dimension(0), eig::Vecs::OFF);
         // solver1i.eig<eig::Form::SYMM>(ham1i.data(), ham1i.dimension(0));
 
-        auto            evals1 = eig::view::get_eigvals<fp64>(solver1.result);
-        auto            evals2 = eig::view::get_eigvals<fp64>(solver2.result);
-        Eigen::VectorXd diffs1 = Eigen::VectorXd::Zero(evals1.size());
-        Eigen::VectorXd diffs2 = Eigen::VectorXd::Zero(evals1.size());
-        auto            N1     = evals1.size() - 1;
-        auto            N2     = evals2.size() - 1;
-        diffs1.topRows(N1)     = (evals1.bottomRows(N1) - evals1.topRows(N1));
-        diffs2.topRows(N2)     = (evals2.bottomRows(N2) - evals2.topRows(N2));
+        auto    evals1     = eig::view::get_eigvals<RealScalar>(solver1.result);
+        auto    evals2     = eig::view::get_eigvals<RealScalar>(solver2.result);
+        VecReal diffs1     = VecReal::Zero(evals1.size());
+        VecReal diffs2     = VecReal::Zero(evals1.size());
+        auto    N1         = evals1.size() - 1;
+        auto    N2         = evals2.size() - 1;
+        diffs1.topRows(N1) = (evals1.bottomRows(N1) - evals1.topRows(N1));
+        diffs2.topRows(N2) = (evals2.bottomRows(N2) - evals2.topRows(N2));
 
         // auto evals1i = eig::view::get_eigvals<fp64>(solver1i.result);
         fmt::print("{:^8} {:<20}\n", " ", "H¹");
         for(long idx = 0; idx < evals1.size(); ++idx) {
             // if(std::abs(evals1[idx]) > 1.1) continue;
-            fmt::print("idx {:2}: {:20.16f} {:>10.3e}\n", idx, evals1[idx], diffs1[idx]);
+            fmt::print("idx {:2}: {:20.16f} {:>10.3e}\n", idx, fp(evals1[idx]), fp(diffs1[idx]));
         }
         fmt::print("{:^8} {:<20} {:<20} {:<20}\n", " ", "H²", "diff", "sqrt(H²)");
         for(long idx = 0; idx < evals2.size(); ++idx) {
             // if(std::abs(evals2[idx]) > 1.1) continue;
-            fmt::print("idx {:2}: {:20.16f} {:>10.3e} {:20.16f}\n", idx, evals2[idx], diffs2[idx], std::sqrt(evals2[idx]));
+            fmt::print("idx {:2}: {:20.16f} {:>10.3e} {:20.16f}\n", idx, fp(evals2[idx]), fp(diffs2[idx]), fp(std::sqrt(evals2[idx])));
         }
         auto h5file = h5pp::File("../../output/spectrum.h5", h5pp::FileAccess::RENAME);
         h5file.writeDataset(evals1, "H_evals");
@@ -267,7 +280,7 @@ void xdmrg::run_preprocessing() {
         //     fmt::print("idx {:2}: {:20.16f} {:20.16f}\n", idx, evals1_[idx], evals1i[idx]);
         // }
         fmt::print("\n");
-        fmt::print("Hamiltonian norm estimate: {:.16f}\n", norm_est);
+        fmt::print("Hamiltonian norm estimate: {:.16f}\n", fp(norm_est));
         // Try the iterative scheme
         // auto impos = tools::finite::mpo::get_inverted_mpos(tensors.model->get_compressed_mpos_squared(MposWithEdges::ON));
         // auto impos = tools::finite::mpo::get_inverted_mpos(tensors.model->get_all_mpo_tensors(MposWithEdges::ON));
@@ -294,7 +307,8 @@ void xdmrg::run_preprocessing() {
     tools::log->info("Finished {} preprocessing", status.algo_type_sv());
 }
 
-void xdmrg::run_algorithm() {
+template<typename Scalar>
+void xdmrg<Scalar>::run_algorithm() {
     if(tensors.state->get_name().empty()) tensors.state->set_name("state_emid");
     tools::log->info("Starting {} simulation of model [{}] for state [{}] with ritz [{}]", status.algo_type_sv(), enum2sv(settings::model::model_type),
                      tensors.state->get_name(), enum2sv(status.opt_ritz));
@@ -332,9 +346,9 @@ void xdmrg::run_algorithm() {
 
         // It's important not to perform the last move, so we break now: that last state would not get optimized
         if(status.algo_stop != AlgorithmStop::NONE) break;
-        update_eigs_tolerance();         // Updates the tolerance on the iterative eigensolver
-        update_dmrg_blocksize();         // Updates the number sites used in dmrg steps using the information typical scale
-        // Prepare for next step
+        update_eigs_tolerance(); // Updates the tolerance on the iterative eigensolver
+        update_dmrg_blocksize(); // Updates the number sites used in dmrg steps using the information typical scale
+        // Prepare for the next step
 
         move_center_point(); // Moves the center point AC to the next site and increments status.iter and status.step
         status.wall_time = tid::get_unscoped("t_tot").get_time();
@@ -345,7 +359,8 @@ void xdmrg::run_algorithm() {
     //    tools::finite::measure::parity_components(*tensors.state, qm::spin::half::sz);
 }
 
-void xdmrg::update_state() {
+template<typename Scalar>
+void xdmrg<Scalar>::update_state() {
     using namespace tools::finite;
     using namespace tools::finite::opt;
     auto t_step   = tid::tic_scope("step");
@@ -376,29 +391,30 @@ void xdmrg::update_state() {
     opt_state.set_relchange(opt_state.get_variance() / var_latest);
     opt_state.set_bond_limit(opt_meta.svd_cfg->rank_max.value());
     opt_state.set_trnc_limit(opt_meta.svd_cfg->truncation_limit.value());
+
     /* clang-format off */
     opt_meta.optExit = OptExit::SUCCESS;
-    if(opt_state.get_grad_max()       > 1.000                         ) opt_meta.optExit |= OptExit::FAIL_GRADIENT;
-    if(opt_state.get_eigs_rnorm()     > settings::precision::eigs_tol_max) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
+    if(opt_state.get_grad_max()       > static_cast<RealScalar>(1.000)                            ) opt_meta.optExit |= OptExit::FAIL_GRADIENT;
+    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::precision::eigs_tol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
     if(opt_state.get_eigs_nev()       == 0 and
-       opt_meta.optSolver              == OptSolver::EIGS             ) opt_meta.optExit |= OptExit::FAIL_RESIDUAL; // No convergence
-    if(opt_state.get_overlap()        < 0.010                         ) opt_meta.optExit |= OptExit::FAIL_OVERLAP;
-    if(opt_state.get_relchange()      > 1.001                         ) opt_meta.optExit |= OptExit::FAIL_WORSENED;
-    else if(opt_state.get_relchange() > 0.999                         ) opt_meta.optExit |= OptExit::FAIL_NOCHANGE;
-
-    opt_state.set_optexit(opt_meta.optExit);
+       opt_meta.optSolver             == OptSolver::EIGS                                          ) opt_meta.optExit |= OptExit::FAIL_RESIDUAL; // No convergence
+    if(opt_state.get_overlap()        < static_cast<RealScalar>(0.010)                            ) opt_meta.optExit |= OptExit::FAIL_OVERLAP;
+    if(opt_state.get_relchange()      > static_cast<RealScalar>(1.001)                            ) opt_meta.optExit |= OptExit::FAIL_WORSENED;
+    else if(opt_state.get_relchange() > static_cast<RealScalar>(0.999)                            ) opt_meta.optExit |= OptExit::FAIL_NOCHANGE;
     /* clang-format on */
+    opt_state.set_optexit(opt_meta.optExit);
 
     tools::log->trace("Optimization [{}|{}]: {}. Variance change {:8.2e} --> {:8.2e} ({:.3f} %)", enum2sv(opt_meta.optAlgo), enum2sv(opt_meta.optSolver),
-                      flag2str(opt_meta.optExit), var_latest, opt_state.get_variance(), opt_state.get_relchange() * 100);
-    if(opt_state.get_relchange() > 1000) tools::log->warn("Variance increase by x {:.2e}", opt_state.get_relchange());
+                      flag2str(opt_meta.optExit), fp(var_latest), fp(opt_state.get_variance()), fp(opt_state.get_relchange() * 100));
+    if(opt_state.get_relchange() > 1000) tools::log->warn("Variance increase by x {:.2e}", fp(opt_state.get_relchange()));
 
     if(tools::log->level() <= spdlog::level::debug) {
         tools::log->debug("Optimization result: {:<24} | E {:<20.16f}| σ²H {:<8.2e} | rnorm {:8.2e} | overlap {:.16f} | "
                           "sites {} | {:20} | {} | time {:.2e} s",
-                          opt_state.get_name(), opt_state.get_energy(), opt_state.get_variance(), opt_state.get_eigs_rnorm(), opt_state.get_overlap(),
-                          opt_state.get_sites(), fmt::format("[{}][{}]", enum2sv(opt_state.get_optalgo()), enum2sv(opt_state.get_optsolver())),
-                          flag2str(opt_state.get_optexit()), opt_state.get_time());
+                          opt_state.get_name(), fp(opt_state.get_energy()), fp(opt_state.get_variance()), fp(opt_state.get_eigs_rnorm()),
+                          fp(opt_state.get_overlap()), opt_state.get_sites(),
+                          fmt::format("[{}][{}]", enum2sv(opt_state.get_optalgo()), enum2sv(opt_state.get_optsolver())), flag2str(opt_state.get_optexit()),
+                          opt_state.get_time());
     }
 
     tensors.state->tag_active_sites_normalized(false);
@@ -412,20 +428,20 @@ void xdmrg::update_state() {
     if constexpr(settings::debug) {
         if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
         auto variance_after_svd = tools::finite::measure::energy_variance(tensors);
-        tools::log->debug("Before update: variance {:8.2e} | mps dims {}", var_latest, bond_dims_old);
-        tools::log->debug("After  expns.: variance {:8.2e} | mps dims {}", variance_after_exp, bond_dims_exp);
-        tools::log->debug("After  merge : variance {:8.2e} | mps dims {}", variance_after_svd, tensors.state->get_mps_dims_active());
-        tools::log->debug("Variance change from  SVD: {:.16f}%", 100 * variance_after_svd / opt_state.get_variance());
+        tools::log->debug("Before update: variance {:8.2e} | mps dims {}", fp(var_latest), bond_dims_old);
+        tools::log->debug("After  expns.: variance {:8.2e} | mps dims {}", fp(variance_after_exp), bond_dims_exp);
+        tools::log->debug("After  merge : variance {:8.2e} | mps dims {}", fp(variance_after_svd), tensors.state->get_mps_dims_active());
+        tools::log->debug("Variance change from  SVD: {:.16f}%", fp(100 * variance_after_svd / opt_state.get_variance()));
     }
 
     // Update current energy density ε
     if(status.opt_ritz == OptRitz::TE)
-        status.energy_dens = (tools::finite::measure::energy(tensors) - status.energy_min) / (status.energy_max - status.energy_min);
+        status.energy_dens = (static_cast<double>(tools::finite::measure::energy(tensors)) - status.energy_min) / (status.energy_max - status.energy_min);
 
     tools::log->trace("Updating variance record holder");
     auto ene                      = tools::finite::measure::energy(tensors);
     auto var                      = tools::finite::measure::energy_variance(tensors);
-    status.energy_variance_lowest = std::min(var, status.energy_variance_lowest);
+    status.energy_variance_lowest = std::min(static_cast<double>(var), status.energy_variance_lowest);
     var_delta                     = var - var_latest;
     ene_delta                     = ene - ene_latest;
     var_change                    = var / var_latest;
@@ -437,10 +453,10 @@ void xdmrg::update_state() {
     if constexpr(settings::debug) tensors.assert_validity();
 
     expand_bonds(opt_meta);
-
 }
 
-void xdmrg::find_energy_range() {
+template<typename Scalar>
+void xdmrg<Scalar>::find_energy_range() {
     // We only need to find an energy range if we are targeting a particular energy density window or target
     if(status.opt_ritz != OptRitz::TE) return; // We only need the extremal for OptRitz::TED
 
@@ -456,35 +472,36 @@ void xdmrg::find_energy_range() {
                                        fdmrg_task::INIT_RANDOMIZE_INTO_PRODUCT_STATE, fdmrg_task::FIND_HIGHEST_STATE};
     // Find the lowest energy state
     {
-        auto  t_gs = tid::tic_scope("fDMRG");
-        fdmrg fdmrg_gs{};
-        *fdmrg_gs.tensors.model = *tensors.model; // Copy the model
+        auto          t_gs = tid::tic_scope("fDMRG");
+        fdmrg<Scalar> fdmrg_gs{};
+        fdmrg_gs.tensors.get_model() = tensors.get_model(); // Copy the model
         fdmrg_gs.tensors.state->set_name("state_emin");
         tools::log = tools::Logger::setLogger(fmt::format("{}-gs", status.algo_type_sv()), settings::console::loglevel, settings::console::timestamp);
         fdmrg_gs.run_task_list(gs_tasks);
-        status.energy_min = tools::finite::measure::energy(fdmrg_gs.tensors);
+        status.energy_min = static_cast<double>(tools::finite::measure::energy(fdmrg_gs.tensors));
         fdmrg_gs.h5file   = h5file;
-        write_to_file(*fdmrg_gs.tensors.state, *fdmrg_gs.tensors.model, *fdmrg_gs.tensors.edges, StorageEvent::EMIN, CopyPolicy::OFF);
+        write_to_file(fdmrg_gs.tensors.get_state(), fdmrg_gs.tensors.get_model(), fdmrg_gs.tensors.get_edges(), StorageEvent::EMIN, CopyPolicy::OFF);
     }
 
     // Find the highest energy state
     {
-        auto  t_hs = tid::tic_scope("fDMRG");
-        fdmrg fdmrg_hs{};
-        *fdmrg_hs.tensors.model = *tensors.model; // Copy the model
+        auto          t_hs = tid::tic_scope("fDMRG");
+        fdmrg<Scalar> fdmrg_hs{};
+        fdmrg_hs.tensors.get_model() = tensors.get_model(); // Copy the model
         fdmrg_hs.tensors.state->set_name("state_emax");
         tools::log = tools::Logger::setLogger(fmt::format("{}-hs", status.algo_type_sv()), settings::console::loglevel, settings::console::timestamp);
         fdmrg_hs.run_task_list(hs_tasks);
-        status.energy_max = tools::finite::measure::energy(fdmrg_hs.tensors);
+        status.energy_max = static_cast<double>(tools::finite::measure::energy(fdmrg_hs.tensors));
         fdmrg_hs.h5file   = h5file;
-        write_to_file(*fdmrg_hs.tensors.state, *fdmrg_hs.tensors.model, *fdmrg_hs.tensors.edges, StorageEvent::EMAX, CopyPolicy::OFF);
+        write_to_file(fdmrg_hs.tensors.get_state(), fdmrg_hs.tensors.get_model(), fdmrg_hs.tensors.get_edges(), StorageEvent::EMAX, CopyPolicy::OFF);
     }
 
     // Reset our logger
     tools::log = tools::Logger::getLogger(fmt::format("{}", status.algo_type_sv()));
 }
 
-void xdmrg::set_energy_shift_mpo() {
+template<typename Scalar>
+void xdmrg<Scalar>::set_energy_shift_mpo() {
     // In xdmrg we find an excited energy eigenstate by optimizing the energy variance of some state close to a target energy.
     // We can target a particular energy by setting an energy shift (equal to the target energy), which then becomes the energy minimum
     // once we fold the spectrum by squaring the Hamiltonian (i.e. we optimize (H-E_tgt)²):
@@ -498,18 +515,19 @@ void xdmrg::set_energy_shift_mpo() {
     // we get the subtraction of two very small terms since E-E_shf should be small.
 
     if(not tensors.position_is_inward_edge()) return;
-    if(var_latest < std::min(1e-14, settings::precision::variance_convergence_threshold))
+    if(static_cast<double>(var_latest) < std::min(1e-14, settings::precision::variance_convergence_threshold))
         // No need to improve precision further.
-        // The quotient <H-eshift>/<(H-eshift)²> risks being imprecise when both numerator and denominator ar close to zero.
+        // The quotient <H-eshift>/<(H-eshift)²> risks being imprecise when both numerator and denominator are close to zero.
         return;
-    auto energy_shift = status.energy_tgt;
-    if(settings::precision::use_energy_shifted_mpo) { energy_shift = tools::finite::measure::energy(tensors); }
-    tensors.set_energy_shift_mpo(energy_shift);
-    if(std::abs(tensors.model->get_energy_shift_mpo() - energy_shift) > 10 * std::numeric_limits<double>::epsilon())
-        throw except::runtime_error("Energy shift mismatch: {:.16f} != {:.16f}", tensors.model->get_energy_shift_mpo(), energy_shift);
+    double energy_shift = status.energy_tgt;
+    if(settings::precision::use_energy_shifted_mpo) { energy_shift = static_cast<double>(tools::finite::measure::energy(tensors)); }
+    tensors.set_energy_shift_mpo({static_cast<Scalar>(energy_shift)});
+    // if(std::abs(satic_cast<double>(std::real(tensors.model->get_energy_shift_mpo())) - energy_shift) > 10 * std::numeric_limits<double>::epsilon())
+    // throw except::runtime_error("Energy shift mismatch: {:.16f} != {:.16f}", tensors.model->get_energy_shift_mpo(), energy_shift);
 }
 
-void xdmrg::update_time_step() {
+template<typename Scalar>
+void xdmrg<Scalar>::update_time_step() {
     tools::log->trace("Updating time step");
     status.delta_t = std::complex<double>(1e-6, 0);
 }

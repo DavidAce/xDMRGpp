@@ -16,6 +16,10 @@
 #include <h5pp/h5pp.h>
 #include <utility>
 
+template class MpoSite<fp32>;
+template class MpoSite<fp64>;
+template class MpoSite<fp128>;
+template class MpoSite<cx32>;
 template class MpoSite<cx64>;
 template class MpoSite<cx128>;
 
@@ -88,7 +92,7 @@ void MpoSite<Scalar>::set_mpo_squared(const Eigen::Tensor<Scalar, 4> &mpo_sq) {
 template<typename Scalar>
 void MpoSite<Scalar>::clear_mpo() {
     mpo_internal   = Eigen::Tensor<Scalar, 4>();
-    mpo_internal_q = Eigen::Tensor<cx128, 4>();
+    mpo_internal_q = Eigen::Tensor<QuadScalar, 4>();
     unique_id      = std::nullopt;
     is_real_cached = std::nullopt;
     has_nan_cached = std::nullopt;
@@ -114,12 +118,17 @@ bool MpoSite<Scalar>::has_mpo_squared() const {
 }
 
 template<typename Scalar>
-Eigen::Tensor<cx128, 4> MpoSite<Scalar>::get_mpo_q(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                                   std::optional<std::vector<size_t>> skip) const {
+Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 4> MpoSite<Scalar>::get_mpo_q(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                                                                  std::optional<std::vector<size_t>> skip) const {
     // tools::log->trace("MpoSite<Scalar>::get_mpo_q(): Pointless upcast {} -> {}", sfinae::type_name<cx64>(), sfinae::type_name<cx128>());
     auto ereal = energy_shift_per_site; // cx64(static_cast<fp64>(energy_shift_per_site.real(), static_cast<fp64>(energy_shift_per_site.imag())));
     auto mpo   = get_mpo(ereal, nbody, skip);
-    return mpo.unaryExpr([](auto z) { return std::complex<fp128>(static_cast<fp128>(z.real()), static_cast<fp128>(z.imag())); });
+    if constexpr(sfinae::is_std_complex_v<Scalar>) {
+        return mpo.unaryExpr([](auto z) { return std::complex(static_cast<fp128>(std::real(z)), static_cast<fp128>(std::imag(z))); });
+
+    } else {
+        return mpo.unaryExpr([](auto z) { return static_cast<fp128>(z); });
+    }
 }
 
 template<typename Scalar>
@@ -132,7 +141,7 @@ const Eigen::Tensor<Scalar, 4> &MpoSite<Scalar>::MPO() const {
 }
 
 template<typename Scalar>
-const Eigen::Tensor<cx128, 4> &MpoSite<Scalar>::MPO_q() const {
+const Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 4> &MpoSite<Scalar>::MPO_q() const {
     if(all_mpo_parameters_have_been_set) {
         return mpo_internal_q;
     } else {
@@ -150,7 +159,7 @@ Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::MPO_energy_shifted_view(Scalar energy_
     return mpo_build;
 }
 template<typename Scalar>
-Eigen::Tensor<cx128, 4> MpoSite<Scalar>::MPO_energy_shifted_view_q(Scalar energy_shift_per_site) const {
+Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 4> MpoSite<Scalar>::MPO_energy_shifted_view_q(Scalar energy_shift_per_site) const {
     if(has_mpo() and all_mpo_parameters_have_been_set and energy_shift_per_site == energy_shift_mpo) return mpo_internal_q;
     auto mpo_build = get_mpo_q(energy_shift_per_site);
     mpo_build      = get_parity_shifted_mpo(mpo_build);
@@ -158,25 +167,6 @@ Eigen::Tensor<cx128, 4> MpoSite<Scalar>::MPO_energy_shifted_view_q(Scalar energy
     mpo_build      = apply_edge_right(mpo_build, get_MPO_edge_right(mpo_build));
     return mpo_build;
 }
-
-template<typename Scalar>
-template<typename T>
-Eigen::Tensor<T, 4> MpoSite<Scalar>::MPO_energy_shifted_view_as(Scalar energy_shift_per_site) const {
-    static_assert(sfinae::is_any_v<T, fp32, fp64, fp128, cx32, cx64, cx128>);
-    if constexpr(tenx::sfinae::is_single_prec_v<T> or tenx::sfinae::is_double_prec_v<T>) {
-        return tenx::asScalarType<T>(MPO_energy_shifted_view(energy_shift_per_site));
-    } else if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
-        return tenx::asScalarType<T>(MPO_energy_shifted_view_q(energy_shift_per_site));
-    } else
-        throw except::runtime_error("MPO_energy_shifted_view_as(): invalid type <{}>", sfinae::type_name<T>());
-}
-
-template Eigen::Tensor<fp32, 4>  MpoSite<>::MPO_energy_shifted_view_as(cx64 energy_shift_per_site) const;
-template Eigen::Tensor<fp64, 4>  MpoSite<>::MPO_energy_shifted_view_as(cx64 energy_shift_per_site) const;
-template Eigen::Tensor<fp128, 4> MpoSite<>::MPO_energy_shifted_view_as(cx64 energy_shift_per_site) const;
-template Eigen::Tensor<cx32, 4>  MpoSite<>::MPO_energy_shifted_view_as(cx64 energy_shift_per_site) const;
-template Eigen::Tensor<cx64, 4>  MpoSite<>::MPO_energy_shifted_view_as(cx64 energy_shift_per_site) const;
-template Eigen::Tensor<cx128, 4> MpoSite<>::MPO_energy_shifted_view_as(cx64 energy_shift_per_site) const;
 
 template<typename Scalar>
 Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::MPO_nbody_view(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const {
@@ -189,7 +179,7 @@ Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::MPO_nbody_view(std::optional<std::vect
 }
 
 template<typename Scalar>
-Eigen::Tensor<cx128, 4> MpoSite<Scalar>::MPO_nbody_view_q(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const {
+Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 4> MpoSite<Scalar>::MPO_nbody_view_q(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const {
     auto mpo_build = get_mpo_q(energy_shift_mpo, nbody, skip);
     mpo_build      = get_parity_shifted_mpo(mpo_build);
     mpo_build      = apply_edge_left(mpo_build, get_MPO_edge_left(mpo_build));
@@ -197,24 +187,6 @@ Eigen::Tensor<cx128, 4> MpoSite<Scalar>::MPO_nbody_view_q(std::optional<std::vec
     return mpo_build;
     // return get_mpo_q(energy_shift_mpo, nbody, skip);
 }
-
-template<typename Scalar>
-template<typename T>
-Eigen::Tensor<T, 4> MpoSite<Scalar>::MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const {
-    static_assert(sfinae::is_any_v<T, fp32, fp64, fp128, cx32, cx64, cx128>);
-    if constexpr(tenx::sfinae::is_single_prec_v<T> or tenx::sfinae::is_double_prec_v<T>) {
-        return tenx::asScalarType<T>(MPO_nbody_view(nbody, skip));
-    } else if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
-        return tenx::asScalarType<T>(MPO_nbody_view_q(nbody, skip));
-    } else
-        throw except::logic_error("MPO_nbody_view_as(): invalid type <{}>", sfinae::type_name<T>());
-}
-template Eigen::Tensor<fp32, 4>  MpoSite<>::MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
-template Eigen::Tensor<fp64, 4>  MpoSite<>::MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
-template Eigen::Tensor<fp128, 4> MpoSite<>::MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
-template Eigen::Tensor<cx32, 4>  MpoSite<>::MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
-template Eigen::Tensor<cx64, 4>  MpoSite<>::MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
-template Eigen::Tensor<cx128, 4> MpoSite<>::MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
 
 template<typename Scalar>
 const Eigen::Tensor<Scalar, 4> &MpoSite<Scalar>::MPO2() const {
@@ -234,17 +206,6 @@ Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::MPO2_nbody_view(std::optional<std::vec
     auto dim3 = mpo1.dimension(3);
     return mpo1.contract(mpo1, tenx::idx({3}, {2})).shuffle(tenx::array6{0, 3, 1, 4, 2, 5}).reshape(tenx::array4{dim0, dim1, dim2, dim3});
 }
-
-template<typename Scalar>
-template<typename T>
-Eigen::Tensor<T, 4> MpoSite<Scalar>::MPO2_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const {
-    static_assert(sfinae::is_any_v<T, fp32, fp64, cx32, cx64>);
-    return tenx::asScalarType<T>(MPO2_nbody_view(nbody, skip));
-}
-template Eigen::Tensor<fp32, 4> MpoSite<>::MPO2_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
-template Eigen::Tensor<fp64, 4> MpoSite<>::MPO2_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
-template Eigen::Tensor<cx32, 4> MpoSite<>::MPO2_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
-template Eigen::Tensor<cx64, 4> MpoSite<>::MPO2_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const;
 
 template<typename Scalar>
 bool MpoSite<Scalar>::is_real() const {
@@ -420,7 +381,7 @@ Eigen::Tensor<T, 4> MpoSite<Scalar>::get_parity_shifted_mpo(const Eigen::Tensor<
     //      * Q(σ) = 0.5 * ( I - q*prod(σ) )
     //      * σ is a pauli matrix (usually σ^z)
     //      * 0.5 is a scalar that we multiply on the left edge as well.
-    //      * r is the the shift direction depending on the ritz (target energy): ground state energy (r = -1, SR) or maximum energy state (r = +1, LR).
+    //      * r is the shift direction depending on the ritz (target energy): ground state energy (r = -1, SR) or maximum energy state (r = +1, LR).
     //        We multiply r just once on the left edge.
     //      * q == parity_shift_sign_mpo is the sign of the parity sector we want to shift away from the target sector we are interested in.
     //        Often this is done to resolve a degeneracy. We multiply q just once on the left edge.
@@ -457,18 +418,26 @@ Eigen::Tensor<T, 4> MpoSite<Scalar>::get_parity_shifted_mpo(const Eigen::Tensor<
     auto d1 = mpo_build.dimension(1);
     auto d2 = mpo_build.dimension(2);
     auto d3 = mpo_build.dimension(3);
-    auto id = qm::spin::half::id;
-    auto pl = qm::spin::half::get_pauli(parity_shift_axus_mpo);
+    auto id = tenx::asScalarType<T>(qm::spin::half::tensor::id);
+    auto pl = tenx::asScalarType<T>(qm::spin::half::tensor::get_pauli(parity_shift_axus_mpo));
 
     Eigen::Tensor<T, 4> mpo_with_parity_shift_op(d0 + 2, d1 + 2, d2, d3);
     mpo_with_parity_shift_op.setZero();
     mpo_with_parity_shift_op.slice(tenx::array4{0, 0, 0, 0}, mpo_build.dimensions())             = mpo_build;
-    mpo_with_parity_shift_op.slice(tenx::array4{d0, d1, 0, 0}, extent4).reshape(extent2)         = tenx::TensorMap(id).cast<T>();
-    mpo_with_parity_shift_op.slice(tenx::array4{d0 + 1, d1 + 1, 0, 0}, extent4).reshape(extent2) = tenx::TensorMap(pl).cast<T>();
+    mpo_with_parity_shift_op.slice(tenx::array4{d0, d1, 0, 0}, extent4).reshape(extent2)         = id;
+    mpo_with_parity_shift_op.slice(tenx::array4{d0 + 1, d1 + 1, 0, 0}, extent4).reshape(extent2) = pl;
     return mpo_with_parity_shift_op;
 }
-template Eigen::Tensor<cx64, 4>  MpoSite<>::get_parity_shifted_mpo(const Eigen::Tensor<cx64, 4> &mpo_build) const;
-template Eigen::Tensor<cx128, 4> MpoSite<>::get_parity_shifted_mpo(const Eigen::Tensor<cx128, 4> &mpo_build) const;
+template Eigen::Tensor<fp32, 4>  MpoSite<fp32>::get_parity_shifted_mpo(const Eigen::Tensor<fp32, 4> &mpo_build) const;
+template Eigen::Tensor<fp64, 4>  MpoSite<fp64>::get_parity_shifted_mpo(const Eigen::Tensor<fp64, 4> &mpo_build) const;
+template Eigen::Tensor<fp128, 4> MpoSite<fp128>::get_parity_shifted_mpo(const Eigen::Tensor<fp128, 4> &mpo_build) const;
+template Eigen::Tensor<cx32, 4>  MpoSite<cx32>::get_parity_shifted_mpo(const Eigen::Tensor<cx32, 4> &mpo_build) const;
+template Eigen::Tensor<cx64, 4>  MpoSite<cx64>::get_parity_shifted_mpo(const Eigen::Tensor<cx64, 4> &mpo_build) const;
+template Eigen::Tensor<cx128, 4> MpoSite<cx128>::get_parity_shifted_mpo(const Eigen::Tensor<cx128, 4> &mpo_build) const;
+template Eigen::Tensor<fp128, 4> MpoSite<fp32>::get_parity_shifted_mpo(const Eigen::Tensor<fp128, 4> &mpo_build) const;
+template Eigen::Tensor<fp128, 4> MpoSite<fp64>::get_parity_shifted_mpo(const Eigen::Tensor<fp128, 4> &mpo_build) const;
+template Eigen::Tensor<cx128, 4> MpoSite<cx32>::get_parity_shifted_mpo(const Eigen::Tensor<cx128, 4> &mpo_build) const;
+template Eigen::Tensor<cx128, 4> MpoSite<cx64>::get_parity_shifted_mpo(const Eigen::Tensor<cx128, 4> &mpo_build) const;
 
 template<typename Scalar>
 void MpoSite<Scalar>::set_parity_shift_mpo(OptRitz ritz, int sign, std::string_view axis) {
@@ -594,6 +563,88 @@ std::pair<int, std::string_view> MpoSite<Scalar>::get_parity_shift_mpo_squared()
 }
 
 template<typename Scalar>
+long MpoSite<Scalar>::size() const {
+    return mpo_internal.size();
+}
+template<typename Scalar>
+std::array<long, 4> MpoSite<Scalar>::dimensions() const {
+    return mpo_internal.dimensions();
+}
+
+template<typename Scalar>
+void MpoSite<Scalar>::print_parameter_names() const {
+    for(auto &item : get_parameters()) fmt::print("{:<16}", item.first);
+    fmt::print("\n");
+}
+
+template<typename Scalar>
+void MpoSite<Scalar>::print_parameter_values() const {
+    for(auto &item : get_parameters()) {
+        if(item.second.type() == typeid(int)) fmt::print("{:<16}", std::any_cast<int>(item.second));
+        if(item.second.type() == typeid(bool)) fmt::print("{:<16}", std::any_cast<bool>(item.second));
+        if(item.second.type() == typeid(size_t)) fmt::print("{:<16}", std::any_cast<size_t>(item.second));
+        if(item.second.type() == typeid(std::string)) fmt::print("{:<16}", std::any_cast<std::string>(item.second));
+        if(item.second.type() == typeid(double)) fmt::print("{:<16.12f}", std::any_cast<double>(item.second));
+    }
+    fmt::print("\n");
+}
+
+template<typename Scalar>
+void MpoSite<Scalar>::save_mpo(h5pp::File &file, std::string_view mpo_prefix) const {
+    std::string dataset_name = fmt::format("{}/H_{}", mpo_prefix, get_position());
+    file.writeDataset(MPO_energy_shifted_view(Scalar{}), dataset_name, H5D_layout_t::H5D_CONTIGUOUS);
+    file.writeAttribute(get_position(), dataset_name, "position");
+    for(auto &params : get_parameters()) {
+        if(params.second.type() == typeid(double)) file.writeAttribute(std::any_cast<double>(params.second), dataset_name, params.first);
+        if(params.second.type() == typeid(size_t)) file.writeAttribute(std::any_cast<size_t>(params.second), dataset_name, params.first);
+        if(params.second.type() == typeid(uint64_t)) file.writeAttribute(std::any_cast<uint64_t>(params.second), dataset_name, params.first);
+        if(params.second.type() == typeid(int)) file.writeAttribute(std::any_cast<int>(params.second), dataset_name, params.first);
+        if(params.second.type() == typeid(bool)) file.writeAttribute(std::any_cast<bool>(params.second), dataset_name, params.first);
+        if(params.second.type() == typeid(std::string)) file.writeAttribute(std::any_cast<std::string>(params.second), dataset_name, params.first);
+    }
+}
+
+template<typename Scalar>
+void MpoSite<Scalar>::load_mpo(const h5pp::File &file, std::string_view mpo_prefix) {
+    std::string mpo_dset = fmt::format("{}/H_{}", mpo_prefix, get_position());
+    TableMap    map;
+    if(file.linkExists(mpo_dset)) {
+        auto param_names = file.getAttributeNames(mpo_dset);
+        for(auto &param_name : param_names) {
+            auto param_type = file.getTypeInfoAttribute(mpo_dset, param_name);
+            if(param_type.cppTypeIndex) {
+                if(param_type.cppTypeIndex.value() == typeid(double)) map[param_name] = file.readAttribute<double>(mpo_dset, param_name);
+                if(param_type.cppTypeIndex.value() == typeid(size_t)) map[param_name] = file.readAttribute<size_t>(mpo_dset, param_name);
+                if(param_type.cppTypeIndex.value() == typeid(uint64_t)) map[param_name] = file.readAttribute<uint64_t>(mpo_dset, param_name);
+                if(param_type.cppTypeIndex.value() == typeid(int)) map[param_name] = file.readAttribute<int>(mpo_dset, param_name);
+                if(param_type.cppTypeIndex.value() == typeid(bool)) map[param_name] = file.readAttribute<bool>(mpo_dset, param_name);
+                if(param_type.cppTypeIndex.value() == typeid(std::string)) map[param_name] = file.readAttribute<std::string>(mpo_dset, param_name);
+            }
+        }
+        set_parameters(map);
+        build_mpo();
+        if(tenx::VectorMap(MPO()) != tenx::VectorCast(file.readDataset<Eigen::Tensor<Scalar, 4>>(mpo_dset)))
+            throw std::runtime_error("Built MPO does not match the MPO on file");
+    } else {
+        throw except::runtime_error("Could not load MPO. Dataset [{}] does not exist", mpo_dset);
+    }
+}
+
+template<typename Scalar>
+std::size_t MpoSite<Scalar>::get_unique_id() const {
+    if(unique_id) return unique_id.value();
+    unique_id = hash::hash_buffer(MPO().data(), safe_cast<size_t>(MPO().size()));
+    return unique_id.value();
+}
+
+template<typename Scalar>
+std::size_t MpoSite<Scalar>::get_unique_id_sq() const {
+    if(unique_id_sq) return unique_id_sq.value();
+    unique_id_sq = hash::hash_buffer(MPO2().data(), safe_cast<size_t>(MPO2().size()));
+    return unique_id_sq.value();
+}
+
+template<typename Scalar>
 template<typename T>
 Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_left(const Eigen::Tensor<T, 4> &mpo) const {
     using Real = typename Eigen::NumTraits<T>::Real;
@@ -602,7 +653,7 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_left(const Eigen::Tensor<T, 4>
     Eigen::Tensor<T, 1> ledge(ldim);
     if(ldim == 1) {
         // Thin edge (it was probably already applied to the left-most MPO)
-        ledge.setConstant(cx64(1.0, 0.0));
+        ledge.setConstant(T{1});
     } else {
         ledge.setZero();
         if(parity_shift_sign_mpo == 0) {
@@ -655,8 +706,16 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_left(const Eigen::Tensor<T, 4>
     }
     return ledge;
 }
-template Eigen::Tensor<cx64, 1>  MpoSite<>::get_MPO_edge_left(const Eigen::Tensor<cx64, 4> &mpo) const;
-template Eigen::Tensor<cx128, 1> MpoSite<>::get_MPO_edge_left(const Eigen::Tensor<cx128, 4> &mpo) const;
+template Eigen::Tensor<fp32, 1>  MpoSite<fp32>::get_MPO_edge_left(const Eigen::Tensor<fp32, 4> &mpo) const;
+template Eigen::Tensor<fp64, 1>  MpoSite<fp64>::get_MPO_edge_left(const Eigen::Tensor<fp64, 4> &mpo) const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp128>::get_MPO_edge_left(const Eigen::Tensor<fp128, 4> &mpo) const;
+template Eigen::Tensor<cx32, 1>  MpoSite<cx32>::get_MPO_edge_left(const Eigen::Tensor<cx32, 4> &mpo) const;
+template Eigen::Tensor<cx64, 1>  MpoSite<cx64>::get_MPO_edge_left(const Eigen::Tensor<cx64, 4> &mpo) const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx128>::get_MPO_edge_left(const Eigen::Tensor<cx128, 4> &mpo) const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp32>::get_MPO_edge_left(const Eigen::Tensor<fp128, 4> &mpo) const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp64>::get_MPO_edge_left(const Eigen::Tensor<fp128, 4> &mpo) const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx32>::get_MPO_edge_left(const Eigen::Tensor<cx128, 4> &mpo) const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx64>::get_MPO_edge_left(const Eigen::Tensor<cx128, 4> &mpo) const;
 
 template<typename Scalar>
 template<typename T>
@@ -667,7 +726,7 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_right(const Eigen::Tensor<T, 4
     Eigen::Tensor<T, 1> redge(rdim);
     if(rdim == 1) {
         // Thin edge (it was probably already applied to the right-most MPO
-        redge.setConstant(T(static_cast<Real>(1.0), static_cast<Real>(0.0)));
+        redge.setConstant(T{1});
     } else {
         redge.setZero();
 
@@ -694,8 +753,16 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_right(const Eigen::Tensor<T, 4
     return redge;
 }
 
-template Eigen::Tensor<cx64, 1>  MpoSite<>::get_MPO_edge_right(const Eigen::Tensor<cx64, 4> &mpo) const;
-template Eigen::Tensor<cx128, 1> MpoSite<>::get_MPO_edge_right(const Eigen::Tensor<cx128, 4> &mpo) const;
+template Eigen::Tensor<fp32, 1>  MpoSite<fp32>::get_MPO_edge_right(const Eigen::Tensor<fp32, 4> &mpo) const;
+template Eigen::Tensor<fp64, 1>  MpoSite<fp64>::get_MPO_edge_right(const Eigen::Tensor<fp64, 4> &mpo) const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp128>::get_MPO_edge_right(const Eigen::Tensor<fp128, 4> &mpo) const;
+template Eigen::Tensor<cx32, 1>  MpoSite<cx32>::get_MPO_edge_right(const Eigen::Tensor<cx32, 4> &mpo) const;
+template Eigen::Tensor<cx64, 1>  MpoSite<cx64>::get_MPO_edge_right(const Eigen::Tensor<cx64, 4> &mpo) const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx128>::get_MPO_edge_right(const Eigen::Tensor<cx128, 4> &mpo) const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp32>::get_MPO_edge_right(const Eigen::Tensor<fp128, 4> &mpo) const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp64>::get_MPO_edge_right(const Eigen::Tensor<fp128, 4> &mpo) const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx32>::get_MPO_edge_right(const Eigen::Tensor<cx128, 4> &mpo) const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx64>::get_MPO_edge_right(const Eigen::Tensor<cx128, 4> &mpo) const;
 
 template<typename Scalar>
 template<typename T>
@@ -710,8 +777,12 @@ Eigen::Tensor<T, 4> MpoSite<Scalar>::apply_edge_left(const Eigen::Tensor<T, 4> &
     tmp.device(*threads->dev) = edgeL.reshape(tenx::array2{1, edgeL.size()}).contract(mpo, tenx::idx({1}, {0}));
     return tmp;
 }
-template Eigen::Tensor<cx64, 4>  MpoSite<>::apply_edge_left(const Eigen::Tensor<cx64, 4> &mpo, const Eigen::Tensor<cx64, 1> &edgeL) const;
-template Eigen::Tensor<cx128, 4> MpoSite<>::apply_edge_left(const Eigen::Tensor<cx128, 4> &mpo, const Eigen::Tensor<cx128, 1> &edgeL) const;
+template Eigen::Tensor<fp32, 4>  MpoSite<fp32>::apply_edge_left(const Eigen::Tensor<fp32, 4> &mpo, const Eigen::Tensor<fp32, 1> &edgeL) const;
+template Eigen::Tensor<fp64, 4>  MpoSite<fp64>::apply_edge_left(const Eigen::Tensor<fp64, 4> &mpo, const Eigen::Tensor<fp64, 1> &edgeL) const;
+template Eigen::Tensor<fp128, 4> MpoSite<fp128>::apply_edge_left(const Eigen::Tensor<fp128, 4> &mpo, const Eigen::Tensor<fp128, 1> &edgeL) const;
+template Eigen::Tensor<cx32, 4>  MpoSite<cx32>::apply_edge_left(const Eigen::Tensor<cx32, 4> &mpo, const Eigen::Tensor<cx32, 1> &edgeL) const;
+template Eigen::Tensor<cx64, 4>  MpoSite<cx64>::apply_edge_left(const Eigen::Tensor<cx64, 4> &mpo, const Eigen::Tensor<cx64, 1> &edgeL) const;
+template Eigen::Tensor<cx128, 4> MpoSite<cx128>::apply_edge_left(const Eigen::Tensor<cx128, 4> &mpo, const Eigen::Tensor<cx128, 1> &edgeL) const;
 
 template<typename Scalar>
 template<typename T>
@@ -726,46 +797,12 @@ Eigen::Tensor<T, 4> MpoSite<Scalar>::apply_edge_right(const Eigen::Tensor<T, 4> 
     tmp.device(*threads->dev) = mpo.contract(edgeR.reshape(tenx::array2{edgeR.size(), 1}), tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2});
     return tmp;
 }
-template Eigen::Tensor<cx64, 4>  MpoSite<>::apply_edge_right(const Eigen::Tensor<cx64, 4> &mpo, const Eigen::Tensor<cx64, 1> &edgeR) const;
-template Eigen::Tensor<cx128, 4> MpoSite<>::apply_edge_right(const Eigen::Tensor<cx128, 4> &mpo, const Eigen::Tensor<cx128, 1> &edgeR) const;
-
-template<typename Scalar>
-template<typename T>
-Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_left() const {
-    if constexpr(tenx::sfinae::is_single_prec_v<T> or tenx::sfinae::is_double_prec_v<T>)
-        return tenx::asScalarType<T>(get_MPO_edge_left(mpo_internal));
-    else if constexpr(tenx::sfinae::is_quadruple_prec_v<T>)
-        return tenx::asScalarType<T>(get_MPO_edge_left(mpo_internal_q));
-    else {
-        static_assert(sfinae::invalid_type_v<T>);
-        throw std::logic_error("Invalid type");
-    }
-}
-template Eigen::Tensor<fp32, 1>  MpoSite<>::get_MPO_edge_left() const;
-template Eigen::Tensor<fp64, 1>  MpoSite<>::get_MPO_edge_left() const;
-template Eigen::Tensor<fp128, 1> MpoSite<>::get_MPO_edge_left() const;
-template Eigen::Tensor<cx32, 1>  MpoSite<>::get_MPO_edge_left() const;
-template Eigen::Tensor<cx64, 1>  MpoSite<>::get_MPO_edge_left() const;
-template Eigen::Tensor<cx128, 1> MpoSite<>::get_MPO_edge_left() const;
-
-template<typename Scalar>
-template<typename T>
-Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_right() const {
-    if constexpr(tenx::sfinae::is_single_prec_v<T> or tenx::sfinae::is_double_prec_v<T>)
-        return tenx::asScalarType<T>(get_MPO_edge_right(mpo_internal));
-    else if constexpr(tenx::sfinae::is_quadruple_prec_v<T>)
-        return tenx::asScalarType<T>(get_MPO_edge_right(mpo_internal_q));
-    else {
-        static_assert(sfinae::invalid_type_v<T>);
-        throw std::logic_error("Invalid type");
-    }
-}
-template Eigen::Tensor<fp32, 1>  MpoSite<>::get_MPO_edge_right() const;
-template Eigen::Tensor<fp64, 1>  MpoSite<>::get_MPO_edge_right() const;
-template Eigen::Tensor<fp128, 1> MpoSite<>::get_MPO_edge_right() const;
-template Eigen::Tensor<cx32, 1>  MpoSite<>::get_MPO_edge_right() const;
-template Eigen::Tensor<cx64, 1>  MpoSite<>::get_MPO_edge_right() const;
-template Eigen::Tensor<cx128, 1> MpoSite<>::get_MPO_edge_right() const;
+template Eigen::Tensor<fp32, 4>  MpoSite<fp32>::apply_edge_right(const Eigen::Tensor<fp32, 4> &mpo, const Eigen::Tensor<fp32, 1> &edgeR) const;
+template Eigen::Tensor<fp64, 4>  MpoSite<fp64>::apply_edge_right(const Eigen::Tensor<fp64, 4> &mpo, const Eigen::Tensor<fp64, 1> &edgeR) const;
+template Eigen::Tensor<fp128, 4> MpoSite<fp128>::apply_edge_right(const Eigen::Tensor<fp128, 4> &mpo, const Eigen::Tensor<fp128, 1> &edgeR) const;
+template Eigen::Tensor<cx32, 4>  MpoSite<cx32>::apply_edge_right(const Eigen::Tensor<cx32, 4> &mpo, const Eigen::Tensor<cx32, 1> &edgeR) const;
+template Eigen::Tensor<cx64, 4>  MpoSite<cx64>::apply_edge_right(const Eigen::Tensor<cx64, 4> &mpo, const Eigen::Tensor<cx64, 1> &edgeR) const;
+template Eigen::Tensor<cx128, 4> MpoSite<cx128>::apply_edge_right(const Eigen::Tensor<cx128, 4> &mpo, const Eigen::Tensor<cx128, 1> &edgeR) const;
 
 template<typename Scalar>
 template<typename T>
@@ -776,7 +813,7 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO2_edge_left() const {
         if(ldim == 1) {
             // Thin edge (it was probably already applied to the right-most MPO
             auto ledge2 = Eigen::Tensor<T, 1>(ldim);
-            ledge2.setConstant(T(static_cast<Real>(1.0), static_cast<Real>(0.0)));
+            ledge2.setConstant(T{1});
             return ledge2;
         }
     }
@@ -785,7 +822,7 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO2_edge_left() const {
      *        |h 1|
      *  The left edge should pick out the last row
      */
-    auto mpo1  = get_mpo(cx64(0.0, 0.0));
+    auto mpo1  = get_mpo(Scalar{0});
     auto d0    = mpo1.dimension(0);
     auto ledge = Eigen::Tensor<T, 1>(d0);
     ledge.setZero();
@@ -804,8 +841,17 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO2_edge_left() const {
 
     return ledge2_with_shift;
 }
-template Eigen::Tensor<cx64, 1>  MpoSite<>::get_MPO2_edge_left() const;
-template Eigen::Tensor<cx128, 1> MpoSite<>::get_MPO2_edge_left() const;
+
+template Eigen::Tensor<fp32, 1>  MpoSite<fp32>::get_MPO2_edge_left() const;
+template Eigen::Tensor<fp64, 1>  MpoSite<fp64>::get_MPO2_edge_left() const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp128>::get_MPO2_edge_left() const;
+template Eigen::Tensor<cx32, 1>  MpoSite<cx32>::get_MPO2_edge_left() const;
+template Eigen::Tensor<cx64, 1>  MpoSite<cx64>::get_MPO2_edge_left() const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx128>::get_MPO2_edge_left() const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp32>::get_MPO2_edge_left() const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp64>::get_MPO2_edge_left() const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx32>::get_MPO2_edge_left() const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx64>::get_MPO2_edge_left() const;
 
 template<typename Scalar>
 template<typename T>
@@ -824,7 +870,7 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO2_edge_right() const {
      *        |h 1|
      *  The right edge should pick out the first column
      */
-    auto mpo1  = get_mpo(cx64(0.0, 0.0));
+    auto mpo1  = get_mpo(Scalar{});
     auto d0    = mpo1.dimension(1);
     auto redge = Eigen::Tensor<T, 1>(d0);
     redge.setZero();
@@ -834,108 +880,18 @@ Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO2_edge_right() const {
     auto redge2_with_shift = Eigen::Tensor<T, 1>(d0 * d0 + 2);
     redge2_with_shift.setZero();
     redge2_with_shift.slice(tenx::array1{0}, redge2.dimensions()) = redge2;
-    redge2_with_shift(d0 * d0 + 0)                                = static_cast<fp128>(1.0); // 0.5;
-    redge2_with_shift(d0 * d0 + 1)                                = static_cast<fp128>(1.0); // 0.5 * q;
+    redge2_with_shift(d0 * d0 + 0)                                = T{1}; // 0.5;
+    redge2_with_shift(d0 * d0 + 1)                                = T{1}; // 0.5 * q;
     return redge2_with_shift;
 }
-template Eigen::Tensor<cx64, 1>  MpoSite<>::get_MPO2_edge_right() const;
-template Eigen::Tensor<cx128, 1> MpoSite<>::get_MPO2_edge_right() const;
 
-template<typename Scalar>
-long MpoSite<Scalar>::size() const {
-    return mpo_internal.size();
-}
-template<typename Scalar>
-std::array<long, 4> MpoSite<Scalar>::dimensions() const {
-    return mpo_internal.dimensions();
-}
-
-template<typename Scalar>
-void MpoSite<Scalar>::print_parameter_names() const {
-    for(auto &item : get_parameters()) fmt::print("{:<16}", item.first);
-    fmt::print("\n");
-}
-
-template<typename Scalar>
-void MpoSite<Scalar>::print_parameter_values() const {
-    for(auto &item : get_parameters()) {
-        if(item.second.type() == typeid(int)) fmt::print("{:<16}", std::any_cast<int>(item.second));
-        if(item.second.type() == typeid(bool)) fmt::print("{:<16}", std::any_cast<bool>(item.second));
-        if(item.second.type() == typeid(size_t)) fmt::print("{:<16}", std::any_cast<size_t>(item.second));
-        if(item.second.type() == typeid(std::string)) fmt::print("{:<16}", std::any_cast<std::string>(item.second));
-        if(item.second.type() == typeid(double)) fmt::print("{:<16.12f}", std::any_cast<double>(item.second));
-    }
-    fmt::print("\n");
-}
-
-//
-// const std::any &class_model_base::find_val(const Parameters &parameters, std::string_view key) const {
-//    for(auto &param : parameters) {
-//        if(key == param.first) return param.second;
-//    }
-//    throw std::runtime_error("No parameter named [" + std::string(key) + "]");
-//}
-//
-// std::any &class_model_base::find_val(Parameters &parameters, std::string_view key) const {
-//    for(auto &param : parameters) {
-//        if(key == param.first) return param.second;
-//    }
-//    throw std::runtime_error("No parameter named [" + std::string(key) + "]");
-//}
-//
-//
-
-template<typename Scalar>
-void MpoSite<Scalar>::save_mpo(h5pp::File &file, std::string_view mpo_prefix) const {
-    std::string dataset_name = fmt::format("{}/H_{}", mpo_prefix, get_position());
-    file.writeDataset(MPO_energy_shifted_view(cx64(0.0, 0.0)), dataset_name, H5D_layout_t::H5D_CONTIGUOUS);
-    file.writeAttribute(get_position(), dataset_name, "position");
-    for(auto &params : get_parameters()) {
-        if(params.second.type() == typeid(double)) file.writeAttribute(std::any_cast<double>(params.second), dataset_name, params.first);
-        if(params.second.type() == typeid(size_t)) file.writeAttribute(std::any_cast<size_t>(params.second), dataset_name, params.first);
-        if(params.second.type() == typeid(uint64_t)) file.writeAttribute(std::any_cast<uint64_t>(params.second), dataset_name, params.first);
-        if(params.second.type() == typeid(int)) file.writeAttribute(std::any_cast<int>(params.second), dataset_name, params.first);
-        if(params.second.type() == typeid(bool)) file.writeAttribute(std::any_cast<bool>(params.second), dataset_name, params.first);
-        if(params.second.type() == typeid(std::string)) file.writeAttribute(std::any_cast<std::string>(params.second), dataset_name, params.first);
-    }
-}
-
-template<typename Scalar>
-void MpoSite<Scalar>::load_mpo(const h5pp::File &file, std::string_view mpo_prefix) {
-    std::string mpo_dset = fmt::format("{}/H_{}", mpo_prefix, get_position());
-    TableMap    map;
-    if(file.linkExists(mpo_dset)) {
-        auto param_names = file.getAttributeNames(mpo_dset);
-        for(auto &param_name : param_names) {
-            auto param_type = file.getTypeInfoAttribute(mpo_dset, param_name);
-            if(param_type.cppTypeIndex) {
-                if(param_type.cppTypeIndex.value() == typeid(double)) map[param_name] = file.readAttribute<double>(mpo_dset, param_name);
-                if(param_type.cppTypeIndex.value() == typeid(size_t)) map[param_name] = file.readAttribute<size_t>(mpo_dset, param_name);
-                if(param_type.cppTypeIndex.value() == typeid(uint64_t)) map[param_name] = file.readAttribute<uint64_t>(mpo_dset, param_name);
-                if(param_type.cppTypeIndex.value() == typeid(int)) map[param_name] = file.readAttribute<int>(mpo_dset, param_name);
-                if(param_type.cppTypeIndex.value() == typeid(bool)) map[param_name] = file.readAttribute<bool>(mpo_dset, param_name);
-                if(param_type.cppTypeIndex.value() == typeid(std::string)) map[param_name] = file.readAttribute<std::string>(mpo_dset, param_name);
-            }
-        }
-        set_parameters(map);
-        build_mpo();
-        if(tenx::VectorMap(MPO()) != tenx::VectorCast(file.readDataset<Eigen::Tensor<Scalar, 4>>(mpo_dset)))
-            throw std::runtime_error("Built MPO does not match the MPO on file");
-    } else {
-        throw except::runtime_error("Could not load MPO. Dataset [{}] does not exist", mpo_dset);
-    }
-}
-
-template<typename Scalar>
-std::size_t MpoSite<Scalar>::get_unique_id() const {
-    if(unique_id) return unique_id.value();
-    unique_id = hash::hash_buffer(MPO().data(), safe_cast<size_t>(MPO().size()));
-    return unique_id.value();
-}
-
-template<typename Scalar>
-std::size_t MpoSite<Scalar>::get_unique_id_sq() const {
-    if(unique_id_sq) return unique_id_sq.value();
-    unique_id_sq = hash::hash_buffer(MPO2().data(), safe_cast<size_t>(MPO2().size()));
-    return unique_id_sq.value();
-}
+template Eigen::Tensor<fp32, 1>  MpoSite<fp32>::get_MPO2_edge_right() const;
+template Eigen::Tensor<fp64, 1>  MpoSite<fp64>::get_MPO2_edge_right() const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp128>::get_MPO2_edge_right() const;
+template Eigen::Tensor<cx32, 1>  MpoSite<cx32>::get_MPO2_edge_right() const;
+template Eigen::Tensor<cx64, 1>  MpoSite<cx64>::get_MPO2_edge_right() const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx128>::get_MPO2_edge_right() const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp32>::get_MPO2_edge_right() const;
+template Eigen::Tensor<fp128, 1> MpoSite<fp64>::get_MPO2_edge_right() const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx32>::get_MPO2_edge_right() const;
+template Eigen::Tensor<cx128, 1> MpoSite<cx64>::get_MPO2_edge_right() const;

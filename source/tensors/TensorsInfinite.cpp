@@ -9,17 +9,21 @@
 #include "tools/infinite/measure.h"
 #include "tools/infinite/mps.h"
 
+template class TensorsInfinite<fp32>;
+template class TensorsInfinite<fp64>;
+template class TensorsInfinite<fp128>;
+template class TensorsInfinite<cx32>;
 template class TensorsInfinite<cx64>;
 template class TensorsInfinite<cx128>;
 
 template<typename Scalar>
-TensorsInfinite<Scalar>::TensorsInfinite()
+TensorsInfinite<Scalar>::TensorsInfinite() noexcept
     : state(std::make_unique<StateInfinite<Scalar>>()), model(std::make_unique<ModelInfinite<Scalar>>()), edges(std::make_unique<EdgesInfinite<Scalar>>()) {
     tools::log->trace("Constructing TensorsInfinite");
 }
 
 // We need to make a destructor manually because we enclose
-// the classes with unique_ptr. Otherwise unique_ptr will
+// the classes with unique_ptr. Otherwise, unique_ptr will
 // forcibly inline its own default deleter.
 // This is a classic pimpl idiom.
 // Here we follow "rule of five", so we must also define
@@ -31,17 +35,17 @@ TensorsInfinite<Scalar>::TensorsInfinite()
 template<typename Scalar>
 TensorsInfinite<Scalar>::~TensorsInfinite() = default; // default dtor
 template<typename Scalar>
-TensorsInfinite<Scalar>::TensorsInfinite(TensorsInfinite &&other) = default; // default move ctor
+TensorsInfinite<Scalar>::TensorsInfinite(TensorsInfinite &&other) noexcept = default; // default move ctor
 template<typename Scalar>
-TensorsInfinite<Scalar> &TensorsInfinite<Scalar>::operator=(TensorsInfinite &&other) = default; // default move assign
+TensorsInfinite<Scalar> &TensorsInfinite<Scalar>::operator=(TensorsInfinite &&other) noexcept = default; // default move assign
 
 template<typename Scalar>
-TensorsInfinite<Scalar>::TensorsInfinite(const TensorsInfinite &other)
+TensorsInfinite<Scalar>::TensorsInfinite(const TensorsInfinite &other) noexcept
     : state(std::make_unique<StateInfinite<Scalar>>(*other.state)), model(std::make_unique<ModelInfinite<Scalar>>(*other.model)),
       edges(std::make_unique<EdgesInfinite<Scalar>>(*other.edges)), measurements(other.measurements) {}
 
 template<typename Scalar>
-TensorsInfinite<Scalar> &TensorsInfinite<Scalar>::operator=(const TensorsInfinite &other) {
+TensorsInfinite<Scalar> &TensorsInfinite<Scalar>::operator=(const TensorsInfinite &other) noexcept {
     // check for self-assignment
     if(this != &other) {
         state        = std::make_unique<StateInfinite<Scalar>>(*other.state);
@@ -94,6 +98,15 @@ template<typename Scalar>
 size_t TensorsInfinite<Scalar>::get_length() const {
     return edges->get_length();
 }
+
+/* clang-format off */
+template<typename Scalar> StateInfinite<Scalar>       &TensorsInfinite<Scalar>::get_state() { return *state; }
+template<typename Scalar> ModelInfinite<Scalar>       &TensorsInfinite<Scalar>::get_model() { return *model; }
+template<typename Scalar> EdgesInfinite<Scalar>       &TensorsInfinite<Scalar>::get_edges() { return *edges; }
+template<typename Scalar> const StateInfinite<Scalar> &TensorsInfinite<Scalar>::get_state() const { return *state; }
+template<typename Scalar> const ModelInfinite<Scalar> &TensorsInfinite<Scalar>::get_model() const { return *model; }
+template<typename Scalar> const EdgesInfinite<Scalar> &TensorsInfinite<Scalar>::get_edges() const { return *edges; }
+/* clang-format on */
 
 template<typename Scalar>
 void TensorsInfinite<Scalar>::reset_edges() {

@@ -8,11 +8,19 @@
 #include "tools/common/log.h"
 #include "tools/infinite/opt.h"
 
-itebd::itebd(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmInfinite(std::move(h5ppFile_), OptRitz::NONE, AlgorithmType::iTEBD) {
+// template class itebd<fp32>;
+// template class itebd<fp64>;
+// template class itebd<fp128>;
+// template class itebd<cx32>;
+template class itebd<cx64>;
+// template class itebd<cx128>;
+
+template<typename Scalar>
+itebd<Scalar>::itebd(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmInfinite<Scalar>(std::move(h5ppFile_), OptRitz::NONE, AlgorithmType::iTEBD) {
     tools::log->trace("Constructing class_itebd");
 }
 
-void itebd::run_preprocessing() {
+template<typename Scalar> void itebd<Scalar>::run_preprocessing() {
     tools::log->info("Running {} preprocessing", status.algo_type_sv());
     auto t_pre = tid::tic_scope("pre");
     init_bond_dimension_limits();
@@ -24,11 +32,11 @@ void itebd::run_preprocessing() {
     h_odd          = tensors.model->get_2site_ham_BA();
 
     unitary_time_evolving_operators =
-        qm::time::get_twosite_time_evolution_operators(status.delta_t.to_floating_point<cx128>(), settings::itebd::suzuki_order, h_evn, h_odd);
+        qm::time::get_twosite_time_evolution_operators<CplxScalar>(status.delta_t.template to_floating_point<cx128>(), settings::itebd::suzuki_order, h_evn, h_odd);
     tools::log->info("Finished {} preprocessing", status.algo_type_sv());
 }
 
-void itebd::run_algorithm() {
+template<typename Scalar> void itebd<Scalar>::run_algorithm() {
     tools::log->info("Starting {} simulation", status.algo_type_sv());
     auto t_run = tid::tic_scope("run");
     while(status.iter < settings::itebd::iter_max and status.algorithm_converged_for == 0) {
@@ -43,12 +51,12 @@ void itebd::run_algorithm() {
     }
 }
 
-void itebd::run_postprocessing() {
+template<typename Scalar> void itebd<Scalar>::run_postprocessing() {
     auto t_pos = tid::tic_scope("post");
     print_status_full();
 }
 
-void itebd::update_state() {
+template<typename Scalar> void itebd<Scalar>::update_state() {
     /*!
      * \fn update_state()
      * \brief infinite Time evolving block decimation.
@@ -59,11 +67,11 @@ void itebd::update_state() {
         tensors.merge_twosite_tensor(twosite_tensor, MergeEvent::GATE, svd::config(status.bond_lim, status.trnc_lim));
         if(&U != &unitary_time_evolving_operators.back()) { tensors.state->swap_AB(); }
     }
-    status.phys_time += abs(status.delta_t.to_floating_point<cx128>());
+    status.phys_time += abs(status.delta_t.template to_floating_point<cx128>());
     tensors.clear_measurements();
 }
 
-void itebd::check_convergence() {
+template<typename Scalar> void itebd<Scalar>::check_convergence() {
     auto t_con = tid::tic_scope("conv");
     check_convergence_entg_entropy();
     check_convergence_variance_ham();
@@ -77,14 +85,14 @@ void itebd::check_convergence() {
         status.algorithm_converged_for = 0;
 }
 
-void itebd::check_convergence_time_step() {
-    auto delta_t = status.delta_t.to_floating_point<cx128>();
+template<typename Scalar> void itebd<Scalar>::check_convergence_time_step() {
+    auto delta_t = status.delta_t.template to_floating_point<cx128>();
     if(abs(delta_t) <= static_cast<fp128>(settings::itebd::time_step_min)) {
         status.time_step_has_converged = true;
     } else if(status.bond_limit_has_reached_max and status.entanglement_converged_for > 0) {
         // TODO : This step is not compatible with switching between real/imag time evolution... I think?
         status.delta_t                  = std::max<fp128>(static_cast<fp128>(settings::itebd::time_step_min), abs(delta_t) * static_cast<fp128>(0.5));
-        unitary_time_evolving_operators = qm::time::get_twosite_time_evolution_operators(delta_t, settings::itebd::suzuki_order, h_evn, h_odd);
+        unitary_time_evolving_operators = qm::time::get_twosite_time_evolution_operators<CplxScalar>(delta_t, settings::itebd::suzuki_order, h_evn, h_odd);
         //        state->H->update_evolution_step_size(-status.delta_t, settings::itebd::suzuki_order);
         clear_convergence_status();
     }

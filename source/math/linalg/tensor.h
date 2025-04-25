@@ -3,6 +3,7 @@
 #include "math/cast.h"
 #include <array>
 #include <fmt/core.h>
+#include <io/fmt_custom.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 
 namespace linalg::tensor {
@@ -28,21 +29,21 @@ namespace linalg::tensor {
     std::string formatted_number(T number, int prec, int min_width, int min_width_real, int min_width_imag) {
         if constexpr(linalg::is_std_complex_v<T>) {
             if constexpr(std::is_floating_point_v<typename T::value_type>) {
-                std::string real = fmt::format("({0:.{1}f}", number.real(), prec);
-                std::string imag = fmt::format("{0:.{1}f})", number.imag(), prec);
-                std::string cx64 = fmt::format("{:>},{:<}", real, imag);
-                return fmt::format("{0:>{1}}", cx64, min_width_real + min_width_imag + 3); // Two doubles, comma, and parentheses
+                std::string real = fmt::format("({0:.{1}f}", fp(number.real()), prec);
+                std::string imag = fmt::format("{0:.{1}f})", fp(number.imag()), prec);
+                std::string cplx = fmt::format("{:>},{:<}", real, imag);
+                return fmt::format("{0:>{1}}", cplx, min_width_real + min_width_imag + 3); // Two doubles, comma, and parentheses
 
             } else if constexpr(std::is_integral_v<typename T::value_type>) {
-                std::string real = fmt::format("({}", number.real());
-                std::string imag = fmt::format("{})", number.imag());
-                std::string cx64 = fmt::format("{:>},{:<}", real, imag);
-                return fmt::format("{0:>{1}}", cx64, min_width_real + min_width_imag + 3); // Two doubles, comma, and parentheses
+                std::string real = fmt::format("({}", fp(number.real()));
+                std::string imag = fmt::format("{})", fp(number.imag()));
+                std::string cplx = fmt::format("{:>},{:<}", real, imag);
+                return fmt::format("{0:>{1}}", cplx, min_width_real + min_width_imag + 3); // Two doubles, comma, and parentheses
             }
         } else if constexpr(std::is_floating_point_v<T>)
-            return fmt::format("{0:>{1}.{2}f}", number, min_width, prec);
+            return fmt::format("{0:>{1}.{2}f}", fp(number), min_width, prec);
         else if constexpr(std::is_integral_v<T>)
-            return fmt::format("{0:>{1}}", number, min_width);
+            return fmt::format("{0:>{1}}", fp(number), min_width);
     }
 
     template<typename T>

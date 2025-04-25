@@ -27,6 +27,10 @@
 #include "math/linalg.h"
 #include <tools/finite/opt_meta.h>
 
+template class TensorsFinite<fp32>;
+template class TensorsFinite<fp64>;
+template class TensorsFinite<fp128>;
+template class TensorsFinite<cx32>;
 template class TensorsFinite<cx64>;
 template class TensorsFinite<cx128>;
 
@@ -54,7 +58,12 @@ TensorsFinite<Scalar> &TensorsFinite<Scalar>::operator=(TensorsFinite &&other) =
 
 template<typename Scalar>
 TensorsFinite<Scalar>::TensorsFinite(const TensorsFinite &other)
-    : cache_fp32(other.cache_fp32), cache_fp64(other.cache_fp64), cache_cx32(other.cache_cx32), cache_cx64(other.cache_cx64),
+    : cache_fp32(other.cache_fp32),   //
+      cache_fp64(other.cache_fp64),   //
+      cache_fp128(other.cache_fp128), //
+      cache_cx32(other.cache_cx32),   //
+      cache_cx64(other.cache_cx64),   //
+      cache_cx128(other.cache_cx128), //
       state(std::make_unique<StateFinite<Scalar>>(*other.state)), model(std::make_unique<ModelFinite<Scalar>>(*other.model)),
       edges(std::make_unique<EdgesFinite<Scalar>>(*other.edges)), active_sites(other.active_sites), measurements(other.measurements) {}
 template<typename Scalar>
@@ -65,6 +74,7 @@ TensorsFinite<Scalar> &TensorsFinite<Scalar>::operator=(const TensorsFinite &oth
         cache_fp64   = other.cache_fp64;
         cache_cx32   = other.cache_cx32;
         cache_cx64   = other.cache_cx64;
+        cache_cx128  = other.cache_cx128;
         state        = std::make_unique<StateFinite<Scalar>>(*other.state);
         model        = std::make_unique<ModelFinite<Scalar>>(*other.model);
         edges        = std::make_unique<EdgesFinite<Scalar>>(*other.edges);
@@ -79,23 +89,6 @@ template<typename Scalar>
 TensorsFinite<Scalar>::TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position) : TensorsFinite() {
     initialize(algo_type, model_type, model_size, position);
 }
-
-template<typename Scalar>
-template<typename T>
-TensorsFinite<Scalar>::Cache<T> &TensorsFinite<Scalar>::get_cache() const {
-    static_assert(sfinae::is_any_v<T, fp32, fp64, cx32, cx64>);
-    /* clang-format off */
-         if constexpr(std::is_same_v<T, fp32>) { return cache_fp32; }
-    else if constexpr(std::is_same_v<T, fp64>) { return cache_fp64; }
-    else if constexpr(std::is_same_v<T, cx32>) { return cache_cx32; }
-    else if constexpr(std::is_same_v<T, cx64>) { return cache_cx64; }
-    else throw std::logic_error("unrecognized cache type T");
-    /* clang-format on */
-}
-template TensorsFinite<>::Cache<fp32> &TensorsFinite<>::get_cache() const;
-template TensorsFinite<>::Cache<fp64> &TensorsFinite<>::get_cache() const;
-template TensorsFinite<>::Cache<cx32> &TensorsFinite<>::get_cache() const;
-template TensorsFinite<>::Cache<cx64> &TensorsFinite<>::get_cache() const;
 
 /* clang-format off */
 template<typename Scalar> StateFinite<Scalar>       &TensorsFinite<Scalar>::get_state() { return *state; }
@@ -131,53 +124,24 @@ void TensorsFinite<Scalar>::initialize_state(ResetReason reason, StateInit state
     tools::log->debug("Initializing state [{}] to [{}] | Reason [{}] | Type [{}] | Sector [{}] | bond_lim {} | eigspinors {} | pattern {}", state->get_name(),
                       enum2sv(state_init), enum2sv(reason), enum2sv(state_type), axis, bond_lim, use_eigenspinors, pattern);
 
-    tools::log->debug("Initializing state - Before: norm {:.16f} | spin components {:+.16f}", tools::finite::measure::norm(*state),
-                      fmt::join(tools::finite::measure::spin_components(*state), ", "));
+    tools::log->debug("Initializing state - Before: norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm(get_state())),
+                      fv(tools::finite::measure::spin_components(get_state())));
 
-    tools::finite::mps::initialize_state(*state, state_init, state_type, axis, use_eigenspinors, bond_lim, pattern);
+    tools::finite::mps::initialize_state(get_state(), state_init, state_type, axis, use_eigenspinors, bond_lim, pattern);
 
-    tools::log->debug("Initializing state - After : norm {:.16f} | spin components {:+.16f}", tools::finite::measure::norm(*state),
-                      fmt::join(tools::finite::measure::spin_components(*state), ", "));
+    tools::log->debug("Initializing state - After : norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm(get_state())),
+                      fv(tools::finite::measure::spin_components(get_state())));
 }
 
 template<typename Scalar>
 void TensorsFinite<Scalar>::normalize_state(std::optional<svd::config> svd_cfg, NormPolicy norm_policy) {
     // Normalize if unity was lost for some reason (numerical error buildup)
-    bool modified = tools::finite::mps::normalize_state(*state, svd_cfg, norm_policy);
+    bool modified = tools::finite::mps::normalize_state(get_state(), svd_cfg, norm_policy);
     if(modified) {
         state->clear_cache();
         clear_measurements();
     }
 }
-template<typename Scalar>
-template<typename T>
-const Eigen::Tensor<T, 3> &TensorsFinite<Scalar>::get_multisite_mps() const {
-    return state->template get_multisite_mps<T>();
-}
-template const Eigen::Tensor<fp32, 3> &TensorsFinite<>::get_multisite_mps() const;
-template const Eigen::Tensor<fp64, 3> &TensorsFinite<>::get_multisite_mps() const;
-template const Eigen::Tensor<cx32, 3> &TensorsFinite<>::get_multisite_mps() const;
-template const Eigen::Tensor<cx64, 3> &TensorsFinite<>::get_multisite_mps() const;
-
-template<typename Scalar>
-template<typename T>
-const Eigen::Tensor<T, 4> &TensorsFinite<Scalar>::get_multisite_mpo() const {
-    return model->template get_multisite_mpo<T>();
-}
-template const Eigen::Tensor<fp32, 4> &TensorsFinite<>::get_multisite_mpo() const;
-template const Eigen::Tensor<fp64, 4> &TensorsFinite<>::get_multisite_mpo() const;
-template const Eigen::Tensor<cx32, 4> &TensorsFinite<>::get_multisite_mpo() const;
-template const Eigen::Tensor<cx64, 4> &TensorsFinite<>::get_multisite_mpo() const;
-
-template<typename Scalar>
-template<typename T>
-const Eigen::Tensor<T, 4> &TensorsFinite<Scalar>::get_multisite_mpo_squared() const {
-    return model->template get_multisite_mpo_squared<T>();
-}
-template const Eigen::Tensor<fp32, 4> &TensorsFinite<>::get_multisite_mpo_squared() const;
-template const Eigen::Tensor<fp64, 4> &TensorsFinite<>::get_multisite_mpo_squared() const;
-template const Eigen::Tensor<cx32, 4> &TensorsFinite<>::get_multisite_mpo_squared() const;
-template const Eigen::Tensor<cx64, 4> &TensorsFinite<>::get_multisite_mpo_squared() const;
 
 template<typename T>
 Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &envL, const Eigen::Tensor<T, 3> &envR) {
@@ -205,98 +169,49 @@ Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen
         envL.contract(mpo, tenx::idx({2}, {0})).contract(envR, tenx::idx({2}, {2})).shuffle(tenx::array6{3, 1, 5, 2, 0, 4}).reshape(dims);
     return ham;
 }
-
-template<typename Scalar>
-template<typename T>
-const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian() const {
-    auto  t_ham = tid::tic_scope("ham");
-    auto &cache = get_cache<T>();
-    if(cache.effective_hamiltonian and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian.value();
-    const auto &mpo = get_multisite_mpo<T>();
-    const auto &env = get_multisite_env_ene_blk_as<T>();
-    tools::log->trace("Contracting effective multisite Hamiltonian");
-    cache.cached_sites_hamiltonian = active_sites;
-    cache.effective_hamiltonian    = contract_mpo_env<T>(mpo, env.L, env.R);
-    return cache.effective_hamiltonian.value();
-}
-template const Eigen::Tensor<fp32, 2> &TensorsFinite<>::get_effective_hamiltonian() const;
-template const Eigen::Tensor<fp64, 2> &TensorsFinite<>::get_effective_hamiltonian() const;
-template const Eigen::Tensor<cx32, 2> &TensorsFinite<>::get_effective_hamiltonian() const;
-template const Eigen::Tensor<cx64, 2> &TensorsFinite<>::get_effective_hamiltonian() const;
-
-template<typename Scalar>
-template<typename T>
-const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian_squared() const {
-    auto  t_ham = tid::tic_scope("ham²");
-    auto &cache = get_cache<T>();
-    if(cache.effective_hamiltonian_squared and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian_squared.value();
-
-    tools::log->trace("TensorsFinite<Scalar>::get_effective_hamiltonian_squared(): contracting active sites {}", active_sites);
-    const auto &mpo                        = get_multisite_mpo_squared<T>();
-    const auto &env                        = get_multisite_env_var_blk_as<T>();
-    cache.cached_sites_hamiltonian_squared = active_sites;
-    cache.effective_hamiltonian_squared    = contract_mpo_env<T>(mpo, env.L, env.R);
-    return cache.effective_hamiltonian_squared.value();
-}
-template const Eigen::Tensor<fp32, 2> &TensorsFinite<>::get_effective_hamiltonian_squared() const;
-template const Eigen::Tensor<fp64, 2> &TensorsFinite<>::get_effective_hamiltonian_squared() const;
-template const Eigen::Tensor<cx32, 2> &TensorsFinite<>::get_effective_hamiltonian_squared() const;
-template const Eigen::Tensor<cx64, 2> &TensorsFinite<>::get_effective_hamiltonian_squared() const;
+template Eigen::Tensor<fp32, 2>  contract_mpo_env(const Eigen::Tensor<fp32, 4> &mpo, const Eigen::Tensor<fp32, 3> &envL, const Eigen::Tensor<fp32, 3> &envR);
+template Eigen::Tensor<fp64, 2>  contract_mpo_env(const Eigen::Tensor<fp64, 4> &mpo, const Eigen::Tensor<fp64, 3> &envL, const Eigen::Tensor<fp64, 3> &envR);
+template Eigen::Tensor<fp128, 2> contract_mpo_env(const Eigen::Tensor<fp128, 4> &mpo, const Eigen::Tensor<fp128, 3> &envL, const Eigen::Tensor<fp128, 3> &envR);
+template Eigen::Tensor<cx32, 2>  contract_mpo_env(const Eigen::Tensor<cx32, 4> &mpo, const Eigen::Tensor<cx32, 3> &envL, const Eigen::Tensor<cx32, 3> &envR);
+template Eigen::Tensor<cx64, 2>  contract_mpo_env(const Eigen::Tensor<cx64, 4> &mpo, const Eigen::Tensor<cx64, 3> &envL, const Eigen::Tensor<cx64, 3> &envR);
+template Eigen::Tensor<cx128, 2> contract_mpo_env(const Eigen::Tensor<cx128, 4> &mpo, const Eigen::Tensor<cx128, 3> &envL, const Eigen::Tensor<cx128, 3> &envR);
 
 template<typename Scalar>
 env_pair<const Eigen::Tensor<Scalar, 3> &> TensorsFinite<Scalar>::get_multisite_env_ene_blk() const {
-    return std::as_const(*edges).get_multisite_env_ene_blk();
+    return get_edges().get_multisite_env_ene_blk();
 }
 template<typename Scalar>
 env_pair<const Eigen::Tensor<Scalar, 3> &> TensorsFinite<Scalar>::get_multisite_env_var_blk() const {
-    return std::as_const(*edges).get_multisite_env_var_blk();
+    return get_edges().get_multisite_env_var_blk();
 }
-
-template<typename Scalar>
-template<typename T>
-env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_ene_blk_as() const {
-    return std::as_const(*edges).template get_multisite_env_ene_blk_as<T>();
-}
-template env_pair<Eigen::Tensor<fp32, 3>> TensorsFinite<>::get_multisite_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<fp64, 3>> TensorsFinite<>::get_multisite_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<cx32, 3>> TensorsFinite<>::get_multisite_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<cx64, 3>> TensorsFinite<>::get_multisite_env_ene_blk_as() const;
-
-template<typename Scalar>
-template<typename T>
-env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_var_blk_as() const {
-    return std::as_const(*edges).template get_multisite_env_var_blk_as<T>();
-}
-template env_pair<Eigen::Tensor<fp32, 3>> TensorsFinite<>::get_multisite_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<fp64, 3>> TensorsFinite<>::get_multisite_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<cx32, 3>> TensorsFinite<>::get_multisite_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<cx64, 3>> TensorsFinite<>::get_multisite_env_var_blk_as() const;
 
 template<typename Scalar>
 void TensorsFinite<Scalar>::project_to_nearest_axis(std::string_view axis, std::optional<svd::config> svd_cfg) {
-    auto sign = tools::finite::ops::project_to_nearest_axis(*state, axis, svd_cfg);
+    auto sign = tools::finite::ops::project_to_nearest_axis(get_state(), axis, svd_cfg);
     if(sign != 0) clear_cache();
 }
 
+template<typename Scalar>
 struct DebugStatus {
-    double                                              ene = std::numeric_limits<double>::quiet_NaN();
-    double                                              red = std::numeric_limits<double>::quiet_NaN();
-    double                                              var = std::numeric_limits<double>::quiet_NaN();
+    using RealScalar                                        = typename Eigen::NumTraits<Scalar>::Real;
+    RealScalar                                          ene = std::numeric_limits<RealScalar>::quiet_NaN();
+    RealScalar                                          red = std::numeric_limits<RealScalar>::quiet_NaN();
+    RealScalar                                          var = std::numeric_limits<RealScalar>::quiet_NaN();
     std::string                                         tag;
     std::pair<std::vector<size_t>, std::vector<size_t>> env_ids;
     std::vector<size_t>                                 mpo_ids;
 
     [[nodiscard]] std::string msg() const {
         std::string msg;
-        msg.append(fmt::format("Energy {:<20} = {:>20.16f}\n", tag, ene));
-        msg.append(fmt::format("Shift  {:<20} = {:>20.16f}\n", tag, red));
-        msg.append(fmt::format("σ²H    {:<20} = {:>20.16f}\n", tag, var));
+        msg.append(fmt::format("Energy {:<20} = {:>20.16f}\n", tag, fp(ene)));
+        msg.append(fmt::format("Shift  {:<20} = {:>20.16f}\n", tag, fp(red)));
+        msg.append(fmt::format("σ²H    {:<20} = {:>20.16f}\n", tag, fp(var)));
         return msg;
     }
     void print() const {
-        tools::log->debug("Energy   [{:<20}] = {:>20.16f}", tag, ene);
-        tools::log->debug("Shift    [{:<20}] = {:>20.16f}", tag, red);
-        tools::log->debug("σ²H      [{:<20}] = {:>20.16f}", tag, var);
+        tools::log->debug("Energy   [{:<20}] = {:>20.16f}", tag, fp(ene));
+        tools::log->debug("Shift    [{:<20}] = {:>20.16f}", tag, fp(red));
+        tools::log->debug("σ²H      [{:<20}] = {:>20.16f}", tag, fp(var));
     }
 };
 
@@ -311,7 +226,7 @@ void TensorsFinite<Scalar>::set_parity_shift_mpo(OptRitz ritz, std::string_view 
     auto axus = qm::spin::half::get_axis_unsigned(axis);
     if(sign == 0) {
         tools::log->info("set_parity_shift_mpo: no sector sign given for the target axis: taking the closest sector");
-        sign = tools::finite::measure::spin_sign(*state, axis);
+        sign = tools::finite::measure::spin_sign(get_state(), axis);
     }
     auto parity_shift_new = std::make_tuple(ritz, sign, axus);
     auto parity_shift_old = model->get_parity_shift_mpo();
@@ -329,7 +244,7 @@ void TensorsFinite<Scalar>::set_parity_shift_mpo_squared(std::string_view axis) 
     auto axus = qm::spin::half::get_axis_unsigned(axis);
     if(sign == 0) {
         tools::log->info("set_parity_shift_mpo_squared: no sector sign given for the target axis: taking the closest sector");
-        sign = tools::finite::measure::spin_sign(*state, axis);
+        sign = tools::finite::measure::spin_sign(get_state(), axis);
     }
     auto parity_shift_new = std::make_pair(sign, axus);
     auto parity_shift_old = model->get_parity_shift_mpo_squared();
@@ -342,14 +257,14 @@ void TensorsFinite<Scalar>::set_parity_shift_mpo_squared(std::string_view axis) 
 }
 
 template<typename Scalar>
-std::optional<DebugStatus> get_status(TensorsFinite<Scalar> &tensors, std::string_view tag) {
+std::optional<DebugStatus<Scalar>> get_status(TensorsFinite<Scalar> &tensors, std::string_view tag) {
     if constexpr(not settings::debug) return std::nullopt;
     tensors.model->clear_cache();
-    tensors.measurements = MeasurementsTensorsFinite();
+    tensors.measurements = MeasurementsTensorsFinite<Scalar>();
     tensors.rebuild_mpo();
     tensors.rebuild_mpo_squared();
     tensors.rebuild_edges();
-    DebugStatus deb;
+    DebugStatus<Scalar> deb;
     deb.ene     = tools::finite::measure::energy(tensors);
     deb.red     = tools::finite::measure::energy_shift(tensors);
     deb.var     = tools::finite::measure::energy_variance(tensors);
@@ -364,13 +279,13 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
     if(std::isnan(std::real(energy_shift))) throw std::logic_error("TensorsFinite<Scalar>::set_energy_shift_mpo: got std::real(energy_shift) == NAN");
     if(std::isnan(std::imag(energy_shift))) throw std::logic_error("TensorsFinite<Scalar>::set_energy_shift_mpo: got std::imag(energy_shift) == NAN");
     if(std::abs(model->get_energy_shift_mpo() - energy_shift) <= std::numeric_limits<RealScalar>::epsilon()) {
-        tools::log->debug("MPO energy is already shifted by {:.16f} {:+.16f}i : No shift needed.", fp(std::real(energy_shift)), fp(std::imag(energy_shift)));
+        tools::log->debug("MPO energy is already shifted by {:.16f} : No shift needed.", fp(energy_shift));
         return;
     }
-    std::vector<std::optional<DebugStatus>> debs;
+    std::vector<std::optional<DebugStatus<Scalar>>> debs;
     debs.emplace_back(get_status(*this, "Before shift"));
 
-    measurements = MeasurementsTensorsFinite(); // Resets model-related measurements but not state measurements, which can remain
+    measurements = MeasurementsTensorsFinite<Scalar>(); // Resets model-related measurements but not state measurements, which can remain
     model->clear_cache();
 
     tools::log->info("Shifting MPO energy: {:.16f} {:+.16f}i", fp(std::real(energy_shift)), fp(std::imag(energy_shift)));
@@ -383,7 +298,7 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
         auto &bef = debs.front();
         auto &aft = debs.back();
         if(bef and aft) {
-            if(std::abs(bef->red - aft->red) > std::numeric_limits<double>::epsilon()) {
+            if(std::abs(bef->red - aft->red) > std::numeric_limits<RealScalar>::epsilon()) {
                 if(bef->mpo_ids == aft->mpo_ids) throw except::runtime_error("MPO id's are unchanged after energy shift\n{}\n{}", bef->msg(), aft->msg());
                 // It only makes sense to check the interior envs, since the edges are constant.
                 // When the number of active sites is L, then only the edge envs are affected, but these are constant anyway!
@@ -400,30 +315,34 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
         auto &bef = debs.front();
         auto &aft = debs.back();
         if(bef and aft) {
-            double ratio_var                          = std::abs(aft->var / bef->var);
-            double delta_ene                          = std::abs(bef->ene - aft->ene);
-            double delta_var                          = std::abs(bef->var - aft->var);
-            double delta_ene_rel                      = delta_ene / std::abs(aft->ene) * 100;
-            double delta_var_rel                      = delta_var / std::abs(aft->var) * 100;
-            double critical_cancellation_max_decimals = std::numeric_limits<double>::digits10 - std::max(0.0, std::log10(std::pow(energy_shift, 2)));
-            double critical_cancellation_error        = std::pow(10, -critical_cancellation_max_decimals);
-            tools::log->debug("Variance change              {:>20.16f}", delta_var);
-            tools::log->debug("Variance change percent      {:>20.16f}", delta_var_rel);
-            tools::log->debug("Critical cancellation decs   {:>20.16f}", critical_cancellation_max_decimals);
-            tools::log->debug("Critical cancellation error  {:>20.16f}", critical_cancellation_error);
-            if(delta_var > 1e3 * critical_cancellation_error) {
+            RealScalar ratio_var     = std::abs(aft->var / bef->var);
+            RealScalar delta_ene     = std::abs(bef->ene - aft->ene);
+            RealScalar delta_var     = std::abs(bef->var - aft->var);
+            RealScalar delta_ene_rel = delta_ene / std::abs(aft->ene) * 100;
+            RealScalar delta_var_rel = delta_var / std::abs(aft->var) * 100;
+            RealScalar critical_cancellation_max_decimals =
+                std::numeric_limits<RealScalar>::digits10 -
+                std::max<RealScalar>(static_cast<RealScalar>(0.0), static_cast<RealScalar>(std::log10(std::pow(std::abs(energy_shift), 2))));
+            RealScalar critical_cancellation_error = std::pow<RealScalar>(static_cast<RealScalar>(10), -critical_cancellation_max_decimals);
+            tools::log->debug("Variance change              {:>20.16f}", fp(delta_var));
+            tools::log->debug("Variance change percent      {:>20.16f}", fp(delta_var_rel));
+            tools::log->debug("Critical cancellation decs   {:>20.16f}", fp(critical_cancellation_max_decimals));
+            tools::log->debug("Critical cancellation error  {:>20.16f}", fp(critical_cancellation_error));
+            if(delta_var > critical_cancellation_error * static_cast<RealScalar>(1e3)) {
                 tools::log->warn("Variance changed significantly after energy shift+compression");
-                if(delta_var > 1e6 * critical_cancellation_error) throw except::runtime_error("Energy reduction destroyed variance precision");
+                if(delta_var > static_cast<RealScalar>(1e6) * critical_cancellation_error)
+                    throw except::runtime_error("Energy reduction destroyed variance precision");
             }
-            if(delta_ene_rel > 1e-8) {
+            if(delta_ene_rel > static_cast<RealScalar>(1e-8)) {
                 tools::log->warn("Energy changed significantly after energy shift+compression");
-                if(delta_ene_rel > 1e-6)
-                    throw except::runtime_error("Energy shift changed energy level {:.16f} -> {:.16f} (Δ/E = {:.3f} %)", bef->ene, aft->ene, delta_ene_rel);
+                if(delta_ene_rel > static_cast<RealScalar>(1e-6))
+                    throw except::runtime_error("Energy shift changed energy level {:.16f} -> {:.16f} (Δ/E = {:.3f} %)", fp(bef->ene), fp(aft->ene),
+                                                fp(delta_ene_rel));
             }
-            if(ratio_var < 0.8 or ratio_var > 1.2)
-                tools::log->warn("Variance changed significantly after energy shift: old {:.6e} | new {:.6e}", bef->var, aft->var);
-            else if(ratio_var < 0.01 or ratio_var > 100)
-                throw except::runtime_error("Variance changed too much after energy shift: old {:.6e} | new {:.6e}", bef->var, aft->var);
+            if(ratio_var < static_cast<RealScalar>(0.8) or ratio_var > static_cast<RealScalar>(1.2))
+                tools::log->warn("Variance changed significantly after energy shift: old {:.6e} | new {:.6e}", fp(bef->var), fp(aft->var));
+            else if(ratio_var < static_cast<RealScalar>(0.01) or ratio_var > static_cast<RealScalar>(100))
+                throw except::runtime_error("Variance changed too much after energy shift: old {:.6e} | new {:.6e}", fp(bef->var), fp(aft->var));
         }
     }
 }
@@ -448,7 +367,7 @@ void TensorsFinite<Scalar>::rebuild_mpo() {
         return; // They should have been cleared before rebulding them
     }
     tools::log->trace("Rebuilding MPO");
-    measurements = MeasurementsTensorsFinite(); // Resets model-related measurements but not state measurements, which can remain
+    measurements = MeasurementsTensorsFinite<Scalar>(); // Resets model-related measurements but not state measurements, which can remain
     model->clear_cache();
     model->build_mpo();
     if constexpr(settings::debug) model->assert_validity();
@@ -462,7 +381,7 @@ void TensorsFinite<Scalar>::rebuild_mpo_squared() {
         return; // They should have been cleared before rebulding them
     }
     tools::log->trace("Rebuilding MPO²");
-    measurements = MeasurementsTensorsFinite(); // Resets model-related measurements but not state measurements, which can remain
+    measurements = MeasurementsTensorsFinite<Scalar>(); // Resets model-related measurements but not state measurements, which can remain
     model->clear_cache();
     model->build_mpo_squared(); // Will build with energy and parity shifts if they are set, but it will not compress.
     if constexpr(settings::debug) model->assert_validity();
@@ -478,7 +397,7 @@ void TensorsFinite<Scalar>::compress_mpo_squared() {
         return; // They don't need to be compressed again. Rebuild before compressing them
     }
     tools::log->info("Compressing MPO²");
-    measurements = MeasurementsTensorsFinite(); // Resets model-related measurements but not state measurements, which can remain
+    measurements = MeasurementsTensorsFinite<Scalar>(); // Resets model-related measurements but not state measurements, which can remain
     model->compress_mpo_squared();
 
     if constexpr(settings::debug) model->assert_validity();
@@ -532,16 +451,16 @@ void TensorsFinite<Scalar>::activate_sites() {
 
 template<typename Scalar>
 void TensorsFinite<Scalar>::activate_sites(long threshold, size_t max_sites, size_t min_sites) {
-    activate_sites(tools::finite::multisite::generate_site_list(*state, threshold, max_sites, min_sites));
+    activate_sites(tools::finite::multisite::generate_site_list(get_state(), threshold, max_sites, min_sites));
 }
 
 template<typename Scalar>
 std::array<long, 3> TensorsFinite<Scalar>::active_problem_dims() const {
-    return tools::finite::multisite::get_dimensions(*state, active_sites);
+    return tools::finite::multisite::get_dimensions(get_state(), active_sites);
 }
 template<typename Scalar>
 long TensorsFinite<Scalar>::active_problem_size() const {
-    return tools::finite::multisite::get_problem_size(*state, active_sites);
+    return tools::finite::multisite::get_problem_size(get_state(), active_sites);
 }
 template<typename Scalar>
 bool TensorsFinite<Scalar>::is_real() const {
@@ -577,28 +496,6 @@ template<typename Scalar>
 bool TensorsFinite<Scalar>::has_center_point() const {
     return state->has_center_point();
 }
-
-template<typename Scalar>
-template<typename T>
-T TensorsFinite<Scalar>::get_length() const {
-    if(not num::all_equal(state->template get_length<size_t>(), model->get_length(), edges->get_length()))
-        throw except::runtime_error("All lengths are not equal: state {} | model {} | edges {}", state->template get_length<size_t>(), model->get_length(),
-                                    edges->get_length());
-    return state->template get_length<T>();
-}
-
-template double TensorsFinite<>::get_length<double>() const;
-template size_t TensorsFinite<>::get_length<size_t>() const;
-template long   TensorsFinite<>::get_length<long>() const;
-template int    TensorsFinite<>::get_length<int>() const;
-
-template<typename Scalar>
-template<typename T>
-T TensorsFinite<Scalar>::get_position() const {
-    return state->template get_position<T>();
-}
-template size_t TensorsFinite<>::get_position<size_t>() const;
-template long   TensorsFinite<>::get_position<long>() const;
 
 template<typename Scalar>
 bool TensorsFinite<Scalar>::position_is_the_middle() const {
@@ -646,31 +543,31 @@ bool TensorsFinite<Scalar>::position_is_at(long pos, int dir, bool isCenter) con
 }
 template<typename Scalar>
 size_t TensorsFinite<Scalar>::move_center_point(std::optional<svd::config> svd_cfg) {
-    auto moves = tools::finite::mps::move_center_point_single_site(*state, svd_cfg);
+    auto moves = tools::finite::mps::move_center_point_single_site(get_state(), svd_cfg);
     if(moves != 0) clear_active_sites();
     return moves;
 }
 template<typename Scalar>
 size_t TensorsFinite<Scalar>::move_center_point_to_pos(long pos, std::optional<svd::config> svd_cfg) {
-    auto moves = tools::finite::mps::move_center_point_to_pos(*state, pos, svd_cfg);
+    auto moves = tools::finite::mps::move_center_point_to_pos(get_state(), pos, svd_cfg);
     if(moves != 0) clear_active_sites();
     return moves;
 }
 template<typename Scalar>
 size_t TensorsFinite<Scalar>::move_center_point_to_inward_edge(std::optional<svd::config> svd_cfg) {
-    auto moves = tools::finite::mps::move_center_point_to_inward_edge(*state, svd_cfg);
+    auto moves = tools::finite::mps::move_center_point_to_inward_edge(get_state(), svd_cfg);
     if(moves != 0) clear_active_sites();
     return moves;
 }
 template<typename Scalar>
 size_t TensorsFinite<Scalar>::move_center_point_to_middle(std::optional<svd::config> svd_cfg) {
-    auto moves = tools::finite::mps::move_center_point_to_middle(*state, svd_cfg);
+    auto moves = tools::finite::mps::move_center_point_to_middle(get_state(), svd_cfg);
     if(moves != 0) clear_active_sites();
     return moves;
 }
 
 template<typename Scalar>
-void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<cx64, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg,
+void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg,
                                                 LogPolicy log_policy) {
     // Make sure the active sites are the same everywhere
     auto t_merge = tid::tic_scope("merge");
@@ -678,7 +575,7 @@ void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<cx64, 3> &mu
         throw except::runtime_error("All active sites are not equal: tensors {} | state {} | model {} | edges {}", active_sites, state->active_sites,
                                     model->active_sites, edges->active_sites);
     clear_measurements(log_policy);
-    tools::finite::mps::merge_multisite_mps(*state, multisite_tensor, active_sites, get_position<long>(), mevent, svd_cfg, log_policy);
+    tools::finite::mps::merge_multisite_mps(get_state(), multisite_tensor, active_sites, get_position<long>(), mevent, svd_cfg, log_policy);
     normalize_state(svd_cfg, NormPolicy::IFNEEDED);
 }
 
@@ -699,9 +596,9 @@ BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(const OptMeta &o
     rebuild_edges(); // Use fresh edges
     if constexpr(settings::debug) assert_validity();
     if(has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::POSTOPT_1SITE) and opt_meta.optExit != OptExit::NONE) {
-        expresult = tools::finite::env::expand_bond_postopt_1site(*state, *model, *edges, opt_meta);
+        expresult = tools::finite::env::expand_bond_postopt_1site(get_state(), get_model(), get_edges(), opt_meta);
     } else if(has_any_flags(opt_meta.bondexp_policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE)) {
-        expresult = tools::finite::env::expand_bond_preopt_nsite(*state, *model, *edges, opt_meta);
+        expresult = tools::finite::env::expand_bond_preopt_nsite(get_state(), get_model(), get_edges(), opt_meta);
     } else {
         expresult.msg =
             fmt::format("The policy does not allow bond expansion: {} | OptExit: {}", flag2str(opt_meta.bondexp_policy), flag2str(opt_meta.optExit));
@@ -728,7 +625,7 @@ void TensorsFinite<Scalar>::move_site_mps(const size_t site, const long steps, s
         if(posR < 0 or posR >= get_length<long>()) break;
         tools::log->debug("swapping mps sites {} <--> {}", posL, posR);
         // Move the MPS site
-        tools::finite::mps::swap_sites(*state, safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mps, GateMove::OFF);
+        tools::finite::mps::swap_sites(get_state(), safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mps, GateMove::OFF);
     }
     if(new_pos) {
         if(new_pos.value() != std::clamp(new_pos.value(), 0l, get_length<long>()))
@@ -758,7 +655,7 @@ void TensorsFinite<Scalar>::move_site_mpo(const size_t site, const long steps, s
         if(posR < 0 or posR >= get_length<long>()) break;
         tools::log->debug("swapping mpo sites {} <--> {}", posL, posR);
         // Move the MPO site
-        tools::finite::mpo::swap_sites(*model, safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mpo);
+        tools::finite::mpo::swap_sites(get_model(), safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mpo);
     }
     tools::log->debug("Sites mpo: {}", sites_mpo);
     clear_cache();
@@ -791,7 +688,7 @@ void TensorsFinite<Scalar>::move_site_mps_to_pos(const size_t site, const long t
         if(posR < 0 or posR >= get_length<long>()) break;
         tools::log->debug("swapping mps sites {} <--> {}", posL, posR);
         // Move the MPS site
-        tools::finite::mps::swap_sites(*state, safe_cast<size_t>(posL), static_cast<size_t>(posR), sites_mps, GateMove::OFF);
+        tools::finite::mps::swap_sites(get_state(), safe_cast<size_t>(posL), static_cast<size_t>(posR), sites_mps, GateMove::OFF);
     }
     if(new_pos) {
         if(new_pos.value() != std::clamp(new_pos.value(), 0l, get_length<long>()))
@@ -832,7 +729,7 @@ void TensorsFinite<Scalar>::move_site_mpo_to_pos(const size_t site, const long t
         if(posR < 0 or posR >= get_length<long>()) break;
         tools::log->debug("swapping mpo sites {} <--> {}", posL, posR);
         // Move the MPO site
-        tools::finite::mpo::swap_sites(*model, static_cast<size_t>(posL), static_cast<size_t>(posR), sites_mpo);
+        tools::finite::mpo::swap_sites(get_model(), static_cast<size_t>(posL), static_cast<size_t>(posR), sites_mpo);
     }
     tools::log->debug("Sites mpo: {}", sites_mpo);
     clear_cache();
@@ -858,36 +755,36 @@ void TensorsFinite<Scalar>::move_site_to_pos(const size_t site, const long tgt_p
 
 template<typename Scalar>
 void TensorsFinite<Scalar>::assert_edges() const {
-    tools::finite::env::assert_edges(*state, *model, *edges);
+    tools::finite::env::assert_edges(get_state(), get_model(), get_edges());
 }
 template<typename Scalar>
 void TensorsFinite<Scalar>::assert_edges_ene() const {
-    tools::finite::env::assert_edges_ene(*state, *model, *edges);
+    tools::finite::env::assert_edges_ene(get_state(), get_model(), get_edges());
 }
 template<typename Scalar>
 void TensorsFinite<Scalar>::assert_edges_var() const {
-    tools::finite::env::assert_edges_var(*state, *model, *edges);
+    tools::finite::env::assert_edges_var(get_state(), get_model(), get_edges());
 }
 template<typename Scalar>
 void TensorsFinite<Scalar>::rebuild_edges() {
     activate_sites();
-    tools::finite::env::rebuild_edges(*state, *model, *edges);
+    tools::finite::env::rebuild_edges(get_state(), get_model(), get_edges());
 }
 template<typename Scalar>
 void TensorsFinite<Scalar>::rebuild_edges_ene() {
     activate_sites();
-    tools::finite::env::rebuild_edges_ene(*state, *model, *edges);
+    tools::finite::env::rebuild_edges_ene(get_state(), get_model(), get_edges());
 }
 template<typename Scalar>
 void TensorsFinite<Scalar>::rebuild_edges_var() {
     activate_sites();
-    tools::finite::env::rebuild_edges_var(*state, *model, *edges);
+    tools::finite::env::rebuild_edges_var(get_state(), get_model(), get_edges());
 }
 
 template<typename Scalar>
 void TensorsFinite<Scalar>::clear_measurements(LogPolicy logPolicy) const {
     if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) tools::log->trace("Clearing tensors measurements");
-    measurements = MeasurementsTensorsFinite();
+    measurements = MeasurementsTensorsFinite<Scalar>();
     state->clear_measurements(logPolicy);
 }
 

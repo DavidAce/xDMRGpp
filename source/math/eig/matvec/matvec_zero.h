@@ -18,14 +18,12 @@ struct env_pair;
 
 struct primme_params;
 
-template<typename Scalar_>
+template<typename T>
 class MatVecZero {
-
     public:
-    using T      = Scalar_;
-    using Scalar = Scalar_;
-    static_assert(std::is_same_v<T, fp64> or std::is_same_v<T, cx64>);
-
+    using Scalar     = T;
+    using Real       = typename Eigen::NumTraits<Scalar>::Real;
+    using Cplx       = std::complex<Real>;
     using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorType = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
@@ -46,16 +44,17 @@ class MatVecZero {
     eig::Side                        side = eig::Side::R;
 
     // Shift stuff
-    std::complex<double>  sigma         = cx64(0.0, 0.0); // The shift
-    bool                  readyShift    = false;          // Flag to make sure the shift has occurred
-    constexpr static bool readyFactorOp = false;          // Flag to check if factorization has occurred
+    Cplx                  sigma         = Cplx{}; // The shift
+    bool                  readyShift    = false;  // Flag to make sure the shift has occurred
+    constexpr static bool readyFactorOp = false;  // Flag to check if factorization has occurred
+    void                  init_timers();
 
     public:
     MatVecZero() = default;
-    template<typename EnvType>
-    MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> &mpss_, /*!< The MPS sites  */
-               const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos,  /*!< The Hamiltonian MPO's  */
-               const env_pair<const EnvType &>                          &envs   /*!< The left and right environments.  */
+    template<typename S, typename EnvType>
+    MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<S>>> &mpss_, /*!< The MPS sites  */
+               const std::vector<std::reference_wrapper<const MpoSite<S>>> &mpos,  /*!< The Hamiltonian MPO's  */
+               const env_pair<const EnvType &>                             &envs   /*!< The left and right environments.  */
     );
     // Functions used in Arpack++ solver
     [[nodiscard]] int rows() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
@@ -66,20 +65,21 @@ class MatVecZero {
     void MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err);
     void MultAx(T *bond_in_, T *bond_out_); //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err);
+    void perform_op(const T *mps_in_, T *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
 
     // Various utility functions
-    long num_mv = 0;
-    long num_op = 0;
-    void print() const;
-    void reset();
-    void set_shift(std::complex<double> shift);
-    void set_mode(eig::Form form_);
-    void set_side(eig::Side side_);
+    mutable long num_mv = 0;
+    mutable long num_op = 0;
+    void         print() const;
+    void         reset();
+    void         set_shift(Cplx shift);
+    void         set_mode(eig::Form form_);
+    void         set_side(eig::Side side_);
 
-    [[nodiscard]] T                                       get_shift() const;
+    [[nodiscard]] Cplx                                    get_shift() const;
     [[nodiscard]] eig::Form                               get_form() const;
     [[nodiscard]] eig::Side                               get_side() const;
-    [[nodiscard]] eig::Type                               get_type() const;
+    [[nodiscard]] static constexpr eig::Type              get_type() { return eig::ScalarToType<Scalar>(); }
     [[nodiscard]] const std::vector<Eigen::Tensor<T, 4>> &get_mpos() const;
     [[nodiscard]] const Eigen::Tensor<Scalar, 3>         &get_envL() const;
     [[nodiscard]] const Eigen::Tensor<Scalar, 3>         &get_envR() const;

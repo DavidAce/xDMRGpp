@@ -16,7 +16,8 @@
 #include "tools/finite/opt_mps.h"
 namespace tools::finite::ed {
     template<typename Scalar>
-    StateFinite<Scalar> find_exact_state(const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status) {
+    StateFinite<Scalar> find_exact_state(const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status,
+                                         tools::finite::opt::reports::eigs_log<Scalar> &elog) {
         auto sites      = num::range<size_t>(0ul, tensors.template get_length<size_t>());
         auto tensors_ed = tensors;
         tensors_ed.clear_cache();
@@ -45,15 +46,17 @@ namespace tools::finite::ed {
 
         auto solver = eig::solver();
         solver.eig(hamiltonian.data(), hamiltonian.dimension(0));
-        std::vector<tools::finite::opt::opt_mps> results;
-        auto                                     t_ext = tid::tic_scope("extract");
+        std::vector<tools::finite::opt::opt_mps<Scalar>> results;
+        auto                                             t_ext = tid::tic_scope("extract");
 
         tools::finite::opt::internal::extract_results(tensors_ed, target_mps, meta, solver, results, true);
         t_ext.toc();
-        for(const auto &[num, mps] : iter::enumerate(results)) { tools::finite::opt::reports::eigs_add_entry(mps); }
-        tools::finite::opt::reports::print_eigs_report();
+        for(const auto &[num, mps] : iter::enumerate(results)) { elog.eigs_add_entry(mps); }
+        elog.print_eigs_report();
 
-        auto comparator = [](const tools::finite::opt::opt_mps &lhs, const tools::finite::opt::opt_mps &rhs) { return lhs.get_overlap() > rhs.get_overlap(); };
+        auto comparator = [](const tools::finite::opt::opt_mps<Scalar> &lhs, const tools::finite::opt::opt_mps<Scalar> &rhs) {
+            return lhs.get_overlap() > rhs.get_overlap();
+        };
         if(results.size() >= 2) std::sort(results.begin(), results.end(), comparator);
 
         auto  spin_dims     = std::vector<long>(tensors_ed.template get_length<size_t>(), 2l);
@@ -61,7 +64,7 @@ namespace tools::finite::ed {
         auto  centerpos     = tensors_ed.template get_position<long>();
         auto &state_ed      = *tensors_ed.state;
         auto &multisite_mps = results.front().get_tensor();
-        auto  mps_list      = tools::common::split::split_mps(multisite_mps, spin_dims, positions, centerpos, std::nullopt); // No svd truncation
+        auto  mps_list      = tools::common::split::split_mps<Scalar>(multisite_mps, spin_dims, positions, centerpos, std::nullopt); // No svd truncation
         state_ed.set_name("state_ed");
         state_ed.set_mps(mps_list);
 

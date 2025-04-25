@@ -57,6 +57,11 @@ std::pair<StateFinite<Scalar>, AlgorithmStatus> flbit_impl::update_state(const s
     status_tevo.direction       = state_tevo.get_direction();
     return {state_tevo, check_convergence(status_tevo)};
 }
+template std::pair<StateFinite<cx64>, AlgorithmStatus> flbit_impl::update_state(const size_t time_index, cx128 time_point,
+                                                                                const StateFinite<cx64>                      &state_lbit_init,
+                                                                                const std::vector<std::vector<qm::SwapGate>> &gates_tevo,
+                                                                                const std::vector<std::vector<qm::Gate>>     &unitary_circuit,
+                                                                                const AlgorithmStatus                        &status_init);
 
 std::vector<std::vector<qm::SwapGate>> flbit_impl::get_time_evolution_gates(const cx128                                  &time_point,
                                                                             const std::vector<std::vector<qm::SwapGate>> &ham_swap_gates) {
@@ -87,13 +92,15 @@ StateFinite<Scalar> flbit_impl::time_evolve_lbit_state(const StateFinite<Scalar>
             tools::finite::mps::apply_swap_gates(state_lbit_init_debug, gates, CircuitOp::ADJ, GateMove::AUTO, svd_cfg);
         }
         tools::finite::mps::normalize_state(state_lbit_init_debug, std::nullopt, NormPolicy::IFNEEDED);
-        auto overlap = tools::finite::ops::overlap(state_lbit_init, state_lbit_init_debug);
+        auto overlap = tools::finite::ops::overlap<Scalar>(state_lbit_init, state_lbit_init_debug);
         tools::log->info("Debug overlap after time evolution: {:.16f}", overlap);
         if(std::abs(overlap - 1.0) > 10 * status.trnc_lim)
             throw except::runtime_error("State overlap after backwards time evolution is not 1: Got {:.16f}", overlap);
     }
     return state_lbit_tevo;
 }
+template StateFinite<cx64> flbit_impl::time_evolve_lbit_state(const StateFinite<cx64>                      &state_lbit_init,
+                                                              const std::vector<std::vector<qm::SwapGate>> &gates_tevo, const AlgorithmStatus &status);
 
 template<typename Scalar>
 StateFinite<Scalar> flbit_impl::transform_to_real_basis(const StateFinite<Scalar> &state_lbit, const std::vector<std::vector<qm::Gate>> &unitary_circuit,
@@ -131,6 +138,8 @@ AlgorithmStatus flbit_impl::check_convergence(const AlgorithmStatus &status_init
     }
     return status;
 }
+template StateFinite<cx64> flbit_impl::transform_to_real_basis(const StateFinite<cx64> &state_lbit, const std::vector<std::vector<qm::Gate>> &unitary_circuit,
+                                                               const AlgorithmStatus &status);
 
 template<typename Scalar>
 void flbit_impl::print_status(const StateFinite<Scalar> &state_real, const AlgorithmStatus &status) {
@@ -145,8 +154,8 @@ void flbit_impl::print_status(const StateFinite<Scalar> &state_real, const Algor
     report += fmt::format("L:{} ", state_real.get_length());
     report += fmt::format("l:{:<2} ", state_real.get_position());
     report += fmt::format("ε:{:<8.2e} ", state_real.get_truncation_error_midchain());
-    report += fmt::format("Sₑ(L/2):{:<18.16f} ", tools::finite::measure::entanglement_entropy_midchain(state_real));
-    report += fmt::format("Sₙ(L/2):{:<18.16f} ", tools::finite::measure::number_entropy_midchain(state_real));
+    report += fmt::format("Sₑ(L/2):{:<18.16f} ", fp(tools::finite::measure::entanglement_entropy_midchain(state_real)));
+    report += fmt::format("Sₙ(L/2):{:<18.16f} ", fp(tools::finite::measure::number_entropy_midchain<Scalar>(state_real)));
     report += fmt::format("χ:{:<3}|{:<3}|{:<3} ", status.bond_max, status.bond_lim, tools::finite::measure::bond_dimension_midchain(state_real));
     if(settings::flbit::time_scale == TimeScale::LOGSPACED)
         report += fmt::format("ptime:{:<} ", fmt::format("{:>.2e}s", status.phys_time.to_floating_point<fp64>()));
@@ -156,3 +165,5 @@ void flbit_impl::print_status(const StateFinite<Scalar> &state_real, const Algor
     report += fmt::format("mem[rss {:<.1f}|peak {:<.1f}|vm {:<.1f}]MB ", debug::mem_rss_in_mb(), debug::mem_hwm_in_mb(), debug::mem_vm_in_mb());
     tools::log->info(report);
 }
+
+template void flbit_impl::print_status(const StateFinite<cx64> &state_real, const AlgorithmStatus &status);

@@ -17,47 +17,20 @@ namespace eig {
 #endif
 }
 
-template<typename T>
-template<typename S>
-MatVecMPO<T>::MatVecMPO(const Eigen::Tensor<S, 3> &envL_, /*!< The left block tensor.  */
-                        const Eigen::Tensor<S, 3> &envR_, /*!< The right block tensor.  */
-                        const Eigen::Tensor<S, 4> &mpo_   /*!< The Hamiltonian MPO's  */
-) {
-    static_assert(std::is_same_v<S, fp64> or std::is_same_v<S, cx64>);
-
-    if constexpr(std::is_same_v<T, S>) {
-        mpo  = mpo_;
-        envL = envL_;
-        envR = envR_;
-    } else if constexpr(std::is_same_v<T, fp64> and std::is_same_v<S, cx64>) {
-        // This should only be done if we know for a fact that there is no imaginary component.
-        if constexpr(eig::debug) {
-            if(not tenx::isReal(mpo_)) throw except::runtime_error("mpo is not real");
-            if(not tenx::isReal(envL_)) throw except::runtime_error("envL is not real");
-            if(not tenx::isReal(envR_)) throw except::runtime_error("envR is not real");
-        }
-        mpo  = mpo_.real();
-        envL = envL_.real();
-        envR = envR_.real();
-    } else if constexpr(std::is_same_v<T, cx64> and std::is_same_v<S, fp64>) {
-        mpo  = mpo_.template cast<cx64>();
-        envL = envL_.template cast<cx64>();
-        envR = envR_.template cast<cx64>();
-    }
-
-    shape_mps  = {mpo.dimension(2), envL.dimension(0), envR.dimension(0)};
-    size_mps   = shape_mps[0] * shape_mps[1] * shape_mps[2];
+// Explicit instantiations
+template class MatVecMPO<fp32>;
+template class MatVecMPO<fp64>;
+template class MatVecMPO<fp128>;
+template class MatVecMPO<cx32>;
+template class MatVecMPO<cx64>;
+template class MatVecMPO<cx128>;
+template<typename T> void MatVecMPO<T>::init_timers() {
     t_factorOP = std::make_unique<tid::ur>("Time FactorOp");
     t_genMat   = std::make_unique<tid::ur>("Time genMat");
     t_multOPv  = std::make_unique<tid::ur>("Time MultOpv");
     t_multAx   = std::make_unique<tid::ur>("Time MultAx");
     t_multPc   = std::make_unique<tid::ur>("Time MultPc");
 }
-
-template MatVecMPO<cx64>::MatVecMPO(const Eigen::Tensor<fp64, 3> &envL_, const Eigen::Tensor<fp64, 3> &envR_, const Eigen::Tensor<fp64, 4> &mpo_);
-template MatVecMPO<fp64>::MatVecMPO(const Eigen::Tensor<fp64, 3> &envL_, const Eigen::Tensor<fp64, 3> &envR_, const Eigen::Tensor<fp64, 4> &mpo_);
-template MatVecMPO<cx64>::MatVecMPO(const Eigen::Tensor<cx64, 3> &envL_, const Eigen::Tensor<cx64, 3> &envR_, const Eigen::Tensor<cx64, 4> &mpo_);
-template MatVecMPO<fp64>::MatVecMPO(const Eigen::Tensor<cx64, 3> &envL_, const Eigen::Tensor<cx64, 3> &envR_, const Eigen::Tensor<cx64, 4> &mpo_);
 
 template<typename T>
 int MatVecMPO<T>::rows() const {
@@ -78,7 +51,14 @@ void MatVecMPO<T>::FactorOP() {
         return;
     }
     MatrixType A_matrix = get_matrix();
-    if(not readyShift and std::abs(get_shift()) != 0.0) { A_matrix.diagonal() -= VectorType::Constant(rows(), get_shift()); }
+    if(not readyShift and std::abs(get_shift()) != Real{0}) {
+        if constexpr(sfinae::is_std_complex_v<T>) {
+            A_matrix.diagonal() -= VectorType::Constant(rows(), get_shift());
+
+        } else {
+            A_matrix.diagonal() -= VectorType::Constant(rows(), std::real(get_shift()));
+        }
+    }
 
     if(factorization == eig::Factorization::LDLT) {
         eig::log->debug("LDLT Factorization");
@@ -168,6 +148,15 @@ void MatVecMPO<T>::MultAx(T *mps_in_, T *mps_out_) {
 }
 
 template<typename T>
+void MatVecMPO<T>::perform_op(const T *mps_in_, T *mps_out_) const {
+    auto                                        token = t_multAx->tic_token();
+    Eigen::TensorMap<const Eigen::Tensor<T, 3>> mps_in(mps_in_, shape_mps);
+    Eigen::TensorMap<Eigen::Tensor<T, 3>>       mps_out(mps_out_, shape_mps);
+    tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpo, envL, envR);
+    num_mv++;
+}
+
+template<typename T>
 void MatVecMPO<T>::MultAx(T *mps_in, T *mps_out, T *mpo_ptr, T *envL_ptr, T *envR_ptr, std::array<long, 3> shape_mps_, std::array<long, 4> shape_mpo_) {
     auto                token       = t_multAx->tic_token();
     std::array<long, 3> shape_envL_ = {shape_mps_[1], shape_mps_[1], shape_mpo_[0]};
@@ -205,15 +194,14 @@ void MatVecMPO<T>::reset() {
 }
 
 template<typename T>
-void MatVecMPO<T>::set_shift(std::complex<double> shift) {
+void MatVecMPO<T>::set_shift(Cplx shift) {
     // Here we set an energy shift directly on the MPO.
     // This only works if the MPO is not compressed already.
     if(readyShift) return;
     if(sigma == shift) return;
 
-    eig::log->trace("Setting shift = {:.16f} + i{:.16f}", std::real(shift), std::imag(shift));
+    eig::log->trace("Setting shift = {:.16f}", fp(shift));
     sigma = shift; // We can shift the diagonal of the full matrix instead
-    return;
 
     // The MPO is a rank4 tensor ijkl where the first 2 ij indices draw a simple
     // rank2 matrix, where each element is also a matrix with the size
@@ -231,10 +219,10 @@ void MatVecMPO<T>::set_shift(std::complex<double> shift) {
     std::array<long, 2> extent2{spindim, spindim};
     auto                id = tenx::TensorIdentity<T>(spindim);
     // We undo the previous sigma and then subtract the new one. We are aiming for [A - I*shift]
-    if constexpr(std::is_same_v<T, fp64>)
-        mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma - shift);
-    else
+    if constexpr(sfinae::is_std_complex_v<T>)
         mpo.slice(offset4, extent4).reshape(extent2) += id * (sigma - shift);
+    else
+        mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma - shift);
     sigma = shift;
     eig::log->debug("Shifted MPO dimensions {}", mpo.dimensions());
 
@@ -251,11 +239,8 @@ void MatVecMPO<T>::set_side(const eig::Side side_) {
 }
 
 template<typename T>
-T MatVecMPO<T>::get_shift() const {
-    if constexpr(std::is_same_v<T, fp64>)
-        return std::real(sigma);
-    else
-        return sigma;
+typename MatVecMPO<T>::Cplx MatVecMPO<T>::get_shift() const {
+    return sigma;
 }
 
 template<typename T>
@@ -265,15 +250,6 @@ eig::Form MatVecMPO<T>::get_form() const {
 template<typename T>
 eig::Side MatVecMPO<T>::get_side() const {
     return side;
-}
-template<typename T>
-eig::Type MatVecMPO<T>::get_type() const {
-    if constexpr(std::is_same_v<T, fp64>)
-        return eig::Type::FP64;
-    else if constexpr(std::is_same_v<T, cx64>)
-        return eig::Type::CX64;
-    else
-        throw std::runtime_error("Unsupported type");
 }
 
 template<typename T>
@@ -339,7 +315,3 @@ template<typename T>
 bool MatVecMPO<T>::isReadyShift() const {
     return readyShift;
 }
-
-// Explicit instantiations
-template class MatVecMPO<fp64>;
-template class MatVecMPO<cx64>;

@@ -1,8 +1,8 @@
 {
-  "version": 10,
+  "version": 6,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 31,
+    "minor": 28,
     "patch": 0
   },
   "configurePresets": [
@@ -20,7 +20,7 @@
         "DMRG_PACKAGE_MANAGER": "find",
         "EIGEN_USE_THREADS": "TRUE",
         "TBLIS_THREAD_MODEL": "openmp",
-        "BUILD_SHARED_LIBS": "FALSE",
+        "BUILD_SHARED_LIBS": "TRUE",
         "COMPILER_PROFILE_BUILD": "FALSE",
         "CMAKE_VERBOSE_MAKEFILE": "FALSE",
         "CMAKE_MESSAGE_LOG_LEVEL": "STATUS",

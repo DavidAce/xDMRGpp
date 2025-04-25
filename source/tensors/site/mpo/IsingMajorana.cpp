@@ -9,6 +9,10 @@
 #include <h5pp/h5pp.h>
 #include <tools/infinite/mps.h>
 
+template class IsingMajorana<fp32>;
+template class IsingMajorana<fp64>;
+template class IsingMajorana<fp128>;
+template class IsingMajorana<cx32>;
 template class IsingMajorana<cx64>;
 template class IsingMajorana<cx128>;
 
@@ -28,12 +32,12 @@ IsingMajorana<Scalar>::IsingMajorana(ModelType model_type_, size_t position_) : 
 }
 
 template<typename Scalar>
-double IsingMajorana<Scalar>::get_coupling() const {
-    return h5tb.param.J_rand;
+typename IsingMajorana<Scalar>::RealScalar IsingMajorana<Scalar>::get_coupling() const {
+    return static_cast<RealScalar>(h5tb.param.J_rand);
 }
 template<typename Scalar>
-double IsingMajorana<Scalar>::get_field() const {
-    return h5tb.param.h_rand;
+typename IsingMajorana<Scalar>::RealScalar IsingMajorana<Scalar>::get_field() const {
+    return static_cast<RealScalar>(h5tb.param.h_rand);
 }
 template<typename Scalar>
 void IsingMajorana<Scalar>::print_parameter_names() const {
@@ -123,26 +127,27 @@ void IsingMajorana<Scalar>::set_parameter(const std::string_view name, std::any 
  *
  */
 template<typename Scalar>
-Eigen::Tensor<cx64, 4> IsingMajorana<Scalar>::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                                      [[maybe_unused]] std::optional<std::vector<size_t>> skip) const
-
-{
-    using namespace qm::spin::half::tensor;
+Eigen::Tensor<Scalar, 4> IsingMajorana<Scalar>::get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                                        [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
     if constexpr(settings::debug) tools::log->trace("mpo({}): building ising-majorana mpo", get_position());
     if(not all_mpo_parameters_have_been_set)
         throw except::runtime_error("mpo({}): can't build mpo: full lattice parameters haven't been set yet.", get_position());
 
-    double J1 = 1.0, J2 = 1.0;
+    auto J1 = static_cast<RealScalar>(1.0);
+    auto J2 = static_cast<RealScalar>(1.0);
     if(nbody.has_value()) {
-        J1 = 0;
-        J2 = 0;
+        J1 = static_cast<RealScalar>(0.0);
+        J2 = static_cast<RealScalar>(0.0);
         for(const auto &n : nbody.value()) {
-            if(n == 1) J1 = 1.0;
-            if(n == 2) J2 = 1.0;
+            if(n == 1) J1 = static_cast<RealScalar>(1.0);
+            if(n == 2) J2 = static_cast<RealScalar>(1.0);
         }
     }
+    auto id = tenx::asScalarType<Scalar>(qm::spin::half::tensor::id);
+    auto sx = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sx);
+    auto sz = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sz);
 
-    Eigen::Tensor<cx64, 4> mpo_build;
+    Eigen::Tensor<Scalar, 4> mpo_build;
     mpo_build.resize(5, 5, h5tb.param.spin_dim, h5tb.param.spin_dim);
     mpo_build.setZero();
     mpo_build.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = id;
@@ -151,8 +156,8 @@ Eigen::Tensor<cx64, 4> IsingMajorana<Scalar>::get_mpo(cx64 energy_shift_per_site
     mpo_build.slice(std::array<long, 4>{3, 1, 0, 0}, extent4).reshape(extent2) = id;
     mpo_build.slice(std::array<long, 4>{4, 0, 0, 0}, extent4).reshape(extent2) = J1 * get_field() * sz - energy_shift_per_site * id;
     mpo_build.slice(std::array<long, 4>{4, 1, 0, 0}, extent4).reshape(extent2) = J2 * get_coupling() * sx;
-    mpo_build.slice(std::array<long, 4>{4, 2, 0, 0}, extent4).reshape(extent2) = sz * (J2 * h5tb.param.g);
-    mpo_build.slice(std::array<long, 4>{4, 3, 0, 0}, extent4).reshape(extent2) = sx * (J2 * h5tb.param.g);
+    mpo_build.slice(std::array<long, 4>{4, 2, 0, 0}, extent4).reshape(extent2) = (J2 * static_cast<RealScalar>(h5tb.param.g)) * sz;
+    mpo_build.slice(std::array<long, 4>{4, 3, 0, 0}, extent4).reshape(extent2) = (J2 * static_cast<RealScalar>(h5tb.param.g)) * sx;
     mpo_build.slice(std::array<long, 4>{4, 4, 0, 0}, extent4).reshape(extent2) = id;
 
     if(tenx::hasNaN(mpo_build)) {

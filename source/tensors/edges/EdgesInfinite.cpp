@@ -7,6 +7,10 @@
 #include "tensors/site/env/EnvVar.h"
 #include "tools/common/log.h"
 
+template class EdgesInfinite<fp32>;
+template class EdgesInfinite<fp64>;
+template class EdgesInfinite<fp128>;
+template class EdgesInfinite<cx32>;
 template class EdgesInfinite<cx64>;
 template class EdgesInfinite<cx128>;
 
@@ -17,7 +21,7 @@ EdgesInfinite<Scalar>::EdgesInfinite()
 
 // We need to define the destructor and other special functions
 // because we enclose data in unique_ptr for this pimpl idiom.
-// Otherwise unique_ptr will forcibly inline its own default deleter.
+// Otherwise, unique_ptr will forcibly inline its own default deleter.
 // Here we follow "rule of five", so we must also define
 // our own copy/move ctor and copy/move assignments
 // This has the side effect that we must define our own
@@ -144,23 +148,3 @@ env_pair<Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_var_blk() {
     return {varL->get_block(), varR->get_block()};
 }
 
-template<typename Scalar>
-template<typename T>
-env_pair<Eigen::Tensor<T, 3>> EdgesInfinite<Scalar>::get_env_ene_blk_as() const {
-    return {eneL->template get_block_as<T>(), eneR->template get_block_as<T>()};
-}
-template env_pair<Eigen::Tensor<fp32, 3>> EdgesInfinite<>::get_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<fp64, 3>> EdgesInfinite<>::get_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<cx32, 3>> EdgesInfinite<>::get_env_ene_blk_as() const;
-template env_pair<Eigen::Tensor<cx64, 3>> EdgesInfinite<>::get_env_ene_blk_as() const;
-
-template<typename Scalar>
-template<typename T>
-env_pair<Eigen::Tensor<T, 3>> EdgesInfinite<Scalar>::get_env_var_blk_as() const {
-    return {varL->template get_block_as<T>(), varR->template get_block_as<T>()};
-}
-
-template env_pair<Eigen::Tensor<fp32, 3>> EdgesInfinite<>::get_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<fp64, 3>> EdgesInfinite<>::get_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<cx32, 3>> EdgesInfinite<>::get_env_var_blk_as() const;
-template env_pair<Eigen::Tensor<cx64, 3>> EdgesInfinite<>::get_env_var_blk_as() const;

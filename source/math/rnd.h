@@ -1,8 +1,8 @@
 #pragma once
 #include <complex>
 #include <optional>
-#include <pcg_random.hpp>
 #include <pcg_extras.hpp>
+#include <pcg_random.hpp>
 #include <vector>
 
 namespace rnd {
@@ -13,7 +13,7 @@ namespace rnd {
 
     namespace internal {
         // The random number engine
-        inline pcg64 rng64;
+        inline pcg64                rng64;
         inline pcg128_once_insecure rng128;
 
     }
@@ -39,6 +39,19 @@ namespace rnd {
     out_t normal(out_t mean, out_t std);
     template<typename out_t>
     out_t log_normal(out_t mean, out_t std);
+
+    template<typename real_t = double>
+    auto uniform_complex_in_circle(real_t radius = real_t{1}) {
+        return std::polar(uniform(real_t{0}, radius), uniform(real_t{0}, 2 * std::numbers::pi_v<real_t>));
+    }
+    template<typename real_t = double>
+    auto uniform_complex_on_circle(real_t radius = real_t{1}) {
+        return std::polar(radius, uniform(real_t{0}, 2 * std::numbers::pi_v<real_t>));
+    }
+    template<typename real_t = double>
+    auto uniform_complex_in_square(real_t real_min, real_t real_max, real_t imag_min, real_t imag_max) {
+        return std::complex(uniform(real_min, real_max), uniform(imag_min, imag_max));
+    }
 
     template<typename T>
     std::vector<T> uniform_unit_n_sphere(size_t n);

@@ -24,6 +24,10 @@ std::array<RealScalar<Scalar>, 3> tools::finite::measure::spin_components(const 
     state.measurements.spin_components = {spin_x, spin_y, spin_z};
     return state.measurements.spin_components.value();
 }
+template std::array<RealScalar<fp32>, 3>  tools::finite::measure::spin_components(const StateFinite<fp32> &state);
+template std::array<RealScalar<fp64>, 3>  tools::finite::measure::spin_components(const StateFinite<fp64> &state);
+template std::array<RealScalar<fp128>, 3> tools::finite::measure::spin_components(const StateFinite<fp128> &state);
+template std::array<RealScalar<cx32>, 3>  tools::finite::measure::spin_components(const StateFinite<cx32> &state);
 template std::array<RealScalar<cx64>, 3>  tools::finite::measure::spin_components(const StateFinite<cx64> &state);
 template std::array<RealScalar<cx128>, 3> tools::finite::measure::spin_components(const StateFinite<cx128> &state);
 
@@ -42,6 +46,10 @@ RealScalar<Scalar> tools::finite::measure::spin_component(const StateFinite<Scal
     RealScalar<Scalar>       spin     = std::real(spin_tmp(0));
     return spin;
 }
+template RealScalar<fp32>  tools::finite::measure::spin_component(const StateFinite<fp32> &state, const Eigen::Matrix2cd &paulimatrix);
+template RealScalar<fp64>  tools::finite::measure::spin_component(const StateFinite<fp64> &state, const Eigen::Matrix2cd &paulimatrix);
+template RealScalar<fp128> tools::finite::measure::spin_component(const StateFinite<fp128> &state, const Eigen::Matrix2cd &paulimatrix);
+template RealScalar<cx32>  tools::finite::measure::spin_component(const StateFinite<cx32> &state, const Eigen::Matrix2cd &paulimatrix);
 template RealScalar<cx64>  tools::finite::measure::spin_component(const StateFinite<cx64> &state, const Eigen::Matrix2cd &paulimatrix);
 template RealScalar<cx128> tools::finite::measure::spin_component(const StateFinite<cx128> &state, const Eigen::Matrix2cd &paulimatrix);
 
@@ -52,6 +60,10 @@ RealScalar<Scalar> tools::finite::measure::spin_component(const StateFinite<Scal
     if(axis.find('z') != std::string_view::npos) return measure::spin_component(state, qm::spin::half::sz);
     throw except::logic_error("unexpected axis [{}]", axis);
 }
+template RealScalar<fp32>  tools::finite::measure::spin_component(const StateFinite<fp32> &state, std::string_view axis);
+template RealScalar<fp64>  tools::finite::measure::spin_component(const StateFinite<fp64> &state, std::string_view axis);
+template RealScalar<fp128> tools::finite::measure::spin_component(const StateFinite<fp128> &state, std::string_view axis);
+template RealScalar<cx32>  tools::finite::measure::spin_component(const StateFinite<cx32> &state, std::string_view axis);
 template RealScalar<cx64>  tools::finite::measure::spin_component(const StateFinite<cx64> &state, std::string_view axis);
 template RealScalar<cx128> tools::finite::measure::spin_component(const StateFinite<cx128> &state, std::string_view axis);
 
@@ -62,6 +74,10 @@ RealScalar<Scalar> tools::finite::measure::spin_alignment(const StateFinite<Scal
     auto sign                      = qm::spin::half::get_sign(axis);
     return sign * spin_component_along_axis;
 }
+template RealScalar<fp32>  tools::finite::measure::spin_alignment(const StateFinite<fp32> &state, std::string_view axis);
+template RealScalar<fp64>  tools::finite::measure::spin_alignment(const StateFinite<fp64> &state, std::string_view axis);
+template RealScalar<fp128> tools::finite::measure::spin_alignment(const StateFinite<fp128> &state, std::string_view axis);
+template RealScalar<cx32>  tools::finite::measure::spin_alignment(const StateFinite<cx32> &state, std::string_view axis);
 template RealScalar<cx64>  tools::finite::measure::spin_alignment(const StateFinite<cx64> &state, std::string_view axis);
 template RealScalar<cx128> tools::finite::measure::spin_alignment(const StateFinite<cx128> &state, std::string_view axis);
 
@@ -71,58 +87,77 @@ int tools::finite::measure::spin_sign(const StateFinite<Scalar> &state, std::str
     auto spin_component_along_axis = tools::finite::measure::spin_component(state, qm::spin::half::get_pauli(axis));
     return num::sign(spin_component_along_axis);
 }
+template int tools::finite::measure::spin_sign(const StateFinite<fp32> &state, std::string_view axis);
+template int tools::finite::measure::spin_sign(const StateFinite<fp64> &state, std::string_view axis);
+template int tools::finite::measure::spin_sign(const StateFinite<fp128> &state, std::string_view axis);
+template int tools::finite::measure::spin_sign(const StateFinite<cx32> &state, std::string_view axis);
 template int tools::finite::measure::spin_sign(const StateFinite<cx64> &state, std::string_view axis);
 template int tools::finite::measure::spin_sign(const StateFinite<cx128> &state, std::string_view axis);
 
 template<typename Scalar>
 std::array<Eigen::Tensor<RealScalar<Scalar>, 1>, 3> tools::finite::measure::expectation_values_xyz(const StateFinite<Scalar> &state) {
-    if(not state.measurements.expectation_values_sx) state.measurements.expectation_values_sx = measure::expectation_values(state, qm::spin::half::sx).real();
-    if(not state.measurements.expectation_values_sy) state.measurements.expectation_values_sy = measure::expectation_values(state, qm::spin::half::sy).real();
-    if(not state.measurements.expectation_values_sz) state.measurements.expectation_values_sz = measure::expectation_values(state, qm::spin::half::sz).real();
+    if(not state.measurements.expectation_values_sx)
+        state.measurements.expectation_values_sx = measure::expectation_values<Scalar>(state, qm::spin::half::sx).real();
+    if(not state.measurements.expectation_values_sy)
+        state.measurements.expectation_values_sy = measure::expectation_values<Scalar>(state, qm::spin::half::sy).real();
+    if(not state.measurements.expectation_values_sz)
+        state.measurements.expectation_values_sz = measure::expectation_values<Scalar>(state, qm::spin::half::sz).real();
     return {state.measurements.expectation_values_sx.value(), state.measurements.expectation_values_sy.value(),
             state.measurements.expectation_values_sz.value()};
 }
+template std::array<Eigen::Tensor<RealScalar<fp32>, 1>, 3>  tools::finite::measure::expectation_values_xyz(const StateFinite<fp32> &state);
+template std::array<Eigen::Tensor<RealScalar<fp64>, 1>, 3>  tools::finite::measure::expectation_values_xyz(const StateFinite<fp64> &state);
+template std::array<Eigen::Tensor<RealScalar<fp128>, 1>, 3> tools::finite::measure::expectation_values_xyz(const StateFinite<fp128> &state);
+template std::array<Eigen::Tensor<RealScalar<cx32>, 1>, 3>  tools::finite::measure::expectation_values_xyz(const StateFinite<cx32> &state);
 template std::array<Eigen::Tensor<RealScalar<cx64>, 1>, 3>  tools::finite::measure::expectation_values_xyz(const StateFinite<cx64> &state);
 template std::array<Eigen::Tensor<RealScalar<cx128>, 1>, 3> tools::finite::measure::expectation_values_xyz(const StateFinite<cx128> &state);
 
 template<typename Scalar>
 std::array<RealScalar<Scalar>, 3> tools::finite::measure::expectation_value_xyz(const StateFinite<Scalar> &state) {
     if constexpr(settings::debug) tools::log->trace("Measuring spin expectation_value_xyz");
-    auto sx = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sx);
-    auto sy = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sy);
-    auto sz = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sz);
+    auto sx = qm::spin::half::tensor::sx;
+    auto sy = qm::spin::half::tensor::sy;
+    auto sz = qm::spin::half::tensor::sz;
 
     auto pos = (state.template get_length<long>() - 1) / 2;
-    return {measure::expectation_value<Scalar>(state, std::vector{LocalObservableOp<Scalar>{sx, pos}}).real(),
-            measure::expectation_value<Scalar>(state, std::vector{LocalObservableOp<Scalar>{sy, pos}}).real(),
-            measure::expectation_value<Scalar>(state, std::vector{LocalObservableOp<Scalar>{sz, pos}}).real()};
+    return {std::real(measure::expectation_value<Scalar>(state, std::vector{LocalObservableOp{sx, pos}})),
+            std::real(measure::expectation_value<Scalar>(state, std::vector{LocalObservableOp{sy, pos}})),
+            std::real(measure::expectation_value<Scalar>(state, std::vector{LocalObservableOp{sz, pos}}))};
 }
+template std::array<RealScalar<fp32>, 3>  tools::finite::measure::expectation_value_xyz(const StateFinite<fp32> &state);
+template std::array<RealScalar<fp64>, 3>  tools::finite::measure::expectation_value_xyz(const StateFinite<fp64> &state);
+template std::array<RealScalar<fp128>, 3> tools::finite::measure::expectation_value_xyz(const StateFinite<fp128> &state);
+template std::array<RealScalar<cx32>, 3>  tools::finite::measure::expectation_value_xyz(const StateFinite<cx32> &state);
 template std::array<RealScalar<cx64>, 3>  tools::finite::measure::expectation_value_xyz(const StateFinite<cx64> &state);
 template std::array<RealScalar<cx128>, 3> tools::finite::measure::expectation_value_xyz(const StateFinite<cx128> &state);
 
 template<typename Scalar>
 std::array<RealScalar<Scalar>, 3> tools::finite::measure::structure_factor_xyz(const StateFinite<Scalar> &state) {
-    auto sx = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sx);
-    auto sy = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sy);
-    auto sz = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sz);
+    auto sx = qm::spin::half::tensor::sx;
+    auto sy = qm::spin::half::tensor::sy;
+    auto sz = qm::spin::half::tensor::sz;
 
     if(not state.measurements.structure_factor_x) {
-        auto correlation_matrix_sx = measure::correlation_matrix(state, sx, sx);
+        auto correlation_matrix_sx = measure::correlation_matrix<Scalar>(state, sx, sx);
         if(not state.measurements.correlation_matrix_sx) state.measurements.correlation_matrix_sx = correlation_matrix_sx.real();
         state.measurements.structure_factor_x = measure::structure_factor(state, correlation_matrix_sx);
     }
     if(not state.measurements.structure_factor_y) {
-        auto correlation_matrix_sy = measure::correlation_matrix(state, sy, sy);
+        auto correlation_matrix_sy = measure::correlation_matrix<Scalar>(state, sy, sy);
         if(not state.measurements.correlation_matrix_sy) state.measurements.correlation_matrix_sy = correlation_matrix_sy.real();
         state.measurements.structure_factor_y = measure::structure_factor(state, correlation_matrix_sy);
     }
     if(not state.measurements.structure_factor_z) {
-        auto correlation_matrix_sz = measure::correlation_matrix(state, sz, sz);
+        auto correlation_matrix_sz = measure::correlation_matrix<Scalar>(state, sz, sz);
         if(not state.measurements.correlation_matrix_sz) state.measurements.correlation_matrix_sz = correlation_matrix_sz.real();
         state.measurements.structure_factor_z = measure::structure_factor(state, correlation_matrix_sz);
     }
 
     return {state.measurements.structure_factor_x.value(), state.measurements.structure_factor_y.value(), state.measurements.structure_factor_z.value()};
 }
+template std::array<RealScalar<fp32>, 3>  tools::finite::measure::structure_factor_xyz(const StateFinite<fp32> &state);
+template std::array<RealScalar<fp64>, 3>  tools::finite::measure::structure_factor_xyz(const StateFinite<fp64> &state);
+template std::array<RealScalar<fp128>, 3> tools::finite::measure::structure_factor_xyz(const StateFinite<fp128> &state);
+template std::array<RealScalar<cx32>, 3>  tools::finite::measure::structure_factor_xyz(const StateFinite<cx32> &state);
 template std::array<RealScalar<cx64>, 3>  tools::finite::measure::structure_factor_xyz(const StateFinite<cx64> &state);
 template std::array<RealScalar<cx128>, 3> tools::finite::measure::structure_factor_xyz(const StateFinite<cx128> &state);

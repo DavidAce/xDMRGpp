@@ -14,7 +14,7 @@ class ModelInfinite;
 template<typename Scalar>
 class EdgesInfinite;
 
-template<typename Scalar = cx64>
+template<typename Scalar>
 class TensorsInfinite {
     public:
     std::unique_ptr<StateInfinite<Scalar>>      state;
@@ -29,12 +29,19 @@ class TensorsInfinite {
     //  - Activate sites
     //  - Manage measurements cache
 
-    TensorsInfinite();
-    ~TensorsInfinite();                                       // Read comment on implementation
-    TensorsInfinite(TensorsInfinite &&other);                 // default move ctor
-    TensorsInfinite &operator=(TensorsInfinite &&other);      // default move assign
-    TensorsInfinite(const TensorsInfinite &other);            // copy ctor
-    TensorsInfinite &operator=(const TensorsInfinite &other); // copy assign
+    TensorsInfinite() noexcept;
+    ~TensorsInfinite();                                                // Read comment on implementation
+    TensorsInfinite(TensorsInfinite &&other) noexcept;                 // default move ctor
+    TensorsInfinite &operator=(TensorsInfinite &&other) noexcept;      // default move assign
+    TensorsInfinite(const TensorsInfinite &other) noexcept;            // copy ctor
+    TensorsInfinite &operator=(const TensorsInfinite &other) noexcept; // copy assign
+
+    StateInfinite<Scalar>       &get_state();
+    ModelInfinite<Scalar>       &get_model();
+    EdgesInfinite<Scalar>       &get_edges();
+    const StateInfinite<Scalar> &get_state() const;
+    const ModelInfinite<Scalar> &get_model() const;
+    const EdgesInfinite<Scalar> &get_edges() const;
 
     void initialize(ModelType model_type);
     void initialize_model();

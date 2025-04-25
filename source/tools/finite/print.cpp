@@ -26,9 +26,22 @@ void tools::finite::print::dimensions(const TensorsFinite<Scalar> &tensors) {
     }
     tools::log->info("Direction: {}", tensors.state->get_direction());
 }
+template void tools::finite::print::dimensions(const TensorsFinite<fp32> &tensors);
+template void tools::finite::print::dimensions(const TensorsFinite<fp64> &tensors);
+template void tools::finite::print::dimensions(const TensorsFinite<fp128> &tensors);
+template void tools::finite::print::dimensions(const TensorsFinite<cx32> &tensors);
+template void tools::finite::print::dimensions(const TensorsFinite<cx64> &tensors);
+template void tools::finite::print::dimensions(const TensorsFinite<cx128> &tensors);
 
 template<typename Scalar>
 void tools::finite::print::model(const ModelFinite<Scalar> &model) {
     model.get_mpo(0).print_parameter_names();
     for(size_t pos = 0; pos < model.get_length(); pos++) model.get_mpo(pos).print_parameter_values();
 }
+
+template void tools::finite::print::model(const ModelFinite<fp32> &model);
+template void tools::finite::print::model(const ModelFinite<fp64> &model);
+template void tools::finite::print::model(const ModelFinite<fp128> &model);
+template void tools::finite::print::model(const ModelFinite<cx32> &model);
+template void tools::finite::print::model(const ModelFinite<cx64> &model);
+template void tools::finite::print::model(const ModelFinite<cx128> &model);

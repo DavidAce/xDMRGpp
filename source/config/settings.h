@@ -255,6 +255,8 @@ namespace settings {
 
     /*! \namespace settings::precision Settings for the convergence threshold and precision of MPS, SVD and eigensolvers */
     namespace precision {
+        inline ScalarType         algoScalar                      = ScalarType::CX64;            /*!< Scalar type for tensor storage (state, model, edges)  */
+        inline ScalarType         optScalar                       = ScalarType::CX64;            /*!< Scalar type for computations (eig, eigs, svd) */
         inline long               eig_max_size                    = 4096  ;                      /*!< Maximum problem size before switching from eig to eigs. */
         inline size_t             eigs_iter_min                   = 1000;                        /*!< Minimum number of iterations for eigenvalue solver. */
         inline size_t             eigs_iter_max                   = 100000;                      /*!< Maximum number of iterations for eigenvalue solver. */

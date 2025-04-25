@@ -8,6 +8,10 @@
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
 
+template class XXZ<fp32>;
+template class XXZ<fp64>;
+template class XXZ<fp128>;
+template class XXZ<cx32>;
 template class XXZ<cx64>;
 template class XXZ<cx128>;
 
@@ -21,12 +25,12 @@ XXZ<Scalar>::XXZ(ModelType model_type_, size_t position_) : MpoSite<Scalar>(mode
 }
 
 template<typename Scalar>
-double XXZ<Scalar>::get_field() const {
-    return h5tb.param.h_rand;
+typename XXZ<Scalar>::RealScalar XXZ<Scalar>::get_field() const {
+    return static_cast<RealScalar>(h5tb.param.h_rand);
 }
 template<typename Scalar>
-double XXZ<Scalar>::get_coupling() const {
-    return h5tb.param.delta;
+typename XXZ<Scalar>::RealScalar XXZ<Scalar>::get_coupling() const {
+    return static_cast<RealScalar>(h5tb.param.delta);
 }
 template<typename Scalar>
 void XXZ<Scalar>::print_parameter_names() const {
@@ -85,18 +89,24 @@ void XXZ<Scalar>::set_parameter(const std::string_view name, std::any value) {
 
 /*! Builds the MPO hamiltonian as a rank 4 tensor.
  *
- * H = Σ σx{i}*σx{i+1} + σy{i}*σy{i+1} + Δσz{i}*σz{i+1} + h{i}σz{i}
+ * H = 1/4 [Σ(σx{i}*σx{i+1} + σy{i}*σy{i+1}) + Δσz{i}*σz{i+1} ] + Σ h{i}σz{i}
+ *   = [Σ (1/2)*(σ+{i}*σ-{i+1} + σ-{i}*σ+{i+1}) + (Δ/4)σz{i}*σz{i+1}] + Σ h{i}σz{i}
  *
- * or equivalently,
+ * where J = 1 in this case.
  *
- * H = Σ 2*(σ+{i}*σ-{i+1} + σ-{i}*σ+{i+1}) + Δσz{i}*σz{i+1} + h{i}σz{i}
  *
  *
  *  |    I           0          0          0         0   |
- *  |    σx          0          0          0         0   |
- *  |    σy          0          0          0         0   |
- *  |    σz          0          0          0         0   |
+ *  |    σx/4        0          0          0         0   |
+ *  |    σy/4        0          0          0         0   |
+ *  |    σz/4        0          0          0         0   |
  *  | h_rand*σz      σx        σy         Δσz        I   |
+ *
+ *  |    I           0          0          0         0   |
+ *  |    σ+/2        0          0          0         0   |
+ *  |    σ-/2        0          0          0         0   |
+ *  |    σz/4        0          0          0         0   |
+ *  | h_rand*σz      σ-        σ+         Δσz        I   |
  *
  *        2
  *        |
@@ -108,16 +118,28 @@ void XXZ<Scalar>::set_parameter(const std::string_view name, std::any value) {
  *
  *         I==[0]--------------------------h_{i}σz_{i}------------[4]==I
  *         |                                                       |
- *         |---σx{i}---[1]-------------------σx{i+1}---------------|
+ *         |---σx{i}/4---[1]-----------------σx{i+1}---------------|
  *         |                                                       |
- *         |---σy{i}---[2]-------------------σy{i+1}---------------|
+ *         |---σy{i}/4---[2]-----------------σy{i+1}---------------|
  *         |                                                       |
- *         |---σz{i}---[3]------------------ Δσz{i+1}--------------|
+ *         |---σz{i}/4---[3]---------------- Δσz{i+1}--------------|
+ *
+ * or
+ *
+ *         I==[0]--------------------------h_{i}σz_{i}------------[4]==I
+ *         |                                                       |
+ *         |---σ+{i}/2---[1]-----------------σ-{i+1}---------------|
+ *         |                                                       |
+ *         |---σ-{i}/2---[2]-----------------σ+{i+1}---------------|
+ *         |                                                       |
+ *         |---σz{i}/4---[3]---------------- Δσz{i+1}--------------|
+ *
+ *
  *
  */
 template<typename Scalar>
-Eigen::Tensor<cx64, 4> XXZ<Scalar>::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                            [[maybe_unused]] std::optional<std::vector<size_t>> skip) const
+Eigen::Tensor<Scalar, 4> XXZ<Scalar>::get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                              [[maybe_unused]] std::optional<std::vector<size_t>> skip) const
 
 {
     using namespace qm::spin::half::tensor;
@@ -125,27 +147,32 @@ Eigen::Tensor<cx64, 4> XXZ<Scalar>::get_mpo(cx64 energy_shift_per_site, std::opt
     if(not all_mpo_parameters_have_been_set)
         throw except::runtime_error("mpo({}): can't build mpo: full lattice parameters haven't been set yet.", get_position());
 
-    double J1 = 1.0, J2 = 1.0;
+    auto J1 = static_cast<RealScalar>(1.0);
+    auto J2 = static_cast<RealScalar>(1.0);
     if(nbody.has_value()) {
-        J1 = 0;
-        J2 = 0;
+        J1 = static_cast<RealScalar>(0.0);
+        J2 = static_cast<RealScalar>(0.0);
         for(const auto &n : nbody.value()) {
-            if(n == 1) J1 = 1.0;
-            if(n == 2) J2 = 1.0;
+            if(n == 1) J1 = static_cast<RealScalar>(1.0);
+            if(n == 2) J2 = static_cast<RealScalar>(1.0);
         }
     }
+    auto id = tenx::asScalarType<Scalar>(qm::spin::half::tensor::id);
+    auto sp = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sp);
+    auto sm = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sm);
+    auto sz = tenx::asScalarType<Scalar>(qm::spin::half::tensor::sz);
 
-    Eigen::Tensor<cx64, 4> mpo_build;
+    Eigen::Tensor<Scalar, 4> mpo_build;
     mpo_build.resize(5, 5, h5tb.param.spin_dim, h5tb.param.spin_dim);
     mpo_build.setZero();
     mpo_build.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = id;
-    mpo_build.slice(std::array<long, 4>{1, 0, 0, 0}, extent4).reshape(extent2) = sx;
-    mpo_build.slice(std::array<long, 4>{2, 0, 0, 0}, extent4).reshape(extent2) = sy;
-    mpo_build.slice(std::array<long, 4>{3, 0, 0, 0}, extent4).reshape(extent2) = sz;
-    mpo_build.slice(std::array<long, 4>{4, 0, 0, 0}, extent4).reshape(extent2) = J1 * h5tb.param.h_rand * sz - energy_shift_per_site * id;
-    mpo_build.slice(std::array<long, 4>{4, 1, 0, 0}, extent4).reshape(extent2) = J2 * sx;
-    mpo_build.slice(std::array<long, 4>{4, 2, 0, 0}, extent4).reshape(extent2) = J2 * sy;
-    mpo_build.slice(std::array<long, 4>{4, 3, 0, 0}, extent4).reshape(extent2) = J2 * h5tb.param.delta * sz;
+    mpo_build.slice(std::array<long, 4>{1, 0, 0, 0}, extent4).reshape(extent2) = sp * static_cast<Scalar>(0.50);
+    mpo_build.slice(std::array<long, 4>{2, 0, 0, 0}, extent4).reshape(extent2) = sm * static_cast<Scalar>(0.50);
+    mpo_build.slice(std::array<long, 4>{3, 0, 0, 0}, extent4).reshape(extent2) = sz * static_cast<Scalar>(0.25);
+    mpo_build.slice(std::array<long, 4>{4, 0, 0, 0}, extent4).reshape(extent2) = J1 * get_field() * sz - energy_shift_per_site * id;
+    mpo_build.slice(std::array<long, 4>{4, 1, 0, 0}, extent4).reshape(extent2) = J2 * sm;
+    mpo_build.slice(std::array<long, 4>{4, 2, 0, 0}, extent4).reshape(extent2) = J2 * sp;
+    mpo_build.slice(std::array<long, 4>{4, 3, 0, 0}, extent4).reshape(extent2) = J2 * get_coupling() * sz;
     mpo_build.slice(std::array<long, 4>{4, 4, 0, 0}, extent4).reshape(extent2) = id;
 
     if(tenx::hasNaN(mpo_build)) {

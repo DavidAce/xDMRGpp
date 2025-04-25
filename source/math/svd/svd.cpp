@@ -137,22 +137,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         //        log->info("sizeS = {} | lim {} | {} {} {} | {} ", sizeS, rank_lim, switchsize_gejsv, switchsize_gesvd, switchsize_gesdd,
         //        enum2sv(svd_rtn));
     }
-    if(svd_save != svd::save::NONE) {
-        saveMetaData.rank_max         = rank_max;
-        saveMetaData.rank_min         = rank_min;
-        saveMetaData.truncation_lim   = truncation_lim;
-        saveMetaData.switchsize_gejsv = switchsize_gejsv;
-        saveMetaData.switchsize_gesvd = switchsize_gesvd;
-        saveMetaData.switchsize_gesdd = switchsize_gesdd;
-        saveMetaData.svd_lib          = svd_lib;
-        saveMetaData.svd_rtn          = svd_rtn;
-        saveMetaData.svd_save         = svd_save;
-        if(not saveMetaData.at_quick_exit) {
-            std::at_quick_exit(save_svd);
-            saveMetaData.at_quick_exit = true;
-        }
-        saveMetaData.svd_is_running = true;
-    }
+
 
 #pragma omp atomic
     count++;
@@ -204,11 +189,14 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     }
     throw std::logic_error("Unrecognized svd library");
 }
-
-template std::tuple<svd::MatrixType<fp32>, svd::VectorType<fp32>, svd::MatrixType<fp32>> svd::solver::do_svd_ptr(const fp32 *, long, long, const svd::config &);
-template std::tuple<svd::MatrixType<fp64>, svd::VectorType<fp64>, svd::MatrixType<fp64>> svd::solver::do_svd_ptr(const fp64 *, long, long, const svd::config &);
-template std::tuple<svd::MatrixType<cx32>, svd::VectorType<cx32>, svd::MatrixType<cx32>> svd::solver::do_svd_ptr(const cx32 *, long, long, const svd::config &);
-template std::tuple<svd::MatrixType<cx64>, svd::VectorType<cx64>, svd::MatrixType<cx64>> svd::solver::do_svd_ptr(const cx64 *, long, long, const svd::config &);
+/* clang-format off */
+template std::tuple<svd::MatrixType<fp32>,  svd::VectorType<fp32>,  svd::MatrixType<fp32>>  svd::solver::do_svd_ptr(const fp32 *, long, long, const svd::config &);
+template std::tuple<svd::MatrixType<fp64>,  svd::VectorType<fp64>,  svd::MatrixType<fp64>>  svd::solver::do_svd_ptr(const fp64 *, long, long, const svd::config &);
+template std::tuple<svd::MatrixType<fp128>, svd::VectorType<fp128>, svd::MatrixType<fp128>> svd::solver::do_svd_ptr(const fp128 *, long, long, const svd::config &);
+template std::tuple<svd::MatrixType<cx32>,  svd::VectorType<cx32>,  svd::MatrixType<cx32>>  svd::solver::do_svd_ptr(const cx32 *, long, long, const svd::config &);
+template std::tuple<svd::MatrixType<cx64>,  svd::VectorType<cx64>,  svd::MatrixType<cx64>>  svd::solver::do_svd_ptr(const cx64 *, long, long, const svd::config &);
+template std::tuple<svd::MatrixType<cx128>, svd::VectorType<cx128>, svd::MatrixType<cx128>> svd::solver::do_svd_ptr(const cx128 *, long, long, const svd::config &);
+/* clang-format on */
 
 template<typename Scalar>
 void svd::solver::print_matrix([[maybe_unused]] const Scalar *mat_ptr, [[maybe_unused]] long rows, [[maybe_unused]] long cols,
@@ -359,7 +347,8 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
     }
     // rank = dropfilter(U, S, V, svd_cfg.truncation_limit.value_or(1e-16), 8);
     VT = S.asDiagonal() * VT; // Rescaled singular values
-    fmt::print("S l2r min {:.5e} | max {:.5e} -->  min {:.5e} | max {:.5e} | size {}\n", Smin, Smax, S.real().minCoeff(), S.real().maxCoeff(), S.size());
+    fmt::print("S l2r min {:.5e} | max {:.5e} -->  min {:.5e} | max {:.5e} | size {}\n", fp(Smin), fp(Smax), fp(S.real().minCoeff()), fp(S.real().maxCoeff()),
+               S.size());
     /* clang-format off */
     return std::make_tuple(
             tenx::TensorMap(U).reshape(tenx::array4{dim0, dim1, dim2, rank}).shuffle(
@@ -367,11 +356,14 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
             tenx::TensorMap(VT).template cast<Scalar>());
     /* clang-format on */
 }
-
-template std::tuple<Eigen::Tensor<fp32, 4>, Eigen::Tensor<fp32, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<fp32, 4> &mpo, const svd::config &svd_cfg);
-template std::tuple<Eigen::Tensor<fp64, 4>, Eigen::Tensor<fp64, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<fp64, 4> &mpo, const svd::config &svd_cfg);
-template std::tuple<Eigen::Tensor<cx32, 4>, Eigen::Tensor<cx32, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<cx32, 4> &mpo, const svd::config &svd_cfg);
-template std::tuple<Eigen::Tensor<cx64, 4>, Eigen::Tensor<cx64, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<cx64, 4> &mpo, const svd::config &svd_cfg);
+/* clang-format off */
+template std::tuple<Eigen::Tensor<fp32, 4>, Eigen::Tensor<fp32, 2>>   svd::solver::split_mpo_l2r(const Eigen::Tensor<fp32, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<fp64, 4>, Eigen::Tensor<fp64, 2>>   svd::solver::split_mpo_l2r(const Eigen::Tensor<fp64, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<fp128, 4>, Eigen::Tensor<fp128, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<fp128, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<cx32, 4>, Eigen::Tensor<cx32, 2>>   svd::solver::split_mpo_l2r(const Eigen::Tensor<cx32, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<cx64, 4>, Eigen::Tensor<cx64, 2>>   svd::solver::split_mpo_l2r(const Eigen::Tensor<cx64, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<cx128, 4>, Eigen::Tensor<cx128, 2>> svd::solver::split_mpo_l2r(const Eigen::Tensor<cx128, 4> &mpo, const svd::config &svd_cfg);
+/* clang-format on */
 
 template<typename Scalar>
 std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<Scalar, 4> &mpo, const svd::config &svd_cfg) {
@@ -424,8 +416,8 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
     auto Smax = S.real().maxCoeff();
 
     // Stabilize by inserting avgS *  1/avgS
-    using RealScalar = RealType<Scalar>;
-    auto avgS        = num::next_power_of_two<RealScalar>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
+    using R = RealScalar<Scalar>;
+    auto avgS        = num::next_power_of_two<R>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
     if(avgS > 1) {
         S /= avgS;
         std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
@@ -435,7 +427,8 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
         VT *= avgS;
     }
     // TRY PRINTING S before rescaling
-    fmt::print("S r2l min {:.5e} | max {:.5e} -->  min {:.5e} | max {:.5e} | size {}\n", Smin, Smax, S.real().minCoeff(), S.real().maxCoeff(), S.size());
+    fmt::print("S r2l min {:.5e} | max {:.5e} -->  min {:.5e} | max {:.5e} | size {}\n", fp(Smin), fp(Smax), fp(S.real().minCoeff()), fp(S.real().maxCoeff()),
+               S.size());
     // rank = dropfilter(U, S, V, svd_cfg.truncation_limit.value_or(1e-16), 8);
     U = U * S.asDiagonal();
 
@@ -446,8 +439,11 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
                     tenx::array4{0, 3, 1, 2}).template cast<Scalar>());
     /* clang-format on */
 }
-
-template std::tuple<Eigen::Tensor<fp64, 2>, Eigen::Tensor<fp64, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<fp64, 4> &mpo, const svd::config &svd_cfg);
-template std::tuple<Eigen::Tensor<fp32, 2>, Eigen::Tensor<fp32, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<fp32, 4> &mpo, const svd::config &svd_cfg);
-template std::tuple<Eigen::Tensor<cx64, 2>, Eigen::Tensor<cx64, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<cx64, 4> &mpo, const svd::config &svd_cfg);
-template std::tuple<Eigen::Tensor<cx32, 2>, Eigen::Tensor<cx32, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<cx32, 4> &mpo, const svd::config &svd_cfg);
+/* clang-format off */
+template std::tuple<Eigen::Tensor<fp32, 2>, Eigen::Tensor<fp32, 4>>   svd::solver::split_mpo_r2l(const Eigen::Tensor<fp32, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<fp64, 2>, Eigen::Tensor<fp64, 4>>   svd::solver::split_mpo_r2l(const Eigen::Tensor<fp64, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<fp128, 2>, Eigen::Tensor<fp128, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<fp128, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<cx32, 2>, Eigen::Tensor<cx32, 4>>   svd::solver::split_mpo_r2l(const Eigen::Tensor<cx32, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<cx64, 2>, Eigen::Tensor<cx64, 4>>   svd::solver::split_mpo_r2l(const Eigen::Tensor<cx64, 4> &mpo, const svd::config &svd_cfg);
+template std::tuple<Eigen::Tensor<cx128, 2>, Eigen::Tensor<cx128, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<cx128, 4> &mpo, const svd::config &svd_cfg);
+/* clang-format on */

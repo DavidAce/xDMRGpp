@@ -12,8 +12,13 @@
 #include "tools/common/log.h"
 #include <utility>
 
+template class EnvBase<fp32>;
+template class EnvBase<fp64>;
+template class EnvBase<fp128>;
+template class EnvBase<cx32>;
 template class EnvBase<cx64>;
 template class EnvBase<cx128>;
+
 
 // We need to define the destructor and other special functions
 // because we enclose data in unique_ptr for this pimpl idiom.
@@ -49,7 +54,7 @@ EnvBase<Scalar>::EnvBase(size_t position_, std::string side_, std::string tag_)
     assert_block();
 }
 template<typename Scalar>
-EnvBase<Scalar>::EnvBase(std::string side_, std::string tag_, const MpsSite &MPS, const MpoSite<Scalar> &MPO)
+EnvBase<Scalar>::EnvBase(std::string side_, std::string tag_, const MpsSite<Scalar> &MPS, const MpoSite<Scalar> &MPO)
     : block(std::make_unique<Eigen::Tensor<Scalar, 3>>()), side(std::move(side_)), tag(std::move(tag_)) {
     if(MPS.get_position() != MPO.get_position())
         throw except::logic_error("MPS and MPO have different positions: {} != {}", MPS.get_position(), MPO.get_position());
@@ -250,7 +255,7 @@ void EnvBase<Scalar>::assert_validity() const {
 }
 
 template<typename Scalar>
-void EnvBase<Scalar>::assert_unique_id(const EnvBase &env, const MpsSite &mps, const MpoSite<Scalar> &mpo) const {
+void EnvBase<Scalar>::assert_unique_id(const EnvBase &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) const {
     std::vector<std::string> msg;
     if(unique_id_env and env.get_unique_id() != unique_id_env.value())
         msg.emplace_back(fmt::format("env({}): new {} | old {}", env.get_position(), env.get_unique_id(), unique_id_env.value()));
@@ -374,23 +379,19 @@ std::optional<std::size_t> EnvBase<Scalar>::get_unique_id_mpo() const {
     return unique_id_mpo;
 }
 
-template<typename Scalar>
 template<typename T>
-Eigen::Tensor<T, 3> EnvBase<Scalar>::get_expansion_term(const Eigen::Tensor<T, 3> &mps, const Eigen::Tensor<T, 4> &mpo) const {
-    if constexpr(std::is_same_v<T, Scalar>) {
-        if(is_real() and tenx::isReal(mps) and tenx::isReal(mpo)) { return get_expansion_term<fp64>(mps.real(), mpo.real()).template cast<Scalar>(); }
-    }
-    Eigen::Tensor<T, 3> P;
+Eigen::Tensor<T, 3> get_expansion_term_exec(const Eigen::Tensor<T, 3> &mps, const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &env,
+                                            std::string_view side) {
     auto               &threads = tenx::threads::get();
-    decltype(auto)      block_t = get_block_as<T>();
+    Eigen::Tensor<T, 3> P;
     if(side == "L") {
         long spin = mps.dimension(0);
         long chiL = mps.dimension(1);
         long chiR = mps.dimension(2) * mpo.dimension(1);
-        assert(block_t.dimension(0) == chiL);
+        assert(env.dimension(0) == chiL);
         P.resize(spin, chiL, chiR);
-        P.device(*threads->dev) = block_t.contract(mps, tenx::idx({0}, {1}))
-                                      .contract(mpo, tenx::idx({1, 2}, {0, 2}))
+        P.device(*threads->dev) = env.contract(tenx::asScalarType<T>(mps), tenx::idx({0}, {1}))
+                                      .contract(tenx::asScalarType<T>(mpo), tenx::idx({1, 2}, {0, 2}))
                                       .shuffle(tenx::array4{3, 0, 1, 2})
                                       .reshape(tenx::array3{spin, chiL, chiR});
 
@@ -398,39 +399,42 @@ Eigen::Tensor<T, 3> EnvBase<Scalar>::get_expansion_term(const Eigen::Tensor<T, 3
         long spin = mps.dimension(0);
         long chiL = mps.dimension(1) * mpo.dimension(0);
         long chiR = mps.dimension(2);
-        assert(block_t.dimension(0) == chiR);
+        assert(env.dimension(0) == chiR);
         P.resize(spin, chiL, chiR);
-        P.device(*threads->dev) = block_t.contract(mps, tenx::idx({0}, {2}))
-                                      .contract(mpo, tenx::idx({1, 2}, {1, 2}))
+        P.device(*threads->dev) = env.contract(tenx::asScalarType<T>(mps), tenx::idx({0}, {2}))
+                                      .contract(tenx::asScalarType<T>(mpo), tenx::idx({1, 2}, {1, 2}))
                                       .shuffle(tenx::array4{3, 0, 1, 2})
                                       .reshape(tenx::array3{spin, chiL, chiR});
     }
     return P;
 }
 
-template Eigen::Tensor<fp32, 3> EnvBase<>::get_expansion_term<fp32>(const Eigen::Tensor<fp32, 3> &mps, const Eigen::Tensor<fp32, 4> &mpo) const;
-template Eigen::Tensor<fp64, 3> EnvBase<>::get_expansion_term<fp64>(const Eigen::Tensor<fp64, 3> &mps, const Eigen::Tensor<fp64, 4> &mpo) const;
-template Eigen::Tensor<cx32, 3> EnvBase<>::get_expansion_term<cx32>(const Eigen::Tensor<cx32, 3> &mps, const Eigen::Tensor<cx32, 4> &mpo) const;
-template Eigen::Tensor<cx64, 3> EnvBase<>::get_expansion_term<cx64>(const Eigen::Tensor<cx64, 3> &mps, const Eigen::Tensor<cx64, 4> &mpo) const;
-
 template<typename Scalar>
 template<typename T>
-Eigen::Tensor<T, 3> EnvBase<Scalar>::get_expansion_term(const MpsSite &mps, const MpoSite<Scalar> &mpo) const {
-    if constexpr(sfinae::is_std_complex_v<T>) {
-        if(is_real() and mps.is_real() and mpo.is_real()) { return get_expansion_term<typename T::value_type>(mps, mpo).template cast<T>(); }
+Eigen::Tensor<T, 3> EnvBase<Scalar>::get_expansion_term(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) const {
+    if constexpr(sfinae::is_std_complex_v<T> and sfinae::is_std_complex_v<Scalar>) {
+        if(is_real() and mps.is_real() and mpo.is_real()) {
+            using RealT = typename T::value_type;
+            return get_expansion_term<RealT>(mps, mpo).template cast<T>();
+        }
     }
 
     assert(tag == "ene" or tag == "var");
     assert(side == "L" or side == "R");
-    if constexpr(settings::debug)
-        if(not num::all_equal(get_position(), mps.get_position(), mpo.get_position()))
-            throw except::logic_error("class_env_{}::enlarge(): side({}), pos({}),: All positions are not equal: env {} | mps {} | mpo {}", tag, side,
-                                      get_position(), get_position(), mps.get_position(), mpo.get_position());
-    Eigen::Tensor<T, 4> mpo_tensor = tag == "ene" ? mpo.template MPO_as<T>() : mpo.template MPO2_as<T>();
-    return get_expansion_term<T>(mps.get_M_as<T>(), mpo_tensor);
+    assert(get_position() == mps.get_position());
+    assert(mps.get_position() == mpo.get_position());
+    decltype(auto) mpo_tensor = tag == "ene" ? mpo.template MPO_as<T>() : mpo.template MPO2_as<T>();
+    decltype(auto) mps_tensor = mps.template get_M_as<T>();
+    decltype(auto) blk_tensor = get_block_as<T>();
+    return get_expansion_term_exec<T>(mps_tensor, mpo_tensor, blk_tensor, side);
 }
 
-template Eigen::Tensor<fp32, 3> EnvBase<>::get_expansion_term<fp32>(const MpsSite &mps, const MpoSite<> &mpo) const;
-template Eigen::Tensor<fp64, 3> EnvBase<>::get_expansion_term<fp64>(const MpsSite &mps, const MpoSite<> &mpo) const;
-template Eigen::Tensor<cx32, 3> EnvBase<>::get_expansion_term<cx32>(const MpsSite &mps, const MpoSite<> &mpo) const;
-template Eigen::Tensor<cx64, 3> EnvBase<>::get_expansion_term<cx64>(const MpsSite &mps, const MpoSite<> &mpo) const;
+template Eigen::Tensor<fp32, 3>  EnvBase<fp32>::get_expansion_term<fp32>(const MpsSite<fp32> &mps, const MpoSite<fp32> &mpo) const;
+template Eigen::Tensor<fp64, 3>  EnvBase<fp64>::get_expansion_term<fp64>(const MpsSite<fp64> &mps, const MpoSite<fp64> &mpo) const;
+template Eigen::Tensor<fp128, 3> EnvBase<fp128>::get_expansion_term<fp128>(const MpsSite<fp128> &mps, const MpoSite<fp128> &mpo) const;
+template Eigen::Tensor<fp32, 3>  EnvBase<cx32>::get_expansion_term<fp32>(const MpsSite<cx32> &mps, const MpoSite<cx32> &mpo) const;
+template Eigen::Tensor<fp64, 3>  EnvBase<cx64>::get_expansion_term<fp64>(const MpsSite<cx64> &mps, const MpoSite<cx64> &mpo) const;
+template Eigen::Tensor<fp128, 3> EnvBase<cx128>::get_expansion_term<fp128>(const MpsSite<cx128> &mps, const MpoSite<cx128> &mpo) const;
+template Eigen::Tensor<cx32, 3>  EnvBase<cx32>::get_expansion_term<cx32>(const MpsSite<cx32> &mps, const MpoSite<cx32> &mpo) const;
+template Eigen::Tensor<cx64, 3>  EnvBase<cx64>::get_expansion_term<cx64>(const MpsSite<cx64> &mps, const MpoSite<cx64> &mpo) const;
+template Eigen::Tensor<cx128, 3> EnvBase<cx128>::get_expansion_term<cx128>(const MpsSite<cx128> &mps, const MpoSite<cx128> &mpo) const;

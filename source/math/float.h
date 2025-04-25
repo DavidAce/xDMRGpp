@@ -126,6 +126,10 @@ inline fp128 ceil(const fp128 &x) { return ceilq(x); }
 // inline fp128 imag(const cx128 &) { return 0.; }
 // inline fp128 abs(const cx128 &x) { return abs_t(x); }
 // inline fp128 abs2(const cx128 &x) { return abs_t(conj(x) * x); }
+// template<typename T>
+// f128_base<T> operator*(const T &v) const {
+    // return val * v;
+// }
 
 #endif
 

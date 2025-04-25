@@ -67,6 +67,31 @@
     #error Could not include arpack headers correctly
 #endif
 
+template class eig::solver_arpack<MatVecMPOS<fp32>>;
+template class eig::solver_arpack<MatVecMPOS<fp64>>;
+template class eig::solver_arpack<MatVecMPOS<cx32>>;
+template class eig::solver_arpack<MatVecMPOS<cx64>>;
+//
+template class eig::solver_arpack<MatVecMPO<fp32>>;
+template class eig::solver_arpack<MatVecMPO<fp64>>;
+template class eig::solver_arpack<MatVecMPO<cx32>>;
+template class eig::solver_arpack<MatVecMPO<cx64>>;
+//
+template class eig::solver_arpack<MatVecDense<fp32>>;
+template class eig::solver_arpack<MatVecDense<fp64>>;
+template class eig::solver_arpack<MatVecDense<cx32>>;
+template class eig::solver_arpack<MatVecDense<cx64>>;
+//
+template class eig::solver_arpack<MatVecSparse<fp32>>;
+template class eig::solver_arpack<MatVecSparse<fp64>>;
+template class eig::solver_arpack<MatVecSparse<cx32>>;
+template class eig::solver_arpack<MatVecSparse<cx64>>;
+//
+template class eig::solver_arpack<MatVecZero<fp32>>;
+template class eig::solver_arpack<MatVecZero<fp64>>;
+template class eig::solver_arpack<MatVecZero<cx32>>;
+template class eig::solver_arpack<MatVecZero<cx64>>;
+
 namespace tc = sfinae;
 using namespace eig;
 
@@ -103,11 +128,11 @@ void eig::solver_arpack<MatrixType>::eigs() {
 
 template<typename MatrixType>
 void eig::solver_arpack<MatrixType>::eigs_sym() {
-    if constexpr(std::is_same<Scalar, double>::value) {
+    if constexpr(sfinae::is_any_v<Scalar, fp32, fp64>) {
         if(config.form != Form::SYMM) throw std::runtime_error("ERROR: config not SYMMETRIC");
         if(matrix.get_form() != Form::SYMM) throw std::runtime_error("ERROR: matrix not SYMMETRIC");
-        ARSymStdEig<double, MatrixType> solver(matrix.rows(), nev_internal, &matrix, &MatrixType::MultAx, config.get_ritz_string().data(), ncv_internal,
-                                               config.tol.value(), safe_cast<int>(config.maxIter.value()), residual);
+        ARSymStdEig<Scalar, MatrixType> solver(matrix.rows(), nev_internal, &matrix, &MatrixType::MultAx, config.get_ritz_string().data(), ncv_internal,
+                                               static_cast<Scalar>(config.tol.value()), safe_cast<int>(config.maxIter.value()), residual);
         find_solution(solver, config.maxNev.value());
         copy_solution(solver);
 
@@ -119,10 +144,10 @@ void eig::solver_arpack<MatrixType>::eigs_sym() {
 
 template<typename MatrixType>
 void eig::solver_arpack<MatrixType>::eigs_sym_rc() {
-    if constexpr(std::is_same<Scalar, double>::value) {
+    if constexpr(sfinae::is_any_v<Scalar, fp32, fp64>) {
         if(config.form != Form::SYMM) throw std::runtime_error("ERROR: config not SYMMETRIC");
         if(matrix.get_form() != Form::SYMM) throw std::runtime_error("ERROR: matrix not SYMMETRIC");
-        ARrcSymStdEig<double> solver(matrix.rows(), nev_internal, config.get_ritz_string().data(), ncv_internal, config.tol.value(),
+        ARrcSymStdEig<Scalar> solver(matrix.rows(), nev_internal, config.get_ritz_string().data(), ncv_internal, static_cast<Scalar>(config.tol.value()),
                                      safe_cast<int>(config.maxIter.value()), residual, true);
         find_solution_rc(solver);
         copy_solution(solver);
@@ -134,13 +159,13 @@ void eig::solver_arpack<MatrixType>::eigs_sym_rc() {
 
 template<typename MatrixType>
 void eig::solver_arpack<MatrixType>::eigs_nsym() {
-    if constexpr(std::is_same<Scalar, double>::value) {
+    if constexpr(sfinae::is_any_v<Scalar, fp32, fp64>) {
         if(config.form != Form::NSYM) throw std::runtime_error("ERROR: config not NSYM");
         if(matrix.get_form() != Form::NSYM) throw std::runtime_error("ERROR: matrix not NSYM");
         if(nev_internal == 1) { nev_internal++; }
 
-        ARNonSymStdEig<double, MatrixType> solver(matrix.rows(), nev_internal, &matrix, &MatrixType::MultAx, config.get_ritz_string().data(), ncv_internal,
-                                                  config.tol.value(), config.maxIter.value(), residual);
+        ARNonSymStdEig<Scalar, MatrixType> solver(matrix.rows(), nev_internal, &matrix, &MatrixType::MultAx, config.get_ritz_string().data(), ncv_internal,
+                                                  static_cast<Scalar>(config.tol.value()), config.maxIter.value(), residual);
         find_solution(solver, config.maxNev.value());
         copy_solution(solver);
     } else {
@@ -150,11 +175,11 @@ void eig::solver_arpack<MatrixType>::eigs_nsym() {
 
 template<typename MatrixType>
 void eig::solver_arpack<MatrixType>::eigs_nsym_rc() {
-    if constexpr(std::is_same<Scalar, double>::value) {
+    if constexpr(sfinae::is_any_v<Scalar, fp32, fp64>) {
         if(config.form != Form::NSYM) throw std::runtime_error("ERROR: config not NSYM");
         if(matrix.get_form() != Form::NSYM) throw std::runtime_error("ERROR: matrix not NSYM");
         //        if(nev_internal == 1) { nev_internal++; }
-        ARrcNonSymStdEig<double> solver(matrix.rows(), nev_internal, config.get_ritz_string().data(), ncv_internal, config.tol.value(),
+        ARrcNonSymStdEig<Scalar> solver(matrix.rows(), nev_internal, config.get_ritz_string().data(), ncv_internal, static_cast<Scalar>(config.tol.value()),
                                         safe_cast<int>(config.maxIter.value()), residual, true);
         find_solution_rc(solver);
         copy_solution(solver);
@@ -165,9 +190,10 @@ void eig::solver_arpack<MatrixType>::eigs_nsym_rc() {
 
 template<typename MatrixType>
 void eig::solver_arpack<MatrixType>::eigs_comp() {
-    if constexpr(std::is_same_v<Scalar, cx64>) {
-        ARCompStdEig<double, MatrixType> solver(matrix.rows(), nev_internal, &matrix, &MatrixType::MultAx, config.get_ritz_string().data(), ncv_internal,
-                                                config.tol.value(), config.maxIter.value(), residual);
+    if constexpr(sfinae::is_any_v<Scalar, cx32, cx64>) {
+        using Real = typename Scalar::value_type;
+        ARCompStdEig<Real, MatrixType> solver(matrix.rows(), nev_internal, &matrix, &MatrixType::MultAx, config.get_ritz_string().data(), ncv_internal,
+                                                static_cast<Real>(config.tol.value()), config.maxIter.value(), residual);
         find_solution(solver, config.maxNev.value());
         copy_solution(solver);
     } else {
@@ -177,8 +203,9 @@ void eig::solver_arpack<MatrixType>::eigs_comp() {
 
 template<typename MatrixType>
 void eig::solver_arpack<MatrixType>::eigs_comp_rc() {
-    if constexpr(std::is_same_v<Scalar, cx64>) {
-        ARrcCompStdEig<double> solver(matrix.rows(), nev_internal, config.get_ritz_string().data(), ncv_internal, config.tol.value(),
+    if constexpr(sfinae::is_any_v<Scalar, cx32, cx64>) {
+        using Real = typename Scalar::value_type;
+        ARrcCompStdEig<Real> solver(matrix.rows(), nev_internal, config.get_ritz_string().data(), ncv_internal, static_cast<Real>(config.tol.value()),
                                       safe_cast<int>(config.maxIter.value()), residual, true);
         find_solution_rc(solver);
         copy_solution(solver);
@@ -191,20 +218,30 @@ template<typename MatrixType>
 template<typename Derived>
 void eig::solver_arpack<MatrixType>::find_solution(Derived &solver, int nev) {
     using ShiftType = decltype(solver.GetShift());
-
+    using Real      = decltype(std::real(std::declval<ShiftType>()));
     // Start by preparing the matrix for solving. Apply shifts, do inversion/factorization and then compress
     {
         auto t_prep = tid::tic_scope("prep");
         if constexpr(MatrixType::can_shift) {
             if(config.sigma) {
                 eig::log->trace("Setting shift with sigma = {}{:+}", std::real(config.sigma.value()), std::imag(config.sigma.value()));
-                matrix.set_shift(config.sigma.value());
+                using RealScalar = decltype(std::real(std::declval<Scalar>()));
+                using CplxScalar = std::complex<RealScalar>;
+                auto sig_scalar =
+                    CplxScalar(static_cast<RealScalar>(std::real(config.sigma.value())), static_cast<RealScalar>(std::imag(config.sigma.value())));
+                matrix.set_shift(sig_scalar);
                 if constexpr(MatrixType::can_shift_invert) {
                     if(config.shift_invert == Shinv::ON) {
                         eig::log->trace("Enabling shift-invert mode");
                         matrix.FactorOP();
-                        if constexpr(std::is_same_v<ShiftType, cx64>) solver.SetShiftInvertMode(config.sigma.value(), &matrix, &MatrixType::MultOPv);
-                        if constexpr(std::is_same_v<ShiftType, fp64>) solver.SetShiftInvertMode(std::real(config.sigma.value()), &matrix, &MatrixType::MultOPv);
+                        if constexpr(sfinae::is_std_complex_v<ShiftType>) {
+                            auto sig =
+                                std::complex<Real>(static_cast<Real>(std::real(config.sigma.value())), static_cast<Real>(std::imag(config.sigma.value())));
+                            solver.SetShiftInvertMode(sig, &matrix, &MatrixType::MultOPv);
+                        } else {
+                            auto sig = static_cast<Real>(std::real(config.sigma.value()));
+                            solver.SetShiftInvertMode(sig, &matrix, &MatrixType::MultOPv);
+                        }
                     }
                 } else if(config.shift_invert == Shinv::ON)
                     throw std::runtime_error("Tried to shift-invert an incompatible matrix");
@@ -286,20 +323,32 @@ template<typename MatrixType>
 template<typename Derived>
 void eig::solver_arpack<MatrixType>::find_solution_rc(Derived &solver) {
     using ShiftType = decltype(solver.GetShift());
-    auto t_arpack   = tid::tic_scope("arpack");
+    using Real      = decltype(std::real(std::declval<ShiftType>()));
+
+    auto t_arpack = tid::tic_scope("arpack");
     // Start by prepare the matrix for solving. Apply shifts, do inversion/factorization and then compress
     {
         auto t_prep = tid::tic_scope("prep");
         if constexpr(MatrixType::can_shift) {
             if(config.sigma) {
                 eig::log->trace("Setting shift with sigma = {}{:+}", std::real(config.sigma.value()), std::imag(config.sigma.value()));
-                matrix.set_shift(config.sigma.value());
+                using RealScalar = decltype(std::real(std::declval<Scalar>()));
+                using CplxScalar = std::complex<RealScalar>;
+                auto sig_scalar =
+                    CplxScalar(static_cast<RealScalar>(std::real(config.sigma.value())), static_cast<RealScalar>(std::imag(config.sigma.value())));
+                matrix.set_shift(sig_scalar);
                 if constexpr(MatrixType::can_shift_invert) {
                     if(config.shift_invert == Shinv::ON) {
                         eig::log->trace("Enabling shift-invert mode");
                         matrix.FactorOP();
-                        if constexpr(std::is_same_v<ShiftType, cx64>) solver.SetShiftInvertMode(config.sigma.value());
-                        if constexpr(std::is_same_v<ShiftType, fp64>) solver.SetShiftInvertMode(std::real(config.sigma.value()));
+                        if constexpr(sfinae::is_std_complex_v<ShiftType>) {
+                            auto sig =
+                                std::complex<Real>(static_cast<Real>(std::real(config.sigma.value())), static_cast<Real>(std::imag(config.sigma.value())));
+                            solver.SetShiftInvertMode(sig);
+                        } else {
+                            auto sig = static_cast<Real>(std::real(config.sigma.value()));
+                            solver.SetShiftInvertMode(sig);
+                        }
                     }
                 } else if(config.shift_invert == Shinv::ON) {
                     throw std::runtime_error("Tried to shift-invert an incompatible matrix");
@@ -425,56 +474,73 @@ template<typename Derived>
 void eig::solver_arpack<MatrixType>::copy_solution(Derived &solver) {
     // In this function we copy the solution "naively"
     eig::log->trace("Copying solution");
-    using eigval_type                         = std::remove_pointer_t<decltype(solver.RawEigenvalues())>;
-    using eigvec_type                         = std::remove_pointer_t<decltype(solver.RawEigenvectors())>;
+    using eigval_type = std::remove_pointer_t<decltype(solver.RawEigenvalues())>;
+    using eigvec_type = std::remove_pointer_t<decltype(solver.RawEigenvectors())>;
+    using eigval_real = decltype(std::real(std::declval<eigval_type>()));
+    // using eigvec_real = decltype(std::real(std::declval<eigvec_type>()));
+
     auto           eigvecsize                 = result.meta.rows * result.meta.cols;
     auto           eigvalsize                 = result.meta.cols;
     auto           eigvalsize_t               = safe_cast<size_t>(eigvalsize);
     auto           eigvecsize_t               = safe_cast<size_t>(eigvecsize);
     constexpr auto eigval_has_imag_separately = eig::sfinae::has_RawEigenvaluesImag_v<Derived>;
-    constexpr auto eigval_is_cplx             = std::is_same_v<cx64, eigval_type>;
-    constexpr auto eigval_is_real             = std::is_same_v<fp64, eigval_type>;
-    constexpr auto eigvec_is_cplx             = std::is_same_v<cx64, eigvec_type>;
-    constexpr auto eigvec_is_real             = std::is_same_v<fp64, eigvec_type>;
+    constexpr auto eigval_is_cplx             = sfinae::is_any_v<eigval_type, cx32, cx64>;
+    constexpr auto eigval_is_real             = sfinae::is_any_v<eigval_type, fp32, fp64>;
+    constexpr auto eigvec_is_cplx             = sfinae::is_any_v<eigvec_type, cx32, cx64>;
+    constexpr auto eigvec_is_real             = sfinae::is_any_v<eigvec_type, fp32, fp64>;
 
     if(result.meta.eigvals_found) {
         if constexpr(eigval_has_imag_separately) {
             eig::log->trace("Copying eigenvalues from separate real and imaginary buffers");
-            result.eigvals_imag_fp64.resize(eigvalsize_t);
-            result.eigvals_real_fp64.resize(eigvalsize_t);
-            std::copy(solver.RawEigenvaluesImag(), solver.RawEigenvaluesImag() + eigvalsize, result.eigvals_imag_fp64.begin());
-            std::copy(solver.RawEigenvaluesReal(), solver.RawEigenvaluesReal() + eigvalsize, result.eigvals_real_fp64.begin());
+            if constexpr(std::is_same_v<eigval_real, fp32>) {
+                result.eigvals_imag_fp32.resize(eigvalsize_t);
+                result.eigvals_real_fp32.resize(eigvalsize_t);
+                std::copy(solver.RawEigenvaluesImag(), solver.RawEigenvaluesImag() + eigvalsize, result.eigvals_imag_fp32.begin());
+                std::copy(solver.RawEigenvaluesReal(), solver.RawEigenvaluesReal() + eigvalsize, result.eigvals_real_fp32.begin());
+            }
+            if constexpr(std::is_same_v<eigval_real, fp64>) {
+                result.eigvals_imag_fp64.resize(eigvalsize_t);
+                result.eigvals_real_fp64.resize(eigvalsize_t);
+                std::copy(solver.RawEigenvaluesImag(), solver.RawEigenvaluesImag() + eigvalsize, result.eigvals_imag_fp64.begin());
+                std::copy(solver.RawEigenvaluesReal(), solver.RawEigenvaluesReal() + eigvalsize, result.eigvals_real_fp64.begin());
+            }
         }
         if constexpr(eigval_is_real) {
             if(not solver.EigenvaluesFound()) throw std::runtime_error("Eigenvalues were not found");
             eig::log->trace("Copying real eigenvalues");
-            result.eigvals_real_fp64.resize(eigvalsize_t);
-            std::copy(solver.RawEigenvalues(), solver.RawEigenvalues() + eigvalsize, result.eigvals_real_fp64.begin());
+            auto &eigvals_real = result.get_eigvals<eigval_type>();
+            eigvals_real.resize(eigvalsize_t);
+            std::copy(solver.RawEigenvalues(), solver.RawEigenvalues() + eigvalsize, eigvals_real.begin());
         }
         if constexpr(eigval_is_cplx) {
             if(not solver.EigenvaluesFound()) throw std::runtime_error("Eigenvalues were not found");
             eig::log->trace("Copying complex eigenvalues");
-            result.eigvals_cx64.resize(eigvalsize_t);
-            std::copy(solver.RawEigenvalues(), solver.RawEigenvalues() + eigvalsize, result.eigvals_cx64.begin());
+            auto &eigvals_cplx = result.get_eigvals<eigval_type>();
+            eigvals_cplx.resize(eigvalsize_t);
+            std::copy(solver.RawEigenvalues(), solver.RawEigenvalues() + eigvalsize, eigvals_cplx.begin());
         }
     }
     if(result.meta.eigvecsR_found or result.meta.eigvecsL_found) {
         if constexpr(eigvec_is_real) {
             if(not solver.EigenvectorsFound()) throw std::runtime_error("Eigenvectors were not found");
             eig::log->trace("Copying real eigenvectors");
-            result.eigvecsR_real_fp64.resize(eigvecsize_t);
-            std::copy(solver.RawEigenvectors(), solver.RawEigenvectors() + eigvecsize, result.eigvecsR_real_fp64.begin());
+            auto &eigvecs_real = result.get_eigvecs<eigvec_type, Side::R>();
+            eigvecs_real.resize(eigvecsize_t);
+            std::copy(solver.RawEigenvectors(), solver.RawEigenvectors() + eigvecsize, eigvecs_real.begin());
         }
 
         if constexpr(eigvec_is_cplx) {
             if(not solver.EigenvectorsFound()) throw std::runtime_error("Eigenvectors were not found");
             eig::log->trace("Copying complex eigenvectors");
             if(config.side == Side::L) {
-                result.eigvecsL_cx64.resize(eigvecsize_t);
-                std::copy(solver.RawEigenvectors(), solver.RawEigenvectors() + eigvecsize, result.eigvecsL_cx64.begin());
+                auto &eigvecs_cplx = result.get_eigvecs<eigvec_type, Side::L>();
+                eigvecs_cplx.resize(eigvecsize_t);
+                std::copy(solver.RawEigenvectors(), solver.RawEigenvectors() + eigvecsize, eigvecs_cplx.begin());
             } else {
-                result.eigvecsR_cx64.resize(eigvecsize_t);
-                std::copy(solver.RawEigenvectors(), solver.RawEigenvectors() + eigvecsize, result.eigvecsR_cx64.begin());
+                auto &eigvecs_cplx = result.get_eigvecs<eigvec_type, Side::L>();
+                eigvecs_cplx.resize(eigvecsize_t);
+                eigvecs_cplx.resize(eigvecsize_t);
+                std::copy(solver.RawEigenvectors(), solver.RawEigenvectors() + eigvecsize, eigvecs_cplx.begin());
             }
         }
     }
@@ -507,16 +573,6 @@ void eig::solver_arpack<MatrixType>::compute_residual_norms() {
     }
 }
 
-template class eig::solver_arpack<MatVecDense<fp64>>;
-template class eig::solver_arpack<MatVecDense<cx64>>;
-template class eig::solver_arpack<MatVecSparse<fp64>>;
-template class eig::solver_arpack<MatVecSparse<cx64>>;
-template class eig::solver_arpack<MatVecMPO<fp64>>;
-template class eig::solver_arpack<MatVecMPO<cx64>>;
-template class eig::solver_arpack<MatVecMPOS<fp64>>;
-template class eig::solver_arpack<MatVecMPOS<cx64>>;
-template class eig::solver_arpack<MatVecZero<fp64>>;
-template class eig::solver_arpack<MatVecZero<cx64>>;
 #if defined(__clang__)
     // turn the warnings back on
     #pragma clang diagnostic pop

@@ -10,12 +10,7 @@ namespace h5pp::hid {
 
 template<typename Scalar>
 class XXZ : public MpoSite<Scalar> {
-    private:
-    h5tb_xxz               h5tb;
-    [[nodiscard]] double   get_coupling() const;
-    [[nodiscard]] double   get_field() const;
-    Eigen::Tensor<cx64, 4> get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                   std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    using RealScalar = typename MpoSite<Scalar>::RealScalar;
     using MpoSite<Scalar>::extent2;
     using MpoSite<Scalar>::extent4;
     using MpoSite<Scalar>::all_mpo_parameters_have_been_set;
@@ -30,6 +25,13 @@ class XXZ : public MpoSite<Scalar> {
     using MpoSite<Scalar>::build_mpo;
     using MpoSite<Scalar>::build_mpo_squared;
     using TableMap = typename MpoSite<Scalar>::TableMap;
+
+    private:
+    h5tb_xxz                 h5tb;
+    [[nodiscard]] RealScalar     get_coupling() const;
+    [[nodiscard]] RealScalar     get_field() const;
+    Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+                                     std::optional<std::vector<size_t>> skip = std::nullopt) const final;
 
     public:
     explicit XXZ(ModelType model_type_, size_t position_);

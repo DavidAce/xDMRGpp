@@ -5,6 +5,7 @@
 #include "measure/MeasurementsStateFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tools/finite/opt_meta.h"
+#include <general/sfinae.h>
 
 template<typename Scalar>
 class StateFinite;
@@ -13,13 +14,16 @@ class ModelFinite;
 template<typename Scalar>
 class EdgesFinite;
 namespace tools::finite::opt {
-    class opt_mps;
+    template<typename Scalar> class opt_mps;
     struct OptMeta;
 }
 
 // class h5pp_table_measurements_finite;
+template<typename Scalar>
 class AlgorithmFinite : public AlgorithmBase {
-    using OptMeta = tools::finite::opt::OptMeta;
+    protected:
+    using OptMeta    = tools::finite::opt::OptMeta;
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
 
     private:
     size_t                             dmrg_blocksize        = 1; // Number of sites in a DMRG step. This is updated by the information per scale mass center
@@ -35,7 +39,24 @@ class AlgorithmFinite : public AlgorithmBase {
     using AlgorithmBase::AlgorithmBase;
     explicit AlgorithmFinite(OptRitz opt_ritz_, AlgorithmType algo_type);
     explicit AlgorithmFinite(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz opt_ritz_, AlgorithmType algo_type);
-    TensorsFinite tensors; // State, model and edges
+    TensorsFinite<Scalar> tensors; // State, model and edges
+
+    // using TensorsType =
+    // std::variant<TensorsFinite<fp32>, TensorsFinite<fp64>, TensorsFinite<fp128>, TensorsFinite<cx32>, TensorsFinite<cx64>, TensorsFinite<cx128>>;
+    // TensorsType tensors;
+    // std::unique_ptr<TensorsFiniteI> tensors;
+    // template<typename T>
+    // TensorsFinite<T> get_tensors() {
+    //     if(std::holds_alternative<TensorsFinite<T>>(tensors)) return std::get<TensorsFinite<T>>(tensors);
+    //     std::visit(
+    //         [&](const auto &tensor) {
+    //             throw except::runtime_error("Tensors holds type {}, but {} was requested.", sfinae::type_name<decltype(tensor)>(),
+    //                                         sfinae::type_name<TensorsFinite<T>>());
+    //         },
+    //         tensors);
+    //     throw;
+    // }
+    // static_assert(std::is_same_v<decltype(get_tensors<cx32>), TensorsFinite<cx32>>);
 
     size_t                   projected_iter = 0; /*!< The last iteration when projection was tried */
     std::optional<OptAlgo>   last_optalgo   = std::nullopt;
@@ -76,33 +97,33 @@ class AlgorithmFinite : public AlgorithmBase {
     void print_status() override;
     void print_status_full() final;
     void check_convergence() override;
-    void check_convergence_variance(std::optional<double> threshold = std::nullopt, std::optional<double> saturation_sensitivity = std::nullopt);
-    void check_convergence_icom(std::optional<double> saturation_sensitivity = std::nullopt);
-    void check_convergence_entg_entropy(std::optional<double> saturation_sensitivity = std::nullopt);
+    void check_convergence_variance(std::optional<RealScalar> threshold = std::nullopt, std::optional<RealScalar> saturation_sensitivity = std::nullopt);
+    void check_convergence_icom(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
+    void check_convergence_entg_entropy(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
     void check_convergence_spin_parity_sector(std::string_view target_axis, double threshold = 1e-8);
-    template<typename Scalar>
-    void write_to_file(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, StorageEvent storage_event,
+    template<typename T>
+    void write_to_file(const StateFinite<T> &state, const ModelFinite<T> &model, const EdgesFinite<T> &edges, StorageEvent storage_event,
                        CopyPolicy copy_policy = CopyPolicy::TRY);
     template<typename T>
     void write_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy = CopyPolicy::TRY);
 
     struct log_entry {
-        AlgorithmStatus     status;
-        double              energy;
-        double              variance;
-        double              icom;
-        double              time;
-        std::vector<double> entropies;
-        log_entry(const AlgorithmStatus &s, const TensorsFinite &t);
+        AlgorithmStatus         status;
+        RealScalar              energy;
+        RealScalar              variance;
+        RealScalar              icom;
+        double                  time;
+        std::vector<RealScalar> entropies;
+        log_entry(const AlgorithmStatus &s, const TensorsFinite<Scalar> &t);
     };
     std::vector<log_entry> algorithm_history;
-    double                 ene_latest = 0.0;
-    double                 var_latest = 1.0;
-    double                 ene_bondex = 1.0;
-    double                 var_bondex = 1.0;
-    double                 ene_delta  = 0.0;
-    double                 var_delta  = 0.0;
-    double                 var_change = 0.0; // Variance change from normal optimization
+    RealScalar             ene_latest = 0.0;
+    RealScalar             var_latest = 1.0;
+    RealScalar             ene_bondex = 1.0;
+    RealScalar             var_bondex = 1.0;
+    RealScalar             ene_delta  = 0.0;
+    RealScalar             var_delta  = 0.0;
+    RealScalar             var_change = 0.0; // Variance change from normal optimization
 
     size_t             infocom_saturated_for = 0;
     std::deque<double> qexp_history;

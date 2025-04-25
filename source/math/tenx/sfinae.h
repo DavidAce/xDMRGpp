@@ -98,6 +98,14 @@ namespace tenx::sfinae {
     //    static_assert(!is_eigen_tensormap_v<decltype(Eigen::Tensor<double, 3>().shuffle(std::array<long, 3>{0}))>);
     //    static_assert(is_eigen_tensormap_v<Eigen::TensorMap<Eigen::Tensor<double, 3>>>);
 
+    template<typename T, auto rank>
+    concept is_eigen_tensorN = std::is_base_of_v<Eigen::TensorBase<std::remove_cvref_t<T>, Eigen::ReadOnlyAccessors>, std::remove_cvref_t<T>> && //
+                               std::remove_cvref_t<T>::NumDimensions == rank;
+
+    template<typename T> concept is_eigen_tensor1 = is_eigen_tensorN<T, 1>;
+    template<typename T> concept is_eigen_tensor2 = is_eigen_tensorN<T, 2>;
+    template<typename T> concept is_eigen_tensor3 = is_eigen_tensorN<T, 3>;
+
     template<typename T, typename = std::void_t<>>
     struct has_NumIndices : public std::false_type {};
     template<typename T>

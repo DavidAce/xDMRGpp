@@ -21,9 +21,13 @@ template fp32   tools::common::contraction::contract_mps_mps_overlap(const fp32 
                                                                      const fp32 * const mps2_ptr, std::array<long,3> mps2_dims);
 template fp64   tools::common::contraction::contract_mps_mps_overlap(const fp64 * const mps1_ptr, std::array<long,3> mps1_dims,
                                                                      const fp64 * const mps2_ptr, std::array<long,3> mps2_dims);
+template fp128  tools::common::contraction::contract_mps_mps_overlap(const fp128 * const mps1_ptr, std::array<long,3> mps1_dims,
+                                                                     const fp128 * const mps2_ptr, std::array<long,3> mps2_dims);
 template cx32   tools::common::contraction::contract_mps_mps_overlap(const cx32 * const mps1_ptr, std::array<long,3> mps1_dims,
                                                                      const cx32 * const mps2_ptr, std::array<long,3> mps2_dims);
 template cx64   tools::common::contraction::contract_mps_mps_overlap(const cx64 * const mps1_ptr, std::array<long,3> mps1_dims,
                                                                      const cx64 * const mps2_ptr, std::array<long,3> mps2_dims);
+template cx128  tools::common::contraction::contract_mps_mps_overlap(const cx128 * const mps1_ptr, std::array<long,3> mps1_dims,
+                                                                     const cx128 * const mps2_ptr, std::array<long,3> mps2_dims);
 
 /* clang-format on */

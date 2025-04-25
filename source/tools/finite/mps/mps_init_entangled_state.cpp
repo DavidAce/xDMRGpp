@@ -15,15 +15,18 @@
 #include <Eigen/QR>
 #include <fmt/ranges.h>
 
+using tools::finite::mps::RealScalar;
+
 template<typename Scalar>
 Eigen::Tensor<Scalar, 2> get_random_unitary_matrix(long rows, long cols) {
     using mat_t   = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using vec_t   = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     auto gaussian = []() -> Scalar {
-        if constexpr(std::is_same_v<Scalar, std::complex<double>>)
-            return Scalar(rnd::normal(0., 1.), rnd::normal(0., 1.)) / std::sqrt(2.0);
+        using Real = typename Eigen::NumTraits<Scalar>::Real;
+        if constexpr(sfinae::is_std_complex_v<Scalar>)
+            return Scalar(rnd::normal(Real(0.), Real(1.)), rnd::normal(Real(0.), Real(1.))) / std::sqrt<Real>(2.0);
         else
-            return rnd::normal(0., 1.);
+            return rnd::normal(Real(0.0), Real(1.));
     };
     mat_t M = mat_t::NullaryExpr(rows, cols, gaussian);
 
@@ -48,14 +51,15 @@ std::vector<long> tools::finite::mps::init::get_valid_bond_dimensions(size_t siz
     return bond_dimensions;
 }
 
-void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite &state, StateInitType type, std::string_view axis, std::string &pattern) {
+template<typename Scalar>
+void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     tools::log->debug("Setting Néel state of type {} on axis {} with a midchain singlet {}", enum2sv(type), axis,
                       pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
     move_center_point_to_middle(state);
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
     Eigen::Tensor<cx64, 1> LC(2); // L for the singlet
-    LC.setConstant(1.0 / std::sqrt(2));
+    LC.setConstant(RealScalar<Scalar>(1.0 / std::sqrt(2)));
     auto axus = qm::spin::half::get_axis_unsigned(axis);
     if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
@@ -113,41 +117,50 @@ void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite &stat
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
     tools::log->debug("Initial state: {}", bitfield);
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<fp32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<fp64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<fp128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<cx32> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<cx64> &state, StateInitType type, std::string_view axis, std::string &pattern);
+template void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
+/* clang-format on */
 
-void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite &state, StateInitType type, long bond_lim) {
+template<typename Scalar>
+void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<Scalar> &state, StateInitType type, long bond_lim) {
     tools::log->info("Setting random entangled state with Haar distribution | bond_lim {}", bond_lim);
-    const auto  spin_dim        = state.get_mps_site<size_t>(0).spin_dim();
+    const auto  spin_dim        = state.template get_mps_site<size_t>(0).spin_dim();
     auto        bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, bond_lim);
     bool        pastCenter      = false;
     std::string label           = "A";
+    using VectorReal            = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
     for(auto &mps_ptr : state.mps_sites) {
-        auto &mps  = *mps_ptr;
-        auto  chiL = bond_dimensions[mps.get_position()];
-        auto  chiR = bond_dimensions[mps.get_position() + 1];
-
-        Eigen::Tensor<cx64, 2> U;
-        Eigen::Tensor<cx64, 3> G(spin_dim, chiL, chiR);
+        auto                    &mps  = *mps_ptr;
+        auto                     chiL = bond_dimensions[mps.get_position()];
+        auto                     chiR = bond_dimensions[mps.get_position() + 1];
+        Eigen::Tensor<Scalar, 2> U;
+        Eigen::Tensor<Scalar, 3> G(spin_dim, chiL, chiR);
         if(label == "A") {
-            if(type == StateInitType::REAL) U = get_random_unitary_matrix<fp64>(spin_dim * chiL, chiR).cast<cx64>();
-            if(type == StateInitType::CPLX) U = get_random_unitary_matrix<cx64>(spin_dim * chiL, chiR);
+            if(type == StateInitType::REAL) U = get_random_unitary_matrix<RealScalar<Scalar>>(spin_dim * chiL, chiR).template cast<Scalar>();
+            if(type == StateInitType::CPLX) U = get_random_unitary_matrix<Scalar>(spin_dim * chiL, chiR);
             chiR     = U.dimension(1);
             auto rsh = std::array<long, 3>{spin_dim, chiL, chiR};
             G        = U.reshape(rsh);
         }
         if(label == "B") {
-            if(type == StateInitType::REAL) U = get_random_unitary_matrix<fp64>(spin_dim * chiR, chiL).cast<cx64>();
-            if(type == StateInitType::CPLX) U = get_random_unitary_matrix<cx64>(spin_dim * chiR, chiL);
+            if(type == StateInitType::REAL) U = get_random_unitary_matrix<RealScalar<Scalar>>(spin_dim * chiR, chiL).template cast<Scalar>();
+            if(type == StateInitType::CPLX) U = get_random_unitary_matrix<Scalar>(spin_dim * chiR, chiL);
             chiL     = U.dimension(1);
             auto rsh = std::array<long, 3>{spin_dim, chiR, chiL};
             auto shf = std::array<long, 3>{0, 2, 1};
             G        = U.reshape(rsh).shuffle(shf);
         }
         auto smdt = pastCenter ? chiR : chiL;
-        auto L    = tenx::TensorCast(Eigen::VectorXd::Ones(smdt).normalized());
+        auto L    = tenx::TensorCast(VectorReal::Ones(smdt).normalized());
 
         mps.set_mps(G, L, 0, label);
         if(mps.isCenter()) {
-            auto LC = tenx::TensorCast(Eigen::VectorXd::Ones(chiR).normalized());
+            auto LC = tenx::TensorCast(VectorReal::Ones(chiR).normalized());
             mps.set_LC(LC);
             pastCenter = true;
             label      = "B";
@@ -157,42 +170,70 @@ void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite &stat
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+template void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<fp32> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<fp64> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<fp128> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<cx32> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<cx64> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<cx128> &state, StateInitType type, long bond_lim);
 
-void tools::finite::mps::init::random_entangled_state(StateFinite &state, StateInitType type, [[maybe_unused]] std::string_view axis,
+template<typename Scalar>
+void tools::finite::mps::init::random_entangled_state(StateFinite<Scalar> &state, StateInitType type, [[maybe_unused]] std::string_view axis,
                                                       [[maybe_unused]] bool use_eigenspinors, long bond_lim) {
     // TODO: Make version with/without eigenspinors
     set_random_entangled_state_with_random_spinors(state, type, bond_lim);
 }
+/* clang-format off */
+template void tools::finite::mps::init::random_entangled_state(StateFinite<fp32> &state, StateInitType type, [[maybe_unused]] std::string_view axis, [[maybe_unused]] bool use_eigenspinors, long bond_lim);
+template void tools::finite::mps::init::random_entangled_state(StateFinite<fp64> &state, StateInitType type, [[maybe_unused]] std::string_view axis, [[maybe_unused]] bool use_eigenspinors, long bond_lim);
+template void tools::finite::mps::init::random_entangled_state(StateFinite<fp128> &state, StateInitType type, [[maybe_unused]] std::string_view axis, [[maybe_unused]] bool use_eigenspinors, long bond_lim);
+template void tools::finite::mps::init::random_entangled_state(StateFinite<cx32> &state, StateInitType type, [[maybe_unused]] std::string_view axis, [[maybe_unused]] bool use_eigenspinors, long bond_lim);
+template void tools::finite::mps::init::random_entangled_state(StateFinite<cx64> &state, StateInitType type, [[maybe_unused]] std::string_view axis, [[maybe_unused]] bool use_eigenspinors, long bond_lim);
+template void tools::finite::mps::init::random_entangled_state(StateFinite<cx128> &state, StateInitType type, [[maybe_unused]] std::string_view axis, [[maybe_unused]] bool use_eigenspinors, long bond_lim);
+/* clang-format on */
 
-void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite &state, StateInitType type, long bond_lim) {
+template<typename Scalar>
+void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<Scalar> &state, StateInitType type, long bond_lim) {
     tools::log->info("Setting random entangled state with random unit spinors");
-    const auto  spin_dim        = state.get_mps_site<size_t>(0).spin_dim();
+    // static_assert(sfinae::is_std_complex_v<Scalar>);
+    const auto  spin_dim        = state.template get_mps_site<size_t>(0).spin_dim();
     auto        bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, bond_lim);
     bool        pastCenter      = false;
     std::string label           = "A";
+    using VectorReal            = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
+    using VectorType            = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+
     for(auto &mps_ptr : state.mps_sites) {
-        auto           &mps  = *mps_ptr;
-        auto            chiL = bond_dimensions[mps.get_position()];
-        auto            chiR = bond_dimensions[mps.get_position() + 1];
-        auto            size = spin_dim * chiL * chiR;
-        auto            smdt = pastCenter ? chiR : chiL;
-        Eigen::VectorXd Ltmp = Eigen::VectorXd(smdt).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform_double_01(); });
-        std::sort(Ltmp.data(), Ltmp.data() + Ltmp.size(), std::greater<double>());
-        Eigen::Tensor<cx64, 1> L = tenx::TensorCast(Ltmp.normalized()).cast<cx64>();
-        Eigen::Tensor<cx64, 3> G(spin_dim, chiL, chiR);
+        auto      &mps  = *mps_ptr;
+        auto       chiL = bond_dimensions[mps.get_position()];
+        auto       chiR = bond_dimensions[mps.get_position() + 1];
+        auto       size = spin_dim * chiL * chiR;
+        auto       smdt = pastCenter ? chiR : chiL;
+        VectorReal Ltmp = VectorReal(smdt).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform<RealScalar<Scalar>>(0, 1); });
+        std::sort(Ltmp.data(), Ltmp.data() + Ltmp.size(), std::greater<RealScalar<Scalar>>());
+        Eigen::Tensor<Scalar, 1> L = tenx::TensorCast(Ltmp.normalized()).template cast<Scalar>();
+        Eigen::Tensor<Scalar, 3> G(spin_dim, chiL, chiR);
         if(type == StateInitType::REAL) {
-            Eigen::VectorXd Gtmp = Eigen::VectorXd(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform_double_box(-1.0, 1.0); });
-            G                    = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).cast<cx64>();
+            VectorReal Gtmp = VectorReal(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform<RealScalar<Scalar>>(-1, 1); });
+            G               = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).template cast<Scalar>();
         } else if(type == StateInitType::CPLX) {
-            Eigen::VectorXcd Gtmp = Eigen::VectorXcd(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform_complex_in_unit_circle(); });
-            G                     = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).cast<cx64>();
+            if constexpr(sfinae::is_std_complex_v<Scalar>) {
+                VectorType Gtmp = VectorType(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform_complex_in_circle<RealScalar<Scalar>>(1); });
+                G               = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).template cast<Scalar>();
+            }else {
+                tools::log->warn("set_random_entangled_state_with_random_spinors: Detected StateInitType::CPLX, but the state has real scalar type [{}]. \n"
+                                 "Reverting the distribution uniform_complex_in_circle(1) -> uniform(-1,1)", sfinae::type_name<Scalar>());
+                VectorType Gtmp = VectorType(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform<RealScalar<Scalar>>(-1,1); });
+                G               = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).template cast<Scalar>();
+            }
+
         }
 
         mps.set_mps(G, L, 0, label);
         if(mps.isCenter()) {
-            Ltmp = Eigen::VectorXd(chiR).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform_double_01(); });
-            std::sort(Ltmp.data(), Ltmp.data() + Ltmp.size(), std::greater<double>());
-            Eigen::Tensor<cx64, 1> LC = tenx::TensorCast(Ltmp.normalized()).cast<cx64>();
+            Ltmp = VectorReal(chiR).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform<RealScalar<Scalar>>(0, 1); });
+            std::sort(Ltmp.data(), Ltmp.data() + Ltmp.size(), std::greater<RealScalar<Scalar>>());
+            Eigen::Tensor<Scalar, 1> LC = tenx::TensorCast(Ltmp.normalized()).template cast<Scalar>();
             mps.set_LC(LC);
             pastCenter = true;
             label      = "B";
@@ -202,6 +243,12 @@ void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(St
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+template void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<fp32> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<fp64> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<fp128> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<cx32> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<cx64> &state, StateInitType type, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<cx128> &state, StateInitType type, long bond_lim);
 
 Eigen::Tensor<std::complex<double>, 3> get_random_spinor_tensor(const std::array<long, 3> &dims, std::string_view label,
                                                                 const std::vector<Eigen::VectorXcd> &eigenspinors) {
@@ -235,13 +282,14 @@ Eigen::Tensor<std::complex<double>, 3> get_random_spinor_tensor(const std::array
     throw except::logic_error("Unexpected label: {}", label);
 }
 
-void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite &state, StateInitType type,
+template<typename Scalar>
+void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<Scalar> &state, StateInitType type,
                                                                                      const std::vector<std::string> &axes, long bond_lim) {
-    auto spin_dim        = state.get_mps_site<size_t>(0).spin_dim();
+    auto spin_dim        = state.template get_mps_site<size_t>(0).spin_dim();
     auto bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, bond_lim);
     auto eigenspinors    = std::vector<Eigen::VectorXcd>();
     tools::log->info("Setting random entangled state on axes {}: bond dims {}", axes, bond_dimensions);
-
+    using VectorReal = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
     for(const auto &axis : axes) {
         auto axus = qm::spin::half::get_axis_unsigned(axis);
         if(type == StateInitType::REAL and axus == "y") throw except::logic_error("axis y is incompatible with StateInitType::REAL");
@@ -256,11 +304,11 @@ void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspi
         auto  chiR = bond_dimensions[mps.get_position() + 1];
         auto  dims = std::array<long, 3>{spin_dim, chiL, chiR};
         auto  G    = get_random_spinor_tensor(dims, label, eigenspinors);
-        auto  L    = Eigen::Tensor<double, 1>(tenx::TensorCast(Eigen::VectorXd::Ones((past_center ? chiR : chiL)).normalized()));
+        auto  L    = Eigen::Tensor<RealScalar<Scalar>, 1>(tenx::TensorCast(VectorReal::Ones((past_center ? chiR : chiL)).normalized()));
 
         mps.set_mps(G, L, 0, label);
         if(mps.isCenter()) {
-            Eigen::Tensor<double, 1> LC = tenx::TensorCast(Eigen::VectorXd::Ones(chiR).normalized());
+            Eigen::Tensor<RealScalar<Scalar>, 1> LC = tenx::TensorCast(VectorReal::Ones(chiR).normalized());
             mps.set_LC(LC);
             past_center = true;
             label       = "B";
@@ -270,10 +318,19 @@ void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspi
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<fp32> &state, StateInitType type, const std::vector<std::string> &axes, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<fp64> &state, StateInitType type, const std::vector<std::string> &axes, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<fp128> &state, StateInitType type, const std::vector<std::string> &axes, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<cx32> &state, StateInitType type, const std::vector<std::string> &axes, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<cx64> &state, StateInitType type, const std::vector<std::string> &axes, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<cx128> &state, StateInitType type, const std::vector<std::string> &axes, long bond_lim);
+/* clang-format on */
 
-void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite &state, StateInitType type, std::string_view axis,
+template<typename Scalar>
+void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
                                                                                      long bond_lim) {
-    const auto spin_dim        = state.get_mps_site<size_t>(0).spin_dim();
+    const auto spin_dim        = state.template get_mps_site<size_t>(0).spin_dim();
     auto       bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, bond_lim);
     auto       axus            = qm::spin::half::get_axis_unsigned(axis);
     auto       sign            = qm::spin::half::get_sign(axis);
@@ -281,15 +338,17 @@ void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspi
     if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state in axis [y] which impliex CPLX");
     bool        past_center = false;
     std::string label       = "A";
+    using MatrixType        = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorType        = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     for(auto &mps_ptr : state.mps_sites) {
-        auto                                                           &mps  = *mps_ptr;
-        auto                                                            chiL = bond_dimensions[mps.get_position()];
-        auto                                                            chiR = bond_dimensions[mps.get_position() + 1];
-        auto                                                            rows = past_center ? chiL : chiL * spin_dim;
-        auto                                                            cols = past_center ? chiR * spin_dim : chiR;
-        Eigen::Tensor<cx64, 1>                                          L    = tenx::TensorCast(Eigen::VectorXd::Ones(chiL).normalized()).cast<cx64>();
-        Eigen::Tensor<cx64, 3>                                          G(spin_dim, chiL, chiR);
-        Eigen::Map<Eigen::Matrix<cx64, Eigen::Dynamic, Eigen::Dynamic>> G_mat(G.data(), rows, cols);
+        auto                    &mps  = *mps_ptr;
+        auto                     chiL = bond_dimensions[mps.get_position()];
+        auto                     chiR = bond_dimensions[mps.get_position() + 1];
+        auto                     rows = past_center ? chiL : chiL * spin_dim;
+        auto                     cols = past_center ? chiR * spin_dim : chiR;
+        Eigen::Tensor<Scalar, 1> L    = tenx::TensorCast(Eigen::VectorXd::Ones(chiL).normalized()).template cast<Scalar>();
+        Eigen::Tensor<Scalar, 3> G(spin_dim, chiL, chiR);
+        Eigen::Map<MatrixType>   G_mat(G.data(), rows, cols);
         // Here we construct the set of spinors for each site using randomly selected eigenspinors
         std::array<long, 3> offset3;
         std::array<long, 3> extent3{spin_dim, 1, 1};
@@ -297,7 +356,7 @@ void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspi
         for(long col = 0; col < chiR; col++) {
             for(long row = 0; row < chiL; row++) {
                 auto rnd_sign                              = 2 * rnd::uniform_integer_01() - 1;
-                auto spinor                                = qm::spin::half::get_spinor(axus, rnd_sign);
+                auto spinor                                = tenx::asScalarType<Scalar>(qm::spin::half::get_spinor(axus, rnd_sign));
                 offset3                                    = {0, row, col};
                 G.slice(offset3, extent3).reshape(extent1) = tenx::TensorMap(spinor);
             }
@@ -308,7 +367,7 @@ void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspi
         //        G = tenx::TensorMap(tenx::VectorCast(G).normalized(), spin_dim, chiL, chiR);
         mps.set_mps(G, L, 0, label);
         if(mps.isCenter()) {
-            Eigen::Tensor<cx64, 1> LC = tenx::TensorCast(Eigen::VectorXd::Ones(chiR).normalized()).cast<cx64>();
+            Eigen::Tensor<Scalar, 1> LC = tenx::TensorCast(VectorType::Ones(chiR).normalized());
             mps.set_LC(LC);
             past_center = true;
             label       = "B";
@@ -319,24 +378,24 @@ void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspi
     // spin if necessary
     auto spin_component = tools::finite::measure::spin_component(state, axus);
     if(spin_component * sign < 0) {
-        auto                                                           &mps  = *state.mps_sites.back();
-        auto                                                            chiL = bond_dimensions[mps.get_position()];
-        auto                                                            chiR = bond_dimensions[mps.get_position() + 1];
-        auto                                                            rows = past_center ? chiL : chiL * spin_dim;
-        auto                                                            cols = past_center ? chiR * spin_dim : chiR;
-        std::array<long, 3>                                             offset3;
-        std::array<long, 3>                                             extent3{spin_dim, 1, 1};
-        std::array<long, 1>                                             extent1{spin_dim};
-        Eigen::Tensor<cx64, 3>                                          G(spin_dim, chiL, chiR);
-        Eigen::Map<Eigen::Matrix<cx64, Eigen::Dynamic, Eigen::Dynamic>> G_mat(G.data(), rows, cols);
+        auto                                                             &mps  = *state.mps_sites.back();
+        auto                                                              chiL = bond_dimensions[mps.get_position()];
+        auto                                                              chiR = bond_dimensions[mps.get_position() + 1];
+        auto                                                              rows = past_center ? chiL : chiL * spin_dim;
+        auto                                                              cols = past_center ? chiR * spin_dim : chiR;
+        std::array<long, 3>                                               offset3;
+        std::array<long, 3>                                               extent3{spin_dim, 1, 1};
+        std::array<long, 1>                                               extent1{spin_dim};
+        Eigen::Tensor<Scalar, 3>                                          G(spin_dim, chiL, chiR);
+        Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>> G_mat(G.data(), rows, cols);
         for(long col = 0; col < chiR; col++) {
             for(long row = 0; row < chiL; row++) {
                 offset3                                    = {0, row, col};
-                Eigen::Tensor<cx64, 1> old_spinor_tensor   = mps.get_M().slice(offset3, extent3).reshape(extent1);
-                Eigen::VectorXcd       old_spinor_vector   = tenx::VectorCast(old_spinor_tensor);
-                cx64                   old_spinor_expval   = old_spinor_vector.dot(qm::spin::half::get_pauli(axus) * old_spinor_vector);
-                int                    old_spinor_sign     = std::real(old_spinor_expval) > 0 ? 1 : -1;
-                auto                   new_spinor_vector   = qm::spin::half::get_spinor(axus, -old_spinor_sign);
+                Eigen::Tensor<Scalar, 1> old_spinor_tensor = mps.get_M().slice(offset3, extent3).reshape(extent1);
+                VectorType               old_spinor_vector = tenx::VectorCast(old_spinor_tensor);
+                Scalar old_spinor_expval = old_spinor_vector.dot(tenx::asScalarType<Scalar>(qm::spin::half::get_pauli(axus)) * old_spinor_vector);
+                int    old_spinor_sign   = std::real(old_spinor_expval) > 0 ? 1 : -1;
+                auto   new_spinor_vector = tenx::asScalarType<Scalar>(qm::spin::half::get_spinor(axus, -old_spinor_sign));
                 G.slice(offset3, extent3).reshape(extent1) = tenx::TensorMap(new_spinor_vector);
             }
         }
@@ -348,13 +407,28 @@ void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspi
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
+/* clang-format off */
+template void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<fp32> &state, StateInitType type, std::string_view axis, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<fp64> &state, StateInitType type, std::string_view axis, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<fp128> &state, StateInitType type, std::string_view axis, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<cx32> &state, StateInitType type, std::string_view axis, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<cx64> &state, StateInitType type, std::string_view axis, long bond_lim);
+template void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<cx128> &state, StateInitType type, std::string_view axis, long bond_lim);
+/* clang-format on */
 
-void tools::finite::mps::init::randomize_given_state(StateFinite &state, StateInitType type) {
+template<typename Scalar>
+void tools::finite::mps::init::randomize_given_state(StateFinite<Scalar> &state, StateInitType type) {
     using namespace qm::spin::half::matrix;
     switch(type) {
-        case StateInitType::REAL: tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::MatrixXcd>{id, 1.0 / std::sqrt(2.0) * (sx + sz)}); break;
+        case StateInitType::REAL: tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::Matrix2cd>{id, 1.0 / std::sqrt(2.0) * (sx + sz)}); break;
         case StateInitType::CPLX:
-            tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::MatrixXcd>{id, 1.0 / std::sqrt(3.0) * (sx + sy + sz)});
+            tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::Matrix2cd>{id, 1.0 / std::sqrt(3.0) * (sx + sy + sz)});
             break;
     }
 }
+template void tools::finite::mps::init::randomize_given_state(StateFinite<fp32> &state, StateInitType type);
+template void tools::finite::mps::init::randomize_given_state(StateFinite<fp64> &state, StateInitType type);
+template void tools::finite::mps::init::randomize_given_state(StateFinite<fp128> &state, StateInitType type);
+template void tools::finite::mps::init::randomize_given_state(StateFinite<cx32> &state, StateInitType type);
+template void tools::finite::mps::init::randomize_given_state(StateFinite<cx64> &state, StateInitType type);
+template void tools::finite::mps::init::randomize_given_state(StateFinite<cx128> &state, StateInitType type);

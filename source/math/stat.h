@@ -1,7 +1,6 @@
 #pragma once
 
 #include "cast.h"
-#include "general/iter.h"
 #include "num.h"
 #include <algorithm>
 #include <cmath>
@@ -9,8 +8,8 @@
 #include <iterator>
 #include <numeric>
 #include <optional>
-#include <vector>
 #include <span>
+#include <vector>
 
 /*!
  *  \namespace stat
@@ -59,22 +58,24 @@ namespace stat {
     template<typename ContainerType>
     [[nodiscard]] typename ContainerType::value_type mean(ContainerType &X, std::optional<size_t> start_point = std::nullopt,
                                                           std::optional<size_t> end_point = std::nullopt) {
+        using value_type  = typename ContainerType::value_type;
         auto [x_it, x_en] = get_start_end_iterators(X, start_point, end_point);
-        auto n            = static_cast<double>(std::distance(x_it, x_en));
+        auto n            = static_cast<value_type>(std::distance(x_it, x_en));
         return std::accumulate(x_it, x_en, static_cast<typename ContainerType::value_type>(0.0)) / n;
     }
 
     template<typename ContainerType>
     [[nodiscard]] typename ContainerType::value_type median(ContainerType X, std::optional<size_t> offset = std::nullopt,
-                                                          std::optional<size_t> extent = std::nullopt) {
-        if(X.empty()) return std::numeric_limits<typename ContainerType::value_type>::quiet_NaN();
+                                                            std::optional<size_t> extent = std::nullopt) {
+        using value_type = typename ContainerType::value_type;
+        if(X.empty()) return std::numeric_limits<value_type>::quiet_NaN();
         offset = offset.value_or(0);
-        offset = std::clamp<size_t>(offset.value(), 0ul, X.size()-1);
-        extent = extent.value_or(X.size()-offset.value());
-        extent = std::clamp<size_t>(extent.value(), 0ul, X.size()-offset.value());
-        auto x = std::span<typename ContainerType::value_type>(X.begin()+static_cast<std::ptrdiff_t>(offset.value()), extent.value());
-        auto n  = static_cast<size_t>(x.size());
-        if(n == 0) return std::numeric_limits<typename ContainerType::value_type>::quiet_NaN();
+        offset = std::clamp<size_t>(offset.value(), 0ul, X.size() - 1);
+        extent = extent.value_or(X.size() - offset.value());
+        extent = std::clamp<size_t>(extent.value(), 0ul, X.size() - offset.value());
+        auto x = std::span<value_type>(X.begin() + static_cast<std::ptrdiff_t>(offset.value()), extent.value());
+        auto n = static_cast<size_t>(x.size());
+        if(n == 0) return std::numeric_limits<value_type>::quiet_NaN();
         std::sort(x.begin(), x.end());
         // Find the starting point
         auto x_it_mid = x.begin();
@@ -85,7 +86,7 @@ namespace stat {
             auto a = *x_it_mid;
             std::advance(x_it_mid, -1);
             auto b = *x_it_mid;
-            return 0.5 * (a + b);
+            return static_cast<value_type>(0.5) * (a + b);
         } else {
             // odd number of elements
             return *x_it_mid;
@@ -100,11 +101,12 @@ namespace stat {
     template<typename ContainerType>
     [[nodiscard]] typename ContainerType::value_type variance(const ContainerType &X, std::optional<size_t> start_point = std::nullopt,
                                                               std::optional<size_t> end_point = std::nullopt) {
+        using value_type = typename ContainerType::value_type;
         auto [x_it, x_en] = get_start_end_iterators(X, start_point, end_point);
-        auto n            = static_cast<double>(std::distance(x_it, x_en));
+        auto n            = static_cast<value_type>(std::distance(x_it, x_en));
         if(n == 0) return 0.0;
         auto X_mean = stat::mean(X, start_point, end_point);
-        auto sum    = std::accumulate(x_it, x_en, static_cast<typename ContainerType::value_type>(0.0),
+        auto sum    = std::accumulate(x_it, x_en, static_cast<value_type>(0.0),
                                       [&X_mean](auto x1, auto x2) { return x1 + (x2 - X_mean) * (x2 - X_mean); });
         return sum / n;
     }
@@ -123,15 +125,18 @@ namespace stat {
         return stdev(X, start_point, end_point) / std::sqrt(n);
     }
     template<typename ContainerType>
-    [[nodiscard]] std::vector<double> stdev_moving(const ContainerType &X, double width = 0.1, std::optional<size_t> start_point = std::nullopt,
-                                                   std::optional<size_t> end_point = std::nullopt) {
-        std::vector<double> res;
-        width             = std::clamp<double>(width, 0.0, 1.0);
+    [[nodiscard]] std::vector<typename ContainerType::value_type> stdev_moving(const ContainerType &X, typename ContainerType::value_type width = 0.1,
+                                                                               std::optional<size_t> start_point = std::nullopt,
+                                                                               std::optional<size_t> end_point   = std::nullopt) {
+        using value_type = typename ContainerType::value_type;
+        static_assert(std::is_floating_point_v<value_type>);
+        std::vector<value_type> res;
+        width             = std::clamp<value_type>(width, 0, 1);
         auto [x_it, x_en] = get_start_end_iterators(X, start_point, end_point);
         long idx0         = std::distance(X.begin(), x_it);
         long idxN         = std::distance(X.begin(), x_en);
         long xlen         = std::distance(x_it, x_en);                                             // Number of points to consider in X
-        long wlen         = std::max<long>(2, safe_cast<long>(width * static_cast<double>(xlen))); // Number of points in the moving window
+        long wlen         = std::max<long>(2, safe_cast<long>(width * static_cast<value_type>(xlen))); // Number of points in the moving window
         while(x_it != x_en) {
             long idx_beg = std::distance(X.begin(), x_it); // Center around x_it
             long idx_end = std::distance(X.begin(), x_it); // Center around x_it
@@ -302,7 +307,7 @@ namespace stat {
         width = std::min<long>(4, safe_cast<long>(X.size()) / 2);
         ContainerType S;
         S.reserve(X.size());
-        for(auto &&[i, x] : iter::enumerate(X)) {
+        for(size_t i = 0; i < X.size(); i++) {
             auto min_idx = std::clamp<long>(safe_cast<long>(i) - width, 0l, safe_cast<long>(i));
             auto max_idx = std::clamp<long>(safe_cast<long>(i) + width, safe_cast<long>(i), safe_cast<long>(X.size()) - 1l);
             S.push_back(stat::mean(X, min_idx, max_idx));

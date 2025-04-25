@@ -19,7 +19,7 @@ namespace tools::infinite::measure {
     template<typename Scalar> extern size_t length                           (const TensorsInfinite<Scalar> & tensors);
     template<typename Scalar> extern size_t length                           (const EdgesInfinite<Scalar> & edges);
     template<typename Scalar> extern long   bond_dimension                   (const StateInfinite<Scalar> & state);
-    template<typename Scalar> extern RealScalar<Scalar> truncation_error     (const StateInfinite<Scalar> & state);
+    template<typename Scalar> extern double truncation_error                 (const StateInfinite<Scalar> & state);
     template<typename Scalar> extern RealScalar<Scalar> norm                 (const StateInfinite<Scalar> & state);
     template<typename Scalar> extern RealScalar<Scalar> entanglement_entropy (const StateInfinite<Scalar> & state);
 

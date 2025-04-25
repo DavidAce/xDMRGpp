@@ -9,11 +9,11 @@ class IsingRandomField : public MpoSite<Scalar> {
     protected:
     h5tb_ising_tf_rf h5tb;
 
-    [[nodiscard]] double   get_field() const;
-    [[nodiscard]] double   get_coupling() const;
+    [[nodiscard]] double     get_field() const;
+    [[nodiscard]] double     get_coupling() const;
     Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                   std::optional<std::vector<size_t>> skip = std::nullopt) const final;
-
+                                     std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    using RealScalar = typename MpoSite<Scalar>::RealScalar;
     using MpoSite<Scalar>::extent2;
     using MpoSite<Scalar>::extent4;
     using MpoSite<Scalar>::all_mpo_parameters_have_been_set;

@@ -7,6 +7,10 @@
 #include "math/tenx.h"
 #include "tensors/site/mpo/MpoFactory.h"
 
+template class ModelInfinite<fp32>;
+template class ModelInfinite<fp64>;
+template class ModelInfinite<fp128>;
+template class ModelInfinite<cx32>;
 template class ModelInfinite<cx64>;
 template class ModelInfinite<cx128>;
 

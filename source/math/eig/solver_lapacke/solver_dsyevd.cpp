@@ -25,7 +25,7 @@ int eig::solver::dsyevd(fp64 *matrix, size_type L) {
     eig::log->trace("Starting eig dsyevd");
     auto t_start = std::chrono::high_resolution_clock::now();
 
-    auto &eigvals = result.get_eigvals<Form::SYMM>();
+    auto &eigvals = result.get_eigvals<Form::SYMM, Type::FP64>();
     eigvals.resize(safe_cast<size_t>(L));
 
     // Call lapack solver

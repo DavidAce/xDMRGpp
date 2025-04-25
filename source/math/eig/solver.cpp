@@ -7,7 +7,9 @@
 #include "matvec/matvec_sparse.h"
 #include "matvec/matvec_zero.h"
 #include "solver_arpack/solver_arpack.h"
+#include "solver_spectra/solver_spectra.h"
 #include "tid/tid.h"
+#include <general/sfinae.h>
 
 int eig::getBasisSize(long L, int nev, std::optional<int> basisSize) {
     if(not basisSize.has_value() or basisSize.value() <= 0) { basisSize = nev * safe_cast<int>(std::ceil(std::log2(L))); }
@@ -36,13 +38,13 @@ void eig::solver::subtract_phase(std::vector<Scalar> &eigvecs, size_type L, int 
 // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
 // remove it from all other elements of v.
 {
-    if constexpr(std::is_same_v<Scalar, cx32> or std::is_same_v<Scalar, cx64>) {
+    if constexpr(sfinae::is_std_complex_v<Scalar>) {
         if(eigvecs.empty()) return;
         using Real = typename Scalar::value_type;
         if(nev > 0) {
             for(int i = 0; i < nev; i++) {
-                if(eigvecs[safe_cast<size_t>(i * L)].imag() == static_cast<Real>(0.0)) { continue; }
-                Scalar inv_phase     = Scalar(0.0, -1.0) * std::arg(eigvecs[safe_cast<size_t>(i * L)]);
+                if(eigvecs[safe_cast<size_t>(i * L)].imag() == Real{0}) { continue; }
+                Scalar inv_phase     = Scalar(Real{0}, Real{-1}) * std::arg(eigvecs[safe_cast<size_t>(i * L)]);
                 auto   begin         = eigvecs.begin() + i * L;
                 auto   end           = begin + L;
                 Scalar exp_inv_phase = std::exp(inv_phase);
@@ -57,8 +59,10 @@ void eig::solver::subtract_phase(std::vector<Scalar> &eigvecs, size_type L, int 
 
 template void eig::solver::subtract_phase(std::vector<fp32> &eigvecs, size_type L, int nev);
 template void eig::solver::subtract_phase(std::vector<fp64> &eigvecs, size_type L, int nev);
+template void eig::solver::subtract_phase(std::vector<fp128> &eigvecs, size_type L, int nev);
 template void eig::solver::subtract_phase(std::vector<cx64> &eigvecs, size_type L, int nev);
 template void eig::solver::subtract_phase(std::vector<cx32> &eigvecs, size_type L, int nev);
+template void eig::solver::subtract_phase(std::vector<cx128> &eigvecs, size_type L, int nev);
 
 void eig::solver::eig_init(Form form, Type type, Vecs compute_eigvecs, Dephase remove_phase) {
     eig::log->trace("eig init");
@@ -129,7 +133,8 @@ void eig::solver::eig(Scalar *matrix, size_type L, Vecs compute_eigvecs_, Dephas
     result.build_eigvecs_cx32();
     result.build_eigvals_cx64();
     result.build_eigvecs_cx64();
-
+    result.build_eigvals_cx128();
+    result.build_eigvecs_cx128();
     if(info == 0 and config.remove_phase and config.remove_phase.value() == Dephase::OFF) {
         // The solution to  the eigenvalue equation Av = l*v is determined up to a constant phase factor, i.e., if v
         // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
@@ -138,16 +143,22 @@ void eig::solver::eig(Scalar *matrix, size_type L, Vecs compute_eigvecs_, Dephas
         subtract_phase(result.eigvecsR_cx32, L, result.meta.nev);
         subtract_phase(result.eigvecsL_cx64, L, result.meta.nev);
         subtract_phase(result.eigvecsR_cx64, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx128, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx128, L, result.meta.nev);
     }
 }
 template void eig::solver::eig<eig::Form::SYMM>(fp32 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(fp32 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(fp64 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(fp64 *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(fp128 *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(fp128 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx32 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(cx32 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx64 *matrix, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(cx64 *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(cx128 *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(cx128 *matrix, size_type, Vecs, Dephase);
 
 template<eig::Form form, typename Scalar>
 void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, Vecs compute_eigvecs_, Dephase remove_phase_) {
@@ -257,7 +268,8 @@ void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, Vecs comput
     result.build_eigvecs_cx32();
     result.build_eigvals_cx64();
     result.build_eigvecs_cx64();
-
+    result.build_eigvals_cx128();
+    result.build_eigvecs_cx128();
     if(info == 0 and config.remove_phase and config.remove_phase.value() == Dephase::OFF) {
         // The solution to  the eigenvalue equation Av = l*v is determined up to a constant phase factor, i.e., if v
         // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
@@ -272,10 +284,14 @@ template void eig::solver::eig<eig::Form::SYMM>(fp32 *matrixA, fp32 *matrixB, si
 template void eig::solver::eig<eig::Form::NSYM>(fp32 *matrixA, fp32 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(fp64 *matrixA, fp64 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(fp64 *matrixA, fp64 *matrixB, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(fp128 *matrixA, fp128 *matrixB, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(fp128 *matrixA, fp128 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx32 *matrixA, cx32 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(cx32 *matrixA, cx32 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx64 *matrixA, cx64 *matrixB, size_type, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::NSYM>(cx64 *matrixA, cx64 *matrixB, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(cx128 *matrixA, cx128 *matrixB, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(cx128 *matrixA, cx128 *matrixB, size_type, Vecs, Dephase);
 
 template<eig::Form form, typename Scalar, typename RealScalar>
 void eig::solver::eig(Scalar *matrix, size_type L, char range, int il, int iu, RealScalar vl, RealScalar vu, Vecs compute_eigvecs_, Dephase remove_phase_) {
@@ -333,12 +349,16 @@ void eig::solver::eig(Scalar *matrix, size_type L, char range, int il, int iu, R
         subtract_phase(result.eigvecsR_cx32, L, result.meta.nev);
         subtract_phase(result.eigvecsL_cx64, L, result.meta.nev);
         subtract_phase(result.eigvecsR_cx64, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx128, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx128, L, result.meta.nev);
     }
 }
 template void eig::solver::eig<eig::Form::SYMM>(fp32 *matrix, size_type, char, int, int, fp32, fp32, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(fp64 *matrix, size_type, char, int, int, fp64, fp64, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(fp128 *matrix, size_type, char, int, int, fp128, fp128, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx32 *matrix, size_type, char, int, int, fp32, fp32, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx64 *matrix, size_type, char, int, int, fp64, fp64, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(cx128 *matrix, size_type, char, int, int, fp128, fp128, Vecs, Dephase);
 
 template<eig::Form form, typename Scalar, typename RealScalar>
 void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, char range, int il, int iu, RealScalar vl, RealScalar vu, Vecs compute_eigvecs_,
@@ -421,22 +441,31 @@ void eig::solver::eig(Scalar *matrixA, Scalar *matrixB, size_type L, char range,
         eig::log->error("Eigenvalue solver failed: {}", ex.what());
         throw except::runtime_error("Eigenvalue solver Failed: {}", ex.what());
     }
-
+    result.build_eigvals_cx32();
+    result.build_eigvecs_cx32();
     result.build_eigvals_cx64();
     result.build_eigvecs_cx64();
+    result.build_eigvals_cx128();
+    result.build_eigvecs_cx128();
 
     if(info == 0 and config.remove_phase and config.remove_phase.value() == Dephase::OFF) {
         // The solution to  the eigenvalue equation Av = l*v is determined up to a constant phase factor, i.e., if v
         // is a solution, so is v*exp(i*theta). By computing the complex angle of the first element in v, one can then
         // remove it from all other elements of v.
+        subtract_phase(result.eigvecsL_cx32, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx32, L, result.meta.nev);
         subtract_phase(result.eigvecsL_cx64, L, result.meta.nev);
         subtract_phase(result.eigvecsR_cx64, L, result.meta.nev);
+        subtract_phase(result.eigvecsL_cx128, L, result.meta.nev);
+        subtract_phase(result.eigvecsR_cx128, L, result.meta.nev);
     }
 }
 template void eig::solver::eig<eig::Form::SYMM>(fp32 *matrixA, fp32 *matrixB, size_type, char, int, int, fp32, fp32, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(fp64 *matrixA, fp64 *matrixB, size_type, char, int, int, fp64, fp64, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(fp128 *matrixA, fp128 *matrixB, size_type, char, int, int, fp128, fp128, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx32 *matrixA, cx32 *matrixB, size_type, char, int, int, fp32, fp32, Vecs, Dephase);
 template void eig::solver::eig<eig::Form::SYMM>(cx64 *matrixA, cx64 *matrixB, size_type, char, int, int, fp64, fp64, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(cx128 *matrixA, cx128 *matrixB, size_type, char, int, int, fp128, fp128, Vecs, Dephase);
 
 template<typename Scalar>
 void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert,
@@ -487,14 +516,14 @@ void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form,
         if(eig::log->level() >= spdlog::level::info) config.logIter = 5000;
     }
 }
-template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert,
-                                     Storage storage, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual, Lib lib);
-template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert,
-                                     Storage storage, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual, Lib lib);
-template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert,
-                                     Storage storage, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual, Lib lib);
-template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert,
-                                     Storage storage, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual, Lib lib);
+/* clang-format off */
+template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert, Storage storage, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual, Lib lib);
+template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert, Storage storage, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual, Lib lib);
+template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert, Storage storage, Vecs compute_eigvecs, Dephase remove_phase, fp128 *residual, Lib lib);
+template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert, Storage storage, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual, Lib lib);
+template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert, Storage storage, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual, Lib lib);
+template void eig::solver::eigs_init(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma, Shinv shift_invert, Storage storage, Vecs compute_eigvecs, Dephase remove_phase, cx128 *residual, Lib lib);
+/* clang-format on */
 
 template<typename MatrixProductType>
 void eig::solver::set_default_config(const MatrixProductType &matrix) {
@@ -542,17 +571,41 @@ void eig::solver::set_default_config(const MatrixProductType &matrix) {
         if(eig::log->level() == spdlog::level::info) config.logIter = 5000;
     }
 }
-
-template void eig::solver::set_default_config(const MatVecDense<fp64> &matrix);
-template void eig::solver::set_default_config(const MatVecDense<cx64> &matrix);
-template void eig::solver::set_default_config(const MatVecSparse<fp64> &matrix);
-template void eig::solver::set_default_config(const MatVecSparse<cx64> &matrix);
-template void eig::solver::set_default_config(const MatVecMPO<fp64> &matrix);
-template void eig::solver::set_default_config(const MatVecMPO<cx64> &matrix);
+template void eig::solver::set_default_config(const MatVecMPOS<fp32> &matrix);
 template void eig::solver::set_default_config(const MatVecMPOS<fp64> &matrix);
+template void eig::solver::set_default_config(const MatVecMPOS<fp128> &matrix);
+template void eig::solver::set_default_config(const MatVecMPOS<cx32> &matrix);
 template void eig::solver::set_default_config(const MatVecMPOS<cx64> &matrix);
+template void eig::solver::set_default_config(const MatVecMPOS<cx128> &matrix);
+
+template void eig::solver::set_default_config(const MatVecMPO<fp32> &matrix);
+template void eig::solver::set_default_config(const MatVecMPO<fp64> &matrix);
+template void eig::solver::set_default_config(const MatVecMPO<fp128> &matrix);
+template void eig::solver::set_default_config(const MatVecMPO<cx32> &matrix);
+template void eig::solver::set_default_config(const MatVecMPO<cx64> &matrix);
+template void eig::solver::set_default_config(const MatVecMPO<cx128> &matrix);
+
+template void eig::solver::set_default_config(const MatVecDense<fp32> &matrix);
+template void eig::solver::set_default_config(const MatVecDense<fp64> &matrix);
+template void eig::solver::set_default_config(const MatVecDense<fp128> &matrix);
+template void eig::solver::set_default_config(const MatVecDense<cx32> &matrix);
+template void eig::solver::set_default_config(const MatVecDense<cx64> &matrix);
+template void eig::solver::set_default_config(const MatVecDense<cx128> &matrix);
+
+template void eig::solver::set_default_config(const MatVecSparse<fp32> &matrix);
+template void eig::solver::set_default_config(const MatVecSparse<fp64> &matrix);
+template void eig::solver::set_default_config(const MatVecSparse<fp128> &matrix);
+template void eig::solver::set_default_config(const MatVecSparse<cx32> &matrix);
+template void eig::solver::set_default_config(const MatVecSparse<cx64> &matrix);
+template void eig::solver::set_default_config(const MatVecSparse<cx128> &matrix);
+
+template void eig::solver::set_default_config(const MatVecZero<fp32> &matrix);
 template void eig::solver::set_default_config(const MatVecZero<fp64> &matrix);
+template void eig::solver::set_default_config(const MatVecZero<fp128> &matrix);
+template void eig::solver::set_default_config(const MatVecZero<cx32> &matrix);
 template void eig::solver::set_default_config(const MatVecZero<cx64> &matrix);
+template void eig::solver::set_default_config(const MatVecZero<cx128> &matrix);
+
 template<typename Scalar, eig::Storage storage>
 void eig::solver::eigs(const Scalar *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert,
                        Vecs compute_eigvecs, Dephase remove_phase, Scalar *residual) {
@@ -568,10 +621,12 @@ void eig::solver::eigs(const Scalar *matrix, size_type L, int nev, int ncv, Ritz
 }
 
 /* clang-format off */
-// template void eig::solver::eigs(const fp32 *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual);
+template void eig::solver::eigs(const fp32 *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual);
 template void eig::solver::eigs(const fp64 *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
-// template void eig::solver::eigs(const cx32 *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual);
+template void eig::solver::eigs(const fp128 *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp128 *residual);
+template void eig::solver::eigs(const cx32 *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual);
 template void eig::solver::eigs(const cx64 *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
+template void eig::solver::eigs(const cx128 *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx128 *residual);
 /* clang-format on */
 
 template<typename MatrixProductType>
@@ -579,16 +634,21 @@ void eig::solver::eigs(MatrixProductType &matrix, int nev, int ncv, Ritz ritz, F
                        Vecs compute_eigvecs, Dephase remove_phase, typename MatrixProductType::Scalar *residual) {
     auto t_eig   = tid::tic_scope("eig");
     using Scalar = typename MatrixProductType::Scalar;
-    Type type;
-    if(std::is_same_v<Scalar, fp32>) type = Type::FP32;
-    if(std::is_same_v<Scalar, fp64>) type = Type::FP64;
-    if(std::is_same_v<Scalar, cx32>) type = Type::CX32;
-    if(std::is_same_v<Scalar, cx64>) type = Type::CX64;
-
+    Type type = eig::ScalarToType<Scalar>();
     eigs_init(matrix.rows(), nev, ncv, ritz, form, type, side, sigma, shift_invert, matrix.storage, compute_eigvecs, remove_phase, residual);
     switch(config.lib.value()) {
         case Lib::ARPACK: {
-            solver_arpack<MatrixProductType> solver(matrix, config, result);
+            if constexpr (!sfinae::is_quadruple_prec_v<Scalar>) {
+                solver_arpack<MatrixProductType> solver(matrix, config, result);
+                solver.eigs();
+                break;
+            } else {
+                eig::log->warn("Quadruple precision not supported for ARPACK. Trying with Spectra ...");
+                [[fallthrough]];
+            }
+        }
+        case Lib::SPECTRA: {
+            solver_spectra<MatrixProductType> solver(matrix, config, result);
             solver.eigs();
             break;
         }
@@ -599,25 +659,63 @@ void eig::solver::eigs(MatrixProductType &matrix, int nev, int ncv, Ritz ritz, F
     }
 }
 /* clang-format off */
-template void eig::solver::eigs(MatVecDense<fp64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
-template void eig::solver::eigs(MatVecDense<cx64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
-template void eig::solver::eigs(MatVecSparse<fp64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
-template void eig::solver::eigs(MatVecSparse<cx64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
+template void eig::solver::eigs(MatVecMPOS<fp32> &matrix,  int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual);
+template void eig::solver::eigs(MatVecMPOS<fp64> &matrix,  int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
+template void eig::solver::eigs(MatVecMPOS<fp128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp128 *residual);
+template void eig::solver::eigs(MatVecMPOS<cx32> &matrix,  int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual);
+template void eig::solver::eigs(MatVecMPOS<cx64> &matrix,  int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
+template void eig::solver::eigs(MatVecMPOS<cx128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx128 *residual);
+
+template void eig::solver::eigs(MatVecMPO<fp32> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual);
 template void eig::solver::eigs(MatVecMPO<fp64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
+template void eig::solver::eigs(MatVecMPO<fp128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp128 *residual);
+template void eig::solver::eigs(MatVecMPO<cx32> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual);
 template void eig::solver::eigs(MatVecMPO<cx64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
-template void eig::solver::eigs(MatVecMPOS<fp64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
-template void eig::solver::eigs(MatVecMPOS<cx64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
+template void eig::solver::eigs(MatVecMPO<cx128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx128 *residual);
+
+template void eig::solver::eigs(MatVecDense<fp32> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual);
+template void eig::solver::eigs(MatVecDense<fp64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
+template void eig::solver::eigs(MatVecDense<fp128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp128 *residual);
+template void eig::solver::eigs(MatVecDense<cx32> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual);
+template void eig::solver::eigs(MatVecDense<cx64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
+template void eig::solver::eigs(MatVecDense<cx128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx128 *residual);
+
+template void eig::solver::eigs(MatVecSparse<fp32> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual);
+template void eig::solver::eigs(MatVecSparse<fp64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
+template void eig::solver::eigs(MatVecSparse<fp128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp128 *residual);
+template void eig::solver::eigs(MatVecSparse<cx32> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual);
+template void eig::solver::eigs(MatVecSparse<cx64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
+template void eig::solver::eigs(MatVecSparse<cx128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx128 *residual);
+
+template void eig::solver::eigs(MatVecZero<fp32> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp32 *residual);
+template void eig::solver::eigs(MatVecZero<fp64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp64 *residual);
+template void eig::solver::eigs(MatVecZero<fp128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, fp128 *residual);
+template void eig::solver::eigs(MatVecZero<cx32> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx32 *residual);
+template void eig::solver::eigs(MatVecZero<cx64> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx64 *residual);
+template void eig::solver::eigs(MatVecZero<cx128> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma, Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, cx128 *residual);
 /* clang-format on */
 
 template<typename MatrixProductType>
 void eig::solver::eigs(MatrixProductType &matrix) {
-    auto t_eig = tid::tic_scope("eig");
+    auto t_eig   = tid::tic_scope("eig");
+    using Scalar = typename MatrixProductType::Scalar;
     result.reset();
     set_default_config(matrix);
     switch(config.lib.value()) {
         case Lib::ARPACK: {
             config.tag = fmt::format("{}{}arpack", config.tag, config.tag.empty() ? "" : " ");
-            solver_arpack<MatrixProductType> solver(matrix, config, result);
+            if constexpr (!sfinae::is_quadruple_prec_v<Scalar>) {
+                solver_arpack<MatrixProductType> solver(matrix, config, result);
+                solver.eigs();
+                break;
+            } else {
+                eig::log->warn("Quadruple precision not supported for ARPACK. Trying with Spectra ...");
+                [[fallthrough]];
+            }
+        }
+        case Lib::SPECTRA: {
+            config.tag = fmt::format("{}{}spectra", config.tag, config.tag.empty() ? "" : " ");
+            solver_spectra<MatrixProductType> solver(matrix, config, result);
             solver.eigs();
             break;
         }
@@ -629,13 +727,37 @@ void eig::solver::eigs(MatrixProductType &matrix) {
     }
 }
 
-template void eig::solver::eigs(MatVecDense<fp64> &matrix);
-template void eig::solver::eigs(MatVecDense<cx64> &matrix);
-template void eig::solver::eigs(MatVecSparse<fp64> &matrix);
-template void eig::solver::eigs(MatVecSparse<cx64> &matrix);
-template void eig::solver::eigs(MatVecMPO<fp64> &matrix);
-template void eig::solver::eigs(MatVecMPO<cx64> &matrix);
+template void eig::solver::eigs(MatVecMPOS<fp32> &matrix);
 template void eig::solver::eigs(MatVecMPOS<fp64> &matrix);
+template void eig::solver::eigs(MatVecMPOS<fp128> &matrix);
+template void eig::solver::eigs(MatVecMPOS<cx32> &matrix);
 template void eig::solver::eigs(MatVecMPOS<cx64> &matrix);
+template void eig::solver::eigs(MatVecMPOS<cx128> &matrix);
+
+template void eig::solver::eigs(MatVecMPO<fp32> &matrix);
+template void eig::solver::eigs(MatVecMPO<fp64> &matrix);
+template void eig::solver::eigs(MatVecMPO<fp128> &matrix);
+template void eig::solver::eigs(MatVecMPO<cx32> &matrix);
+template void eig::solver::eigs(MatVecMPO<cx64> &matrix);
+template void eig::solver::eigs(MatVecMPO<cx128> &matrix);
+
+template void eig::solver::eigs(MatVecDense<fp32> &matrix);
+template void eig::solver::eigs(MatVecDense<fp64> &matrix);
+template void eig::solver::eigs(MatVecDense<fp128> &matrix);
+template void eig::solver::eigs(MatVecDense<cx32> &matrix);
+template void eig::solver::eigs(MatVecDense<cx64> &matrix);
+template void eig::solver::eigs(MatVecDense<cx128> &matrix);
+
+template void eig::solver::eigs(MatVecSparse<fp32> &matrix);
+template void eig::solver::eigs(MatVecSparse<fp64> &matrix);
+template void eig::solver::eigs(MatVecSparse<fp128> &matrix);
+template void eig::solver::eigs(MatVecSparse<cx32> &matrix);
+template void eig::solver::eigs(MatVecSparse<cx64> &matrix);
+template void eig::solver::eigs(MatVecSparse<cx128> &matrix);
+
+template void eig::solver::eigs(MatVecZero<fp32> &matrix);
 template void eig::solver::eigs(MatVecZero<fp64> &matrix);
+template void eig::solver::eigs(MatVecZero<fp128> &matrix);
+template void eig::solver::eigs(MatVecZero<cx32> &matrix);
 template void eig::solver::eigs(MatVecZero<cx64> &matrix);
+template void eig::solver::eigs(MatVecZero<cx128> &matrix);

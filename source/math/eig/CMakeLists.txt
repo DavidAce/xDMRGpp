@@ -1,5 +1,6 @@
 
 add_subdirectory(solver_arpack)
+add_subdirectory(solver_spectra)
 add_subdirectory(solver_primme)
 add_subdirectory(solver_lapacke)
 add_subdirectory(matvec)
@@ -18,4 +19,5 @@ add_source_target(xdmrg++-math-eig
         xdmrg++-math-eig-arpack
         xdmrg++-math-eig-lapacke
         xdmrg++-math-eig-primme
+        xdmrg++-math-eig-spectra
         )

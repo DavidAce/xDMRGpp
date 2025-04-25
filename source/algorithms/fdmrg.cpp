@@ -17,20 +17,33 @@
 #include <math/cast.h>
 #include <tools/finite/multisite.h>
 
-fdmrg::fdmrg() : AlgorithmFinite(settings::xdmrg::ritz, AlgorithmType::fDMRG) { tools::log->trace("Constructing class_fdmrg (without a file)"); }
+template class fdmrg<fp32>;
+template class fdmrg<fp64>;
+template class fdmrg<fp128>;
+template class fdmrg<cx32>;
+template class fdmrg<cx64>;
+template class fdmrg<cx128>;
 
-fdmrg::fdmrg(std::shared_ptr<h5pp::File> h5file_) : AlgorithmFinite(std::move(h5file_), settings::fdmrg::ritz, AlgorithmType::fDMRG) {
+template<typename Scalar>
+fdmrg<Scalar>::fdmrg() : AlgorithmFinite<Scalar>(settings::xdmrg::ritz, AlgorithmType::fDMRG) {
+    tools::log->trace("Constructing class_fdmrg (without a file)");
+}
+
+template<typename Scalar>
+fdmrg<Scalar>::fdmrg(std::shared_ptr<h5pp::File> h5file_) : AlgorithmFinite<Scalar>(std::move(h5file_), settings::fdmrg::ritz, AlgorithmType::fDMRG) {
     tools::log->trace("Constructing class_fdmrg");
 }
 
-std::string_view fdmrg::get_state_name() const {
+template<typename Scalar>
+std::string_view fdmrg<Scalar>::get_state_name() const {
     if(status.opt_ritz == OptRitz::SR)
         return "state_emin";
     else
         return "state_emax";
 }
 
-void fdmrg::resume() {
+template<typename Scalar>
+void fdmrg<Scalar>::resume() {
     // Resume can imply many things
     // 1) Resume a simulation which terminated prematurely
     // 2) Resume a previously successful simulation. This may be desireable if the config
@@ -95,7 +108,8 @@ void fdmrg::resume() {
     }
 }
 
-void fdmrg::run_task_list(std::deque<fdmrg_task> &task_list) {
+template<typename Scalar>
+void fdmrg<Scalar>::run_task_list(std::deque<fdmrg_task> &task_list) {
     while(not task_list.empty()) {
         auto task = task_list.front();
         switch(task) {
@@ -130,7 +144,8 @@ void fdmrg::run_task_list(std::deque<fdmrg_task> &task_list) {
     }
 }
 
-void fdmrg::run_default_task_list() {
+template<typename Scalar>
+void fdmrg<Scalar>::run_default_task_list() {
     fdmrg_task fdmrg_task_find_state_ritz;
     switch(settings::fdmrg::ritz) {
         case OptRitz::SR: fdmrg_task_find_state_ritz = fdmrg_task::FIND_GROUND_STATE; break;
@@ -151,7 +166,8 @@ void fdmrg::run_default_task_list() {
     }
 }
 
-void fdmrg::run_preprocessing() {
+template<typename Scalar>
+void fdmrg<Scalar>::run_preprocessing() {
     tools::log->info("Running {} preprocessing", status.algo_type_sv());
     auto t_pre = tid::tic_scope("pre");
     status.clear();
@@ -168,7 +184,8 @@ void fdmrg::run_preprocessing() {
     tools::log->info("Finished {} preprocessing", status.algo_type_sv());
 }
 
-void fdmrg::run_algorithm() {
+template<typename Scalar>
+void fdmrg<Scalar>::run_algorithm() {
     if(tensors.state->get_name().empty()) tensors.state->set_name(get_state_name());
     tools::log->info("Starting {} algorithm with model [{}] for state [{}]", status.algo_type_sv(), enum2sv(settings::model::model_type),
                      tensors.state->get_name());
@@ -196,9 +213,9 @@ void fdmrg::run_algorithm() {
     }
     tools::log->info("Finished {} simulation of state [{}] -- stop reason: {}", status.algo_type_sv(), tensors.state->get_name(), status.algo_stop_sv());
     status.algorithm_has_finished = true;
-    if(settings::fdmrg::store_wavefn and tensors.get_length<long>() <= 16) {
+    if(settings::fdmrg::store_wavefn and tensors.template get_length<long>() <= 16) {
 #pragma message "Save fdmrg wavevector properly"
-        Eigen::Tensor<fp64, 1> psi = tools::finite::mps::mps2tensor(*tensors.state).real();
+        Eigen::Tensor<RealScalar, 1> psi = tools::finite::mps::mps2tensor<Scalar>(tensors.get_state()).real();
         write_to_file(psi, "psi", StorageEvent::FINISHED);
     }
 }
@@ -280,7 +297,8 @@ void fdmrg::run_algorithm() {
 // return m1;
 // }
 
-void fdmrg::update_state() {
+template<typename Scalar>
+void fdmrg<Scalar>::update_state() {
     auto t_step          = tid::tic_scope("step");
     auto opt_meta        = get_opt_meta();
     variance_before_step = std::nullopt;
@@ -317,27 +335,26 @@ void fdmrg::update_state() {
     opt_state.set_trnc_limit(opt_meta.svd_cfg->truncation_limit.value());
     /* clang-format off */
     opt_meta.optExit = OptExit::SUCCESS;
-    if(opt_state.get_grad_max()       > 1.000                         ) opt_meta.optExit |= OptExit::FAIL_GRADIENT;
-    if(opt_state.get_eigs_rnorm()     > settings::precision::eigs_tol_max) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
+    if(opt_state.get_grad_max()       > static_cast<RealScalar>(1.000)                            ) opt_meta.optExit |= OptExit::FAIL_GRADIENT;
+    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::precision::eigs_tol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
     if(opt_state.get_eigs_nev()       == 0 and
-       opt_meta.optSolver              == OptSolver::EIGS             ) opt_meta.optExit |= OptExit::FAIL_RESIDUAL; // No convergence
-    if(opt_state.get_overlap()        < 0.010                         ) opt_meta.optExit |= OptExit::FAIL_OVERLAP;
-    if(opt_state.get_relchange()      > 1.001                         ) opt_meta.optExit |= OptExit::FAIL_WORSENED;
-    else if(opt_state.get_relchange() > 0.999                         ) opt_meta.optExit |= OptExit::FAIL_NOCHANGE;
-
+       opt_meta.optSolver             == OptSolver::EIGS                                          ) opt_meta.optExit |= OptExit::FAIL_RESIDUAL; // No convergence
+    if(opt_state.get_overlap()        < static_cast<RealScalar>(0.010)                            ) opt_meta.optExit |= OptExit::FAIL_OVERLAP;
+    if(opt_state.get_relchange()      > static_cast<RealScalar>(1.001)                            ) opt_meta.optExit |= OptExit::FAIL_WORSENED;
+    else if(opt_state.get_relchange() > static_cast<RealScalar>(0.999)                            ) opt_meta.optExit |= OptExit::FAIL_NOCHANGE;
+    /* clang-format on */
     opt_state.set_optexit(opt_meta.optExit);
 
-    tools::log->trace("Optimization [{}]: {}. Variance change {:8.2e} --> {:8.2e} ({:.3f} %)", enum2sv(opt_meta.optSolver),
-                         flag2str(opt_meta.optExit), variance_before_step.value(), opt_state.get_variance(), opt_state.get_relchange() * 100);
-    if(opt_state.get_relchange() > 1000) tools::log->warn("Variance increase by x {:.2e}", opt_state.get_relchange());
+    tools::log->trace("Optimization [{}]: {}. Variance change {:8.2e} --> {:8.2e} ({:.3f} %)", enum2sv(opt_meta.optSolver), flag2str(opt_meta.optExit),
+                      fp(variance_before_step.value()), fp(opt_state.get_variance()), fp(opt_state.get_relchange() * 100));
+    if(opt_state.get_relchange() > static_cast<RealScalar>(1000)) tools::log->warn("Variance increase by x {:.2e}", fp(opt_state.get_relchange()));
 
     if(tools::log->level() <= spdlog::level::debug) {
         tools::log->debug("Optimization result: {:<24} | E {:<20.16f}| σ²H {:<8.2e} | rnorm {:8.2e} | overlap {:.16f} | "
                           "sites {} |"
                           "{} | {} | time {:.2e} s",
-                          opt_state.get_name(), opt_state.get_energy(), opt_state.get_variance(), opt_state.get_eigs_rnorm(), opt_state.get_overlap(),
-                          opt_state.get_sites(),
-                          enum2sv(opt_state.get_optsolver()), flag2str(opt_state.get_optexit()),
+                          opt_state.get_name(), fp(opt_state.get_energy()), fp(opt_state.get_variance()), fp(opt_state.get_eigs_rnorm()),
+                          fp(opt_state.get_overlap()), opt_state.get_sites(), enum2sv(opt_state.get_optsolver()), flag2str(opt_state.get_optexit()),
                           opt_state.get_time());
     }
     last_optsolver = opt_state.get_optsolver();
@@ -356,15 +373,15 @@ void fdmrg::update_state() {
     if constexpr(settings::debug) {
         auto variance_before_svd = opt_state.get_variance();
         auto variance_after_svd  = tools::finite::measure::energy_variance(tensors);
-        tools::log->debug("Variance check before SVD: {:8.2e}", variance_before_svd);
-        tools::log->debug("Variance check after  SVD: {:8.2e}", variance_after_svd);
-        tools::log->debug("Variance change from  SVD: {:.16f}%", 100 * variance_after_svd / variance_before_svd);
+        tools::log->debug("Variance check before SVD: {:8.2e}", fp(variance_before_svd));
+        tools::log->debug("Variance check after  SVD: {:8.2e}", fp(variance_after_svd));
+        tools::log->debug("Variance change from  SVD: {:.16f}%", fp(100 * variance_after_svd / variance_before_svd));
     }
 
     tools::log->trace("Updating variance record holder");
-    auto var = tools::finite::measure::energy_variance(tensors);
+    auto var                      = tools::finite::measure::energy_variance(tensors);
     auto ene                      = tools::finite::measure::energy(tensors);
-    status.energy_variance_lowest = std::min(var, status.energy_variance_lowest);
+    status.energy_variance_lowest = std::min(static_cast<double>(var), status.energy_variance_lowest);
     var_delta                     = var - var_latest;
     ene_delta                     = ene - ene_latest;
     var_change                    = var / var_latest;
@@ -375,4 +392,3 @@ void fdmrg::update_state() {
     last_optalgo   = opt_state.get_optalgo();
     if constexpr(settings::debug) tensors.assert_validity();
 }
-

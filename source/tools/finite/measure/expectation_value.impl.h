@@ -1,3 +1,5 @@
+#pragma once
+
 #include "expectation_value.h"
 #include "general/iter.h"
 #include "math/num.h"
@@ -20,14 +22,18 @@ namespace settings {
 }
 
 template<typename CalcType, typename Scalar, typename OpType>
-Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &state, const std::vector<LocalObservableOp<OpType>> &ops) {
+CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &state, const std::vector<LocalObservableOp<OpType>> &ops) {
     if constexpr(sfinae::is_std_complex_v<CalcType>) {
         bool mpsIsReal = state.is_real();
         bool opsIsReal = std::all_of(ops.begin(), ops.end(), [](const auto &op) -> bool { return tenx::isReal(op.op); });
         if(mpsIsReal and opsIsReal) {
-            using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+            using RealScalar = typename Eigen::NumTraits<CalcType>::Real;
             return expectation_value<RealScalar>(state, ops);
         }
+    }
+    if constexpr(!sfinae::is_std_complex_v<CalcType>) {
+        bool opsIsReal = std::all_of(ops.begin(), ops.end(), [](const auto &op) -> bool { return tenx::isReal(op.op); });
+        if(!opsIsReal) throw except::runtime_error("expectation_value<{}>: ops are not real", sfinae::type_name<CalcType>());
     }
 
     if(state.mps_sites.empty()) throw std::runtime_error("expectation_value: state.mps_sites is empty");
@@ -41,7 +47,7 @@ Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &stat
         Eigen::Tensor<CalcType, 3> M   = mps->template get_M_as<CalcType>();
         const auto                 pos = mps->template get_position<long>();
         for(const auto &op : iter::reverse(ops)) {
-            // Reverse to apply operators right to left, if they are on the same position
+            // Reverse to apply operators right to left if they are at the same position
             // i.e. ABC|psi> should apply C first and A last (if A and C are on the same site).
             if(op.used or op.pos != pos) continue;
             auto temp                  = Eigen::Tensor<CalcType, 3>(op.op.dimension(0), M.dimension(1), M.dimension(2));
@@ -57,20 +63,14 @@ Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &stat
     Eigen::Tensor<CalcType, 0> expval = chain.trace();
     return expval.coeff(0);
 }
-template cx64  tools::finite::measure::expectation_value<fp64>(const StateFinite<cx64> &state, const std::vector<LocalObservableOp<cx64>> &ops);
-template cx64  tools::finite::measure::expectation_value<cx64>(const StateFinite<cx64> &state, const std::vector<LocalObservableOp<cx64>> &ops);
-template cx128 tools::finite::measure::expectation_value<fp128>(const StateFinite<cx128> &state, const std::vector<LocalObservableOp<cx128>> &ops);
-template cx128 tools::finite::measure::expectation_value<cx128>(const StateFinite<cx128> &state, const std::vector<LocalObservableOp<cx128>> &ops);
 
 template<typename CalcType, typename Scalar, typename MpoType>
-Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &state, const std::vector<LocalObservableMpo<MpoType>> &mpos) {
+CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &state, const std::vector<LocalObservableMpo<MpoType>> &mpos) {
+    using RealScalar = typename Eigen::NumTraits<CalcType>::Real;
     if constexpr(sfinae::is_std_complex_v<CalcType>) {
         bool mpsIsReal = state.is_real();
         bool mpoIsReal = std::all_of(mpos.begin(), mpos.end(), [](const auto &mpo) -> bool { return tenx::isReal(mpo.mpo); });
-        if(mpsIsReal and mpoIsReal) {
-            using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
-            return expectation_value<RealScalar>(state, mpos);
-        }
+        if(mpsIsReal and mpoIsReal) { return expectation_value<RealScalar>(state, mpos); }
     }
 
     if(state.mps_sites.empty()) throw std::runtime_error("expectation_value: state.mps_sites is empty");
@@ -142,19 +142,13 @@ Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &stat
     // Finish by contracting Redge3
     Eigen::Tensor<CalcType, 0> expval = Ledge3.contract(Redge3, tenx::idx({0, 1, 2}, {0, 1, 2}));
 
-    if(std::imag(expval.coeff(0)) > 1e-14) tools::log->warn("expectation_value: result has imaginary part: {:8.2e}", fp(expval(0)));
-    //    if(std::imag(expval(0)) > 1e-8)
-    //        throw except::runtime_error("expectation_value: result has imaginary part: {:+8.2e}{:+8.2e} i", std::real(expval(0)), std::imag(expval(0)));
+    if(std::imag(expval.coeff(0)) > RealScalar{1e-14f}) tools::log->warn("expectation_value: result has imaginary part: {:8.2e}", fp(expval(0)));
     return expval.coeff(0);
 }
-template cx64  tools::finite::measure::expectation_value<fp64>(const StateFinite<cx64> &state, const std::vector<LocalObservableMpo<cx64>> &mpos);
-template cx64  tools::finite::measure::expectation_value<cx64>(const StateFinite<cx64> &state, const std::vector<LocalObservableMpo<cx64>> &mpos);
-template cx128 tools::finite::measure::expectation_value<fp128>(const StateFinite<cx128> &state, const std::vector<LocalObservableMpo<cx128>> &mpos);
-template cx128 tools::finite::measure::expectation_value<cx128>(const StateFinite<cx128> &state, const std::vector<LocalObservableMpo<cx128>> &mpos);
 
 template<typename CalcType, typename Scalar, typename MpoType>
-Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &state1, const StateFinite<Scalar> &state2,
-                                                 const std::vector<Eigen::Tensor<MpoType, 4>> &mpos) {
+CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &state1, const StateFinite<Scalar> &state2,
+                                                   const std::vector<Eigen::Tensor<MpoType, 4>> &mpos) {
     /*!
      * Calculates <state1 | mpos | state2>
      * The states and mpo can be of different type: then the mpo precision is converted to that of the state,
@@ -164,11 +158,11 @@ Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &stat
      * The return type will always be that of the state, however
      *
      */
-    if constexpr(sfinae::is_std_complex_v<Scalar> or sfinae::is_std_complex_v<MpoType>) {
+    if constexpr(sfinae::is_std_complex_v<CalcType>) {
         bool mpsIsReal = state1.is_real() and state2.is_real();
         bool mpoIsReal = std::all_of(mpos.begin(), mpos.end(), [](const auto &mpo) -> bool { return tenx::isReal(mpo); });
         if(mpsIsReal and mpoIsReal) {
-            using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+            using RealScalar = typename Eigen::NumTraits<CalcType>::Real;
             return expectation_value<RealScalar>(state1, state2, mpos);
         }
     }
@@ -209,70 +203,45 @@ Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &stat
     if(result.size() != 1) tools::log->warn("expectation_value: result does not have size 1!");
     return result.coeff(0);
 }
-/* clang-format off */
-template cx64   tools::finite::measure::expectation_value<fp32>(const StateFinite<cx64> &state1, const StateFinite<cx64> &state2, const std::vector<Eigen::Tensor<cx64, 4>> &mpos);
-template cx64   tools::finite::measure::expectation_value<fp64>(const StateFinite<cx64> &state1, const StateFinite<cx64> &state2, const std::vector<Eigen::Tensor<cx64, 4>> &mpos);
-template cx128  tools::finite::measure::expectation_value<fp128>(const StateFinite<cx128> &state1, const StateFinite<cx128> &state2, const std::vector<Eigen::Tensor<cx128, 4>> &mpos);
-template cx64   tools::finite::measure::expectation_value<cx32>(const StateFinite<cx64> &state1, const StateFinite<cx64> &state2, const std::vector<Eigen::Tensor<cx64, 4>> &mpos);
-template cx64   tools::finite::measure::expectation_value<cx64>(const StateFinite<cx64> &state1, const StateFinite<cx64> &state2, const std::vector<Eigen::Tensor<cx64, 4>> &mpos);
-template cx128  tools::finite::measure::expectation_value<cx128>(const StateFinite<cx128> &state1, const StateFinite<cx128> &state2, const std::vector<Eigen::Tensor<cx128, 4>> &mpos);
-/* clang-format on */
 
 template<typename CalcType, typename Scalar, typename MpoType>
-Scalar tools::finite::measure::expectation_value(const StateFinite<Scalar> &state1, const StateFinite<Scalar> &state2,
-                                                 const std::vector<Eigen::Tensor<MpoType, 4>> &mpos, const Eigen::Tensor<MpoType, 1> &ledge,
-                                                 const Eigen::Tensor<MpoType, 1> &redge) {
+CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &state1, const StateFinite<Scalar> &state2,
+                                                   const std::vector<Eigen::Tensor<MpoType, 4>> &mpos, const Eigen::Tensor<MpoType, 1> &ledge,
+                                                   const Eigen::Tensor<MpoType, 1> &redge) {
     /*!
      * Calculates <state1 | mpos | state2>
      */
     auto mpos_w_edge = mpo::get_mpos_with_edges(mpos, ledge, redge);
     return expectation_value<CalcType>(state1, state2, mpos_w_edge);
 }
-/* clang-format off */
-template cx64   tools::finite::measure::expectation_value<fp32>(const StateFinite<cx64> &state1, const StateFinite<cx64> &state2, const std::vector<Eigen::Tensor<cx64, 4>> &mpos,  const Eigen::Tensor<cx64, 1> &ledge, const Eigen::Tensor<cx64, 1> &redge);
-template cx64   tools::finite::measure::expectation_value<fp64>(const StateFinite<cx64> &state1, const StateFinite<cx64> &state2, const std::vector<Eigen::Tensor<cx64, 4>> &mpos,  const Eigen::Tensor<cx64, 1> &ledge, const Eigen::Tensor<cx64, 1> &redge);
-template cx128  tools::finite::measure::expectation_value<fp128>(const StateFinite<cx128> &state1, const StateFinite<cx128> &state2, const std::vector<Eigen::Tensor<cx128, 4>> &mpos,  const Eigen::Tensor<cx128, 1> &ledge, const Eigen::Tensor<cx128, 1> &redge);
-template cx64   tools::finite::measure::expectation_value<cx32>(const StateFinite<cx64> &state1, const StateFinite<cx64> &state2, const std::vector<Eigen::Tensor<cx64, 4>> &mpos,  const Eigen::Tensor<cx64, 1> &ledge, const Eigen::Tensor<cx64, 1> &redge);
-template cx64   tools::finite::measure::expectation_value<cx64>(const StateFinite<cx64> &state1, const StateFinite<cx64> &state2, const std::vector<Eigen::Tensor<cx64, 4>> &mpos,  const Eigen::Tensor<cx64, 1> &ledge, const Eigen::Tensor<cx64, 1> &redge);
-template cx128  tools::finite::measure::expectation_value<cx128>(const StateFinite<cx128> &state1, const StateFinite<cx128> &state2, const std::vector<Eigen::Tensor<cx128, 4>> &mpos,  const Eigen::Tensor<cx128, 1> &ledge, const Eigen::Tensor<cx128, 1> &redge);
-/* clang-format on */
 
 template<typename CalcType, typename Scalar>
-Eigen::Tensor<Scalar, 1> tools::finite::measure::expectation_values(const StateFinite<Scalar> &state, const Eigen::Tensor<cx64, 2> &op) {
+Eigen::Tensor<CalcType, 1> tools::finite::measure::expectation_values(const StateFinite<Scalar> &state, const Eigen::Tensor<cx64, 2> &op) {
     tools::log->trace("Measuring local expectation values");
-    long                     len = state.template get_length<long>();
-    Eigen::Tensor<Scalar, 1> expvals(len);
+    long                       len = state.template get_length<long>();
+    Eigen::Tensor<CalcType, 1> expvals(len);
     expvals.setZero();
     for(long pos = 0; pos < len; pos++) {
-        LocalObservableOp<cx64> ob1 = {op, pos};
+        LocalObservableOp ob1 = {op, pos};
         expvals(pos)                = expectation_value<CalcType>(state, std::vector{ob1});
     }
     return expvals;
 }
 
-template Eigen::Tensor<cx64, 1>  tools::finite::measure::expectation_values<fp64>(const StateFinite<cx64> &state, const Eigen::Tensor<cx64, 2> &op);
-template Eigen::Tensor<cx64, 1>  tools::finite::measure::expectation_values<cx64>(const StateFinite<cx64> &state, const Eigen::Tensor<cx64, 2> &op);
-template Eigen::Tensor<cx128, 1> tools::finite::measure::expectation_values<fp128>(const StateFinite<cx128> &state, const Eigen::Tensor<cx64, 2> &op);
-template Eigen::Tensor<cx128, 1> tools::finite::measure::expectation_values<cx128>(const StateFinite<cx128> &state, const Eigen::Tensor<cx64, 2> &op);
-
 template<typename CalcType, typename Scalar>
-Eigen::Tensor<Scalar, 1> tools::finite::measure::expectation_values(const StateFinite<Scalar> &state, const Eigen::Matrix2cd &op) {
+Eigen::Tensor<CalcType, 1> tools::finite::measure::expectation_values(const StateFinite<Scalar> &state, const Eigen::Matrix2cd &op) {
     Eigen::Tensor<Eigen::Matrix2cd::Scalar, 2> tensor_op = tenx::TensorMap(op);
     return expectation_values<CalcType>(state, tensor_op);
 }
-template Eigen::Tensor<cx64, 1>  tools::finite::measure::expectation_values<fp64>(const StateFinite<cx64> &state, const Eigen::Matrix2cd &op);
-template Eigen::Tensor<cx64, 1>  tools::finite::measure::expectation_values<cx64>(const StateFinite<cx64> &state, const Eigen::Matrix2cd &op);
-template Eigen::Tensor<cx128, 1> tools::finite::measure::expectation_values<fp128>(const StateFinite<cx128> &state, const Eigen::Matrix2cd &op);
-template Eigen::Tensor<cx128, 1> tools::finite::measure::expectation_values<cx128>(const StateFinite<cx128> &state, const Eigen::Matrix2cd &op);
 
 template<typename CalcType, typename Scalar, typename EnvType>
-Scalar tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3> &mpsBra, const Eigen::Tensor<Scalar, 3> &mpsKet,
-                                                 const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, const env_pair<EnvType> &envs) {
+CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3> &mpsBra, const Eigen::Tensor<Scalar, 3> &mpsKet,
+                                                   const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, const env_pair<EnvType> &envs) {
     /*!
      * Calculates <mpsBra | mpos | mpsKet> by applying the mpos in series without splitting the mps first
      */
     if constexpr(sfinae::is_std_complex_v<CalcType>) {
-        using RealScalar = typename Scalar::value_type;
+        using RealScalar = typename CalcType::value_type;
         bool mpsIsReal   = tenx::isReal(mpsBra) and tenx::isReal(mpsKet);
         bool envIsReal   = envs.L.is_real() and envs.R.is_real();
         bool mpoIsReal   = std::all_of(mpos.begin(), mpos.end(), [](const auto &mpo) -> bool { return mpo.get().is_real(); });
@@ -297,22 +266,11 @@ Scalar tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3> 
     Eigen::Tensor<CalcType, 3> mpoMpsKet = tools::common::contraction::matrix_vector_product(tenx::asScalarType<CalcType>(mpsKet), mpos_shf, envL, envR);
     return tools::common::contraction::contract_mps_overlap(tenx::asScalarType<CalcType>(mpsBra), mpoMpsKet);
 }
-/* clang-format off */
-template cx64 tools::finite::measure::expectation_value<fp64>(const Eigen::Tensor<cx64, 3> &mpsBra, const Eigen::Tensor<cx64, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<EnvEne<cx64>> &envs);
-template cx64 tools::finite::measure::expectation_value<cx64>(const Eigen::Tensor<cx64, 3> &mpsBra, const Eigen::Tensor<cx64, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<EnvEne<cx64>> &envs);
-template cx64 tools::finite::measure::expectation_value<fp64>(const Eigen::Tensor<cx64, 3> &mpsBra, const Eigen::Tensor<cx64, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<EnvVar<cx64>> &envs);
-template cx64 tools::finite::measure::expectation_value<cx64>(const Eigen::Tensor<cx64, 3> &mpsBra, const Eigen::Tensor<cx64, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<EnvVar<cx64>> &envs);
-
-template cx128 tools::finite::measure::expectation_value<fp128>(const Eigen::Tensor<cx128, 3> &mpsBra, const Eigen::Tensor<cx128, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<EnvEne<cx128>> &envs);
-template cx128 tools::finite::measure::expectation_value<cx128>(const Eigen::Tensor<cx128, 3> &mpsBra, const Eigen::Tensor<cx128, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<EnvEne<cx128>> &envs);
-template cx128 tools::finite::measure::expectation_value<fp128>(const Eigen::Tensor<cx128, 3> &mpsBra, const Eigen::Tensor<cx128, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<EnvVar<cx128>> &envs);
-template cx128 tools::finite::measure::expectation_value<cx128>(const Eigen::Tensor<cx128, 3> &mpsBra, const Eigen::Tensor<cx128, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<EnvVar<cx128>> &envs);
-/* clang-format on */
 
 template<typename CalcType, typename Scalar, typename EnvType>
-Scalar tools::finite::measure::expectation_value(const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> &mpsBra,
-                                                 const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> &mpsKet,
-                                                 const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, const env_pair<EnvType> &envs) {
+CalcType tools::finite::measure::expectation_value(const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> &mpsBra,
+                                                   const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> &mpsKet,
+                                                   const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, const env_pair<EnvType> &envs) {
     /*!
      * Calculates <mpsBra | mpos | mpsKet>
      */
@@ -321,7 +279,7 @@ Scalar tools::finite::measure::expectation_value(const std::vector<std::referenc
     assert(num::all_equal(mpsBra.size(), mpsKet.size(), mpos.size()));
     static_assert(sfinae::is_any_v<EnvType, EnvEne<Scalar>, EnvVar<Scalar>>);
     if constexpr(sfinae::is_std_complex_v<CalcType>) {
-        using RealScalar = typename Scalar::value_type;
+        using RealScalar = typename CalcType::value_type;
         bool braIsReal   = std::all_of(mpsBra.begin(), mpsBra.end(), [](const auto &mps) -> bool { return mps.get().is_real(); });
         bool ketIsReal   = std::all_of(mpsKet.begin(), mpsKet.end(), [](const auto &mps) -> bool { return mps.get().is_real(); });
         bool envIsReal   = envs.L.is_real() and envs.R.is_real();
@@ -371,21 +329,11 @@ Scalar tools::finite::measure::expectation_value(const std::vector<std::referenc
     Eigen::Tensor<CalcType, 0> res = resL.contract(envs.R.template get_block_as<CalcType>(), tenx::idx({0, 1, 2}, {0, 2, 1}));
     return res.coeff(0);
 }
-/* clang-format off */
-template cx64 tools::finite::measure::expectation_value<fp64>(const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpsBra, const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvEne<cx64> &> &envs);
-template cx64 tools::finite::measure::expectation_value<cx64>(const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpsBra, const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvEne<cx64> &> &envs);
-template cx64 tools::finite::measure::expectation_value<fp64>(const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpsBra, const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvVar<cx64> &> &envs);
-template cx64 tools::finite::measure::expectation_value<cx64>(const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpsBra, const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvVar<cx64> &> &envs);
-template cx128 tools::finite::measure::expectation_value<fp128>(const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpsBra, const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvEne<cx128> &> &envs);
-template cx128 tools::finite::measure::expectation_value<cx128>(const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpsBra, const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvEne<cx128> &> &envs);
-template cx128 tools::finite::measure::expectation_value<fp128>(const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpsBra, const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvVar<cx128> &> &envs);
-template cx128 tools::finite::measure::expectation_value<cx128>(const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpsBra, const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvVar<cx128> &> &envs);
-/* clang-format on */
 
 template<typename CalcType, typename Scalar, typename EnvType>
-Scalar tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3> &mpsBra, const Eigen::Tensor<Scalar, 3> &mpsKet,
-                                                 const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, const env_pair<EnvType> &envs,
-                                                 std::optional<svd::config> svd_cfg) {
+CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3> &mpsBra, const Eigen::Tensor<Scalar, 3> &mpsKet,
+                                                   const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, const env_pair<EnvType> &envs,
+                                                   std::optional<svd::config> svd_cfg) {
     /*!
      * Calculates <mpsBra | mpos | mpsKet>, where the mps are already multisite.
      * E.g. for 3 sites we have
@@ -401,7 +349,7 @@ Scalar tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3> 
      * To apply the mpo's one by one efficiently, we need to split the mps using SVD first
      * Here we make the assumption that bra and ket are not necessarily equal
      */
-    if(not svd_cfg) return expectation_value<cx64>(mpsBra, mpsKet, mpos, envs);
+    if(not svd_cfg) return expectation_value<CalcType>(mpsBra, mpsKet, mpos, envs);
 
     std::vector<long>   spin_dims_bra, spin_dims_ket;
     std::vector<size_t> positions;
@@ -424,21 +372,10 @@ Scalar tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3> 
     return expectation_value<CalcType>(mpsBra_refs, mpsKet_refs, mpos, envs);
 }
 
-/* clang-format off */
-template cx64 tools::finite::measure::expectation_value<fp64>(const Eigen::Tensor<cx64, 3> &mpsBra, const Eigen::Tensor<cx64, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvEne<cx64> &> &envs, std::optional<svd::config> svd_cfg);
-template cx64 tools::finite::measure::expectation_value<cx64>(const Eigen::Tensor<cx64, 3> &mpsBra, const Eigen::Tensor<cx64, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvEne<cx64> &> &envs, std::optional<svd::config> svd_cfg);
-template cx64 tools::finite::measure::expectation_value<fp64>(const Eigen::Tensor<cx64, 3> &mpsBra, const Eigen::Tensor<cx64, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvVar<cx64> &> &envs, std::optional<svd::config> svd_cfg);
-template cx64 tools::finite::measure::expectation_value<cx64>(const Eigen::Tensor<cx64, 3> &mpsBra, const Eigen::Tensor<cx64, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvVar<cx64> &> &envs, std::optional<svd::config> svd_cfg);
-template cx128 tools::finite::measure::expectation_value<fp128>(const Eigen::Tensor<cx128, 3> &mpsBra, const Eigen::Tensor<cx128, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvEne<cx128> &> &envs, std::optional<svd::config> svd_cfg);
-template cx128 tools::finite::measure::expectation_value<cx128>(const Eigen::Tensor<cx128, 3> &mpsBra, const Eigen::Tensor<cx128, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvEne<cx128> &> &envs, std::optional<svd::config> svd_cfg);
-template cx128 tools::finite::measure::expectation_value<fp128>(const Eigen::Tensor<cx128, 3> &mpsBra, const Eigen::Tensor<cx128, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvVar<cx128> &> &envs, std::optional<svd::config> svd_cfg);
-template cx128 tools::finite::measure::expectation_value<cx128>(const Eigen::Tensor<cx128, 3> &mpsBra, const Eigen::Tensor<cx128, 3> &mpsKet, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvVar<cx128> &> &envs, std::optional<svd::config> svd_cfg);
-/* clang-format on */
-
 template<typename CalcType, typename Scalar, typename EnvType>
-Scalar tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3>                                   &multisite_mps,
-                                                 const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, const env_pair<EnvType> &envs,
-                                                 std::optional<svd::config> svd_cfg) {
+CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3>                                   &multisite_mps,
+                                                   const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, const env_pair<EnvType> &envs,
+                                                   std::optional<svd::config> svd_cfg) {
     /*!
      * Calculates <mpsBra | mpos | mpsKet>, where the mps are already multisite.
      * E.g. for 3 sites we have
@@ -489,13 +426,3 @@ Scalar tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3> 
         return expectation_value<CalcType>(mps_refs, mps_refs, mpos, envs);
     }
 }
-/* clang-format off */
-template cx64 tools::finite::measure::expectation_value<fp64>(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvEne<cx64> &> &envs, std::optional<svd::config> svd_cfg);
-template cx64 tools::finite::measure::expectation_value<cx64>(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvEne<cx64> &> &envs, std::optional<svd::config> svd_cfg);
-template cx64 tools::finite::measure::expectation_value<fp64>(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvVar<cx64> &> &envs, std::optional<svd::config> svd_cfg);
-template cx64 tools::finite::measure::expectation_value<cx64>(const Eigen::Tensor<cx64, 3> &multisite_mps, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos, const env_pair<const EnvVar<cx64> &> &envs, std::optional<svd::config> svd_cfg);
-template cx128 tools::finite::measure::expectation_value<fp128>(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvEne<cx128> &> &envs, std::optional<svd::config> svd_cfg);
-template cx128 tools::finite::measure::expectation_value<cx128>(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvEne<cx128> &> &envs, std::optional<svd::config> svd_cfg);
-template cx128 tools::finite::measure::expectation_value<fp128>(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvVar<cx128> &> &envs, std::optional<svd::config> svd_cfg);
-template cx128 tools::finite::measure::expectation_value<cx128>(const Eigen::Tensor<cx128, 3> &multisite_mps, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos, const env_pair<const EnvVar<cx128> &> &envs, std::optional<svd::config> svd_cfg);
-/* clang-format on */

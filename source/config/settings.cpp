@@ -217,6 +217,8 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("strategy::etol_decrease_when"                     , strategy::etol_decrease_when);
     dmrg_config.load_parameter("strategy::etol_decrease_rate"                     , strategy::etol_decrease_rate);
 
+    dmrg_config.load_parameter("precision::algoScalar"                        , precision::algoScalar);
+    dmrg_config.load_parameter("precision::optScalar"                         , precision::optScalar);
     dmrg_config.load_parameter("precision::eig_max_size"                      , precision::eig_max_size);
     dmrg_config.load_parameter("precision::eigs_iter_min"                     , precision::eigs_iter_min);
     dmrg_config.load_parameter("precision::eigs_iter_max"                     , precision::eigs_iter_max);

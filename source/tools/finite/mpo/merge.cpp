@@ -43,13 +43,14 @@
  *
  * @endverbatim
  */
-std::vector<Eigen::Tensor<cx64, 4>> tools::finite::mpo::get_merged_mpos(const std::vector<Eigen::Tensor<cx64, 4>> &mpos_dn,
-                                                                        const std::vector<Eigen::Tensor<cx64, 4>> &mpos_md,
-                                                                        const std::vector<Eigen::Tensor<cx64, 4>> &mpos_up, const svd::config &cfg) {
+template<typename Scalar>
+std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_merged_mpos(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_dn,
+                                                                          const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_md,
+                                                                          const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_up, const svd::config &cfg) {
     if(mpos_dn.size() != mpos_up.size()) throw except::logic_error("size mismatch: {} != {}", mpos_dn.size(), mpos_up.size());
     if(mpos_dn.size() != mpos_md.size()) throw except::logic_error("size mismatch: {} != {}", mpos_dn.size(), mpos_md.size());
     auto t_merge = tid::tic_scope("merge3");
-    auto mpos    = std::vector<Eigen::Tensor<cx64, 4>>(mpos_dn.size());
+    auto mpos    = std::vector<Eigen::Tensor<Scalar, 4>>(mpos_dn.size());
     // auto cfg             = svd::config();
     // cfg.rank_max         = settings::flbit::cls::mpo_circuit_svd_bondlim;
     // cfg.truncation_limit = settings::flbit::cls::mpo_circuit_svd_trnclim;
@@ -60,8 +61,8 @@ std::vector<Eigen::Tensor<cx64, 4>> tools::finite::mpo::get_merged_mpos(const st
     auto &threads = tenx::threads::get();
     {
         // Initialize a dummy SV to start contracting from the left
-        auto mpo_dmu = Eigen::Tensor<cx64, 4>();
-        auto SV      = Eigen::Tensor<cx64, 2>();
+        auto mpo_dmu = Eigen::Tensor<Scalar, 4>();
+        auto SV      = Eigen::Tensor<Scalar, 2>();
         SV.resize(std::array<long, 2>{1, mpos_dn.front().dimension(0) * mpos_md.front().dimension(0) * mpos_up.front().dimension(0)});
         SV.setConstant(1.0);
         for(size_t idx = 0; idx < mpos.size(); ++idx) {
@@ -98,8 +99,8 @@ std::vector<Eigen::Tensor<cx64, 4>> tools::finite::mpo::get_merged_mpos(const st
     // Now compress once backwards
     {
         auto t_back = tid::tic_scope("back");
-        auto mpoUS  = Eigen::Tensor<cx64, 4>();
-        auto US     = Eigen::Tensor<cx64, 2>();
+        auto mpoUS  = Eigen::Tensor<Scalar, 4>();
+        auto US     = Eigen::Tensor<Scalar, 2>();
         US.resize(std::array<long, 2>{mpos.back().dimension(1), 1});
         US.setConstant(1.0);
         for(size_t idx = mpos.size() - 1; idx < mpos.size(); --idx) {

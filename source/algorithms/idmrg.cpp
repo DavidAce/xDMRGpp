@@ -7,12 +7,21 @@
 #include "tools/common/log.h"
 #include "tools/infinite/opt.h"
 
-idmrg::idmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmInfinite(std::move(h5ppFile_), OptRitz::SR, AlgorithmType::iDMRG) {
+template class idmrg<fp32>;
+template class idmrg<fp64>;
+template class idmrg<fp128>;
+template class idmrg<cx32>;
+template class idmrg<cx64>;
+template class idmrg<cx128>;
+
+template<typename Scalar>
+idmrg<Scalar>::idmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmInfinite<Scalar>(std::move(h5ppFile_), OptRitz::SR, AlgorithmType::iDMRG) {
     tools::log->trace("Constructing class_idmrg");
     tensors.initialize(settings::model::model_type);
 }
 
-void idmrg::run_algorithm() {
+template<typename Scalar>
+void idmrg<Scalar>::run_algorithm() {
     if(status.opt_ritz == OptRitz::SR)
         tensors.state->set_name("state_emin");
     else
@@ -64,16 +73,18 @@ void idmrg::run_algorithm() {
     tools::log->info("Finished {} simulation -- reason: {}", status.algo_type_sv(), status.algo_stop_sv());
 }
 
-void idmrg::update_state() {
+template<typename Scalar>
+void idmrg<Scalar>::update_state() {
     /*!
      * \fn void single_DMRG_step()
      */
     tools::log->trace("Starting single iDMRG step with ritz: [{}]", enum2sv(status.opt_ritz));
-    Eigen::Tensor<cx64, 3> twosite_tensor = tools::infinite::opt::find_ground_state(tensors, status.opt_ritz);
+    Eigen::Tensor<Scalar, 3> twosite_tensor = tools::infinite::opt::find_ground_state(tensors, status.opt_ritz);
     tensors.merge_twosite_tensor(twosite_tensor, MergeEvent::OPT, svd::config(status.bond_lim, status.trnc_lim));
 }
 
-void idmrg::check_convergence() {
+template<typename Scalar>
+void idmrg<Scalar>::check_convergence() {
     tools::log->trace("Checking convergence");
     auto t_con = tid::tic_scope("conv");
     check_convergence_entg_entropy();

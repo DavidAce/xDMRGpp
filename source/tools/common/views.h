@@ -5,7 +5,6 @@ template<typename Scalar>
 class StateInfinite;
 template<typename Scalar>
 class StateFinite;
-class class_mps_2site;
 
 namespace tools::common {
     template<typename Scalar>
@@ -40,21 +39,6 @@ namespace tools::common {
         static Eigen::Tensor<Scalar, 4> get_transfer_matrix_theta_evn(const StateInfinite<Scalar> &state, Scalar norm = 1.0);
         static Eigen::Tensor<Scalar, 4> get_transfer_matrix_theta_odd(const StateInfinite<Scalar> &state, Scalar norm = 1.0);
         static Eigen::Tensor<Scalar, 4> get_transfer_matrix_AB(const StateInfinite<Scalar> &state, int p);
-
-        static Eigen::Tensor<Scalar, 4> get_theta(const class_mps_2site &MPS, Scalar norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$.*/
-        static Eigen::Tensor<Scalar, 4> get_theta_swapped(const class_mps_2site &MPS,
-                                                          Scalar                 norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$, with A and B swapped.*/
-        static Eigen::Tensor<Scalar, 4> get_theta_evn(const class_mps_2site &MPS, Scalar norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$.*/
-        static Eigen::Tensor<Scalar, 4> get_theta_odd(const class_mps_2site &MPS,
-                                                      Scalar                 norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$, with A and B swapped.*/
-        static Eigen::Tensor<Scalar, 4> get_transfer_matrix_zero(const class_mps_2site &MPS);
-        static Eigen::Tensor<Scalar, 4> get_transfer_matrix_LBGA(const class_mps_2site &MPS, Scalar norm = 1.0);
-        static Eigen::Tensor<Scalar, 4> get_transfer_matrix_GALC(const class_mps_2site &MPS, Scalar norm = 1.0);
-        static Eigen::Tensor<Scalar, 4> get_transfer_matrix_GBLB(const class_mps_2site &MPS, Scalar norm = 1.0);
-        static Eigen::Tensor<Scalar, 4> get_transfer_matrix_LCGB(const class_mps_2site &MPS, Scalar norm = 1.0);
-        static Eigen::Tensor<Scalar, 4> get_transfer_matrix_theta_evn(const class_mps_2site &MPS, Scalar norm = 1.0);
-        static Eigen::Tensor<Scalar, 4> get_transfer_matrix_theta_odd(const class_mps_2site &MPS, Scalar norm = 1.0);
-        static Eigen::Tensor<Scalar, 4> get_transfer_matrix_AB(const class_mps_2site &MPS, int p);
     };
 
 }

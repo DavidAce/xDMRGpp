@@ -3,7 +3,9 @@
 #include "math/float.h"
 #include <array>
 #include <complex>
+#include <Eigen/Cholesky>
 #include <Eigen/IterativeLinearSolvers>
+#include <Eigen/LU>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
 #include <memory>
@@ -13,29 +15,25 @@
 namespace tid {
     class ur;
 }
-template<typename Scalar>
-class MpoSite;
-
-template<typename T>
-struct env_pair;
+template<typename Scalar> class MpoSite;
+template<typename Scalar> struct env_pair;
 
 struct primme_params;
 
 template<typename Scalar_>
 class MatVecMPOS {
-    // static_assert(std::is_same_v<T, fp64> or std::is_same_v<T, cx64>);
+    // static_assert(std::is_same_v<Scalar, fp64> or std::is_same_v<Scalar, cx64>);
 
     public:
-    using T          = Scalar_;
     using Scalar     = Scalar_;
     using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
     using CplxScalar = std::complex<RealScalar>;
-    using T32        = std::conditional_t<std::is_same_v<T, fp64>, float, std::complex<float>>;
-    using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-    using VectorType = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-    using SparseType = Eigen::SparseMatrix<T>;
-    using MatrixRowM = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
-    using SparseRowM = Eigen::SparseMatrix<T, Eigen::RowMajor>;
+    using T32        = std::conditional_t<std::is_same_v<Scalar, fp64>, float, std::complex<float>>;
+    using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+    using SparseType = Eigen::SparseMatrix<Scalar>;
+    using MatrixRowM = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    using SparseRowM = Eigen::SparseMatrix<Scalar, Eigen::RowMajor>;
     using MatrixT32  = Eigen::Matrix<T32, Eigen::Dynamic, Eigen::Dynamic>;
 
     constexpr static bool         can_shift_invert = true;
@@ -48,19 +46,19 @@ class MatVecMPOS {
     private:
     bool fullsystem = false;
 
-    std::vector<Eigen::Tensor<T, 4>> mpos_A, mpos_B, mpos_A_shf, mpos_B_shf;
-    Eigen::Tensor<T, 3>              envL_A, envR_A, envL_B, envR_B;
-    std::array<long, 3>              shape_mps;
-    long                             size_mps;
-    std::vector<long>                spindims;
-    eig::Form                        form            = eig::Form::SYMM;
-    eig::Side                        side            = eig::Side::R;
-    std::optional<T>                 jcbShift        = std::nullopt;
-    long                             jcbMaxBlockSize = 1l;  // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
-    VectorType                       jcbDiagA, jcbDiagB;    // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
-    VectorType                       invJcbDiagonal;        // The inverted diagonals used when jcBMaxBlockSize == 1
-    std::vector<std::pair<long, SparseType>> sInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as sparse matrices
-    std::vector<std::pair<long, MatrixType>> dInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as dense matrices
+    std::vector<Eigen::Tensor<Scalar, 4>> mpos_A, mpos_B, mpos_A_shf, mpos_B_shf;
+    Eigen::Tensor<Scalar, 3>              envL_A, envR_A, envL_B, envR_B;
+    std::array<long, 3>                   shape_mps;
+    long                                  size_mps;
+    std::vector<long>                     spindims;
+    eig::Form                             form            = eig::Form::SYMM;
+    eig::Side                             side            = eig::Side::R;
+    std::optional<Scalar>                 jcbShift        = std::nullopt;
+    long                                  jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
+    VectorType                            jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
+    VectorType                            invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
+    std::vector<std::pair<long, SparseType>> sInvJcbBlocks;     // inverted blocks for the block Jacobi preconditioner stored as sparse matrices
+    std::vector<std::pair<long, MatrixType>> dInvJcbBlocks;     // inverted blocks for the block Jacobi preconditioner stored as dense matrices
     // std::vector<std::pair<long, MatrixType>> dJcbBlocksA;   // the blocks for the Jacobi preconditioner stored as dense matrices
     // std::vector<std::pair<long, MatrixType>> dJcbBlocksB;   // the blocks for the Jacobi preconditioner stored as dense matrices
 
@@ -89,21 +87,26 @@ class MatVecMPOS {
     std::vector<long> get_k_smallest(const VectorType &vec, size_t k) const;
     std::vector<long> get_k_largest(const VectorType &vec, size_t k) const;
 
-    T get_matrix_element(long I, long J, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const;
-    VectorType get_diagonal_new(long offset, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-                                const Eigen::Tensor<T, 3> &ENVR) const;
-    MatrixType get_diagonal_block(long offset, long extent, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL,
-                                  const Eigen::Tensor<T, 3> &ENVR) const;
-    MatrixType get_diagonal_block(long offset, long extent, T shift, const std::vector<Eigen::Tensor<T, 4>> &MPOS_A, const Eigen::Tensor<T, 3> &ENVL_A,
-                                  const Eigen::Tensor<T, 3> &ENVR_A, const std::vector<Eigen::Tensor<T, 4>> &MPOS_B, const Eigen::Tensor<T, 3> &ENVL_B,
-                                  const Eigen::Tensor<T, 3> &ENVR_B) const;
+    Scalar     get_matrix_element(long I, long J, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
+                                  const Eigen::Tensor<Scalar, 3> &ENVR) const;
+    VectorType get_diagonal_new(long offset, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
+                                const Eigen::Tensor<Scalar, 3> &ENVR) const;
+    MatrixType get_diagonal_block(long offset, long extent, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
+                                  const Eigen::Tensor<Scalar, 3> &ENVR) const;
+    MatrixType get_diagonal_block(long offset, long extent, Scalar shift, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_A,
+                                  const Eigen::Tensor<Scalar, 3> &ENVL_A, const Eigen::Tensor<Scalar, 3> &ENVR_A,
+                                  const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_B, const Eigen::Tensor<Scalar, 3> &ENVL_B,
+                                  const Eigen::Tensor<Scalar, 3> &ENVR_B) const;
 
     // VectorType get_diagonal_old(long offset) const;
-    VectorType get_row(long row_idx, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const;
-    VectorType get_col(long col_idx, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const;
-    VectorType get_diagonal(long offset, const std::vector<Eigen::Tensor<T, 4>> &MPOS, const Eigen::Tensor<T, 3> &ENVL, const Eigen::Tensor<T, 3> &ENVR) const;
-    void       thomas(long rows, T *x, T *const dl, T *const dm, T *const du);
-    void       thomas2(long rows, T *x, T *const dl, T *const dm, T *const du);
+    VectorType get_row(long row_idx, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
+                       const Eigen::Tensor<Scalar, 3> &ENVR) const;
+    VectorType get_col(long col_idx, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
+                       const Eigen::Tensor<Scalar, 3> &ENVR) const;
+    VectorType get_diagonal(long offset, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
+                            const Eigen::Tensor<Scalar, 3> &ENVR) const;
+    void       thomas(long rows, Scalar *x, Scalar *const dl, Scalar *const dm, Scalar *const du);
+    void       thomas2(long rows, Scalar *x, Scalar *const dl, Scalar *const dm, Scalar *const du);
     // void                             thomas(const long rows, const VectorType &x, const VectorType &dl, const VectorType &dm, const VectorType &du);
 
     // Shift stuff
@@ -115,34 +118,36 @@ class MatVecMPOS {
 
     public:
     MatVecMPOS() = default;
-    template<typename EnvType>
-    MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, /*!< The Hamiltonian MPO's  */
-               const env_pair<const EnvType &>                                  &envs  /*!< The left and right environments.  */
+    template<typename A, typename EnvType>
+    MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<A>>> &mpos, /*!< The Hamiltonian MPO's  */
+               const env_pair<const EnvType &>                             &envs  /*!< The left and right environments.  */
     );
-    template<typename EnvTypeA, typename EnvTypeB>
-    MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos, /*!< The Hamiltonian MPO's  */
-               const env_pair<const EnvTypeA &>                                 &enva, /*!< The left and right environments.  */
-               const env_pair<const EnvTypeB &>                                 &envb  /*!< The left and right environments.  */
+    template<typename A, typename EnvTypeA, typename EnvTypeB>
+    MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<A>>> &mpos, /*!< The Hamiltonian MPO's  */
+               const env_pair<const EnvTypeA &>                            &enva, /*!< The left and right environments.  */
+               const env_pair<const EnvTypeB &>                            &envb  /*!< The left and right environments.  */
     );
 
     // Functions used in Arpack++ solver
     [[nodiscard]] int rows() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
     [[nodiscard]] int cols() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
 
-    void                FactorOP();                      //  Factorizes (A-sigma*I) (or finds its diagonal elements)
-    void                MultOPv(T *mps_in_, T *mps_out); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
-    void                MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
-    void                MultAx(T *mps_in_, T *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in.
-    void                MultAx(const T *mps_in_, T *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
-    void                MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
-    void                MultBx(T *mps_in_, T *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
-    void                MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
-    Eigen::Tensor<T, 3> operator*(const Eigen::Tensor<T, 3> &x) const;
-    Eigen::Tensor<T, 1> operator*(const Eigen::Tensor<T, 1> &x) const;
-    VectorType          operator*(const VectorType &x) const;
+    void FactorOP();                                //  Factorizes (A-sigma*I) (or finds its diagonal elements)
+    void MultOPv(Scalar *mps_in_, Scalar *mps_out); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
+    void MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
+    void MultAx(Scalar *mps_in_, Scalar *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultAx(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
+    void MultBx(Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
+    void perform_op(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
 
-    void CalcPc(T shift = 0.0);                         //  Calculates the diagonal or tridiagonal part of A
-    void MultPc(T *mps_in_, T *mps_out, T shift = 0.0); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
+    Eigen::Tensor<Scalar, 3> operator*(const Eigen::Tensor<Scalar, 3> &x) const;
+    Eigen::Tensor<Scalar, 1> operator*(const Eigen::Tensor<Scalar, 1> &x) const;
+    VectorType               operator*(const VectorType &x) const;
+
+    void CalcPc(Scalar shift = 0.0);                                   //  Calculates the diagonal or tridiagonal part of A
+    void MultPc(Scalar *mps_in_, Scalar *mps_out, Scalar shift = 0.0); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
     void MultPc(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
 
     // Various utility functions
@@ -156,30 +161,30 @@ class MatVecMPOS {
     void         set_side(eig::Side side_);
     void         set_jcbMaxBlockSize(std::optional<long> jcbSize); // the llt preconditioner bandwidth (default 8) (tridiagonal has bandwidth == 1)
 
-    [[nodiscard]] T                                       get_shift() const;
-    [[nodiscard]] eig::Form                               get_form() const;
-    [[nodiscard]] eig::Side                               get_side() const;
-    [[nodiscard]] eig::Type                               get_type() const;
-    [[nodiscard]] const std::vector<Eigen::Tensor<T, 4>> &get_mpos() const;
-    [[nodiscard]] const Eigen::Tensor<Scalar, 3>         &get_envL() const;
-    [[nodiscard]] const Eigen::Tensor<Scalar, 3>         &get_envR() const;
-    [[nodiscard]] long                                    get_size() const;
-    [[nodiscard]] std::array<long, 3>                     get_shape_mps() const;
-    [[nodiscard]] std::vector<std::array<long, 4>>        get_shape_mpo() const;
-    [[nodiscard]] std::array<long, 3>                     get_shape_envL() const;
-    [[nodiscard]] std::array<long, 3>                     get_shape_envR() const;
-    [[nodiscard]] Eigen::Tensor<Scalar, 6>                get_tensor() const;
-    [[nodiscard]] Eigen::Tensor<Scalar, 6>                get_tensor_shf() const;
-    [[nodiscard]] Eigen::Tensor<Scalar, 6>                get_tensor_ene() const;
-    [[nodiscard]] MatrixType                              get_matrix() const;
-    [[nodiscard]] MatrixType                              get_matrix_shf() const;
-    [[nodiscard]] MatrixType                              get_matrix_ene() const;
-    [[nodiscard]] SparseType                              get_sparse_matrix() const;
-    [[nodiscard]] double                                  get_sparsity() const;
-    [[nodiscard]] long                                    get_non_zeros() const;
-    [[nodiscard]] long                                    get_jcbMaxBlockSize() const;
-    [[nodiscard]] bool                                    isReadyShift() const;
-    [[nodiscard]] bool                                    isReadyFactorOp() const;
+    [[nodiscard]] Scalar                                       get_shift() const;
+    [[nodiscard]] eig::Form                                    get_form() const;
+    [[nodiscard]] eig::Side                                    get_side() const;
+    [[nodiscard]] static constexpr eig::Type                   get_type() { return eig::ScalarToType<Scalar>(); }
+    [[nodiscard]] const std::vector<Eigen::Tensor<Scalar, 4>> &get_mpos() const;
+    [[nodiscard]] const Eigen::Tensor<Scalar, 3>              &get_envL() const;
+    [[nodiscard]] const Eigen::Tensor<Scalar, 3>              &get_envR() const;
+    [[nodiscard]] long                                         get_size() const;
+    [[nodiscard]] std::array<long, 3>                          get_shape_mps() const;
+    [[nodiscard]] std::vector<std::array<long, 4>>             get_shape_mpo() const;
+    [[nodiscard]] std::array<long, 3>                          get_shape_envL() const;
+    [[nodiscard]] std::array<long, 3>                          get_shape_envR() const;
+    [[nodiscard]] Eigen::Tensor<Scalar, 6>                     get_tensor() const;
+    [[nodiscard]] Eigen::Tensor<Scalar, 6>                     get_tensor_shf() const;
+    [[nodiscard]] Eigen::Tensor<Scalar, 6>                     get_tensor_ene() const;
+    [[nodiscard]] MatrixType                                   get_matrix() const;
+    [[nodiscard]] MatrixType                                   get_matrix_shf() const;
+    [[nodiscard]] MatrixType                                   get_matrix_ene() const;
+    [[nodiscard]] SparseType                                   get_sparse_matrix() const;
+    [[nodiscard]] double                                       get_sparsity() const;
+    [[nodiscard]] long                                         get_non_zeros() const;
+    [[nodiscard]] long                                         get_jcbMaxBlockSize() const;
+    [[nodiscard]] bool                                         isReadyShift() const;
+    [[nodiscard]] bool                                         isReadyFactorOp() const;
 
     // Timers
     std::unique_ptr<tid::ur> t_factorOP; // Factorization time

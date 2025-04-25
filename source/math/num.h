@@ -91,6 +91,27 @@ namespace num {
         }
     }
 
+    template<std::floating_point A, std::floating_point B>
+    constexpr bool lt(A a, B b) {
+        using CT = std::common_type_t<A, B>;
+        return CT{a} < CT{b}; // CT{…} is value-initialization + conversion
+    }
+    template<std::floating_point A, std::floating_point B>
+    constexpr bool leq(A a, B b) {
+        using CT = std::common_type_t<A, B>;
+        return CT{a} <= CT{b};
+    }
+    template<std::floating_point A, std::floating_point B>
+    constexpr bool gt(A a, B b) {
+        using CT = std::common_type_t<A, B>;
+        return CT{a} > CT{b};
+    }
+    template<std::floating_point A, std::floating_point B>
+    constexpr bool geq(A a, B b) {
+        using CT = std::common_type_t<A, B>;
+        return CT{a} > CT{b};
+    }
+
     template<typename out_t, typename ContainerT, typename Func>
     std::vector<out_t> cast(const ContainerT &x, Func &&f) {
         std::vector<out_t> y;

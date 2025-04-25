@@ -25,50 +25,47 @@ namespace eig {
     inline constexpr bool debug = true;
 #endif
 }
+template class MatVecZero<fp32>;
+template class MatVecZero<fp64>;
+template class MatVecZero<fp128>;
+template class MatVecZero<cx32>;
+template class MatVecZero<cx64>;
+template class MatVecZero<cx128>;
+
 template<typename T>
-template<typename EnvType>
-MatVecZero<T>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite>> &mpss_, /*!< The MPS sites  */
-                          const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, /*!< The Hamiltonian MPO's  */
-                          const env_pair<const EnvType &>                          &envs_  /*!< The left and right environments.  */
+template<typename S, typename EnvType>
+MatVecZero<T>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<S>>> &mpss_, /*!< The MPS sites  */
+                          const std::vector<std::reference_wrapper<const MpoSite<S>>> &mpos_, /*!< The Hamiltonian MPO's  */
+                          const env_pair<const EnvType &>                             &envs_  /*!< The left and right environments.  */
 ) {
-    static_assert(sfinae::is_any_v<EnvType, EnvEne, EnvVar>);
+    static_assert(sfinae::is_any_v<EnvType, EnvEne<S>, EnvVar<S>>);
 
     if(mpss_.size() != 1) throw except::runtime_error("MatVecZero: requires a single mps site. Got {} sites", mpss_.size());
     if(mpos_.size() != 1) throw except::runtime_error("MatVecZero: requires a single mpo site. Got {} sites", mpos_.size());
 
     auto &mps = mpss_.front().get();
     auto &mpo = mpos_.front().get();
-    if(!mps.isCenter()) throw except::runtime_error("MatVecZero: mps at pos {} must be a center matrix. Got {}", mps.get_position<long>(), mps.get_label());
-    // Contract the bare mps and mpo into the environment
-    if constexpr(std::is_same_v<T, cx64>) {
-        envR = envs_.R.get_block();
-        if constexpr(std::is_same_v<EnvType, EnvEne>) {
-            envL = envs_.L.get_block()
-                       .contract(mps.get_M_bare(), tenx::idx({0}, {1}))
-                       .contract(mps.get_M_bare().conjugate(), tenx::idx({0}, {1}))
-                       .contract(mpo.MPO(), tenx::idx({0, 1, 3}, {0, 2, 3}));
-        } else {
-            envL = envs_.L.get_block()
-                       .contract(mps.get_M_bare(), tenx::idx({0}, {1}))
-                       .contract(mps.get_M_bare().conjugate(), tenx::idx({0}, {1}))
-                       .contract(mpo.MPO2(), tenx::idx({0, 1, 3}, {0, 2, 3}));
-        }
-    } else {
+    if(!mps.isCenter())
+        throw except::runtime_error("MatVecZero: mps at pos {} must be a center matrix. Got {}", mps.template get_position<long>(), mps.get_label());
+    if constexpr(!sfinae::is_std_complex_v<T> and sfinae::is_std_complex_v<S>) {
         if(not tenx::isReal(mpo.MPO())) throw except::runtime_error("mpo is not real");
-        if constexpr(eig::debug) {
-            if(not tenx::isReal(envs_.L.get_block())) throw except::runtime_error("envL is not real");
-            if(not tenx::isReal(envs_.R.get_block())) throw except::runtime_error("envR is not real");
-        }
-        envR          = envs_.R.get_block().real();
-        auto mps_real = Eigen::Tensor<Scalar, 3>(mps.get_M_bare().real());
-        auto env_real = Eigen::Tensor<Scalar, 3>(envs_.L.get_block().real());
-        if constexpr(std::is_same_v<EnvType, EnvEne>) {
-            auto mpo_real = Eigen::Tensor<Scalar, 4>(mpo.MPO().real());
-            envL = env_real.contract(mps_real, tenx::idx({0}, {1})).contract(mps_real, tenx::idx({0}, {1})).contract(mpo_real, tenx::idx({0, 1, 3}, {0, 2, 3}));
-        } else {
-            auto mpo_real = Eigen::Tensor<Scalar, 4>(mpo.MPO2().real());
-            envL = env_real.contract(mps_real, tenx::idx({0}, {1})).contract(mps_real, tenx::idx({0}, {1})).contract(mpo_real, tenx::idx({0, 1, 3}, {0, 2, 3}));
-        }
+        if(not tenx::isReal(envs_.L.get_block())) throw except::runtime_error("envL is not real");
+        if(not tenx::isReal(envs_.R.get_block())) throw except::runtime_error("envR is not real");
+    }
+
+    // Contract the bare mps and mpo into the environment
+    envR = envs_.R.template get_block_as<T>();
+    if constexpr(std::is_same_v<EnvType, EnvEne<S>>) {
+        envL = envs_.L.template get_block_as<T>()
+                   .contract(mps.template get_M_bare_as<T>(), tenx::idx({0}, {1}))
+                   .contract(mps.template get_M_bare_as<T>().conjugate(), tenx::idx({0}, {1}))
+                   .contract(mpo.template MPO_as<T>(), tenx::idx({0, 1, 3}, {0, 2, 3}));
+    }
+    if constexpr(std::is_same_v<EnvType, EnvVar<S>>) {
+        envL = envs_.L.template get_block_as<T>()
+                   .contract(mps.template get_M_bare_as<T>(), tenx::idx({0}, {1}))
+                   .contract(mps.template get_M_bare_as<T>().conjugate(), tenx::idx({0}, {1}))
+                   .contract(mpo.template MPO2_as<T>(), tenx::idx({0, 1, 3}, {0, 2, 3}));
     }
 
     long spin_dim = mpo.get_spin_dimension();
@@ -76,23 +73,26 @@ MatVecZero<T>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite
     size_mps      = spin_dim * envL.dimension(0) * envR.dimension(0);
     shape_bond    = {envL.dimension(0), envR.dimension(0)};
     size_bond     = envL.dimension(0) * envR.dimension(0);
+}
+/* clang-format off */
+template MatVecZero<fp32>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<fp32>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<fp32>>> &mpos_, const env_pair<const EnvEne<fp32> &> &envs_);
+template MatVecZero<fp64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<fp64>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<fp64>>> &mpos_, const env_pair<const EnvEne<fp64> &> &envs_);
+template MatVecZero<fp128>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<fp128>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<fp128>>> &mpos_, const env_pair<const EnvEne<fp128> &> &envs_);
+template MatVecZero<fp32>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx32>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx32>>> &mpos_, const env_pair<const EnvEne<cx32> &> &envs_);
+template MatVecZero<fp64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos_, const env_pair<const EnvEne<cx64> &> &envs_);
+template MatVecZero<fp128>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos_, const env_pair<const EnvEne<cx128> &> &envs_);
+template MatVecZero<cx32>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx32>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx32>>> &mpos_, const env_pair<const EnvEne<cx32> &> &envs_);
+template MatVecZero<cx64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos_, const env_pair<const EnvEne<cx64> &> &envs_);
+template MatVecZero<cx128>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos_, const env_pair<const EnvEne<cx128> &> &envs_);
+/* clang-format off */
 
+template<typename T> void MatVecZero<T>::init_timers() {
     t_factorOP = std::make_unique<tid::ur>("Time FactorOp");
     t_genMat   = std::make_unique<tid::ur>("Time genMat");
     t_multOPv  = std::make_unique<tid::ur>("Time MultOpv");
     t_multAx   = std::make_unique<tid::ur>("Time MultAx");
     t_multPc   = std::make_unique<tid::ur>("Time MultPc");
 }
-
-template MatVecZero<cx64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite>> &mpss_,
-                                      const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-template MatVecZero<fp64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite>> &mpss_,
-                                      const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvEne &> &envs_);
-template MatVecZero<cx64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite>> &mpss_,
-                                      const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
-template MatVecZero<fp64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite>> &mpss_,
-                                      const std::vector<std::reference_wrapper<const MpoSite>> &mpos_, const env_pair<const EnvVar &> &envs_);
-
 template<typename T>
 int MatVecZero<T>::rows() const {
     return safe_cast<int>(size_bond);
@@ -130,6 +130,16 @@ void MatVecZero<T>::MultAx(T *bond_in_, T *bond_out_) {
     bond_out = bond_in.contract(envL, tenx::idx({0}, {0})).contract(envR, tenx::idx({0, 2}, {0, 2}));
     num_mv++;
 }
+template<typename T>
+void MatVecZero<T>::perform_op(const T *bond_in_, T *bond_out_) const {
+    auto token    = t_multAx->tic_token();
+    auto bond_in  = Eigen::TensorMap<Eigen::Tensor<const T, 2>>(bond_in_, shape_bond);
+    auto bond_out = Eigen::TensorMap<Eigen::Tensor<T, 2>>(bond_out_, shape_bond);
+    // auto bond_rank2 = tenx::asDiagonal(bond_in).contract(envL, tenx::idx({0}, {0})).contract(envR, tenx::idx({0, 2}, {0, 2}));
+    // bond_out        = tenx::extractDiagonal(bond_rank2);
+    bond_out = bond_in.contract(envL, tenx::idx({0}, {0})).contract(envR, tenx::idx({0, 2}, {0, 2}));
+    num_mv++;
+}
 
 template<typename T>
 void MatVecZero<T>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) {
@@ -141,7 +151,6 @@ void MatVecZero<T>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize,
     }
     *err = 0;
 }
-
 
 template<typename T>
 void MatVecZero<T>::print() const {}
@@ -157,19 +166,19 @@ void MatVecZero<T>::reset() {
 }
 
 template<typename T>
-void MatVecZero<T>::set_shift(std::complex<double> shift) {
+void MatVecZero<T>::set_shift(Cplx shift) {
     // Here we set an energy shift directly on the MPO.
     // This only works if the MPO is not compressed already.
     if(readyShift) return;
     if(sigma == shift) return;
-    auto shift_per_mpo = shift / static_cast<double>(mpos.size());
-    auto sigma_per_mpo = sigma / static_cast<double>(mpos.size());
+    auto shift_per_mpo = shift / static_cast<Real>(mpos.size());
+    auto sigma_per_mpo = sigma / static_cast<Real>(mpos.size());
     for(size_t idx = 0; idx < mpos.size(); ++idx) {
         // The MPO is a rank4 tensor ijkl where the first 2 ij indices draw a simple
         // rank2 matrix, where each element is also a matrix with the size
         // determined by the last 2 indices kl.
         // When we shift an MPO, all we do is subtract a diagonal matrix from
-        // the botton left corner of the ij-matrix.
+        // the bottom left corner of the ij-matrix.
         auto &mpo  = mpos[idx];
         auto  dims = mpo.dimensions();
         if(dims[2] != dims[3]) throw except::logic_error("MPO has different spin dimensions up and down: {}", dims);
@@ -182,11 +191,11 @@ void MatVecZero<T>::set_shift(std::complex<double> shift) {
         std::array<long, 2> extent2{spindim, spindim};
         auto                id = tenx::TensorIdentity<T>(spindim);
         // We undo the previous sigma and then subtract the new one. We are aiming for [A - I*shift]
-        if constexpr(std::is_same_v<T, fp64>)
-            mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma_per_mpo - shift_per_mpo);
-        else
+        if constexpr(sfinae::is_std_complex_v<T>)
             mpo.slice(offset4, extent4).reshape(extent2) += id * (sigma_per_mpo - shift_per_mpo);
-        eig::log->debug("Shifted MPO {} energy by {:.16f}", idx, shift_per_mpo);
+        else
+            mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma_per_mpo - shift_per_mpo);
+        eig::log->debug("Shifted MPO {} energy by {:.16f}", idx, fp(shift_per_mpo));
     }
     sigma = shift;
     if(not mpos_shf.empty()) {
@@ -207,11 +216,8 @@ void MatVecZero<T>::set_side(const eig::Side side_) {
 }
 
 template<typename T>
-T MatVecZero<T>::get_shift() const {
-    if constexpr(std::is_same_v<T, fp64>)
-        return std::real(sigma);
-    else
-        return sigma;
+typename  MatVecZero<T>::Cplx MatVecZero<T>::get_shift() const {
+    return sigma;
 }
 
 template<typename T>
@@ -221,15 +227,6 @@ eig::Form MatVecZero<T>::get_form() const {
 template<typename T>
 eig::Side MatVecZero<T>::get_side() const {
     return side;
-}
-template<typename T>
-eig::Type MatVecZero<T>::get_type() const {
-    if constexpr(std::is_same_v<T, fp64>)
-        return eig::Type::FP64;
-    else if constexpr(std::is_same_v<T, cx64>)
-        return eig::Type::CX64;
-    else
-        throw std::runtime_error("Unsupported type");
 }
 
 template<typename T>
@@ -297,6 +294,3 @@ bool MatVecZero<T>::isReadyShift() const {
     return readyShift;
 }
 
-// Explicit instantiations
-template class MatVecZero<fp64>;
-template class MatVecZero<cx64>;

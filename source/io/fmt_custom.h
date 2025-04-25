@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <general/sfinae.h>
 
 #if defined(FMT_HEADER_ONLY)
@@ -52,8 +53,94 @@ struct fmt::formatter<std::reference_wrapper<T>> : fmt::formatter<T> {
 template<typename T>
 struct fp {
     public:
-    T value = static_cast<T>(0.0);
+    T value          = static_cast<T>(0.0);
+    using value_type = T;
     fp(T value_) : value(value_) {}
+};
+
+template<typename T> // T is the scalar type, not the container type
+requires std::floating_point<T>
+class fv {
+    public:
+    using value_type = fp<T>;
+
+    const fp<T> *ptr_;
+    std::size_t  len_;
+
+    template<typename size_type>
+    requires std::is_integral_v<size_type>
+    fv(T *ptr, size_type len) noexcept : ptr_{reinterpret_cast<const fp<T> *>(ptr)}, len_{static_cast<std::size_t>(len)} {}
+    fv(const T *bgn, const T *end) noexcept : ptr_{reinterpret_cast<const fp<T> *>(bgn)}, len_{static_cast<std::size_t>(std::distance(bgn, end))} {}
+
+    template<template<typename, auto...> typename V, auto... Args>
+    // requires sfinae::has_data_v<V<T, Args...>> and sfinae::has_size_v<V<T, Args...>>
+    fv(const V<T, Args...> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(v.size()) {} // Matches std::array
+
+    template<template<typename, auto, auto, typename> typename V, auto a, auto b, typename c>
+    // requires sfinae::has_data_v<V<T, a, b, c>> and sfinae::has_size_v<V<T, a, b, c>>
+    fv(const V<T, a, b, c> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(v.size()) {} // Matches eigen tensors
+
+    template<template<typename, typename> typename V, typename A>
+    fv(const V<T, A> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(v.size()) {} // Matches std::vector
+
+    template<typename V>
+    // requires sfinae::has_data_v<V> and sfinae::has_size_v<V>
+    fv(const V &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(static_cast<size_t>(v.size())) {} // Matches others (requires <>)
+    // template<auto N>
+    // requires std::floating_point<T>
+    // fps(const Eigen::Tensor<T, N> &v) noexcept : ptr_{reinterpret_cast<const fp<T> *>(v.data())}, len_{static_cast<size_t>(v.size())} {}
+
+    fp<T>                    &operator[](size_t i) noexcept { return *ptr_[i]; }
+    fp<T> const              &operator[](size_t i) const noexcept { return *ptr_[i]; }
+    [[nodiscard]] std::size_t size() const noexcept { return len_; }
+
+    fp<T>       *data() noexcept { return ptr_; }
+    fp<T>       *begin() noexcept { return ptr_; }
+    fp<T>       *end() noexcept { return ptr_ + len_; }
+    const fp<T> *data() const noexcept { return ptr_; }
+    const fp<T> *begin() const noexcept { return ptr_; }
+    const fp<T> *end() const noexcept { return ptr_ + len_; }
+};
+
+template<typename T> // T is the scalar type, not the container type
+requires std::is_same_v<T, typename fp<T>::value_type>
+class fpv {
+    public:
+    using value_type = T;
+
+    const T    *ptr_;
+    std::size_t len_;
+
+    template<typename size_type>
+    requires std::is_integral_v<size_type>
+    fpv(T *ptr, size_type len) noexcept : ptr_{ptr}, len_{static_cast<std::size_t>(len)} {}
+    fpv(const T *bgn, const T *end) noexcept : ptr_{bgn}, len_{static_cast<std::size_t>(std::distance(bgn, end))} {}
+
+    template<template<typename, auto...> typename V, auto... Args>
+    fpv(const V<T, Args...> &v) noexcept : ptr_(v.data()), len_(v.size()) {} // Matches std::array
+
+    template<template<typename, auto, auto, typename> typename V, auto a, auto b, typename c>
+    fpv(const V<T, a, b, c> &v) noexcept : ptr_(v.data()), len_(v.size()) {} // Matches eigen tensors
+
+    template<template<typename, typename> typename V, typename A>
+    fpv(const V<T, A> &v) noexcept : ptr_(v.data()), len_(v.size()) {} // Matches std::vector
+
+    template<typename V>
+    fpv(const V &v) noexcept : ptr_(v.data()), len_(static_cast<size_t>(v.size())) {} // Matches others (requires <>)
+    // template<auto N>
+    // requires std::floating_point<T>
+    // fps(const Eigen::Tensor<T, N> &v) noexcept : ptr_{reinterpret_cast<const fp<T> *>(v.data())}, len_{static_cast<size_t>(v.size())} {}
+
+    T                        &operator[](size_t i) noexcept { return *ptr_[i]; }
+    T const                  &operator[](size_t i) const noexcept { return *ptr_[i]; }
+    [[nodiscard]] std::size_t size() const noexcept { return len_; }
+
+    T       *data() noexcept { return ptr_; }
+    T       *begin() noexcept { return ptr_; }
+    T       *end() noexcept { return ptr_ + len_; }
+    const T *data() const noexcept { return ptr_; }
+    const T *begin() const noexcept { return ptr_; }
+    const T *end() const noexcept { return ptr_ + len_; }
 };
 
 template<typename T>
@@ -105,7 +192,20 @@ struct fmt::formatter<fp<T>> {
         std::string valstr;
         if constexpr(sfinae::is_std_complex_v<T>) {
             valstr = fmt::format("({},{})", to_chars_internal(std::real(value.value), sign), to_chars_internal(std::imag(value.value), sign));
-        } else {
+        }
+        // else if constexpr(sfinae::is_iterable_v<T> and sfinae::has_value_type_v<T>) {
+        //     auto valstrs = std::vector<std::string>();
+        //     if constexpr(sfinae::is_std_complex_v<typename T::value_type>) {
+        //         std::transform(value.value.begin(), value.value.end(), std::back_inserter(valstrs), [&](const auto &v) -> std::string {
+        //             return fmt::format("({},{})", to_chars_internal(std::real(v), sign), to_chars_internal(std::imag(v), sign));
+        //         });
+        //     } else {
+        //         std::transform(value.value.begin(), value.value.end(), std::back_inserter(valstrs),
+        //                        [&](const auto &v) -> std::string { return to_chars_internal(v, sign); });
+        //     }
+        //     valstr = fmt::format("[{}]", fmt::join(valstrs, ", "));
+        // }
+        else {
             valstr = to_chars_internal(value.value, sign);
         }
 

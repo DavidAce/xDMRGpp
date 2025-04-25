@@ -132,11 +132,14 @@ namespace qm::lbit {
     extern std::vector<qm::Gate>                create_unitary_2site_gate_layer(const qm::lbit::UnitaryGateProperties &u);
     extern std::vector<Eigen::Tensor<cx64, 4>>  get_unitary_mpo_layer(const std::vector<qm::Gate> & ulayer, std::optional<svd::config> cfg = std::nullopt);
     extern std::vector<Eigen::Tensor<cx64, 4>>  get_unitary_mpo_layer(const UnitaryGateProperties & u);
-    extern std::vector<Eigen::Tensor<cx64, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx64, 4>> & mpos_dn, const std::vector<Eigen::Tensor<cx64, 4>> & mpos_up, bool adj_dn = false);
-    extern std::vector<Eigen::Tensor<cx64, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx64, 4>> & mpos_dn,
-                                                                         const std::vector<Eigen::Tensor<cx64, 4>> & mpos_md,
-                                                                         const std::vector<Eigen::Tensor<cx64, 4>> & mpos_up);
-    extern std::vector<Eigen::Tensor<cx64, 4>>  merge_unitary_mpo_layers(const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> & mpos);
+    template<typename Scalar>
+    extern std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn, const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_up, bool adj_dn = false);
+    template<typename Scalar>
+    extern std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn,
+                                                                           const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_md,
+                                                                           const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_up);
+    template<typename Scalar>
+    extern std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> & mpos);
     extern std::vector<Eigen::Tensor<cx64, 2>>  get_time_evolution_operators_2site(size_t sites, cx128 delta_t, const std::vector<Eigen::Tensor<cx64, 2>> &twosite_hams);
     extern std::vector<Eigen::Tensor<cx64, 2>>  get_time_evolution_operators_3site(size_t sites, cx128 delta_t, const std::vector<Eigen::Tensor<cx64, 2>> &hams_3site);
     extern std::vector<Eigen::Tensor<cx64, 4>>  get_time_evolution_mpos(cx128 delta_t, const std::vector<Eigen::Tensor<cx64, 4>> &mpos);
@@ -176,21 +179,23 @@ namespace qm::lbit {
     StateFinite<Scalar> transform_to_real_basis(const StateFinite<Scalar> &lbit_state,
                                         const std::vector<std::vector<qm::Gate>> & unitary_gates_2site_layers,
                                         svd::config svd_cfg);
-    template<typename Scalar>
+    template<typename Scalar, typename T>
     StateFinite<Scalar> transform_to_real_basis(const StateFinite<Scalar> &lbit_state,
-                                        const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &unitary_gates_mpo_layers,
-                                        const Eigen::Tensor<std::complex<double>, 1> & ledge,
-                                        const Eigen::Tensor<std::complex<double>, 1> & redge,
+                                        const std::vector<std::vector<Eigen::Tensor<T, 4>>> &unitary_gates_mpo_layers,
+                                        const Eigen::Tensor<T, 1> & ledge,
+                                        const Eigen::Tensor<T, 1> & redge,
                                         svd::config svd_cfg);
     template<typename Scalar>
     StateFinite<Scalar> transform_to_lbit_basis(const StateFinite<Scalar> &real_state,
                                         const std::vector<std::vector<qm::Gate>> & unitary_gates_2site_layers,
                                         svd::config svd_cfg);
-    template<typename Scalar>
+    template<typename Scalar, typename T>
     StateFinite<Scalar> transform_to_lbit_basis(const StateFinite<Scalar> &real_state,
-                                        const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &unitary_gates_mpo_layers,
-                                        const Eigen::Tensor<std::complex<double>, 1> & ledge,
-                                        const Eigen::Tensor<std::complex<double>, 1> & redge,
+                                        const std::vector<std::vector<Eigen::Tensor<T, 4>>> &unitary_gates_mpo_layers,
+                                        const Eigen::Tensor<T, 1> & ledge,
+                                        const Eigen::Tensor<T, 1> & redge,
                                         svd::config svd_cfg);
+
+
     /* clang-format on */
 }

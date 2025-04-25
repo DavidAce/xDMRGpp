@@ -9,7 +9,7 @@
 template<typename Scalar>
 class MpoSite;
 
-template<typename Scalar = cx64>
+template<typename Scalar>
 class ModelInfinite {
     private:
     struct Cache {

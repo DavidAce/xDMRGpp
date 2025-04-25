@@ -25,14 +25,13 @@ namespace tools::finite::env {
 
     using OptMeta = tools::finite::opt::OptMeta;
     /* clang-format off */
-    template<typename Scalar> extern BondExpansionResult<Scalar> get_optimally_mixed_block_1site(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta);
+    namespace internal {
+        template<typename T, typename Scalar> extern void set_mixing_factors_to_rnorm(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta, BondExpansionResult<Scalar> &res);
+        template<typename T, typename Scalar> extern void set_mixing_factors_to_stdv_H(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta, BondExpansionResult<Scalar> &res);
+        template<typename T, typename Scalar> extern void get_optimally_mixed_block(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta, BondExpansionResult<Scalar> &res);
+    }
     template<typename Scalar> extern BondExpansionResult<Scalar> get_mixing_factors_postopt_rnorm(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta);
     template<typename Scalar> extern BondExpansionResult<Scalar> get_mixing_factors_preopt_krylov(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta);
-    namespace internal {
-        template<typename Scalar> extern void set_mixing_factors_to_rnorm(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta, BondExpansionResult<Scalar> &res);
-        template<typename Scalar> extern void set_mixing_factors_to_stdv_H(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta, BondExpansionResult<Scalar> &res);
-        template<typename Scalar> extern void get_optimally_mixed_block(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta, BondExpansionResult<Scalar> &res);
-    }
 
     template<typename Scalar> extern std::array<double, 2>         get_optimal_mixing_factor_ene(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionPolicy bep);
     template<typename Scalar> extern std::array<double, 2>         get_optimal_mixing_factor_var(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionPolicy bep);

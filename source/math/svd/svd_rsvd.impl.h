@@ -1,3 +1,4 @@
+#pragma once
 #include "math/svd.h"
 #include "debug/exceptions.h"
 #include "math/rnd.h"
@@ -21,8 +22,8 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     auto mat = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols);
     if constexpr(tenx::sfinae::is_std_complex_v<Scalar>) {
         if(tenx::isReal(mat)) {
-            svd::MatrixType<RealType<Scalar>> matreal = mat.real();
-            auto [U, S, V]                            = do_svd_rsvd(matreal.data(), rows, cols);
+            svd::MatrixType<RealScalar<Scalar>> matreal = mat.real();
+            auto [U, S, V]                              = do_svd_rsvd(matreal.data(), rows, cols);
             return std::make_tuple(U.template cast<Scalar>(), S.template cast<Scalar>(), V.template cast<Scalar>());
         }
     }
@@ -39,6 +40,10 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     //    randomEngine.seed(777);
     //    rnd::
 
+    auto dump     = internal::DumpSVD<Scalar>();
+    dump.svd_save = svd_save;
+    if(dump.svd_save != svd::save::NONE) dump.A = mat;
+
     Rsvd::RandomizedSvd<MatrixType<Scalar>, pcg64, Rsvd::SubspaceIterationConditioner::None> SVD(rnd::internal::rng64);
     //    Rsvd::RandomizedSvd<MatrixType<Scalar>, pcg64, Rsvd::SubspaceIterationConditioner::Mgs> SVD(rnd::internal::rng);
 
@@ -48,9 +53,22 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
 
     // Truncation error needs normalized singular values
     std::tie(rank, truncation_error) = get_rank_from_truncation_error(SVD.singularValues().col(0));
+    long max_size                    = std::min(rank, rank_lim);
+    bool U_finite                    = SVD.matrixU().leftCols(max_size).allFinite();
+    bool S_finite                    = SVD.singularValues().topRows(max_size).allFinite();
+    bool V_finite                    = SVD.matrixV().leftCols(max_size).allFinite();
+    bool S_positive                  = (SVD.singularValues().topRows(max_size).real().array() >= 0).all();
+    bool success                     = rank > 0 and U_finite and S_finite and S_positive and V_finite;
 
-    if(rank == 0 or not SVD.matrixU().leftCols(rank).allFinite() or not SVD.singularValues().topRows(rank).allFinite() or
-       not SVD.matrixV().leftCols(rank).allFinite()) {
+    if(!success) {
+        if(dump.svd_save == svd::save::FAIL) {
+            dump.U                = SVD.matrixU();
+            dump.S                = SVD.singularValues().real();
+            dump.VT               = SVD.matrixV().adjoint();
+            dump.rank             = rank;
+            dump.truncation_error = truncation_error;
+            dump.info             = -1;
+        }
         throw except::runtime_error("RSVD SVD error \n"
                                     "  Truncation Error = {:.4e}\n"
                                     "  Rank             = {}\n"
@@ -62,13 +80,18 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                                     truncation_error, rank, rows, cols, mat.allFinite(), SVD.matrixU().leftCols(rank).allFinite(),
                                     SVD.singularValues().topRows(rank).allFinite(), SVD.matrixV().leftCols(rank).allFinite());
     }
+    if(dump.svd_save == svd::save::ALL or dump.svd_save == svd::save::LAST) {
+        dump.U                = SVD.matrixU().leftCols(rank);
+        dump.S                = SVD.singularValues().topRows(rank).real();
+        dump.VT               = SVD.matrixV().leftCols(rank).adjoint();
+        dump.rank             = rank;
+        dump.truncation_error = truncation_error;
+        dump.info             = 0;
+    }
+
     log->trace("SVD with RND SVD finished successfully | rank {:<4} | rank_lim {:<4} | {:>4} x {:<4} | trunc {:8.2e}, time {:8.2e}", rank, rank_lim, rows, cols,
                truncation_error, t_rsvd->get_last_interval());
     // Not all calls to do_svd need normalized S, so we do not normalize here!
     return std::make_tuple(SVD.matrixU().leftCols(rank), SVD.singularValues().topRows(rank), SVD.matrixV().leftCols(rank).adjoint());
 }
 
-template std::tuple<svd::MatrixType<fp32>, svd::VectorType<fp32>, svd::MatrixType<fp32>> svd::solver::do_svd_rsvd(const fp32 *, long, long) const;
-template std::tuple<svd::MatrixType<fp64>, svd::VectorType<fp64>, svd::MatrixType<fp64>> svd::solver::do_svd_rsvd(const fp64 *, long, long) const;
-template std::tuple<svd::MatrixType<cx32>, svd::VectorType<cx32>, svd::MatrixType<cx32>> svd::solver::do_svd_rsvd(const cx32 *, long, long) const;
-template std::tuple<svd::MatrixType<cx64>, svd::VectorType<cx64>, svd::MatrixType<cx64>> svd::solver::do_svd_rsvd(const cx64 *, long, long) const;

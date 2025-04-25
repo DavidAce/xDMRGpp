@@ -1,15 +1,18 @@
 #pragma once
+#include "math/float.h"
+#include "sfinae.h"
 #include <complex>
 #include <optional>
+
 namespace eig {
     using size_type = long;
 
     // Enums
-    enum class Lib { ARPACK, PRIMME };          // Choose the underlying library
-    enum class Form { SYMM, NSYM };             // Symmetric or non-symmetric problems (complex symmetric are assumed Hermitian)
-    enum class Type { FP32, FP64, CX32, CX64 }; // Real or complex, 32 or 64 bit
-    enum class Side { L, R, LR };               // Left, right or both eigenvectors (for nsym problems)
-    enum class Prob { STD, GEN };               // Standard or generalized eigenvalue problem
+    enum class Lib { ARPACK, SPECTRA, PRIMME };               // Choose the underlying library
+    enum class Form { SYMM, NSYM };                           // Symmetric or non-symmetric problems (complex symmetric are assumed Hermitian)
+    enum class Type { FP32, FP64, FP128, CX32, CX64, CX128 }; // Real or complex, 32, 64 or 128 bit
+    enum class Side { L, R, LR };                             // Left, right or both eigenvectors (for nsym problems)
+    enum class Prob { STD, GEN };                             // Standard or generalized eigenvalue problem
     enum class Ritz {
         LA,
         SA,
@@ -116,6 +119,7 @@ namespace eig {
     inline std::string_view LibToString(Lib lib) {
         switch(lib) {
             case Lib::ARPACK: return "ARPACK";
+            case Lib::SPECTRA: return "SPECTRA";
             case Lib::PRIMME: return "PRIMME";
             default: throw std::logic_error("No valid eig::Lib given");
         }
@@ -126,10 +130,23 @@ namespace eig {
         switch(type) {
             case Type::FP32: return "FP32";
             case Type::FP64: return "FP64";
+            case Type::FP128: return "FP128";
             case Type::CX32: return "CX32";
             case Type::CX64: return "CX64";
+            case Type::CX128: return "CX128";
             default: throw std::logic_error("Not a valid eig::Type");
         }
+    }
+
+    template<typename Scalar>
+    constexpr eig::Type ScalarToType() {
+        if constexpr(std::is_same_v<Scalar, fp32>) return eig::Type::FP32;
+        if constexpr(std::is_same_v<Scalar, fp64>) return eig::Type::FP64;
+        if constexpr(std::is_same_v<Scalar, fp128>) return eig::Type::FP128;
+        if constexpr(std::is_same_v<Scalar, cx32>) return eig::Type::CX32;
+        if constexpr(std::is_same_v<Scalar, cx64>) return eig::Type::CX64;
+        if constexpr(std::is_same_v<Scalar, cx128>) return eig::Type::CX128;
+        throw std::logic_error("Not a valid Scalar for eig::Type");
     }
 
     constexpr std::string_view TypeToString(std::optional<Type> type) { return type ? TypeToString(type.value()) : "Type:UNKNOWN"; }

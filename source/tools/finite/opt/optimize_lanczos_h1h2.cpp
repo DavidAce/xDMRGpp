@@ -40,13 +40,10 @@ namespace tools::finite::opt {
             Eigen::Tensor<Scalar, 2> bond = {};
             long                     idx  = 0;
         };
-        template<typename Scalar>
-        Eigen::Tensor<Scalar, 3> get_initial_guess(const opt_mps &initial_mps, const std::vector<opt_mps> &results) {
+        template<typename CalcType, typename Scalar>
+        Eigen::Tensor<CalcType, 3> get_initial_guess(const opt_mps<Scalar> &initial_mps, const std::vector<opt_mps<Scalar>> &results) {
             if(results.empty()) {
-                if constexpr(std::is_same_v<Scalar, fp64>)
-                    return initial_mps.get_tensor().real();
-                else
-                    return initial_mps.get_tensor();
+                return initial_mps.template get_tensor_as<CalcType>();
             } else {
                 // Return whichever of initial_mps or results that has the lowest variance
                 auto it = std::min_element(results.begin(), results.end(), internal::comparator::variance);
@@ -54,36 +51,27 @@ namespace tools::finite::opt {
 
                 if(it->get_variance() < initial_mps.get_variance()) {
                     tools::log->debug("Previous result is a good initial guess: {} | var {:8.2e}", it->get_name(), it->get_variance());
-                    return get_initial_guess<Scalar>(*it, {});
+                    return get_initial_guess<CalcType>(*it, {});
                 } else
-                    return get_initial_guess<Scalar>(initial_mps, {});
+                    return get_initial_guess<CalcType>(initial_mps, {});
             }
         }
 
-        template<typename Scalar>
-        std::vector<opt_mps_init_t<Scalar>> get_initial_guess_mps(const opt_mps &initial_mps, const std::vector<opt_mps> &results, long nev) {
-            std::vector<opt_mps_init_t<Scalar>> init;
+        template<typename CalcType, typename Scalar>
+        std::vector<opt_mps_init_t<CalcType>> get_initial_guess_mps(const opt_mps<Scalar> &initial_mps, const std::vector<opt_mps<Scalar>> &results, long nev) {
+            std::vector<opt_mps_init_t<CalcType>> init;
             if(results.empty()) {
-                if constexpr(std::is_same_v<Scalar, fp64>)
-                    init.push_back({initial_mps.get_tensor().real(), 0});
-                else
-                    init.push_back({initial_mps.get_tensor(), 0});
+                init.push_back({initial_mps.template get_tensor_as<CalcType>(), 0});
             } else {
                 for(long n = 0; n < nev; n++) {
                     // Take the latest result with idx == n
 
                     // Start by collecting the results with the correct index
-                    std::vector<std::reference_wrapper<const opt_mps>> results_idx_n;
+                    std::vector<std::reference_wrapper<const opt_mps<Scalar>>> results_idx_n;
                     for(const auto &r : results) {
                         if(r.get_eigs_idx() == n) results_idx_n.emplace_back(r);
                     }
-                    if(not results_idx_n.empty()) {
-                        if constexpr(std::is_same_v<Scalar, fp64>) {
-                            init.push_back({results_idx_n.back().get().get_tensor().real(), n});
-                        } else {
-                            init.push_back({results_idx_n.back().get().get_tensor(), n});
-                        }
-                    }
+                    if(not results_idx_n.empty()) { init.push_back({results_idx_n.back().get().template get_tensor_as<CalcType>(), n}); }
                 }
             }
             if(init.size() > safe_cast<size_t>(nev)) throw except::logic_error("Found too many initial guesses");
@@ -152,42 +140,49 @@ namespace tools::finite::opt {
         return {Q, nonOrthoCols};
     }
 
-    template<typename T>
-    opt_mps eigs_lanczos_h1h2(const opt_mps &initial, const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges, OptMeta &opt_meta) {
-        auto          t_mixblk = tid::tic_scope("mixblk");
-        auto          K1_on    = has_any_flags(opt_meta.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::DMRG);
-        auto          K2_on    = has_any_flags(opt_meta.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::XDMRG);
-        auto          sites    = initial.get_sites();
-        auto          mpos     = model.get_mpo(sites);
-        auto          enve     = edges.get_multisite_env_ene(sites);
-        auto          envv     = edges.get_multisite_env_var(sites);
-        MatVecMPOS<T> H1       = MatVecMPOS<T>(mpos, enve);
-        MatVecMPOS<T> H2       = MatVecMPOS<T>(mpos, envv);
-        using RealScalar       = typename Eigen::NumTraits<T>::Real;
-        using CplxScalar       = std::complex<RealScalar>;
-        using MatrixType       = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-        using MatrixCplx       = Eigen::Matrix<CplxScalar, Eigen::Dynamic, Eigen::Dynamic>;
-        using MatrixReal       = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
-        using VectorCplx       = Eigen::Matrix<CplxScalar, Eigen::Dynamic, 1>;
-        using VectorReal       = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
-        auto nonOrthoCols      = std::vector<long>();
+    template<typename CalcType, typename Scalar>
+    opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar> &initial, [[maybe_unused]] const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
+                                      const EdgesFinite<Scalar> &edges, OptMeta &opt_meta, reports::eigs_log<Scalar> &elog) {
+        auto t_mixblk = tid::tic_scope("mixblk");
+        auto K1_on    = has_any_flags(opt_meta.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::DMRG);
+        auto K2_on    = has_any_flags(opt_meta.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::XDMRG);
+        auto sites    = initial.get_sites();
+        auto mpos     = model.get_mpo(sites);
+        auto enve     = edges.get_multisite_env_ene(sites);
+        auto envv     = edges.get_multisite_env_var(sites);
+        auto H1       = MatVecMPOS<CalcType>(mpos, enve);
+        auto H2       = MatVecMPOS<CalcType>(mpos, envv);
+        using tools::finite::opt::MatrixType;
+        using tools::finite::opt::RealScalar;
+        using tools::finite::opt::VectorReal;
+
+        using CalcReal = RealScalar<CalcType>;
+        using VectorCR = VectorReal<CalcType>;
+        using MatrixCT = MatrixType<CalcType>;
+
+        // using RealScalar  = typename Eigen::NumTraits<CalcType>::Real;
+        // using CplxScalar  = std::complex<RealScalar>;
+        // using MatrixType  = Eigen::Matrix<CalcType, Eigen::Dynamic, Eigen::Dynamic>;
+        // using MatrixCplx  = Eigen::Matrix<CplxScalar, Eigen::Dynamic, Eigen::Dynamic>;
+        // using VectorReal  = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
+        auto nonOrthoCols = std::vector<long>();
 
         auto mps_size  = H1.get_size();
         auto mps_shape = H1.get_shape_mps();
         long ncv       = opt_meta.eigs_ncv.value_or(3);
         if(ncv <= 0) { ncv = safe_cast<int>(std::ceil(std::log2(initial.get_tensor().size()))); }
 
-        auto       H1V = MatrixType();
-        auto       H2V = MatrixType();
-        MatrixType K1  = MatrixType::Zero(ncv, ncv);
-        MatrixType K2  = MatrixType::Zero(ncv, ncv);
+        auto     H1V = MatrixCT();
+        auto     H2V = MatrixCT();
+        MatrixCT K1  = MatrixCT::Zero(ncv, ncv);
+        MatrixCT K2  = MatrixCT::Zero(ncv, ncv);
 
         if(K1_on) H1V.resize(mps_size, ncv);
         if(K2_on) H2V.resize(mps_size, ncv);
 
         // Default solution
-        opt_mps result;
-        result.set_tensor(initial.get_tensor());
+        opt_mps<Scalar> result;
+        result.set_tensor(initial.template get_tensor_as<Scalar>());
 
         result.is_basis_vector = false;
         result.set_name(fmt::format("eigenvector 0 [lanczos h1h2]"));
@@ -211,23 +206,23 @@ namespace tools::finite::opt {
         // res.alpha_h2v = 0.0;
 
         // Initialize Krylov vector 0
-        MatrixType V(mps_size, ncv);
-        V.col(0) = initial.get_vector_as<T>();
+        MatrixCT V(mps_size, ncv);
+        V.col(0) = initial.template get_vector_as<CalcType>();
 
-        auto                    mixedColOk = std::vector<long>(); // New states with acceptable norm and eigenvalue
-        constexpr auto          eps        = std::numeric_limits<RealScalar>::epsilon();
-        RealScalar              optVal     = std::numeric_limits<RealScalar>::quiet_NaN();
-        RealScalar              oldVal     = std::numeric_limits<RealScalar>::quiet_NaN();
-        RealScalar              relVal     = std::numeric_limits<RealScalar>::quiet_NaN();
-        long                    optIdx     = 0;
-        RealScalar              tol        = static_cast<RealScalar>(opt_meta.eigs_tol.value_or(settings::precision::eigs_tol_max));
-        RealScalar              absTol     = eps * static_cast<RealScalar>(1e2);
-        RealScalar              relTol     = std::sqrt(eps); // 1e-4
-        RealScalar              rnorm      = 1.0;
-        [[maybe_unused]] double snorm      = 1.0; // Estimate the matrix norm from the largest singular value/eigenvalue. Converged if  rnorm  < snorm * tol
-        size_t                  iter       = 0;
-        size_t                  ngs        = 0;
-        std::string             exit_msg;
+        auto                      mixedColOk = std::vector<long>(); // New states with acceptable norm and eigenvalue
+        constexpr auto            eps        = std::numeric_limits<CalcReal>::epsilon();
+        CalcReal                  optVal     = std::numeric_limits<CalcReal>::quiet_NaN();
+        CalcReal                  oldVal     = std::numeric_limits<CalcReal>::quiet_NaN();
+        CalcReal                  relVal     = std::numeric_limits<CalcReal>::quiet_NaN();
+        long                      optIdx     = 0;
+        CalcReal                  tol        = static_cast<CalcReal>(opt_meta.eigs_tol.value_or(settings::precision::eigs_tol_max));
+        CalcReal                  absTol     = eps * static_cast<CalcReal>(1e2);
+        CalcReal                  relTol     = std::sqrt(eps); // 1e-4
+        CalcReal                  rnorm      = 1.0;
+        [[maybe_unused]] CalcReal snorm      = 1.0;
+        size_t                    iter       = 0;
+        size_t                    ngs        = 0;
+        std::string               exit_msg;
         while(true) {
             // Define the krylov subspace
             for(long i = 0; i + 1 < ncv; ++i) {
@@ -315,17 +310,17 @@ namespace tools::finite::opt {
             }
 
             t_dotprod.toc();
-            auto       t_eigsol      = tid::tic_scope("eigsol");
-            long       numZeroRowsK1 = (K1.cwiseAbs().rowwise().maxCoeff().array() <= eps).count();
-            long       numZeroRowsK2 = (K2.cwiseAbs().rowwise().maxCoeff().array() <= eps).count();
-            long       numZeroRows   = std::max({numZeroRowsK1, numZeroRowsK2});
-            VectorReal evals; // Eigen::VectorXd ::Zero();
-            MatrixCplx evecs; // Eigen::MatrixXcd::Zero();
-            OptRitz    ritz_internal = opt_meta.optRitz;
+            auto     t_eigsol      = tid::tic_scope("eigsol");
+            long     numZeroRowsK1 = (K1.cwiseAbs().rowwise().maxCoeff().array() <= eps).count();
+            long     numZeroRowsK2 = (K2.cwiseAbs().rowwise().maxCoeff().array() <= eps).count();
+            long     numZeroRows   = std::max({numZeroRowsK1, numZeroRowsK2});
+            VectorCR evals; // Eigen::VectorXd ::Zero();
+            MatrixCT evecs; // Eigen::MatrixXcd::Zero();
+            OptRitz  ritz_internal = opt_meta.optRitz;
             switch(opt_meta.optAlgo) {
                 using enum OptAlgo;
                 case DMRG: {
-                    auto solver = Eigen::SelfAdjointEigenSolver<MatrixType>(K1, Eigen::ComputeEigenvectors);
+                    auto solver = Eigen::SelfAdjointEigenSolver<MatrixCT>(K1, Eigen::ComputeEigenvectors);
                     if(solver.info() == Eigen::ComputationInfo::Success) {
                         evals = solver.eigenvalues();
                         evecs = solver.eigenvectors();
@@ -339,26 +334,26 @@ namespace tools::finite::opt {
                 }
                 case DMRGX: [[fallthrough]];
                 case HYBRID_DMRGX: {
-                    auto solver = Eigen::SelfAdjointEigenSolver<MatrixType>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
+                    auto solver = Eigen::SelfAdjointEigenSolver<MatrixCT>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
                     evals       = solver.eigenvalues();
                     evecs       = solver.eigenvectors();
                     break;
                 }
                 case XDMRG: {
-                    auto solver = Eigen::SelfAdjointEigenSolver<MatrixType>(K2, Eigen::ComputeEigenvectors);
+                    auto solver = Eigen::SelfAdjointEigenSolver<MatrixCT>(K2, Eigen::ComputeEigenvectors);
                     evals       = solver.eigenvalues();
                     evecs       = solver.eigenvectors();
                     break;
                 }
                 case GDMRG: {
                     if(nonOrthoCols.empty() and numZeroRows == 0) {
-                        auto solver = Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType>(K1.template selfadjointView<Eigen::Lower>(),
-                                                                                           K2.template selfadjointView<Eigen::Lower>(),
-                                                                                           Eigen::ComputeEigenvectors | Eigen::Ax_lBx);
+                        auto solver = Eigen::GeneralizedSelfAdjointEigenSolver<MatrixCT>(K1.template selfadjointView<Eigen::Lower>(),
+                                                                                         K2.template selfadjointView<Eigen::Lower>(),
+                                                                                         Eigen::ComputeEigenvectors | Eigen::Ax_lBx);
                         evals       = solver.eigenvalues().real();
                         evecs       = solver.eigenvectors().colwise().normalized();
                     } else {
-                        auto solver = Eigen::SelfAdjointEigenSolver<MatrixType>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
+                        auto solver = Eigen::SelfAdjointEigenSolver<MatrixCT>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
                         evals       = solver.eigenvalues();
                         evecs       = solver.eigenvectors();
                         if(opt_meta.optRitz == OptRitz::LM) ritz_internal = OptRitz::SM;
@@ -370,20 +365,20 @@ namespace tools::finite::opt {
                     break;
                 }
             }
-            auto t_checks         = tid::tic_scope("checks");
-            snorm                 = static_cast<double>(evals.cwiseAbs().maxCoeff());
-            V                     = (V * evecs.real()).eval(); // Now V has ncv columns mixed according to evecs
-            VectorReal mixedNorms = V.colwise().norm();        // New state norms after mixing cols of V according to cols of evecs
-            mixedColOk.clear();                                // New states with acceptable norm and eigenvalue
+            auto t_checks       = tid::tic_scope("checks");
+            snorm               = static_cast<CalcReal>(evals.cwiseAbs().maxCoeff());
+            V                   = (V * evecs.real()).eval(); // Now V has ncv columns mixed according to evecs
+            VectorCR mixedNorms = V.colwise().norm();        // New state norms after mixing cols of V according to cols of evecs
+            mixedColOk.clear();                              // New states with acceptable norm and eigenvalue
             mixedColOk.reserve(static_cast<size_t>(mixedNorms.size()));
             for(long i = 0; i < mixedNorms.size(); ++i) {
-                if(std::abs(mixedNorms(i) - static_cast<RealScalar>(1.0)) > static_cast<RealScalar>(settings::precision::max_norm_error)) continue;
+                if(std::abs(mixedNorms(i) - static_cast<CalcReal>(1.0)) > static_cast<CalcReal>(settings::precision::max_norm_error)) continue;
                 // if(algo != OptAlgo::GDMRG and evals(i) <= 0) continue; // H2 and variance are positive definite, but the eigenvalues of GDMRG are not
                 // if(algo != OptAlgo::GDMRG and (evals(i) < -1e-15 or evals(i) == 0)) continue; // H2 and variance are positive definite, but the eigenvalues
                 // of GDMRG are not
                 mixedColOk.emplace_back(i);
             }
-            if constexpr(!tenx::sfinae::is_quadruple_prec_v<T>) {
+            if constexpr(!tenx::sfinae::is_quadruple_prec_v<CalcType>) {
                 if(mixedColOk.size() <= 1) {
                     tools::log->debug("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8));
                     tools::log->debug("K2                     : \n{}\n", linalg::matrix::to_string(K2, 8));
@@ -433,20 +428,20 @@ namespace tools::finite::opt {
                 case OptRitz::IS: [[fallthrough]];
                 case OptRitz::TE: [[fallthrough]];
                 case OptRitz::NONE: {
-                    (evals(mixedColOk).array() - static_cast<RealScalar>(initial.get_energy())).cwiseAbs().minCoeff(&colIdx);
+                    (evals(mixedColOk).array() - static_cast<CalcReal>(initial.get_energy())).cwiseAbs().minCoeff(&colIdx);
                 }
             }
             optIdx = mixedColOk[colIdx];
 
             oldVal = optVal;
             optVal = evals(optIdx);
-            relVal = std::abs((oldVal - optVal) / (static_cast<RealScalar>(0.5) * (optVal + oldVal)));
+            relVal = std::abs((oldVal - optVal) / (static_cast<CalcReal>(0.5) * (optVal + oldVal)));
 
             // Check convergence
 
             // If we make it here: update the solution
-            result.set_tensor(Eigen::TensorMap<Eigen::Tensor<T, 3>>(V.col(optIdx).data(), mps_shape).template cast<cx64>());
-            VectorReal col = evecs.col(optIdx).real();
+            result.set_tensor(Eigen::TensorMap<Eigen::Tensor<CalcType, 3>>(V.col(optIdx).data(), mps_shape));
+            VectorCR col = evecs.col(optIdx).real();
             // res.alpha_mps       = col.coeff(0);
             // res.alpha_h1v       = col.coeff(1);
             // res.alpha_h2v       = col.coeff(ncv / 2 + 1);
@@ -455,9 +450,9 @@ namespace tools::finite::opt {
 
             if(iter + 1 < opt_meta.eigs_iter_max)
                 tools::log->trace("lanczos: {:.34f} [{}] | sites {} (size {}) | rnorm {:.3e} | ngs {} | iters {} | "
-                                 "{:.3e} it/s |  {:.3e} s",
-                                 fp(optVal), optIdx, sites, mps_size, fp(rnorm), ngs, iter, iter / t_mixblk->get_last_interval(),
-                                 t_mixblk->get_last_interval());
+                                  "{:.3e} it/s |  {:.3e} s",
+                                  fp(optVal), optIdx, sites, mps_size, fp(rnorm), ngs, iter, iter / t_mixblk->get_last_interval(),
+                                  t_mixblk->get_last_interval());
 
             iter++;
         }
@@ -471,43 +466,45 @@ namespace tools::finite::opt {
         result.set_mv(H1.num_mv + H2.num_mv);
         result.set_pc(H1.num_pc + H2.num_pc);
         result.set_iter(iter);
-        result.set_eigs_rnorm(static_cast<fp64>(rnorm));
-        result.set_rnorm_H1(static_cast<fp64>((H1V.col(0) - optVal * V.col(0)).norm()));
-        result.set_rnorm_H2(static_cast<fp64>((H2V.col(0) - optVal * V.col(0)).norm()));
+        result.set_eigs_rnorm(rnorm);
+        result.set_rnorm_H1((H1V.col(0) - optVal * V.col(0)).norm());
+        result.set_rnorm_H2((H2V.col(0) - optVal * V.col(0)).norm());
         result.set_eigs_eigval(static_cast<fp64>(optVal));
-        RealScalar vh1v = std::real(V.col(0).dot(H1V.col(0)));
-        RealScalar vh2v = std::real(V.col(0).dot(H2V.col(0)));
-        result.set_energy(static_cast<fp64>(vh1v) + result.get_eshift());
-        result.set_hsquared(static_cast<fp64>(vh2v));
-        if(K1_on) { result.set_variance(static_cast<fp64>(vh2v - vh1v * vh1v)); }
+        auto vh1v = RealScalar<Scalar>(std::real(V.col(0).dot(H1V.col(0))));
+        auto vh2v = RealScalar<Scalar>(std::real(V.col(0).dot(H2V.col(0))));
+        result.set_energy(vh1v + result.get_eshift());
+        result.set_hsquared(vh2v);
+        if(K1_on) { result.set_variance(vh2v - vh1v * vh1v); }
 
         tools::log->info("lancsoz {}: {:.34f} [{}] | ⟨H⟩ {:.16f} | ⟨H²⟩ {:.16f} | ⟨H²⟩-⟨H⟩² {:.4e} | sites {} (size {}) | rnorm {:.3e} | ngs {} | iters "
                          "{} | {:.3e} s | {} | var {:.4e}",
-                         sfinae::type_name<RealScalar>(), fp(optVal), optIdx, result.get_energy(), result.get_hsquared(), result.get_variance(), sites,
-                         mps_size, fp(rnorm), ngs, iter, t_mixblk->get_last_interval(), exit_msg, fp(vh2v - vh1v * vh1v));
-        reports::eigs_add_entry(result, spdlog::level::debug);
+                         sfinae::type_name<CalcType>(), fp(optVal), optIdx, fp(result.get_energy()), fp(result.get_hsquared()), fp(result.get_variance()),
+                         sites, mps_size, fp(rnorm), ngs, iter, t_mixblk->get_last_interval(), exit_msg, fp(vh2v - vh1v * vh1v));
+        elog.eigs_add_entry(result, spdlog::level::debug);
         return result;
     }
 
-    template opt_mps eigs_lanczos_h1h2<fp32>(const opt_mps &initial_mps, const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges,
-                                             OptMeta &opt_meta);
-    template opt_mps eigs_lanczos_h1h2<fp64>(const opt_mps &initial_mps, const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges,
-                                             OptMeta &opt_meta);
-    template opt_mps eigs_lanczos_h1h2<fp128>(const opt_mps &initial_mps, const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges,
-                                              OptMeta &opt_meta);
-    template opt_mps eigs_lanczos_h1h2<cx32>(const opt_mps &initial_mps, const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges,
-                                             OptMeta &opt_meta);
-    template opt_mps eigs_lanczos_h1h2<cx64>(const opt_mps &initial_mps, const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges,
-                                             OptMeta &opt_meta);
-    template opt_mps eigs_lanczos_h1h2<cx128>(const opt_mps &initial_mps, const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges,
-                                              OptMeta &opt_meta);
+    template opt_mps<fp32>  eigs_lanczos_h1h2<fp32>(const opt_mps<fp32> &initial_mps, const StateFinite<fp32> &state, const ModelFinite<fp32> &model,
+                                                    const EdgesFinite<fp32> &edges, OptMeta &opt_meta, reports::eigs_log<fp32> &elog);
+    template opt_mps<fp64>  eigs_lanczos_h1h2<fp64>(const opt_mps<fp64> &initial_mps, const StateFinite<fp64> &state, const ModelFinite<fp64> &model,
+                                                    const EdgesFinite<fp64> &edges, OptMeta &opt_meta, reports::eigs_log<fp64> &elog);
+    template opt_mps<fp128> eigs_lanczos_h1h2<fp128>(const opt_mps<fp128> &initial_mps, const StateFinite<fp128> &state, const ModelFinite<fp128> &model,
+                                                     const EdgesFinite<fp128> &edges, OptMeta &opt_meta, reports::eigs_log<fp128> &elog);
+    template opt_mps<cx32>  eigs_lanczos_h1h2<cx32>(const opt_mps<cx32> &initial_mps, const StateFinite<cx32> &state, const ModelFinite<cx32> &model,
+                                                    const EdgesFinite<cx32> &edges, OptMeta &opt_meta, reports::eigs_log<cx32> &elog);
+    template opt_mps<cx64>  eigs_lanczos_h1h2<cx64>(const opt_mps<cx64> &initial_mps, const StateFinite<cx64> &state, const ModelFinite<cx64> &model,
+                                                    const EdgesFinite<cx64> &edges, OptMeta &opt_meta, reports::eigs_log<cx64> &elog);
+    template opt_mps<cx128> eigs_lanczos_h1h2<cx128>(const opt_mps<cx128> &initial_mps, const StateFinite<cx128> &state, const ModelFinite<cx128> &model,
+                                                     const EdgesFinite<cx128> &edges, OptMeta &opt_meta, reports::eigs_log<cx128> &elog);
 
-    [[nodiscard]] opt_mps internal::optimize_lanczos_h1h2(const TensorsFinite &tensors, const opt_mps &initial, [[maybe_unused]] const AlgorithmStatus &status,
-                                                          OptMeta &meta) {
+    template<typename Scalar>
+    [[nodiscard]] opt_mps<Scalar> internal::optimize_lanczos_h1h2(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial,
+                                                                  [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta,
+                                                                  reports::eigs_log<Scalar> &elog) {
         using namespace internal;
         using namespace settings::precision;
         initial.validate_initial_mps();
-        reports::eigs_add_entry(initial, spdlog::level::debug);
+        elog.eigs_add_entry(initial, spdlog::level::debug);
 
         auto token = tid::tic_scope(fmt::format("h1h2-{}", enum2sv(meta.optAlgo)), tid::level::higher);
 
@@ -522,15 +519,36 @@ namespace tools::finite::opt {
 
         tools::log->debug("eigs_lanczos_h1h2_executor: Solving [{}] | ritz {} | maxIter {} | tol {:.2e} | init on | size {} | mps {}", eigprob,
                           enum2sv(meta.optRitz), meta.eigs_iter_max, meta.eigs_tol, initial.get_tensor().size(), initial.get_tensor().dimensions());
-
-        switch(meta.optType) {
-            case OptType::FP32: return eigs_lanczos_h1h2<fp32>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta);
-            case OptType::FP64: return eigs_lanczos_h1h2<fp64>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta);
-            case OptType::FP128: return eigs_lanczos_h1h2<fp128>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta);
-            case OptType::CX32: return eigs_lanczos_h1h2<cx32>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta);
-            case OptType::CX64: return eigs_lanczos_h1h2<cx64>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta);
-            case OptType::CX128: return eigs_lanczos_h1h2<cx128>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta);
-            default: throw std::runtime_error("unrecognized option type");
+        if constexpr(sfinae::is_std_complex_v<Scalar>) {
+            switch(meta.optType) {
+                case OptType::FP32: return eigs_lanczos_h1h2<fp32>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                case OptType::FP64: return eigs_lanczos_h1h2<fp64>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                case OptType::FP128: return eigs_lanczos_h1h2<fp128>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                case OptType::CX32: return eigs_lanczos_h1h2<cx32>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                case OptType::CX64: return eigs_lanczos_h1h2<cx64>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                case OptType::CX128: return eigs_lanczos_h1h2<cx128>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                default: throw std::runtime_error("unrecognized option type");
+            }
+        } else {
+            switch(meta.optType) {
+                case OptType::FP32: return eigs_lanczos_h1h2<fp32>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                case OptType::FP64: return eigs_lanczos_h1h2<fp64>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                case OptType::FP128: return eigs_lanczos_h1h2<fp128>(initial, tensors.get_state(), tensors.get_model(), tensors.get_edges(), meta, elog);
+                case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
+                case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
+                case OptType::CX128: throw except::logic_error("Cannot run OptType::CX128 with Scalar type {}", sfinae::type_name<Scalar>());
+                default: throw std::runtime_error("unrecognized option type");
+            }
         }
     }
+
+    /* clang-format off */
+    template opt_mps<fp32>  internal::optimize_lanczos_h1h2(const TensorsFinite<fp32> &tensors, const opt_mps<fp32> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp32> &elog);
+    template opt_mps<fp64>  internal::optimize_lanczos_h1h2(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp64> &elog);
+    template opt_mps<fp128> internal::optimize_lanczos_h1h2(const TensorsFinite<fp128> &tensors, const opt_mps<fp128> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp128> &elog);
+    template opt_mps<cx32>  internal::optimize_lanczos_h1h2(const TensorsFinite<cx32> &tensors, const opt_mps<cx32> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx32> &elog);
+    template opt_mps<cx64>  internal::optimize_lanczos_h1h2(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx64> &elog);
+    template opt_mps<cx128> internal::optimize_lanczos_h1h2(const TensorsFinite<cx128> &tensors, const opt_mps<cx128> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx128> &elog);
+    /* clang-format on */
+
 }

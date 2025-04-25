@@ -9,8 +9,7 @@
 #include <unordered_map>
 #include <unsupported/Eigen/CXX11/Tensor>
 
-template<typename Scalar>
-class MpsSite;
+template<typename Scalar> class MpsSite;
 template<typename Scalar> class TensorsFinite;
 /**
  * \class StateFinite
@@ -30,19 +29,18 @@ template<typename Scalar> class TensorsFinite;
  *  The numbers in parentheses denote the position in the chain, note that this isn't the same as the position in the corresponding containers.
  */
 
-template<typename Scalar = cx64>
+template<typename Scalar>
 class StateFinite {
     private:
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    template<class U> friend class StateFinite;
     template<typename T>
     struct Cache {
         std::optional<Eigen::Tensor<T, 3>>                      multisite_mps = std::nullopt;
         std::deque<std::pair<std::string, Eigen::Tensor<T, 3>>> mps           = {};
         std::deque<std::pair<std::string, Eigen::Tensor<T, 4>>> trf           = {};
         std::unordered_map<std::string, Eigen::Tensor<T, 4>>    temporary_rho = {};
-    };
-    enum class FindStaleKeys { OFF, ON };
 
+    };
     template<typename T>
     struct TrfCacheEntry {
         using trfref    = std::reference_wrapper<const Eigen::Tensor<T, 4>>;
@@ -53,19 +51,40 @@ class StateFinite {
         size_t      nremaining = -1ul;
         double      cost       = std::numeric_limits<double>::quiet_NaN();
         trfref      trf;
-        // std::vector<std::string> stale_keys; // Can be used to erase older cache entries
     };
+
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    enum class FindStaleKeys { OFF, ON };
+    static constexpr bool debug_state           = false;
+    static constexpr bool debug_cache           = false;
+    static constexpr bool debug_density_matrix  = false;
+    static constexpr bool debug_transfer_matrix = false;
+
+    long find_position() const;
+
     static constexpr size_t max_mps_cache_size = 20; // Max mps cache size in units of elements
     static constexpr size_t max_trf_cache_size = 20; // Max transfer matrix cache size in units of elements
     int                     direction          = 1;
     mutable Cache<fp32>     cache_fp32;
     mutable Cache<fp64>     cache_fp64;
+    mutable Cache<fp128>    cache_fp128;
     mutable Cache<cx32>     cache_cx32;
     mutable Cache<cx64>     cache_cx64;
+    mutable Cache<cx128>    cache_cx128;
+
     template<typename T>
-    Cache<T> &get_cache();
-    template<typename T>
-    Cache<T>                 &get_cache() const;
+    [[nodiscard]] Cache<T> &get_cache() const {
+        /* clang-format off */
+        if      constexpr(std::is_same_v<T, fp32>) { return cache_fp32; }
+        else if constexpr(std::is_same_v<T, fp64>) { return cache_fp64; }
+        else if constexpr(std::is_same_v<T, fp128>) { return cache_fp128; }
+        else if constexpr(std::is_same_v<T, cx32>) { return cache_cx32; }
+        else if constexpr(std::is_same_v<T, cx64>) { return cache_cx64; }
+        else if constexpr(std::is_same_v<T, cx128>) { return cache_cx128; }
+        else throw std::logic_error("unrecognized cache type T");
+        /* clang-format on */
+    }
+
     mutable std::vector<bool> tag_normalized_sites;
     std::string               name;
     AlgorithmType             algo = AlgorithmType::ANY;
@@ -101,13 +120,19 @@ class StateFinite {
     mutable MeasurementsStateFinite<Scalar>       measurements;
     size_t popcount = -1ul; /*!< Number of 1's or particles in the product state pattern. Used in the fLBIT algorithm, which conserves the particle number. */
 
-    public:
     StateFinite();
     ~StateFinite() noexcept;                              // Read comment on implementation
     StateFinite(StateFinite &&other) noexcept;            // default move ctor
     StateFinite &operator=(StateFinite &&other) noexcept; // default move assign
-    StateFinite(const StateFinite &other);                // copy ctor
-    StateFinite &operator=(const StateFinite &other);     // copy assign
+    StateFinite(const StateFinite &other) noexcept;                // copy ctor
+    StateFinite &operator=(const StateFinite &other) noexcept;     // copy assign
+
+    template<typename T>
+    StateFinite(const StateFinite<T> &other) noexcept;
+
+    template<typename T>
+    StateFinite &operator=(const StateFinite<T> &other) noexcept;
+
     StateFinite(AlgorithmType algo_type, size_t model_size, long position, long spin_dim = 2);
     void initialize(AlgorithmType algo_type, size_t model_size, long position, long spin_dim = 2);
 
@@ -122,9 +147,18 @@ class StateFinite {
     const Eigen::Tensor<Scalar, 1> &current_bond() const;
 
     template<typename T = size_t>
-    [[nodiscard]] T get_length() const;
-    template<typename T = size_t>
-    [[nodiscard]] T get_position() const;
+    [[nodiscard]] T get_position() const {
+        long pos = find_position();
+        // If no center position was found, then all sites are "B" sites. In that case, return -1 if T is signed, otherwise throw.
+        if constexpr(std::is_unsigned_v<T>)
+            if(pos < 0)
+                throw except::runtime_error("could not find center position in current state: {}\n"
+                                            "hint: Call get_position<long>() to get -1",
+                                            get_labels());
+        return static_cast<T>(pos);
+    }
+
+    template<typename T = size_t> [[nodiscard]] T get_length() const { return static_cast<T>(mps_sites.size()); }
 
     void                                        set_positions();
     void                                        flip_direction();
@@ -156,13 +190,23 @@ class StateFinite {
     [[nodiscard]] bool has_nan() const;
 
     void assert_validity() const;
-    // For individual sites
-    template<typename T = size_t>
-    const MpsSite<Scalar> &get_mps_site(T pos) const;
-    template<typename T = size_t>
-    MpsSite<Scalar>       &get_mps_site(T pos);
+    template<typename T>
+    [[nodiscard]] const MpsSite<Scalar> &get_mps_site(T pos) const {
+        if constexpr(std::is_signed_v<T>) { assert(pos >= 0); }
+        assert(pos < get_length<T>());
+        const auto &mps_ptr = *std::next(mps_sites.begin(), static_cast<long>(pos));
+        assert(mps_ptr->template get_position<T>() == pos);
+        return *mps_ptr;
+    }
+
+    template<typename T>
+    MpsSite<Scalar> &get_mps_site(T pos) {
+        return const_cast<MpsSite<Scalar> &>(std::as_const(*this).template get_mps_site<T>(pos));
+    }
+
     const MpsSite<Scalar> &get_mps_site() const;
     MpsSite<Scalar>       &get_mps_site();
+
     // For multiple sites
     void                                                       set_mps(const std::vector<MpsSite<Scalar>> &mps_list);
     std::vector<std::reference_wrapper<const MpsSite<Scalar>>> get_mps(const std::vector<size_t> &sites) const;
@@ -184,7 +228,12 @@ class StateFinite {
     template<typename T>
     Eigen::Tensor<T, 3> get_multisite_mps(const std::vector<size_t> &sites, bool use_cache = false) const;
     template<typename T>
-    const Eigen::Tensor<T, 3> &get_multisite_mps() const;
+    const Eigen::Tensor<T, 3> &get_multisite_mps() const {
+        if(get_cache<T>().multisite_mps.has_value()) return get_cache<T>().multisite_mps.value();
+        get_cache<T>().multisite_mps = get_multisite_mps<T>(active_sites);
+        return get_cache<T>().multisite_mps.value();
+    }
+
     template<typename T>
     Eigen::Tensor<T, 2> get_reduced_density_matrix(const std::vector<size_t> &sites) const;
     template<typename T>

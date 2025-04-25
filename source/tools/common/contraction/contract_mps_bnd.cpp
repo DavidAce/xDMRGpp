@@ -23,10 +23,16 @@ template void tools::common::contraction::contract_mps_bnd(      fp32 *       re
 template void tools::common::contraction::contract_mps_bnd(      fp64 *       res_ptr, std::array<long,3> res_dims,
                                                            const fp64 * const mps_ptr, std::array<long,3> mps_dims,
                                                            const fp64 * const bnd_ptr, std::array<long,1> bnd_dims);
+template void tools::common::contraction::contract_mps_bnd(      fp128 *       res_ptr, std::array<long,3> res_dims,
+                                                           const fp128 * const mps_ptr, std::array<long,3> mps_dims,
+                                                           const fp128 * const bnd_ptr, std::array<long,1> bnd_dims);
 template void tools::common::contraction::contract_mps_bnd(      cx32 *       res_ptr, std::array<long,3> res_dims,
                                                            const cx32 * const mps_ptr, std::array<long,3> mps_dims,
                                                            const cx32 * const bnd_ptr, std::array<long,1> bnd_dims);
 template void tools::common::contraction::contract_mps_bnd(      cx64 *       res_ptr, std::array<long,3> res_dims,
                                                            const cx64 * const mps_ptr, std::array<long,3> mps_dims,
                                                            const cx64 * const bnd_ptr, std::array<long,1> bnd_dims);
+template void tools::common::contraction::contract_mps_bnd(      cx128 *       res_ptr, std::array<long,3> res_dims,
+                                                           const cx128 * const mps_ptr, std::array<long,3> mps_dims,
+                                                           const cx128 * const bnd_ptr, std::array<long,1> bnd_dims);
 /* clang-format on */

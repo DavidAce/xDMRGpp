@@ -4,7 +4,7 @@
 /*! \brief Environment class with energy MPOs for environment blocks och type Left or Right corresponding to a single site.
  */
 
-template<typename Scalar = cx64>
+template<typename Scalar>
 class EnvEne : public EnvBase<Scalar> {
     public:
     using EnvBase<Scalar>::enlarge;

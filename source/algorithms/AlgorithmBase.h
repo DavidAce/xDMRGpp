@@ -16,7 +16,6 @@ namespace spdlog {
 
 class AlgorithmBase {
     public:
-    using cx64      = std::complex<double>;
     AlgorithmBase() = default;
     AlgorithmBase(OptRitz opt_ritz_, AlgorithmType algo_type_);
     AlgorithmBase(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz opt_ritz_, AlgorithmType algo_type_);
@@ -47,31 +46,34 @@ class AlgorithmBase {
 
     protected:
     // enum class SaturationScale { lin, log };
+    template<typename T>
     struct SaturationReport {
-        bool                has_computed      = false;
-        bool                has_saturated     = false;
-        size_t              saturated_count   = 0;
-        size_t              saturated_point   = 0;
-        SaturationPolicy    saturation_policy = SaturationPolicy::val;
-        std::vector<double> Y_vec;     // The values used to measure saturation. This is the log of given data when log is on
-        std::vector<double> Y_avg;     // The values used to measure saturation. This is the log of given data when log is on
-        std::vector<double> Y_med;     // The values used to measure saturation. This is the log of given data when log is on
-        std::vector<double> Y_min;     // The cumulative minimum of Y_vec
-        std::vector<double> Y_nim;     // The cumulative minimum of Y_vec
-        std::vector<double> Y_max;     // The cumulative maximum of Y_vec
-        std::vector<double> Y_xam;     // The cumulative maximum of Y_vec
-        std::vector<double> Y_mid;     // The midpoint between Y_min and Y_max
-        std::vector<double> Y_dif;     // The cumulative average difference between adjacent points
-        std::vector<double> Y_vec_std; // The "moving start" standard deviation of Y_vec from [i:end]
-        std::vector<double> Y_avg_std; // The "moving start" standard deviation of Y_vec from [i:end]
-        std::vector<double> Y_med_std; // The "moving start" standard deviation of Y_vec from [i:end]
-        std::vector<double> Y_min_std; // The "moving start" standard deviation of Y_min from [i:end]
-        std::vector<double> Y_max_std; // The "moving start" standard deviation of Y_max from [i:end]
-        std::vector<double> Y_mov_std; // The "moving window" standard error of 25% width.
-        std::vector<double> Y_mid_std; // The standard deviation of the midpoint between Y_min and Y_max
-        std::vector<double> Y_dif_avg; // The standard deviation of the midpoint between Y_min and Y_max
-        std::vector<int>    Y_sat;     // Flags that tell if Y_vec has saturated at that index
+        bool             has_computed      = false;
+        bool             has_saturated     = false;
+        size_t           saturated_count   = 0;
+        size_t           saturated_point   = 0;
+        SaturationPolicy saturation_policy = SaturationPolicy::val;
+        std::vector<T>   Y_vec;     // The values used to measure saturation. This is the log of given data when log is on
+        std::vector<T>   Y_avg;     // The values used to measure saturation. This is the log of given data when log is on
+        std::vector<T>   Y_med;     // The values used to measure saturation. This is the log of given data when log is on
+        std::vector<T>   Y_min;     // The cumulative minimum of Y_vec
+        std::vector<T>   Y_nim;     // The cumulative minimum of Y_vec
+        std::vector<T>   Y_max;     // The cumulative maximum of Y_vec
+        std::vector<T>   Y_xam;     // The cumulative maximum of Y_vec
+        std::vector<T>   Y_mid;     // The midpoint between Y_min and Y_max
+        std::vector<T>   Y_dif;     // The cumulative average difference between adjacent points
+        std::vector<T>   Y_vec_std; // The "moving start" standard deviation of Y_vec from [i:end]
+        std::vector<T>   Y_avg_std; // The "moving start" standard deviation of Y_vec from [i:end]
+        std::vector<T>   Y_med_std; // The "moving start" standard deviation of Y_vec from [i:end]
+        std::vector<T>   Y_min_std; // The "moving start" standard deviation of Y_min from [i:end]
+        std::vector<T>   Y_max_std; // The "moving start" standard deviation of Y_max from [i:end]
+        std::vector<T>   Y_mov_std; // The "moving window" standard error of 25% width.
+        std::vector<T>   Y_mid_std; // The standard deviation of the midpoint between Y_min and Y_max
+        std::vector<T>   Y_dif_avg; // The standard deviation of the midpoint between Y_min and Y_max
+        std::vector<int> Y_sat;     // Flags that tell if Y_vec has saturated at that index
     };
-    size_t           count_convergence(const std::vector<double> &Y_vec, double threshold, size_t start_idx = 0);
-    SaturationReport check_saturation(const std::vector<double> &Y_vec, double sensitivity, SaturationPolicy policy);
+    template<typename T>
+    size_t count_convergence(const std::vector<T> &Y_vec, T threshold, size_t start_idx = 0);
+    template<typename T>
+    SaturationReport<T> check_saturation(const std::vector<T> &Y_vec, T threshold, SaturationPolicy policy);
 };

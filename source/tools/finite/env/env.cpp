@@ -81,38 +81,40 @@ std::pair<Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>, std::vector<lon
 
     // Orthonormalize with Modified Gram Schmidt
     using MatrixType  = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using Real        = typename Eigen::NumTraits<Scalar>::Real;
     auto nonOrthoCols = std::vector<long>();
     auto validCols    = std::vector<long>();
     validCols.reserve(Q.cols());
     nonOrthoCols.reserve(Q.cols());
+    constexpr auto max_norm_error  = std::numeric_limits<Real>::epsilon() * 100;
+    constexpr auto max_ortho_error = std::numeric_limits<Real>::epsilon() * 100;
 
     for(long i = 0; i < Q.cols(); ++i) {
         auto norm = Q.col(i).norm();
-        if(std::abs(norm) < 1e2 * std::numeric_limits<fp64>::epsilon()) { continue; }
+        if(std::abs(norm) < max_norm_error) { continue; }
         Q.col(i) /= norm;
         for(long j = i + 1; j < Q.cols(); ++j) { Q.col(j) -= Q.col(i).dot(Q.col(j)) * Q.col(i); }
     }
-    MatrixType     Qid             = MatrixType::Zero(Q.cols(), Q.cols());
-    constexpr auto max_ortho_error = 1e-15;
+    MatrixType Qid = MatrixType::Zero(Q.cols(), Q.cols());
     for(long j = 0; j < Qid.cols(); ++j) {
         for(long i = 0; i <= j; ++i) {
             Qid(i, j) = Q.col(i).dot(Q.col(j));
             Qid(j, i) = Qid(i, j);
         }
-        if(j == 0 and std::abs(Qid(j, j) - 1.0) > max_ortho_error) {
+        if(j == 0 and std::abs(Qid(j, j) - Real{1}) > max_ortho_error) {
             nonOrthoCols.emplace_back(j);
-        } else if(j > 0 and std::abs(Qid(j, j) - 1.0 + Qid.col(j).topRows(j).cwiseAbs().sum()) > max_ortho_error) {
+        } else if(j > 0 and std::abs(Qid(j, j) - Real{1} + Qid.col(j).topRows(j).cwiseAbs().sum()) > max_ortho_error) {
             nonOrthoCols.emplace_back(j);
         }
 
-        if(j == 0 and std::abs(Qid(j, j) - 1.0) <= max_ortho_error) {
+        if(j == 0 and std::abs(Qid(j, j) - Real{1}) <= max_ortho_error) {
             validCols.emplace_back(j);
-        } else if(j > 0 and std::abs(Qid(j, j) - 1.0 + Qid.col(j).topRows(j).cwiseAbs().sum()) <= max_ortho_error) {
+        } else if(j > 0 and std::abs(Qid(j, j) - Real{1} + Qid.col(j).topRows(j).cwiseAbs().sum()) <= max_ortho_error) {
             validCols.emplace_back(j);
         }
     }
 
-    if(!Qid(validCols, validCols).isIdentity(settings::precision::max_norm_error)) {
+    if(!Qid(validCols, validCols).isIdentity(max_norm_error)) {
         tools::log->info("Qid \n{}\n", linalg::matrix::to_string(Qid, 8));
         tools::log->info("vc  {}", validCols);
         tools::log->info("noc {}", nonOrthoCols);
@@ -247,7 +249,7 @@ MGSResult<typename MatrixT::Scalar> modified_gram_schmidt_colpiv(const MatrixT &
     // Perform the Modified Gram-Schmidt process with column pivoting
     // The first ncfix columns (from M) are locked.
     VectorReal Rdiag     = VectorReal::Zero(Q.cols());
-    auto       threshold = 1e2 * std::numeric_limits<RealScalar>::epsilon();
+    auto       threshold = std::numeric_limits<RealScalar>::epsilon() * RealScalar{100};
     for(IdxT i = 0; i < ncols; ++i) {
         // For columns that are not locked (i >= ncfix), perform dynamic pivoting.
         if(i >= ncfix) {
@@ -312,9 +314,10 @@ std::pair<fp64, fp64> get_scaling_factors(const Eigen::Tensor<cx64, 3> &M, const
     return {factor1, factor2};
 }
 
-std::pair<Eigen::Tensor<cx64, 3>, Eigen::Tensor<cx64, 3>> delinearize_expansion_terms_l2r(const Eigen::Tensor<cx64, 3> &M, const Eigen::Tensor<cx64, 3> &N,
-                                                                                          const Eigen::Tensor<cx64, 3> &P1, const Eigen::Tensor<cx64, 3> &P2,
-                                                                                          const BondExpansionResult &res, const svd::config &svd_cfg) {
+template<typename T>
+std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>>
+    delinearize_expansion_terms_l2r(const Eigen::Tensor<T, 3> &M, const Eigen::Tensor<T, 3> &N, const Eigen::Tensor<T, 3> &P1, const Eigen::Tensor<T, 3> &P2,
+                                    const BondExpansionResult<T> &res, [[maybe_unused]] const svd::config &svd_cfg) {
     /*
         We form M_P = [α₀M | α₁P1 | α₂P2] by concatenating along dimension 2.
         The scaling factors α control the amount of perturbation provided by P1 and P2.
@@ -333,12 +336,14 @@ std::pair<Eigen::Tensor<cx64, 3>, Eigen::Tensor<cx64, 3>> delinearize_expansion_
     assert(P1.size() == 0 or P1.dimension(0) == M.dimension(0));
     assert(P2.size() == 0 or P2.dimension(1) == M.dimension(1));
     assert(P2.size() == 0 or P2.dimension(0) == M.dimension(0));
+    using R = typename Eigen::NumTraits<T>::Real;
+    // using VectorT = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+    using VectorR = Eigen::Matrix<R, Eigen::Dynamic, 1>;
+    auto offM     = Eigen::DSizes<long, 3>{0, 0, 0};
+    auto offP1    = Eigen::DSizes<long, 3>{0, 0, M.dimension(2)};
+    auto offP2    = Eigen::DSizes<long, 3>{0, 0, M.dimension(2) + P1.dimension(2)};
 
-    auto offM  = Eigen::DSizes<long, 3>{0, 0, 0};
-    auto offP1 = Eigen::DSizes<long, 3>{0, 0, M.dimension(2)};
-    auto offP2 = Eigen::DSizes<long, 3>{0, 0, M.dimension(2) + P1.dimension(2)};
-
-    auto M_P = Eigen::Tensor<cx64, 3>(M.dimension(0), M.dimension(1), M.dimension(2) + P1.dimension(2) + P2.dimension(2));
+    auto M_P = Eigen::Tensor<T, 3>(M.dimension(0), M.dimension(1), M.dimension(2) + P1.dimension(2) + P2.dimension(2));
     M_P.setZero();
     if(M.size() > 0) M_P.slice(offM, M.dimensions()) = M;
     if(P1.size() > 0) M_P.slice(offP1, P1.dimensions()) = P1;
@@ -349,20 +354,20 @@ std::pair<Eigen::Tensor<cx64, 3>, Eigen::Tensor<cx64, 3>> delinearize_expansion_
     auto dim2           = M_P.dimension(2);
     long nFixedLeftCols = M.dimension(2);
 
-    Eigen::VectorXd norms_before = tenx::MatrixMap(M_P, dim0 * dim1, dim2).colwise().norm();
-    auto            mgsr         = modified_gram_schmidt_colpiv(tenx::MatrixMap(M_P, dim0 * dim1, dim2), nFixedLeftCols);
-    auto            max_keep     = std::min(mgsr.permutation.size(), dim0 * dim1);
+    VectorR norms_before = tenx::MatrixMap(M_P, dim0 * dim1, dim2).colwise().norm();
+    auto    mgsr         = modified_gram_schmidt_colpiv(tenx::MatrixMap(M_P, dim0 * dim1, dim2), nFixedLeftCols);
+    auto    max_keep     = std::min(mgsr.permutation.size(), dim0 * dim1);
 
     // Get the values of Rdiag corresponding to M and P separately
     auto rvals_M = mgsr.Rdiag.topRows(nFixedLeftCols);
     auto rvals_P = mgsr.Rdiag.middleRows(nFixedLeftCols, max_keep - nFixedLeftCols);
 
     // Calculate scaling factors
-    auto gavg_M = std::exp(rvals_M.array().log().mean()); // Geometric average of R(i,i) values corresponding to M
-    auto maxr_P = rvals_P.maxCoeff();                     // Max R value
+    [[maybe_unused]] auto gavg_M = std::exp(rvals_M.array().log().mean()); // Geometric average of R(i,i) values corresponding to M
+    auto                  maxr_P = rvals_P.maxCoeff();                     // Max R value
 
     // Rescale the values in P.
-    fp64 factor = std::max(res.alpha_h1v, res.alpha_h2v) / maxr_P;
+    R factor = std::max(static_cast<R>(res.alpha_h1v), static_cast<R>(res.alpha_h2v)) / maxr_P;
     // fp64 factor = std::max(res.alpha_h1v, res.alpha_h2v)  / maxr_P;
     // Form the new M_P
     M_P       = tenx::TensorCast(tenx::MatrixMap(M_P, dim0 * dim1, dim2)(Eigen::all, mgsr.permutation.topRows(max_keep)), dim0, dim1, max_keep);
@@ -386,179 +391,34 @@ std::pair<Eigen::Tensor<cx64, 3>, Eigen::Tensor<cx64, 3>> delinearize_expansion_
     //     tools::log->info("norms: \n{}\n", linalg::matrix::to_string(norms_fmt, 8));
     // }
 
-    auto N_0 = Eigen::Tensor<cx64, 3>(N.dimension(0), M_P.dimension(2), N.dimension(2));
+    auto N_0 = Eigen::Tensor<T, 3>(N.dimension(0), M_P.dimension(2), N.dimension(2));
     N_0.setZero();
     auto extN_0                              = std::array<long, 3>{N.dimension(0), std::min(N.dimension(1), M_P.dimension(2)), N.dimension(2)};
     N_0.slice(tenx::array3{0, 0, 0}, extN_0) = N.slice(tenx::array3{0, 0, 0}, extN_0); // Copy N into N_0
     return {M_P, N_0};
 }
 
-std::pair<Eigen::Tensor<cx64, 3>, Eigen::Tensor<cx64, 3>> delinearize_expansion_terms_r2l(const Eigen::Tensor<cx64, 3> &M, const Eigen::Tensor<cx64, 3> &N,
-                                                                                          const Eigen::Tensor<cx64, 3> &P1, const Eigen::Tensor<cx64, 3> &P2,
-                                                                                          const BondExpansionResult &res, const svd::config &svd_cfg) {
+template<typename T>
+std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> delinearize_expansion_terms_r2l(const Eigen::Tensor<T, 3> &M, const Eigen::Tensor<T, 3> &N,
+                                                                                    const Eigen::Tensor<T, 3> &P1, const Eigen::Tensor<T, 3> &P2,
+                                                                                    const BondExpansionResult<T> &res, const svd::config &svd_cfg) {
     constexpr auto shf = std::array<long, 3>{0, 2, 1};
     assert(N.dimension(2) == M.dimension(1));
     // assert(std::min(M.dimension(0) * M.dimension(2), N.dimension(0) * N.dimension(1)) >= M.dimension(1));
 
-    auto M_           = M.shuffle(shf);
-    auto N_           = N.shuffle(shf);
-    auto P1_          = P1.shuffle(shf);
-    auto P2_          = P2.shuffle(shf);
+    auto M_           = Eigen::Tensor<T, 3>(M.shuffle(shf));
+    auto N_           = Eigen::Tensor<T, 3>(N.shuffle(shf));
+    auto P1_          = Eigen::Tensor<T, 3>(P1.shuffle(shf));
+    auto P2_          = Eigen::Tensor<T, 3>(P2.shuffle(shf));
     auto [M_P_, N_0_] = delinearize_expansion_terms_l2r(M_, N_, P1_, P2_, res, svd_cfg);
     return {M_P_.shuffle(shf), N_0_.shuffle(shf)};
 }
 
-template<typename T>
-BondExpansionResult tools::finite::env::get_optimally_mixed_block_1site(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
-                                                                        const EdgesFinite &edges, const OptMeta &opt_meta) {
-    assert_edges_ene(state, model, edges);
-    assert_edges_var(state, model, edges);
-    auto res         = BondExpansionResult();
-    res.sites        = sites;
-    res.dims_old     = state.get_mps_dims(sites);
-    res.bond_old     = state.get_bond_dims(sites);
-    res.posL         = safe_cast<long>(sites.front());
-    res.posR         = safe_cast<long>(sites.back());
-    const auto &mpsL = state.get_mps_site(res.posL);
-    const auto &mpsR = state.get_mps_site(res.posR);
-    res.dimL_old     = mpsL.dimensions();
-    res.dimR_old     = mpsR.dimensions();
-    res.alpha_mps    = 1.0; // Default value
-    res.alpha_h1v    = 0.0; // Default value
-    res.alpha_h2v    = 0.0; // Default value
-    auto H1          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
-    auto H2          = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
-
-    using MatrixType = typename MatVecMPOS<T>::MatrixType;
-    std::vector<long> nonOrthoCols;
-    auto              size = H1.get_size();
-    auto              V    = MatrixType(size, 3);
-    auto              H1V  = MatrixType(size, 3);
-    auto              H2V  = MatrixType(size, 3);
-    V.col(0)               = tenx::VectorCast(state.get_multisite_mps<T>(sites));
-
-    // Determine whether we use a 2 or 3-dimensional krylov subspace
-    // If H1_on we use {1, H¹ }|\psi>
-    // If H2_on we use {1, H² }|\psi>
-    // If H1_on and H2_on we use {1,  H¹, H² }|\psi>
-    bool H1_on = has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::H1);
-    bool H2_on = has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::H2);
-
-    // Define the krylov subspace v0,  H1v0, H2v0
-    H1.MultAx(V.col(0).data(), V.col(1).data());
-    H2.MultAx(V.col(0).data(), V.col(2).data());
-
-    // Orthonormalize with Modified Gram Schmidt
-    std::tie(V, nonOrthoCols) = modified_gram_schmidt(V);
-    // V should now have orthonormal columns
-
-    H1.MultAx(V.col(0).data(), H1V.col(0).data());
-    H1.MultAx(V.col(1).data(), H1V.col(1).data());
-    H1.MultAx(V.col(2).data(), H1V.col(2).data());
-
-    H2.MultAx(V.col(0).data(), H2V.col(0).data());
-    H2.MultAx(V.col(1).data(), H2V.col(1).data());
-    H2.MultAx(V.col(2).data(), H2V.col(2).data());
-
-    Eigen::Matrix3cd K1;
-    K1(0, 0) = V.col(0).dot(H1V.col(0));
-    K1(1, 0) = V.col(1).dot(H1V.col(0));
-    K1(2, 0) = V.col(2).dot(H1V.col(0));
-    K1(1, 1) = V.col(1).dot(H1V.col(1));
-    K1(2, 1) = V.col(2).dot(H1V.col(1));
-    K1(2, 2) = V.col(2).dot(H1V.col(2));
-    K1       = K1.template selfadjointView<Eigen::Lower>();
-
-    Eigen::Matrix3cd K2;
-    K2(0, 0) = V.col(0).dot(H2V.col(0));
-    K2(1, 0) = V.col(1).dot(H2V.col(0));
-    K2(2, 0) = V.col(2).dot(H2V.col(0));
-    K2(1, 1) = V.col(1).dot(H2V.col(1));
-    K2(2, 1) = V.col(2).dot(H2V.col(1));
-    K2(2, 2) = V.col(2).dot(H2V.col(2));
-    K2       = K2.template selfadjointView<Eigen::Lower>();
-
-    auto K3 = Eigen::Matrix3cd(K2 - K1 * K1);
-
-    if(!H1_on and K3(2, 2) != 0.0) {
-        K3(1, 0) = 0.0;
-        K3(1, 1) = 0.0;
-        K3(2, 1) = 0.0;
-    }
-    if(!H2_on and K3(1, 1) != 0.0) {
-        K3(2, 0) = 0.0;
-        K3(2, 1) = 0.0;
-        K3(2, 2) = 0.0;
-    }
-
-    auto solver = Eigen::SelfAdjointEigenSolver<Eigen::Matrix3cd>(K3.template selfadjointView<Eigen::Lower>(), Eigen::ComputeEigenvectors);
-    auto evals  = solver.eigenvalues();
-    auto evecs  = solver.eigenvectors();
-
-    // Calculate the new variances
-    // H1.MultAx(V.col(0).data(), H1V.col(0).data());
-    // H1.MultAx(V.col(1).data(), H1V.col(1).data());
-    // H1.MultAx(V.col(2).data(), H1V.col(2).data());
-    // H2.MultAx(V.col(0).data(), H2V.col(0).data());
-    // H2.MultAx(V.col(1).data(), H2V.col(1).data());
-    // H2.MultAx(V.col(2).data(), H2V.col(2).data());
-    // VectorType Vars(3);
-    // Vars(0) = V.col(0).dot(H2V.col(0)) - std::pow(V.col(0).dot(H1V.col(0)), 2.0);
-    // Vars(1) = V.col(1).dot(H2V.col(1)) - std::pow(V.col(1).dot(H1V.col(1)), 2.0);
-    // Vars(2) = V.col(2).dot(H2V.col(2)) - std::pow(V.col(2).dot(H1V.col(2)), 2.0);
-    // tools::log->debug("Vars: {}", linalg::matrix::to_string(Vars.real().transpose(), 8));
-
-    // Eigenvalues are sorted in ascending order.
-    auto tol           = std::clamp(std::pow(K3(0, 0).real(), 2.0), std::numeric_limits<fp64>::epsilon(), 1e-10);
-    long numZeroRowsK1 = (K1.cwiseAbs().rowwise().maxCoeff().array() <= tol).count();
-    long numZeroRowsK2 = (K2.cwiseAbs().rowwise().maxCoeff().array() <= tol).count();
-    long numZeroRowsK3 = (K3.cwiseAbs().rowwise().maxCoeff().array() <= tol).count();
-    long numZeroRows   = std::max({numZeroRowsK1, numZeroRowsK2, numZeroRowsK3});
-    long optIdx        = 0;
-    auto optVal        = evals.coeff(optIdx);
-    if(numZeroRows > 0) {
-        for(long i = 0; i < 3; ++i) { tools::log->debug("V.col({}).norm() = {:.16f}", i, V.col(i).norm()); }
-        tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1)));
-        tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
-        tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
-        tools::log->debug("K1: \n{}\n", linalg::matrix::to_string(K1, 8));
-        tools::log->debug("K2: \n{}\n", linalg::matrix::to_string(K2, 8));
-        tools::log->debug("K3: \n{}\n", linalg::matrix::to_string(K3, 8));
-        tools::log->debug("evals: \n{}\n", linalg::matrix::to_string(evals, 8));
-        tools::log->debug("evecs: \n{}\n", linalg::matrix::to_string(evecs, 8));
-        tools::log->debug("numZeroRowsK3  {}", numZeroRows);
-        long                  maxEvecRow0Idx = 0;
-        [[maybe_unused]] auto maxEvecRow0Val =
-            evecs.row(0).cwiseAbs().maxCoeff(&maxEvecRow0Idx); // Select the column that modifies the current state the least.
-        tools::log->debug("optIdx {} -> {} ", optIdx, maxEvecRow0Idx);
-        optIdx = maxEvecRow0Idx;
-        optVal = evals.coeff(optIdx);
-    }
-
-    Eigen::Vector3d col = evecs.col(optIdx).real();
-    res.alpha_mps       = col.coeff(0);
-    res.alpha_h1v       = col.coeff(1);
-    res.alpha_h2v       = col.coeff(2);
-
-    // Define new vectors based on the eigenvalues
-    V.col(0) = (V * col).eval();
-
-    tools::log->debug("mixed state result:  <H²>-<H>²= {:.16f} | sites {} (size {})", optVal, sites, size);
-    res.mixed_blk = Eigen::TensorMap<Eigen::Tensor<T, 3>>(V.col(0).data(), H1.get_shape_mps()).template cast<cx64>();
-    return res;
-}
-
-template BondExpansionResult tools::finite::env::get_optimally_mixed_block_1site<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                       const ModelFinite &model, const EdgesFinite &edges,
-                                                                                       const OptMeta &opt_meta);
-template BondExpansionResult tools::finite::env::get_optimally_mixed_block_1site<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                                       const ModelFinite &model, const EdgesFinite &edges,
-                                                                                       const OptMeta &opt_meta);
-
-template<typename T>
-void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
-                                                             const EdgesFinite &edges, const OptMeta &opt_meta, BondExpansionResult &res) {
-    if constexpr(std::is_same_v<T, cx64>) {
+template<typename T, typename Scalar>
+void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
+                                                             const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta,
+                                                             BondExpansionResult<Scalar> &res) {
+    if constexpr(sfinae::is_std_complex_v<T>) {
         if(state.is_real() and model.is_real() and edges.is_real()) {
             return tools::finite::env::internal::get_optimally_mixed_block<fp64>(sites, state, model, edges, opt_meta, res);
         }
@@ -568,42 +428,43 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
     auto K1_on    = has_any_flags(opt_meta.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::DMRG);
     auto K2_on    = has_any_flags(opt_meta.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::XDMRG);
 
-    MatVecMPOS<T> H1  = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
-    MatVecMPOS<T> H2  = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
-    using MatrixType  = typename MatVecMPOS<T>::MatrixType;
+    MatVecMPOS<T> H1 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
+    MatVecMPOS<T> H2 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
+    using R          = typename Eigen::NumTraits<T>::Real;
+    using MatrixT    = typename MatVecMPOS<T>::MatrixType;
+    // using MatrixR     = Eigen::Matrix<R, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorR     = Eigen::Matrix<R, Eigen::Dynamic, 1>;
     auto nonOrthoCols = std::vector<long>();
 
     auto mps_size  = H1.get_size();
     auto mps_shape = H1.get_shape_mps();
     long ncv       = std::clamp(opt_meta.bondexp_nkrylov, 3ul, 256ul);
 
-    auto H1V = MatrixType();
-    auto H2V = MatrixType();
+    auto H1V = MatrixT();
+    auto H2V = MatrixT();
     if(K1_on) H1V.resize(mps_size, ncv);
     if(K2_on) H2V.resize(mps_size, ncv);
 
     // Default solution
-    res.mixed_blk = state.get_multisite_mps<cx64>(sites);
+    res.mixed_blk = state.template get_multisite_mps<Scalar>(sites);
     res.alpha_mps = 1.0;
     res.alpha_h1v = 0.0;
     res.alpha_h2v = 0.0;
 
     // Initialize Krylov vector 0
-    auto V = MatrixType(mps_size, ncv);
-    if constexpr(std::is_same_v<T, fp64>) {
-        V.col(0) = tenx::VectorCast(res.mixed_blk).real();
-    } else {
-        V.col(0) = tenx::VectorCast(res.mixed_blk);
-    }
+    auto V   = MatrixT(mps_size, ncv);
+    V.col(0) = tenx::asScalarType<T>(tenx::VectorCast(res.mixed_blk));
 
-    double                  optVal = std::numeric_limits<double>::quiet_NaN();
-    long                    optIdx = 0;
-    double                  tol    = opt_meta.eigs_tol.value_or(settings::precision::eigs_tol_max);
-    double                  rnorm  = 1.0;
-    [[maybe_unused]] double snorm  = 1.0; // Estimate the matrix norm from the largest singular value/eigenvalue. Converged if  rnorm  < snorm * tol
-    size_t                  iter   = 0;
-    size_t                  ngs    = 0;
-    std::string             msg;
+    R                  optVal = std::numeric_limits<R>::quiet_NaN();
+    long               optIdx = 0;
+    R                  tol    = static_cast<R>(opt_meta.eigs_tol.value_or(settings::precision::eigs_tol_max));
+    R                  absTol = std::numeric_limits<R>::epsilon() * 100;
+    R                  relTol = R{1e-4f};
+    R                  rnorm  = R{1};
+    [[maybe_unused]] R snorm  = R{1}; // Estimate the matrix norm from the largest singular value/eigenvalue. Converged if  rnorm  < snorm * tol
+    size_t             iter   = 0;
+    size_t             ngs    = 0;
+    std::string        msg;
     while(true) {
         // Define the krylov subspace
         for(long i = 0; i + 1 < ncv; ++i) {
@@ -632,20 +493,20 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
         }
         if(!std::isnan(optVal)) {
             if(opt_meta.optAlgo == OptAlgo::DMRG)
-                rnorm = (H1V.col(0) - optVal * V.col(0)).template lpNorm<Eigen::Infinity>();
+                rnorm = (H1V.col(0) - optVal * V.col(0)).cwiseAbs().maxCoeff();
             else if(opt_meta.optAlgo == OptAlgo::GDMRG)
-                rnorm = (H1V.col(0) - optVal * H2V.col(0)).template lpNorm<Eigen::Infinity>();
+                rnorm = (H1V.col(0) - optVal * H2V.col(0)).cwiseAbs().maxCoeff();
             else
-                rnorm = (H2V.col(0) - optVal * V.col(0)).template lpNorm<Eigen::Infinity>();
+                rnorm = (H2V.col(0) - optVal * V.col(0)).cwiseAbs().maxCoeff();
         }
 
         if(iter >= 1ul and rnorm < tol /* * snorm */) {
-            msg = fmt::format("converged rnorm {:.3e} < tol {:.3e}", rnorm, tol);
+            msg = fmt::format("converged rnorm {:.3e} < tol {:.3e}", fp(rnorm), fp(tol));
             break;
         }
         auto t_dotprod = tid::tic_scope("dotprod");
 
-        Eigen::MatrixXcd K1 = Eigen::MatrixXcd::Zero(ncv, ncv);
+        MatrixT K1 = MatrixT::Zero(ncv, ncv);
         if(K1_on) {
             for(long j = 0; j < ncv; ++j) {
                 for(long i = j; i < ncv; ++i) { K1(i, j) = V.col(i).dot(H1V.col(j)); }
@@ -653,7 +514,7 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
             K1 = K1.template selfadjointView<Eigen::Lower>();
         }
 
-        Eigen::MatrixXcd K2 = Eigen::MatrixXcd::Zero(ncv, ncv);
+        MatrixT K2 = MatrixT::Zero(ncv, ncv);
         if(K2_on) {
             // Use abs to avoid negative near-zero values
             for(long j = 0; j < ncv; ++j) {
@@ -668,18 +529,18 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
         }
 
         t_dotprod.toc();
-        auto             t_eigsol      = tid::tic_scope("eigsol");
-        auto             eps           = std::numeric_limits<fp64>::epsilon();
-        long             numZeroRowsK1 = (K1.cwiseAbs().rowwise().maxCoeff().array() <= eps).count();
-        long             numZeroRowsK2 = (K2.cwiseAbs().rowwise().maxCoeff().array() <= eps).count();
-        long             numZeroRows   = std::max({numZeroRowsK1, numZeroRowsK2});
-        Eigen::VectorXd  evals; // Eigen::VectorXd ::Zero();
-        Eigen::MatrixXcd evecs; // Eigen::MatrixXcd::Zero();
-        OptRitz          ritz_internal = opt_meta.optRitz;
+        auto t_eigsol = tid::tic_scope("eigsol");
+        // auto    eps           = std::numeric_limits<R>::epsilon();
+        long    numZeroRowsK1 = (K1.cwiseAbs().rowwise().maxCoeff().array() < std::numeric_limits<double>::epsilon()).count();
+        long    numZeroRowsK2 = (K2.cwiseAbs().rowwise().maxCoeff().array() < std::numeric_limits<double>::epsilon()).count();
+        long    numZeroRows   = std::max({numZeroRowsK1, numZeroRowsK2});
+        VectorR evals; // Eigen::VectorXd ::Zero();
+        MatrixT evecs; // Eigen::MatrixXcd::Zero();
+        OptRitz ritz_internal = opt_meta.optRitz;
         switch(opt_meta.optAlgo) {
             using enum OptAlgo;
             case DMRG: {
-                auto solver = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd>(K1, Eigen::ComputeEigenvectors);
+                auto solver = Eigen::SelfAdjointEigenSolver<MatrixT>(K1, Eigen::ComputeEigenvectors);
                 if(solver.info() == Eigen::ComputationInfo::Success) {
                     evals = solver.eigenvalues();
                     evecs = solver.eigenvectors();
@@ -693,25 +554,25 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
             }
             case DMRGX: [[fallthrough]];
             case HYBRID_DMRGX: {
-                auto solver = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
+                auto solver = Eigen::SelfAdjointEigenSolver<MatrixT>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
                 evals       = solver.eigenvalues();
                 evecs       = solver.eigenvectors();
                 break;
             }
             case XDMRG: {
-                auto solver = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd>(K2, Eigen::ComputeEigenvectors);
+                auto solver = Eigen::SelfAdjointEigenSolver<MatrixT>(K2, Eigen::ComputeEigenvectors);
                 evals       = solver.eigenvalues();
                 evecs       = solver.eigenvectors();
                 break;
             }
             case GDMRG: {
                 if(nonOrthoCols.empty() and numZeroRows == 0) {
-                    auto solver = Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXcd>(
+                    auto solver = Eigen::GeneralizedSelfAdjointEigenSolver<MatrixT>(
                         K1.template selfadjointView<Eigen::Lower>(), K2.template selfadjointView<Eigen::Lower>(), Eigen::ComputeEigenvectors | Eigen::Ax_lBx);
                     evals = solver.eigenvalues().real();
                     evecs = solver.eigenvectors().colwise().normalized();
                 } else {
-                    auto solver = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
+                    auto solver = Eigen::SelfAdjointEigenSolver<MatrixT>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
                     evals       = solver.eigenvalues();
                     evecs       = solver.eigenvectors();
                     if(opt_meta.optRitz == OptRitz::LM) ritz_internal = OptRitz::SM;
@@ -723,48 +584,49 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
                 break;
             }
         }
-        auto t_checks              = tid::tic_scope("checks");
-        snorm                      = static_cast<double>(evals.cwiseAbs().maxCoeff());
-        V                          = (V * evecs.real()).eval(); // Now V has ncv columns mixed according to evecs
-        Eigen::VectorXd mixedNorms = V.colwise().norm();        // New state norms after mixing cols of V according to cols of evecs
-        auto            mixedColOk = std::vector<long>();       // New states with acceptable norm and eigenvalue
+        auto t_checks      = tid::tic_scope("checks");
+        snorm              = static_cast<R>(evals.cwiseAbs().maxCoeff());
+        V                  = (V * evecs.real()).eval(); // Now V has ncv columns mixed according to evecs
+        VectorR mixedNorms = V.colwise().norm();        // New state norms after mixing cols of V according to cols of evecs
+        auto    mixedColOk = std::vector<long>();       // New states with acceptable norm and eigenvalue
         mixedColOk.reserve(static_cast<size_t>(mixedNorms.size()));
         for(long i = 0; i < mixedNorms.size(); ++i) {
-            if(std::abs(mixedNorms(i) - 1.0) > settings::precision::max_norm_error) continue;
+            if(std::abs(mixedNorms(i) - R{1}) > static_cast<R>(settings::precision::max_norm_error)) continue;
             // if(algo != OptAlgo::GDMRG and evals(i) <= 0) continue; // H2 and variance are positive definite, but the eigenvalues of GDMRG are not
             // if(algo != OptAlgo::GDMRG and (evals(i) < -1e-15 or evals(i) == 0)) continue; // H2 and variance are positive definite, but the eigenvalues of
             // GDMRG are not
             mixedColOk.emplace_back(i);
         }
-        if(mixedColOk.size() <= 1) {
-            tools::log->debug("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8));
-            tools::log->debug("K2                     : \n{}\n", linalg::matrix::to_string(K2, 8));
-            tools::log->debug("evals                  : \n{}\n", linalg::matrix::to_string(evals, 8));
-            // tools::log->debug("evecs                  : \n{}\n", linalg::matrix::to_string(evecs, 8));
-            // tools::log->debug("Vnorms                 = {}", linalg::matrix::to_string(V.colwise().norm().transpose(), 16));
-            tools::log->debug("mixedNorms             = {}", linalg::matrix::to_string(mixedNorms.transpose(), 16));
-            tools::log->debug("mixedColOk             = {}", mixedColOk);
-            tools::log->debug("numZeroRowsK1          = {}", numZeroRowsK1);
-            tools::log->debug("numZeroRowsK2          = {}", numZeroRowsK2);
-            tools::log->debug("nonOrthoCols           = {}", nonOrthoCols);
-            tools::log->debug("ngramSchmidt           = {}", ngs);
-            if(opt_meta.optAlgo == OptAlgo::GDMRG) {
-                H2.MultAx(V.col(0).data(), H2V.col(0).data());
-                H2.MultAx(V.col(1).data(), H2V.col(1).data());
-                H2.MultAx(V.col(2).data(), H2V.col(2).data());
-                tools::log->debug("V.col(0).dot(H2*V.col(1)) = {:.16f}", V.col(0).dot(H2V.col(1)));
-                tools::log->debug("V.col(0).dot(H2*V.col(2)) = {:.16f}", V.col(0).dot(H2V.col(2)));
-                tools::log->debug("V.col(1).dot(H2*V.col(2)) = {:.16f}", V.col(1).dot(H2V.col(2)));
-            } else {
-                tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1)));
-                tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
-                tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
+        if constexpr(!tenx::sfinae::is_quadruple_prec_v<T>) {
+            if(mixedColOk.size() <= 1) {
+                tools::log->debug("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8));
+                tools::log->debug("K2                     : \n{}\n", linalg::matrix::to_string(K2, 8));
+                tools::log->debug("evals                  : \n{}\n", linalg::matrix::to_string(evals, 8));
+                // tools::log->debug("evecs                  : \n{}\n", linalg::matrix::to_string(evecs, 8));
+                // tools::log->debug("Vnorms                 = {}", linalg::matrix::to_string(V.colwise().norm().transpose(), 16));
+                tools::log->debug("mixedNorms             = {}", linalg::matrix::to_string(mixedNorms.transpose(), 16));
+                tools::log->debug("mixedColOk             = {}", mixedColOk);
+                tools::log->debug("numZeroRowsK1          = {}", numZeroRowsK1);
+                tools::log->debug("numZeroRowsK2          = {}", numZeroRowsK2);
+                tools::log->debug("nonOrthoCols           = {}", nonOrthoCols);
+                tools::log->debug("ngramSchmidt           = {}", ngs);
+                if(opt_meta.optAlgo == OptAlgo::GDMRG) {
+                    H2.MultAx(V.col(0).data(), H2V.col(0).data());
+                    H2.MultAx(V.col(1).data(), H2V.col(1).data());
+                    H2.MultAx(V.col(2).data(), H2V.col(2).data());
+                    tools::log->debug("V.col(0).dot(H2*V.col(1)) = {:.16f}", V.col(0).dot(H2V.col(1)));
+                    tools::log->debug("V.col(0).dot(H2*V.col(2)) = {:.16f}", V.col(0).dot(H2V.col(2)));
+                    tools::log->debug("V.col(1).dot(H2*V.col(2)) = {:.16f}", V.col(1).dot(H2V.col(2)));
+                } else {
+                    tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1)));
+                    tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
+                    tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
+                }
             }
-
-            if(mixedColOk.empty()) {
-                msg = fmt::format("mixedColOk is empty");
-                break;
-            }
+        }
+        if(mixedColOk.empty()) {
+            msg = fmt::format("mixedColOk is empty");
+            break;
         }
         // tools::log->debug("evals                  : \n{}\n", linalg::matrix::to_string(evals, 8));
         // Eigenvalues are sorted in ascending order.
@@ -789,31 +651,31 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
             case OptRitz::IS: [[fallthrough]];
             case OptRitz::TE: [[fallthrough]];
             case OptRitz::NONE: {
-                (evals(mixedColOk).array() - res.ene_old).cwiseAbs().minCoeff(&colIdx);
+                (evals(mixedColOk).array() - static_cast<R>(res.ene_old)).cwiseAbs().minCoeff(&colIdx);
             }
         }
         optIdx = mixedColOk[colIdx];
 
         auto oldVal = optVal;
         optVal      = evals(optIdx);
-        auto relval = std::abs((oldVal - optVal) / (0.5 * (optVal + oldVal)));
+        auto relval = std::abs((oldVal - optVal) / (R{0.5} * (optVal + oldVal)));
 
         // Check convergence
-        if(std::abs(oldVal - optVal) < 1e-14) {
-            msg = fmt::format("saturated: abs change {:.3e} < 1e-14", std::abs(oldVal - optVal));
+        if(std::abs(oldVal - optVal) < absTol) {
+            msg = fmt::format("saturated: abs change {:.3e} < 1e-14", fp(std::abs(oldVal - optVal)));
             break;
         }
-        if(relval < 1e-4) {
-            msg = fmt::format("saturated: rel change ({:.3e}) < 1e-4", relval);
+        if(relval < relTol) {
+            msg = fmt::format("saturated: rel change ({:.3e}) < 1e-4", fp(relval));
             break;
         }
 
         // If we make it here: update the solution
-        res.mixed_blk       = Eigen::TensorMap<Eigen::Tensor<T, 3>>(V.col(optIdx).data(), mps_shape).template cast<cx64>();
-        Eigen::VectorXd col = evecs.col(optIdx).real();
-        res.alpha_mps       = col.coeff(0);
-        res.alpha_h1v       = col.coeff(1);
-        res.alpha_h2v       = col.coeff(ncv / 2 + 1);
+        res.mixed_blk = tenx::asScalarType<Scalar>(tenx::TensorCast(V.col(optIdx), mps_shape));
+        VectorR col   = evecs.col(optIdx).real();
+        res.alpha_mps = static_cast<double>(col.coeff(0));
+        res.alpha_h1v = static_cast<double>(col.coeff(1));
+        res.alpha_h2v = static_cast<double>(col.coeff(ncv / 2 + 1));
 
         if(mixedColOk.size() == 1) {
             msg = fmt::format("saturated: only one valid eigenvector");
@@ -823,9 +685,9 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
         if(optIdx != 0) V.col(0) = V.col(optIdx); // Put the best column first (we discard the others)
         if(iter + 1 < opt_meta.bondexp_maxiter)
             tools::log->debug(
-                "mixed state result: {:.16f} [{}] | α: {:.3e} {:.3e} {:.3e} | sites {} (size {}) | norm {:.16f} | rnorm {:.3e} | ngs {} | iters {} | "
+                "bond expansion result: {:.16f} [{}] | α: {:.3e} {:.3e} {:.3e} | sites {} (size {}) | norm {:.16f} | rnorm {:.3e} | ngs {} | iters {} | "
                 "{:.3e} it/s |  {:.3e} s",
-                optVal, optIdx, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, mps_size, V.col(0).norm(), rnorm, ngs, iter,
+                fp(optVal), optIdx, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, mps_size, fp(V.col(0).norm()), fp(rnorm), ngs, iter,
                 iter / t_mixblk->get_last_interval(), t_mixblk->get_last_interval());
 
         iter++;
@@ -837,55 +699,80 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
 
     tools::log->debug("mixed state result: {:.16f} [{}] | ncv {} | α: {:.3e} {:.3e} {:.3e} | sites {} (size {}) | norm {:.16f} | rnorm {:.3e} | ngs {} | iters "
                       "{} | {:.3e} s | {}",
-                      optVal, optIdx, ncv, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, mps_size, V.col(0).norm(), rnorm, ngs, iter,
+                      fp(optVal), optIdx, ncv, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, sites, mps_size, fp(V.col(0).norm()), fp(rnorm), ngs, iter,
                       t_mixblk->get_last_interval(), msg);
 }
+/* clang-format off */
+template void tools::finite::env::internal::get_optimally_mixed_block<fp32>(const std::vector<size_t> &sites, const StateFinite<fp32> &state, const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const OptMeta &opt_meta, BondExpansionResult<fp32> &res);
+template void tools::finite::env::internal::get_optimally_mixed_block<fp64>(const std::vector<size_t> &sites, const StateFinite<fp64> &state, const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const OptMeta &opt_meta, BondExpansionResult<fp64> &res);
+template void tools::finite::env::internal::get_optimally_mixed_block<fp128>(const std::vector<size_t> &sites, const StateFinite<fp128> &state, const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const OptMeta &opt_meta, BondExpansionResult<fp128> &res);
+template void tools::finite::env::internal::get_optimally_mixed_block<cx32>(const std::vector<size_t> &sites, const StateFinite<cx32> &state, const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const OptMeta &opt_meta, BondExpansionResult<cx32> &res);
+template void tools::finite::env::internal::get_optimally_mixed_block<cx64>(const std::vector<size_t> &sites, const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const OptMeta &opt_meta, BondExpansionResult<cx64> &res);
+template void tools::finite::env::internal::get_optimally_mixed_block<cx128>(const std::vector<size_t> &sites, const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const OptMeta &opt_meta, BondExpansionResult<cx128> &res);
+template void tools::finite::env::internal::get_optimally_mixed_block<fp32>(const std::vector<size_t> &sites, const StateFinite<cx32> &state, const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const OptMeta &opt_meta, BondExpansionResult<cx32> &res);
+template void tools::finite::env::internal::get_optimally_mixed_block<fp64>(const std::vector<size_t> &sites, const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const OptMeta &opt_meta, BondExpansionResult<cx64> &res);
+template void tools::finite::env::internal::get_optimally_mixed_block<fp128>(const std::vector<size_t> &sites, const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const OptMeta &opt_meta, BondExpansionResult<cx128> &res);
+/* clang-format on */
 
-template void tools::finite::env::internal::get_optimally_mixed_block<fp64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                            const ModelFinite &model, const EdgesFinite &edges, const OptMeta &opt_meta,
-                                                                            BondExpansionResult &res);
-template void tools::finite::env::internal::get_optimally_mixed_block<cx64>(const std::vector<size_t> &sites, const StateFinite &state,
-                                                                            const ModelFinite &model, const EdgesFinite &edges, const OptMeta &opt_meta,
-                                                                            BondExpansionResult &res);
-template<typename Scalar>
-void tools::finite::env::internal::set_mixing_factors_to_rnorm(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
-                                                               const EdgesFinite &edges, const OptMeta &opt_meta, BondExpansionResult &res) {
+template<typename T, typename Scalar>
+void tools::finite::env::internal::set_mixing_factors_to_rnorm(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
+                                                               const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta,
+                                                               BondExpansionResult<Scalar> &res) {
     assert(opt_meta.bondexp_minalpha <= opt_meta.bondexp_maxalpha);
     assert(opt_meta.bondexp_minalpha >= 0);
     assert(opt_meta.bondexp_maxalpha > 0);
-    auto multisite_mps = state.get_multisite_mps<Scalar>(sites);
-    auto V             = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>(multisite_mps.size(), 3);
+    // using R = typename Eigen::NumTraits<Scalar>::Real;
+    // using MatrixT      = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+    // using MatrixR      = Eigen::Matrix<R, Eigen::Dynamic, Eigen::Dynamic>;
+    // using VectorR      = Eigen::Matrix<R, Eigen::Dynamic, 1>;
+    auto multisite_mps = state.template get_multisite_mps<Scalar>(sites);
+    using R            = typename Eigen::NumTraits<T>::Real;
+    auto V             = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>(multisite_mps.size(), 3);
     V.setZero();
-    V.col(0)      = tenx::VectorMap(multisite_mps);
+    V.col(0)      = tenx::asScalarType<T>(tenx::VectorCast(multisite_mps));
     res.alpha_mps = 1;
     res.alpha_h1v = 0;
     res.alpha_h2v = 0;
 
     if(has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::H1)) {
         auto rnorm_h1 = tools::finite::measure::residual_norm_H1<Scalar>(sites, state, model, edges);
-        res.alpha_h1v = std::clamp(rnorm_h1, opt_meta.bondexp_minalpha, opt_meta.bondexp_maxalpha);
+        res.alpha_h1v = std::clamp(static_cast<R>(rnorm_h1), static_cast<R>(opt_meta.bondexp_minalpha), static_cast<R>(opt_meta.bondexp_maxalpha));
     }
     if(has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::H2)) {
         auto rnorm_h2 = tools::finite::measure::residual_norm_H2<Scalar>(sites, state, model, edges);
-        res.alpha_h2v = std::clamp(rnorm_h2, opt_meta.bondexp_minalpha, opt_meta.bondexp_maxalpha);
+        res.alpha_h2v = std::clamp(static_cast<R>(rnorm_h2), static_cast<R>(opt_meta.bondexp_minalpha), static_cast<R>(opt_meta.bondexp_maxalpha));
     }
 
     res.alpha_mps = std::sqrt(1.0 - std::pow(res.alpha_h1v, 2.0) + std::pow(res.alpha_h2v, 2.0));
 
-    Eigen::Vector3d col(3);
-    col(0) = res.alpha_mps;
-    col(1) = res.alpha_h1v;
-    col(2) = res.alpha_h2v;
+    Eigen::Matrix<T, 3, 1> col;
+    col(0) = static_cast<R>(res.alpha_mps);
+    col(1) = static_cast<R>(res.alpha_h1v);
+    col(2) = static_cast<R>(res.alpha_h2v);
 
     // Define new vectors based on the eigenvalues
     V.col(0)      = (V * col).eval();
-    res.mixed_blk = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(V.col(0).data(), multisite_mps.dimensions()).template cast<cx64>();
+    res.mixed_blk = tenx::asScalarType<Scalar>(tenx::TensorCast(V.col(0), multisite_mps.dimensions()));
 }
 
-template<typename Scalar>
-void tools::finite::env::internal::set_mixing_factors_to_stdv_H(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
-                                                                const EdgesFinite &edges, const OptMeta &opt_meta, BondExpansionResult &res) {
-    auto multisite_mps = state.get_multisite_mps<Scalar>(sites);
+/* clang-format off */
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<fp32>(const std::vector<size_t> &sites, const StateFinite<fp32> &state, const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const OptMeta &opt_meta, BondExpansionResult<fp32> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<fp64>(const std::vector<size_t> &sites, const StateFinite<fp64> &state, const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const OptMeta &opt_meta, BondExpansionResult<fp64> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<fp128>(const std::vector<size_t> &sites, const StateFinite<fp128> &state, const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const OptMeta &opt_meta, BondExpansionResult<fp128> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<cx32>(const std::vector<size_t> &sites, const StateFinite<cx32> &state, const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const OptMeta &opt_meta, BondExpansionResult<cx32> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<cx64>(const std::vector<size_t> &sites, const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const OptMeta &opt_meta, BondExpansionResult<cx64> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<cx128>(const std::vector<size_t> &sites, const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const OptMeta &opt_meta, BondExpansionResult<cx128> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<fp32>(const std::vector<size_t> &sites, const StateFinite<cx32> &state, const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const OptMeta &opt_meta, BondExpansionResult<cx32> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<fp64>(const std::vector<size_t> &sites, const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const OptMeta &opt_meta, BondExpansionResult<cx64> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_rnorm<fp128>(const std::vector<size_t> &sites, const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const OptMeta &opt_meta, BondExpansionResult<cx128> &res);
+/* clang-format on */
+
+template<typename T, typename Scalar>
+void tools::finite::env::internal::set_mixing_factors_to_stdv_H(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
+                                                                const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta,
+                                                                BondExpansionResult<Scalar> &res) {
+    auto multisite_mps = state.template get_multisite_mps<Scalar>(sites);
+    using R            = typename Eigen::NumTraits<T>::Real;
     assert(opt_meta.bondexp_minalpha <= opt_meta.bondexp_maxalpha);
     assert(opt_meta.bondexp_minalpha >= 0);
     assert(opt_meta.bondexp_maxalpha > 0);
@@ -894,18 +781,33 @@ void tools::finite::env::internal::set_mixing_factors_to_stdv_H(const std::vecto
     res.alpha_h2v = 0;
     auto var      = tools::finite::measure::energy_variance(state, model, edges);
     if(has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::H1)) {
-        res.alpha_h1v = std::clamp(std::sqrt(var), opt_meta.bondexp_minalpha, opt_meta.bondexp_maxalpha);
+        res.alpha_h1v = std::clamp(static_cast<R>(std::sqrt(var)), static_cast<R>(opt_meta.bondexp_minalpha), static_cast<R>(opt_meta.bondexp_maxalpha));
     }
     if(has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::H2)) {
-        res.alpha_h2v = std::clamp(std::sqrt(var), opt_meta.bondexp_minalpha, opt_meta.bondexp_maxalpha);
+        res.alpha_h2v = std::clamp(static_cast<R>(std::sqrt(var)), static_cast<R>(opt_meta.bondexp_minalpha), static_cast<R>(opt_meta.bondexp_maxalpha));
     }
 }
 
-BondExpansionResult tools::finite::env::get_mixing_factors_postopt_rnorm(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
-                                                                         const EdgesFinite &edges, const OptMeta &opt_meta) {
+/* clang-format off */
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<fp32>(const std::vector<size_t> &sites, const StateFinite<fp32> &state, const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const OptMeta &opt_meta, BondExpansionResult<fp32> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<fp64>(const std::vector<size_t> &sites, const StateFinite<fp64> &state, const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const OptMeta &opt_meta, BondExpansionResult<fp64> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<fp128>(const std::vector<size_t> &sites, const StateFinite<fp128> &state, const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const OptMeta &opt_meta, BondExpansionResult<fp128> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<cx32>(const std::vector<size_t> &sites, const StateFinite<cx32> &state, const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const OptMeta &opt_meta, BondExpansionResult<cx32> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<cx64>(const std::vector<size_t> &sites, const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const OptMeta &opt_meta, BondExpansionResult<cx64> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<cx128>(const std::vector<size_t> &sites, const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const OptMeta &opt_meta, BondExpansionResult<cx128> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<fp32>(const std::vector<size_t> &sites, const StateFinite<cx32> &state, const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const OptMeta &opt_meta, BondExpansionResult<cx32> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<fp64>(const std::vector<size_t> &sites, const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const OptMeta &opt_meta, BondExpansionResult<cx64> &res);
+template void tools::finite::env::internal::set_mixing_factors_to_stdv_H<fp128>(const std::vector<size_t> &sites, const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const OptMeta &opt_meta, BondExpansionResult<cx128> &res);
+/* clang-format on */
+
+template<typename Scalar>
+BondExpansionResult<Scalar> tools::finite::env::get_mixing_factors_postopt_rnorm(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
+                                                                                 const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
+                                                                                 const OptMeta &opt_meta) {
+    using R = typename Eigen::NumTraits<Scalar>::Real;
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
-    auto res           = BondExpansionResult();
+    auto res           = BondExpansionResult<Scalar>();
     res.direction      = state.get_direction();
     res.sites          = sites;
     res.dims_old       = state.get_mps_dims(sites);
@@ -916,7 +818,7 @@ BondExpansionResult tools::finite::env::get_mixing_factors_postopt_rnorm(const s
     const auto &mpsR   = state.get_mps_site(res.posR);
     res.dimL_old       = mpsL.dimensions();
     res.dimR_old       = mpsR.dimensions();
-    res.bondexp_factor = opt_meta.bondexp_factor;
+    res.bondexp_factor = static_cast<R>(opt_meta.bondexp_factor);
 
     res.ene_old = tools::finite::measure::energy(state, model, edges);
     res.var_old = tools::finite::measure::energy_variance(state, model, edges);
@@ -931,7 +833,7 @@ BondExpansionResult tools::finite::env::get_mixing_factors_postopt_rnorm(const s
             - the next site ahead is zero-padded to match the new dimensions.
             - this works well because the residuals vanish as we approach an eigenstate.
     */
-    auto pos            = state.get_position<size_t>();
+    auto pos            = state.template get_position<size_t>();
     auto bonds          = state.get_bond_dims(sites);
     auto minbond        = *std::min_element(bonds.begin(), bonds.end());
     auto sites_oneortwo = minbond < 4 ? sites : std::vector{pos}; // We need the bond dimension to be larger than the local 1site dimension
@@ -948,12 +850,19 @@ BondExpansionResult tools::finite::env::get_mixing_factors_postopt_rnorm(const s
     }
     return res;
 }
+template BondExpansionResult<fp64> tools::finite::env::get_mixing_factors_postopt_rnorm(const std::vector<size_t> &, const StateFinite<fp64> &,
+                                                                                        const ModelFinite<fp64> &, const EdgesFinite<fp64> &, const OptMeta &);
+template BondExpansionResult<cx64> tools::finite::env::get_mixing_factors_postopt_rnorm(const std::vector<size_t> &, const StateFinite<cx64> &,
+                                                                                        const ModelFinite<cx64> &, const EdgesFinite<cx64> &, const OptMeta &);
 
-BondExpansionResult tools::finite::env::get_mixing_factors_preopt_krylov(const std::vector<size_t> &sites, const StateFinite &state, const ModelFinite &model,
-                                                                         const EdgesFinite &edges, const OptMeta &opt_meta) {
+template<typename Scalar>
+BondExpansionResult<Scalar> tools::finite::env::get_mixing_factors_preopt_krylov(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
+                                                                                 const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
+                                                                                 const OptMeta &opt_meta) {
+    using R = typename Eigen::NumTraits<Scalar>::Real;
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
-    auto res           = BondExpansionResult();
+    auto res           = BondExpansionResult<Scalar>();
     res.sites          = sites;
     res.dims_old       = state.get_mps_dims(sites);
     res.bond_old       = state.get_bond_dims(sites);
@@ -963,7 +872,7 @@ BondExpansionResult tools::finite::env::get_mixing_factors_preopt_krylov(const s
     const auto &mpsR   = state.get_mps_site(res.posR);
     res.dimL_old       = mpsL.dimensions();
     res.dimR_old       = mpsR.dimensions();
-    res.bondexp_factor = opt_meta.bondexp_factor;
+    res.bondexp_factor = static_cast<R>(opt_meta.bondexp_factor);
 
     res.ene_old = tools::finite::measure::energy(state, model, edges);
     res.var_old = tools::finite::measure::energy_variance(state, model, edges);
@@ -995,9 +904,14 @@ BondExpansionResult tools::finite::env::get_mixing_factors_preopt_krylov(const s
     }
     return res;
 }
+template BondExpansionResult<fp64> tools::finite::env::get_mixing_factors_preopt_krylov(const std::vector<size_t> &, const StateFinite<fp64> &,
+                                                                                        const ModelFinite<fp64> &, const EdgesFinite<fp64> &, const OptMeta &);
+template BondExpansionResult<cx64> tools::finite::env::get_mixing_factors_preopt_krylov(const std::vector<size_t> &, const StateFinite<cx64> &,
+                                                                                        const ModelFinite<cx64> &, const EdgesFinite<cx64> &, const OptMeta &);
 
-void merge_expansion_terms_r2l(const StateFinite &state, MpsSite &mpsL, const Eigen::Tensor<cx64, 3> &ML_PL, MpsSite &mpsR, const Eigen::Tensor<cx64, 3> &MR_PR,
-                               const svd::config &svd_cfg) {
+template<typename Scalar>
+void merge_expansion_terms_r2l(const StateFinite<Scalar> &state, MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &ML_PL, MpsSite<Scalar> &mpsR,
+                               const Eigen::Tensor<Scalar, 3> &MR_PR, const svd::config &svd_cfg) {
     // The expanded bond sits between mpsL and mpsR
     // We zero-pad mpsL and enrich mpsR.
     // During forward expansion -->
@@ -1031,6 +945,7 @@ void merge_expansion_terms_r2l(const StateFinite &state, MpsSite &mpsL, const Ei
     //
 
     tools::log->trace("merge_expansion_term_PR: ({}{},{}{}) {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), svd_cfg.to_string());
+    using Real = typename Eigen::NumTraits<Scalar>::Real;
     svd::solver svd;
     auto        posL = mpsL.get_position();
     auto        labL = mpsL.get_label();
@@ -1050,7 +965,7 @@ void merge_expansion_terms_r2l(const StateFinite &state, MpsSite &mpsL, const Ei
         mpsL.set_M(ML_PL);
         mpsL.take_stash(mpsR); // normalization of mpsL is lost here.
     } else if(labL == "A" and labR == "AC") {
-        Eigen::Tensor<cx64, 3> SV_LCinv = tenx::asDiagonalContract(S, tenx::asDiagonalInverseContract(mpsR.get_LC(), V, 2), 1);
+        Eigen::Tensor<Scalar, 3> SV_LCinv = tenx::asDiagonalContract(S, tenx::asDiagonalInverseContract(mpsR.get_LC(), V, 2), 1);
         // .contract(tenx::asDiagonalInversed(mpsR.get_LC()), tenx::idx({2}, {0}))
         // .shuffle(tenx::array3{1, 0, 2});
         mpsR.set_M(SV_LCinv);
@@ -1076,22 +991,24 @@ void merge_expansion_terms_r2l(const StateFinite &state, MpsSite &mpsL, const Ei
     state.clear_measurements();
     {
         // Make mpsL normalized so that later checks can succeed
-        auto                   multisite_mpsL = state.get_multisite_mps<cx64>({posL});
-        cx64                   norm_old       = tools::common::contraction::contract_mps_norm(multisite_mpsL);
-        Eigen::Tensor<cx64, 3> M_tmp          = mpsL.get_M_bare() * mpsL.get_M_bare().constant(std::pow(norm_old, -0.5)); // Rescale
+        auto                     multisite_mpsL = state.template get_multisite_mps<Scalar>({posL});
+        auto                     norm_old       = tools::common::contraction::contract_mps_norm(multisite_mpsL);
+        Eigen::Tensor<Scalar, 3> M_tmp          = mpsL.get_M_bare() * mpsL.get_M_bare().constant(std::pow(norm_old, Real{-0.5})); // Rescale
         mpsL.set_M(M_tmp);
         state.clear_cache();
         state.clear_measurements();
         // if constexpr(settings::debug_expansion) {
-        auto mpsL_final = state.get_multisite_mps<cx64>({posL});
-        cx64 norm_new   = tools::common::contraction::contract_mps_norm(mpsL_final);
-        tools::log->debug("Normalized expanded mps {}({}): {:.16f} -> {:.16f}", mpsL.get_label(), mpsL.get_position(), std::abs(norm_old), std::abs(norm_new));
+        auto mpsL_final = state.template get_multisite_mps<Scalar>({posL});
+        auto norm_new   = tools::common::contraction::contract_mps_norm(mpsL_final);
+        tools::log->debug("Normalized expanded mps {}({}): {:.16f} -> {:.16f}", mpsL.get_label(), mpsL.get_position(), fp(std::abs(norm_old)),
+                          fp(std::abs(norm_new)));
         // }
     }
 }
 
-void merge_expansion_terms_l2r(const StateFinite &state, MpsSite &mpsL, const Eigen::Tensor<cx64, 3> &ML_PL, MpsSite &mpsR, const Eigen::Tensor<cx64, 3> &MR_PR,
-                               const svd::config &svd_cfg) {
+template<typename Scalar>
+void merge_expansion_terms_l2r(const StateFinite<Scalar> &state, MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &ML_PL, MpsSite<Scalar> &mpsR,
+                               const Eigen::Tensor<Scalar, 3> &MR_PR, const svd::config &svd_cfg) {
     // The expanded bond sits between mpsL and mpsR.
     // During forward expansion <--
     //      * mpsL is A(i-1) always
@@ -1124,10 +1041,11 @@ void merge_expansion_terms_l2r(const StateFinite &state, MpsSite &mpsL, const Ei
 
     tools::log->trace("merge_expansion_term_PL: ({}{},{}{}) {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), svd_cfg.to_string());
     svd::solver svd;
-    auto        posR = mpsR.get_position();
-    auto        labL = mpsL.get_label();
-    auto        labR = mpsR.get_label();
-    auto [U, S, V]   = svd.schmidt_into_left_normalized(ML_PL, mpsL.spin_dim(), svd_cfg);
+    using Real     = typename Eigen::NumTraits<Scalar>::Real;
+    auto posR      = mpsR.get_position();
+    auto labL      = mpsL.get_label();
+    auto labR      = mpsR.get_label();
+    auto [U, S, V] = svd.schmidt_into_left_normalized(ML_PL, mpsL.spin_dim(), svd_cfg);
     if(labL == "A" and labR == "AC") {
         // Eigen::Tensor<cx64, 3> SV          = tenx::asDiagonal(S).contract(V, tenx::idx({1}, {1})).shuffle(tenx::array3{1, 0, 2});
         // Eigen::Tensor<cx64, 3> MR_PR_LCinv = MR_PR.contract(tenx::asDiagonalInversed(mpsR.get_LC()), tenx::idx({2}, {0}));
@@ -1160,21 +1078,23 @@ void merge_expansion_terms_l2r(const StateFinite &state, MpsSite &mpsL, const Ei
     state.clear_measurements();
     {
         // Make mpsR normalized so that later checks can succeed
-        auto                   multisite_mpsR = state.get_multisite_mps<cx64>({posR});
-        cx64                   norm_old       = tools::common::contraction::contract_mps_norm(multisite_mpsR);
-        Eigen::Tensor<cx64, 3> M_tmp          = mpsR.get_M_bare() * mpsR.get_M_bare().constant(std::pow(norm_old, -0.5)); // Rescale by the norm
+        auto                     multisite_mpsR = state.template get_multisite_mps<Scalar>({posR});
+        auto                     norm_old       = tools::common::contraction::contract_mps_norm(multisite_mpsR);
+        Eigen::Tensor<Scalar, 3> M_tmp          = mpsR.get_M_bare() * mpsR.get_M_bare().constant(std::pow(norm_old, -Real(0.5))); // Rescale by the norm
         mpsR.set_M(M_tmp);
         state.clear_cache();
         state.clear_measurements();
         // if constexpr(settings::debug_expansion) {
-        auto mpsR_final = state.get_multisite_mps<cx64>({mpsR.get_position()});
-        cx64 norm_new   = tools::common::contraction::contract_mps_norm(mpsR_final);
-        tools::log->debug("Normalized expanded mps {}({}): {:.16f} -> {:.16f}", mpsR.get_label(), mpsR.get_position(), std::abs(norm_old), std::abs(norm_new));
+        auto mpsR_final = state.template get_multisite_mps<Scalar>({mpsR.get_position()});
+        auto norm_new   = tools::common::contraction::contract_mps_norm(mpsR_final);
+        tools::log->debug("Normalized expanded mps {}({}): {:.16f} -> {:.16f}", mpsR.get_label(), mpsR.get_position(), fp(std::abs(norm_old)),
+                          fp(std::abs(norm_new)));
         // }
     }
 }
-
-BondExpansionResult tools::finite::env::expand_bond_postopt_1site(StateFinite &state, const ModelFinite &model, EdgesFinite &edges, const OptMeta &opt_meta) {
+template<typename Scalar>
+BondExpansionResult<Scalar> tools::finite::env::expand_bond_postopt_1site(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
+                                                                          EdgesFinite<Scalar> &edges, const OptMeta &opt_meta) {
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
         throw except::runtime_error("expand_bond_postopt_1site: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
                                     edges.get_length());
@@ -1197,12 +1117,12 @@ BondExpansionResult tools::finite::env::expand_bond_postopt_1site(StateFinite &s
     // (b)     [ML, 0] [MR P]^T : postopt_rear (A,AC) <--
 
     std::vector<size_t> pos_expanded;
-    auto                pos = state.get_position<size_t>();
-    if(state.get_direction() > 0 and pos == std::clamp<size_t>(pos, 0, state.get_length<size_t>() - 2)) pos_expanded = {pos, pos + 1};
-    if(state.get_direction() < 0 and pos == std::clamp<size_t>(pos, 1, state.get_length<size_t>() - 1)) pos_expanded = {pos - 1, pos};
+    auto                pos = state.template get_position<size_t>();
+    if(state.get_direction() > 0 and pos == std::clamp<size_t>(pos, 0, state.template get_length<size_t>() - 2)) pos_expanded = {pos, pos + 1};
+    if(state.get_direction() < 0 and pos == std::clamp<size_t>(pos, 1, state.template get_length<size_t>() - 1)) pos_expanded = {pos - 1, pos};
 
     if(pos_expanded.empty()) {
-        auto res = BondExpansionResult();
+        auto res = BondExpansionResult<Scalar>();
         res.msg  = fmt::format("No positions to expand: active sites {} | mode {}", state.active_sites, flag2str(opt_meta.bondexp_policy));
         return res; // No update
     }
@@ -1212,7 +1132,7 @@ BondExpansionResult tools::finite::env::expand_bond_postopt_1site(StateFinite &s
     auto  &mpsL = state.get_mps_site(posL);
     auto  &mpsR = state.get_mps_site(posR);
     if(state.num_bonds_at_maximum(pos_expanded) == 1) {
-        auto res = BondExpansionResult();
+        auto res = BondExpansionResult<Scalar>();
         res.msg  = fmt::format("The bond upper limit has been reached for site pair [{}-{}] | mode {}", mpsL.get_tag(), mpsR.get_tag(),
                                flag2str(opt_meta.bondexp_policy));
         return res; // No update
@@ -1248,13 +1168,13 @@ BondExpansionResult tools::finite::env::expand_bond_postopt_1site(StateFinite &s
     svd_cfg.truncation_limit = svd_cfg.truncation_limit.value_or(settings::precision::svd_truncation_min);
     svd_cfg.rank_max         = std::min(bond_max, svd_cfg.rank_max.value_or(bond_max));
 
-    const auto &mpoP  = model.get_mpo(posP);
-    const auto &M     = mpsP.get_M();
-    const auto &N     = mps0.get_M();
-    const auto &envP1 = state.get_direction() > 0 ? edges.get_env_eneL(posP) : edges.get_env_eneR(posP);
-    const auto &envP2 = state.get_direction() > 0 ? edges.get_env_varL(posP) : edges.get_env_varR(posP);
-    const auto  P1    = res.alpha_h1v == 0 ? Eigen::Tensor<cx64, 3>() : envP1.get_expansion_term(mpsP, mpoP);
-    const auto  P2    = res.alpha_h2v == 0 ? Eigen::Tensor<cx64, 3>() : envP2.get_expansion_term(mpsP, mpoP);
+    decltype(auto) M     = mpsP.template get_M_as<Scalar>();
+    decltype(auto) N     = mps0.template get_M_as<Scalar>();
+    const auto    &mpoP  = model.get_mpo(posP);
+    const auto    &envP1 = state.get_direction() > 0 ? edges.get_env_eneL(posP) : edges.get_env_eneR(posP);
+    const auto    &envP2 = state.get_direction() > 0 ? edges.get_env_varL(posP) : edges.get_env_varR(posP);
+    const auto     P1    = res.alpha_h1v == 0 ? Eigen::Tensor<Scalar, 3>() : envP1.template get_expansion_term<Scalar>(mpsP, mpoP);
+    const auto     P2    = res.alpha_h2v == 0 ? Eigen::Tensor<Scalar, 3>() : envP2.template get_expansion_term<Scalar>(mpsP, mpoP);
 
     if(state.get_direction() > 0) {
         auto [M_P_del, N_0] = delinearize_expansion_terms_l2r(M, N, P1, P2, res, svd_cfg);
@@ -1292,8 +1212,18 @@ BondExpansionResult tools::finite::env::expand_bond_postopt_1site(StateFinite &s
     res.ok       = true;
     return res;
 }
+/* clang-format off */
+template BondExpansionResult<fp32>  tools::finite::env::expand_bond_postopt_1site(StateFinite<fp32> &, const ModelFinite<fp32> &, EdgesFinite<fp32> &, const OptMeta &);
+template BondExpansionResult<fp64>  tools::finite::env::expand_bond_postopt_1site(StateFinite<fp64> &, const ModelFinite<fp64> &, EdgesFinite<fp64> &, const OptMeta &);
+template BondExpansionResult<fp128> tools::finite::env::expand_bond_postopt_1site(StateFinite<fp128> &, const ModelFinite<fp128> &, EdgesFinite<fp128> &, const OptMeta &);
+template BondExpansionResult<cx32>  tools::finite::env::expand_bond_postopt_1site(StateFinite<cx32> &, const ModelFinite<cx32> &, EdgesFinite<cx32> &, const OptMeta &);
+template BondExpansionResult<cx64>  tools::finite::env::expand_bond_postopt_1site(StateFinite<cx64> &, const ModelFinite<cx64> &, EdgesFinite<cx64> &, const OptMeta &);
+template BondExpansionResult<cx128> tools::finite::env::expand_bond_postopt_1site(StateFinite<cx128> &, const ModelFinite<cx128> &, EdgesFinite<cx128> &, const OptMeta &);
+/* clang-format on */
 
-BondExpansionResult tools::finite::env::expand_bond_preopt_nsite(StateFinite &state, const ModelFinite &model, EdgesFinite &edges, const OptMeta &opt_meta) {
+template<typename Scalar>
+BondExpansionResult<Scalar> tools::finite::env::expand_bond_preopt_nsite(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
+                                                                         EdgesFinite<Scalar> &edges, const OptMeta &opt_meta) {
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
         throw except::runtime_error("expand_bond_forward_nsite: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
                                     edges.get_length());
@@ -1313,7 +1243,7 @@ BondExpansionResult tools::finite::env::expand_bond_preopt_nsite(StateFinite &st
     size_t blocksize = std::max(opt_meta.bondexp_blocksize, state.active_sites.size() + 1);
     size_t posL      = state.active_sites.front();
     size_t posR      = state.active_sites.back();
-    size_t length    = state.get_length<size_t>();
+    size_t length    = state.template get_length<size_t>();
 
     // Grow the posL and posR boundary until they cover the block size
     long poslL      = safe_cast<long>(posL);
@@ -1334,7 +1264,7 @@ BondExpansionResult tools::finite::env::expand_bond_preopt_nsite(StateFinite &st
 
     auto pos_active_and_expanded = num::range<size_t>(posL, posR + 1);
 
-    if(pos_active_and_expanded.size() < 2ul) { return BondExpansionResult(); }
+    if(pos_active_and_expanded.size() < 2ul) { return BondExpansionResult<Scalar>(); }
 
     // Define the left and right mps that will get modified
     auto        res  = get_mixing_factors_preopt_krylov(pos_active_and_expanded, state, model, edges, opt_meta);
@@ -1355,7 +1285,7 @@ BondExpansionResult tools::finite::env::expand_bond_preopt_nsite(StateFinite &st
     tools::log->debug("Expanding {}({}) - {}({}) | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e}", mpsL.get_label(), mpsL.get_position(), mpsR.get_label(), mpsR.get_position(),
                       res.alpha_mps, res.alpha_h1v, res.alpha_h2v);
 
-    mps::merge_multisite_mps(state, res.mixed_blk, pos_active_and_expanded, state.get_position<long>(), MergeEvent::EXP, opt_meta.svd_cfg.value());
+    mps::merge_multisite_mps(state, res.mixed_blk, pos_active_and_expanded, state.template get_position<long>(), MergeEvent::EXP, opt_meta.svd_cfg.value());
 
     res.dims_new = state.get_mps_dims(pos_active_and_expanded);
     res.bond_new = state.get_bond_dims(pos_active_and_expanded);
@@ -1370,19 +1300,9 @@ BondExpansionResult tools::finite::env::expand_bond_preopt_nsite(StateFinite &st
 
     res.dimL_new = mpsL.dimensions();
     res.dimR_new = mpsR.dimensions();
-    if(num::prod(res.dimL_new) == 0) {
-        tools::log->info("mpsL({}): {}", mpsL.get_position(), tenx::VectorMap(mpsL.get_M_bare()));
-        tools::log->info("mpsR({}): {}", mpsR.get_position(), tenx::VectorMap(mpsR.get_M_bare()));
-        tools::log->info("res     : {}", tenx::VectorMap(res.mixed_blk));
-        throw except::runtime_error("New dimL has a zero: {}", res.dimL_new);
-    }
-    if(num::prod(res.dimR_new) == 0) {
-        tools::log->info("mpsL({}): {}", mpsL.get_position(), tenx::VectorMap(mpsL.get_M_bare()));
-        tools::log->info("mpsR({}): {}", mpsR.get_position(), tenx::VectorMap(mpsR.get_M_bare()));
-        throw except::runtime_error("New dimR has a zero: {}", res.dimR_new);
-    }
+    assert(num::prod(res.dimL_new) > 0);
+    assert(num::prod(res.dimR_new) > 0);
     assert(mpsL.get_chiR() == mpsR.get_chiL());
-    // assert(std::min(mpsL.spin_dim() * mpsL.get_chiL(), mpsR.spin_dim() * mpsR.get_chiR()) >= mpsL.get_chiR());
 
     res.ene_new = tools::finite::measure::energy(state, model, edges);
     res.var_new = tools::finite::measure::energy_variance(state, model, edges);
@@ -1391,17 +1311,26 @@ BondExpansionResult tools::finite::env::expand_bond_preopt_nsite(StateFinite &st
     res.ok = true;
     return res;
 }
+/* clang-format off */
+template BondExpansionResult<fp32>  tools::finite::env::expand_bond_preopt_nsite(StateFinite<fp32> &, const ModelFinite<fp32> &, EdgesFinite<fp32> &, const OptMeta &);
+template BondExpansionResult<fp64>  tools::finite::env::expand_bond_preopt_nsite(StateFinite<fp64> &, const ModelFinite<fp64> &, EdgesFinite<fp64> &, const OptMeta &);
+template BondExpansionResult<fp128> tools::finite::env::expand_bond_preopt_nsite(StateFinite<fp128> &, const ModelFinite<fp128> &, EdgesFinite<fp128> &, const OptMeta &);
+template BondExpansionResult<cx32>  tools::finite::env::expand_bond_preopt_nsite(StateFinite<cx32> &, const ModelFinite<cx32> &, EdgesFinite<cx32> &, const OptMeta &);
+template BondExpansionResult<cx64>  tools::finite::env::expand_bond_preopt_nsite(StateFinite<cx64> &, const ModelFinite<cx64> &, EdgesFinite<cx64> &, const OptMeta &);
+template BondExpansionResult<cx128> tools::finite::env::expand_bond_preopt_nsite(StateFinite<cx128> &, const ModelFinite<cx128> &, EdgesFinite<cx128> &, const OptMeta &);
+/* clang-format on */
 
-void tools::finite::env::assert_edges_ene(const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges) {
+template<typename Scalar>
+void tools::finite::env::assert_edges_ene(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {
     if(state.get_algorithm() == AlgorithmType::fLBIT) throw except::logic_error("assert_edges_var: fLBIT algorithm should never assert energy edges!");
     size_t min_pos = 0;
     size_t max_pos = state.get_length() - 1;
 
-    // If there are no active sites we shouldn't be asserting edges.
-    // For instance, the active sites are cleared after a move of center site.
-    // We could always keep all edges refreshed but that would be wasteful, since the next iteration
+    // If there are no active sites, we shouldn't be asserting edges.
+    // For instance, the active sites are cleared after a move of the center site.
+    // We could always keep all edges refreshed, but that would be wasteful, since the next iteration
     // may activate other sites and not end up needing those edges.
-    // Instead, we force the hand of the algorithm, to only allow edge assertions with active sites defined.
+    // Instead, we force the hand of the algorithm to only allow edge assertions with active sites defined.
     // Ideally, then, this should be done directly after activating new sites in a new iteration.
     if(edges.active_sites.empty())
         throw except::runtime_error("assert_edges_ene: no active sites.\n"
@@ -1411,7 +1340,7 @@ void tools::finite::env::assert_edges_ene(const StateFinite &state, const ModelF
                                     " being used. Make sure to only run this assertion after\n"
                                     " activating sites.");
 
-    long current_position = state.get_position<long>();
+    long current_position = state.template get_position<long>();
 
     // size_t posL_active      = edges.active_sites.front();
     // size_t posR_active      = edges.active_sites.back();
@@ -1448,17 +1377,24 @@ void tools::finite::env::assert_edges_ene(const StateFinite &state, const ModelF
         ene_prev.assert_unique_id(ene, mps, mpo);
     }
 }
+template void tools::finite::env::assert_edges_ene(const StateFinite<fp32> &, const ModelFinite<fp32> &, const EdgesFinite<fp32> &);
+template void tools::finite::env::assert_edges_ene(const StateFinite<fp64> &, const ModelFinite<fp64> &, const EdgesFinite<fp64> &);
+template void tools::finite::env::assert_edges_ene(const StateFinite<fp128> &, const ModelFinite<fp128> &, const EdgesFinite<fp128> &);
+template void tools::finite::env::assert_edges_ene(const StateFinite<cx32> &, const ModelFinite<cx32> &, const EdgesFinite<cx32> &);
+template void tools::finite::env::assert_edges_ene(const StateFinite<cx64> &, const ModelFinite<cx64> &, const EdgesFinite<cx64> &);
+template void tools::finite::env::assert_edges_ene(const StateFinite<cx128> &, const ModelFinite<cx128> &, const EdgesFinite<cx128> &);
 
-void tools::finite::env::assert_edges_var(const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges) {
+template<typename Scalar>
+void tools::finite::env::assert_edges_var(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {
     if(state.get_algorithm() == AlgorithmType::fLBIT) throw except::logic_error("assert_edges_var: fLBIT algorithm should never assert variance edges!");
     size_t min_pos = 0;
     size_t max_pos = state.get_length() - 1;
 
-    // If there are no active sites we shouldn't be asserting edges.
-    // For instance, the active sites are cleared after a move of center site.
-    // We could always keep all edges refreshed but that would be wasteful, since the next iteration
+    // If there are no active sites, we shouldn't be asserting edges.
+    // For instance, the active sites are cleared after a move of the center site.
+    // We could always keep all edges refreshed, but that would be wasteful, since the next iteration
     // may activate other sites and not end up needing those edges.
-    // Instead, we force the hand of the algorithm, to only allow edge assertions with active sites defined.
+    // Instead, we force the hand of the algorithm to only allow edge assertions with active sites defined.
     // Ideally, then, this should be done directly after activating new sites in a new iteration.
     if(edges.active_sites.empty())
         throw except::runtime_error("assert_edges_var: no active sites.\n"
@@ -1468,7 +1404,7 @@ void tools::finite::env::assert_edges_var(const StateFinite &state, const ModelF
                                     " being used. Make sure to only run this assertion after\n"
                                     " activating sites.");
 
-    long current_position = state.get_position<long>();
+    long current_position = state.template get_position<long>();
     // size_t posL_active      = edges.active_sites.front();
     // size_t posR_active      = edges.active_sites.back();
 
@@ -1503,14 +1439,28 @@ void tools::finite::env::assert_edges_var(const StateFinite &state, const ModelF
         var_prev.assert_unique_id(var, mps, mpo);
     }
 }
+template void tools::finite::env::assert_edges_var(const StateFinite<fp32> &, const ModelFinite<fp32> &, const EdgesFinite<fp32> &);
+template void tools::finite::env::assert_edges_var(const StateFinite<fp64> &, const ModelFinite<fp64> &, const EdgesFinite<fp64> &);
+template void tools::finite::env::assert_edges_var(const StateFinite<fp128> &, const ModelFinite<fp128> &, const EdgesFinite<fp128> &);
+template void tools::finite::env::assert_edges_var(const StateFinite<cx32> &, const ModelFinite<cx32> &, const EdgesFinite<cx32> &);
+template void tools::finite::env::assert_edges_var(const StateFinite<cx64> &, const ModelFinite<cx64> &, const EdgesFinite<cx64> &);
+template void tools::finite::env::assert_edges_var(const StateFinite<cx128> &, const ModelFinite<cx128> &, const EdgesFinite<cx128> &);
 
-void tools::finite::env::assert_edges(const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges) {
+template<typename Scalar>
+void tools::finite::env::assert_edges(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {
     if(state.get_algorithm() == AlgorithmType::fLBIT) return;
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
 }
+template void tools::finite::env::assert_edges(const StateFinite<fp32> &, const ModelFinite<fp32> &, const EdgesFinite<fp32> &);
+template void tools::finite::env::assert_edges(const StateFinite<fp64> &, const ModelFinite<fp64> &, const EdgesFinite<fp64> &);
+template void tools::finite::env::assert_edges(const StateFinite<fp128> &, const ModelFinite<fp128> &, const EdgesFinite<fp128> &);
+template void tools::finite::env::assert_edges(const StateFinite<cx32> &, const ModelFinite<cx32> &, const EdgesFinite<cx32> &);
+template void tools::finite::env::assert_edges(const StateFinite<cx64> &, const ModelFinite<cx64> &, const EdgesFinite<cx64> &);
+template void tools::finite::env::assert_edges(const StateFinite<cx128> &, const ModelFinite<cx128> &, const EdgesFinite<cx128> &);
 
-void tools::finite::env::rebuild_edges_ene(const StateFinite &state, const ModelFinite &model, EdgesFinite &edges) {
+template<typename Scalar>
+void tools::finite::env::rebuild_edges_ene(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges) {
     if(state.get_algorithm() == AlgorithmType::fLBIT) throw except::logic_error("rebuild_edges_ene: fLBIT algorithm should never rebuild energy edges!");
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
         throw except::runtime_error("All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(), edges.get_length());
@@ -1565,7 +1515,7 @@ void tools::finite::env::rebuild_edges_ene(const StateFinite &state, const Model
                                     " being used. Make sure to only run this rebuild after\n"
                                     " activating sites.");
 
-    long current_position = state.get_position<long>();
+    long current_position = state.template get_position<long>();
     // size_t posL_active      = edges.active_sites.front();
     // size_t posR_active      = edges.active_sites.back();
 
@@ -1613,8 +1563,15 @@ void tools::finite::env::rebuild_edges_ene(const StateFinite &state, const Model
     if(not edges.get_env_eneL(posL_active).has_block()) throw except::logic_error("rebuild_edges_ene: active env eneL has undefined block");
     if(not edges.get_env_eneR(posR_active).has_block()) throw except::logic_error("rebuild_edges_ene: active env eneR has undefined block");
 }
+template void tools::finite::env::rebuild_edges_ene(const StateFinite<fp32> &, const ModelFinite<fp32> &, EdgesFinite<fp32> &);
+template void tools::finite::env::rebuild_edges_ene(const StateFinite<fp64> &, const ModelFinite<fp64> &, EdgesFinite<fp64> &);
+template void tools::finite::env::rebuild_edges_ene(const StateFinite<fp128> &, const ModelFinite<fp128> &, EdgesFinite<fp128> &);
+template void tools::finite::env::rebuild_edges_ene(const StateFinite<cx32> &, const ModelFinite<cx32> &, EdgesFinite<cx32> &);
+template void tools::finite::env::rebuild_edges_ene(const StateFinite<cx64> &, const ModelFinite<cx64> &, EdgesFinite<cx64> &);
+template void tools::finite::env::rebuild_edges_ene(const StateFinite<cx128> &, const ModelFinite<cx128> &, EdgesFinite<cx128> &);
 
-void tools::finite::env::rebuild_edges_var(const StateFinite &state, const ModelFinite &model, EdgesFinite &edges) {
+template<typename Scalar>
+void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges) {
     if(state.get_algorithm() == AlgorithmType::fLBIT) throw except::logic_error("rebuild_edges_var: fLBIT algorithm should never rebuild variance edges!");
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
         throw except::runtime_error("rebuild_edges_var: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
@@ -1627,11 +1584,11 @@ void tools::finite::env::rebuild_edges_var(const StateFinite &state, const Model
     size_t min_pos = 0;
     size_t max_pos = state.get_length() - 1;
 
-    // If there are no active sites we shouldn't be rebuilding edges.
-    // For instance, the active sites are cleared after a move of center site.
-    // We could always keep all edges refreshed but that would be wasteful, since the next iteration
+    // If there are no active sites, we shouldn't be rebuilding edges.
+    // For instance, the active sites are cleared after a move of the center site.
+    // We could always keep all edges refreshed, but that would be wasteful, since the next iteration
     // may activate other sites and not end up needing those edges.
-    // Instead, we force the hand of the algorithm, to only allow edge rebuilds with active sites defined.
+    // Instead, we force the hand of the algorithm to only allow edge rebuilds with active sites defined.
     // Ideally, then, this should be done directly after activating new sites in a new iteration.
     if(edges.active_sites.empty())
         throw except::runtime_error("rebuild_edges_var: no active sites.\n"
@@ -1641,7 +1598,7 @@ void tools::finite::env::rebuild_edges_var(const StateFinite &state, const Model
                                     " being used. Make sure to only run this assertion after\n"
                                     " activating sites.");
 
-    long current_position = state.get_position<long>();
+    long current_position = state.template get_position<long>();
     // size_t posL_active      = edges.active_sites.front();
     // size_t posR_active      = edges.active_sites.back();
 
@@ -1693,9 +1650,22 @@ void tools::finite::env::rebuild_edges_var(const StateFinite &state, const Model
     if(not edges.get_env_varL(posL_active).has_block()) throw except::logic_error("rebuild_edges_var: active env varL has undefined block");
     if(not edges.get_env_varR(posR_active).has_block()) throw except::logic_error("rebuild_edges_var: active env varR has undefined block");
 }
+template void tools::finite::env::rebuild_edges_var(const StateFinite<fp32> &, const ModelFinite<fp32> &, EdgesFinite<fp32> &);
+template void tools::finite::env::rebuild_edges_var(const StateFinite<fp64> &, const ModelFinite<fp64> &, EdgesFinite<fp64> &);
+template void tools::finite::env::rebuild_edges_var(const StateFinite<fp128> &, const ModelFinite<fp128> &, EdgesFinite<fp128> &);
+template void tools::finite::env::rebuild_edges_var(const StateFinite<cx32> &, const ModelFinite<cx32> &, EdgesFinite<cx32> &);
+template void tools::finite::env::rebuild_edges_var(const StateFinite<cx64> &, const ModelFinite<cx64> &, EdgesFinite<cx64> &);
+template void tools::finite::env::rebuild_edges_var(const StateFinite<cx128> &, const ModelFinite<cx128> &, EdgesFinite<cx128> &);
 
-void tools::finite::env::rebuild_edges(const StateFinite &state, const ModelFinite &model, EdgesFinite &edges) {
+template<typename Scalar>
+void tools::finite::env::rebuild_edges(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges) {
     if(state.get_algorithm() == AlgorithmType::fLBIT) return;
     rebuild_edges_ene(state, model, edges);
     rebuild_edges_var(state, model, edges);
 }
+template void tools::finite::env::rebuild_edges(const StateFinite<fp32> &, const ModelFinite<fp32> &, EdgesFinite<fp32> &);
+template void tools::finite::env::rebuild_edges(const StateFinite<fp64> &, const ModelFinite<fp64> &, EdgesFinite<fp64> &);
+template void tools::finite::env::rebuild_edges(const StateFinite<fp128> &, const ModelFinite<fp128> &, EdgesFinite<fp128> &);
+template void tools::finite::env::rebuild_edges(const StateFinite<cx32> &, const ModelFinite<cx32> &, EdgesFinite<cx32> &);
+template void tools::finite::env::rebuild_edges(const StateFinite<cx64> &, const ModelFinite<cx64> &, EdgesFinite<cx64> &);
+template void tools::finite::env::rebuild_edges(const StateFinite<cx128> &, const ModelFinite<cx128> &, EdgesFinite<cx128> &);

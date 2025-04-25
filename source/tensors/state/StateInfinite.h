@@ -11,13 +11,15 @@ template<typename Scalar>
 class MpsSite;
 
 /*!
-  \class class_infinite_state
+  \class StateInfinite
   \brief This class contains the current 2-site translationally invariant wave function in MPS form
 */
 
 template<typename Scalar>
 class StateInfinite {
     public:
+    template<class U> friend class StateInfinite;
+
     private:
     struct Cache {
         std::optional<Eigen::Tensor<Scalar, 3>> twosite_mps = std::nullopt;
@@ -40,16 +42,38 @@ class StateInfinite {
     AlgorithmType                    algo = AlgorithmType::ANY;
 
     public:
-    mutable MeasurementsStateInfinite measurements;
-    mutable double                    lowest_recorded_variance = 1.0;
+    mutable MeasurementsStateInfinite<Scalar> measurements;
+    mutable double                            lowest_recorded_variance = 1.0;
 
     public:
     StateInfinite();
-    ~StateInfinite();                                     // Read comment on implementation
-    StateInfinite(StateInfinite &&other);                 // default move ctor
-    StateInfinite &operator=(StateInfinite &&other);      // default move assign
-    StateInfinite(const StateInfinite &other);            // copy ctor
-    StateInfinite &operator=(const StateInfinite &other); // copy assign
+    ~StateInfinite();                                              // Read comment on implementation
+    StateInfinite(StateInfinite &&other) noexcept;                 // default move ctor
+    StateInfinite &operator=(StateInfinite &&other) noexcept;      // default move assign
+    StateInfinite(const StateInfinite &other) noexcept;            // copy ctor
+    StateInfinite &operator=(const StateInfinite &other) noexcept; // copy assign
+
+    template<typename T>
+    StateInfinite(const StateInfinite<T> &other) noexcept;
+
+    template<typename T>
+    StateInfinite &operator=(const StateInfinite<T> &other) noexcept;
+    // {
+    //     if constexpr(std::is_same_v<Scalar, T>) {
+    //         if(this == &other) return *this; // check for self-assignment
+    //     }
+    //     MPS_A                    = std::make_unique<MpsSite<Scalar>>(other.get_mps_siteA());
+    //     MPS_B                    = std::make_unique<MpsSite<Scalar>>(other.get_mps_siteB());
+    //     swapped                  = other.swapped;
+    //     name                     = other.name;
+    //     algo                     = other.algo;
+    //     lowest_recorded_variance = other.lowest_recorded_variance;
+    //     if constexpr(std::is_same_v<Scalar, T>) {
+    //         cache        = other.cache;
+    //         measurements = other.measurements;
+    //     }
+    //     return *this;
+    // }
 
     void initialize(ModelType model_type);
 
@@ -62,6 +86,7 @@ class StateInfinite {
     void                                    assert_validity() const;
     [[nodiscard]] bool                      is_real() const;
     [[nodiscard]] bool                      has_nan() const;
+    [[nodiscard]] bool                      is_swapped() const;
     [[nodiscard]] double                    get_truncation_error() const;
     [[nodiscard]] std::pair<size_t, size_t> get_positions();
     [[nodiscard]] size_t                    get_positionA();

@@ -8,21 +8,15 @@
 #include <optional>
 #include <vector>
 
-template<typename Scalar>
-class EnvEne;
-template<typename Scalar>
-class EnvVar;
+template<typename Scalar> class EnvEne;
+template<typename Scalar> class EnvVar;
 
-template<typename Scalar = cx64>
+template<typename Scalar>
 class EdgesFinite {
     public:
     std::vector<size_t> active_sites;
 
     private:
-    //    size_t iter      = 0;
-    //    size_t step      = 0;
-    //    int    direction = 1;
-
     std::vector<std::unique_ptr<EnvEne<Scalar>>> eneL;
     std::vector<std::unique_ptr<EnvEne<Scalar>>> eneR;
     std::vector<std::unique_ptr<EnvVar<Scalar>>> varL;

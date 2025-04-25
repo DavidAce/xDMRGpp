@@ -7,6 +7,10 @@
 #include "MpoSite.h"
 #include <memory>
 
+template class MpoFactory<fp32>;
+template class MpoFactory<fp64>;
+template class MpoFactory<fp128>;
+template class MpoFactory<cx32>;
 template class MpoFactory<cx64>;
 template class MpoFactory<cx128>;
 

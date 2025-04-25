@@ -20,10 +20,30 @@ void tools::common::contraction::contract_env_mps_mpo(      Scalar *      res_pt
                                    .contract(mps.conjugate(), tenx::idx({0, 2}, {1, 0}));
 }
 
+template void tools::common::contraction::contract_env_mps_mpo(      fp32 *       res_ptr , std::array<long,2> res_dims,
+                                                               const fp32 * const env_ptr , std::array<long,2> env_dims,
+                                                               const fp32 * const mps_ptr , std::array<long,3> mps_dims,
+                                                               const fp32 * const mpo_ptr , std::array<long,2> mpo_dims);
+template void tools::common::contraction::contract_env_mps_mpo(      fp64 *       res_ptr , std::array<long,2> res_dims,
+                                                               const fp64 * const env_ptr , std::array<long,2> env_dims,
+                                                               const fp64 * const mps_ptr , std::array<long,3> mps_dims,
+                                                               const fp64 * const mpo_ptr , std::array<long,2> mpo_dims);
+template void tools::common::contraction::contract_env_mps_mpo(      fp128 *       res_ptr , std::array<long,2> res_dims,
+                                                               const fp128 * const env_ptr , std::array<long,2> env_dims,
+                                                               const fp128 * const mps_ptr , std::array<long,3> mps_dims,
+                                                               const fp128 * const mpo_ptr , std::array<long,2> mpo_dims);
+template void tools::common::contraction::contract_env_mps_mpo(      cx32 *       res_ptr , std::array<long,2> res_dims,
+                                                               const cx32 * const env_ptr , std::array<long,2> env_dims,
+                                                               const cx32 * const mps_ptr , std::array<long,3> mps_dims,
+                                                               const cx32 * const mpo_ptr , std::array<long,2> mpo_dims);
 template void tools::common::contraction::contract_env_mps_mpo(      cx64 *       res_ptr , std::array<long,2> res_dims,
                                                                const cx64 * const env_ptr , std::array<long,2> env_dims,
                                                                const cx64 * const mps_ptr , std::array<long,3> mps_dims,
                                                                const cx64 * const mpo_ptr , std::array<long,2> mpo_dims);
+template void tools::common::contraction::contract_env_mps_mpo(      cx128 *       res_ptr , std::array<long,2> res_dims,
+                                                               const cx128 * const env_ptr , std::array<long,2> env_dims,
+                                                               const cx128 * const mps_ptr , std::array<long,3> mps_dims,
+                                                               const cx128 * const mpo_ptr , std::array<long,2> mpo_dims);
 
 template<typename Scalar>
 void tools::common::contraction::contract_env_mps_mpo(      Scalar *       res_ptr, std::array<long, 3> res_dims,
@@ -48,6 +68,10 @@ template void tools::common::contraction::contract_env_mps_mpo(      fp64 *     
                                                                const fp64 * const env_ptr , std::array<long,3> env_dims,
                                                                const fp64 * const mps_ptr , std::array<long,3> mps_dims,
                                                                const fp64 * const mpo_ptr , std::array<long,4> mpo_dims);
+template void tools::common::contraction::contract_env_mps_mpo(      fp128 *       res_ptr , std::array<long,3> res_dims,
+                                                               const fp128 * const env_ptr , std::array<long,3> env_dims,
+                                                               const fp128 * const mps_ptr , std::array<long,3> mps_dims,
+                                                               const fp128 * const mpo_ptr , std::array<long,4> mpo_dims);
 template void tools::common::contraction::contract_env_mps_mpo(      cx32 *       res_ptr , std::array<long,3> res_dims,
                                                                const cx32 * const env_ptr , std::array<long,3> env_dims,
                                                                const cx32 * const mps_ptr , std::array<long,3> mps_dims,
@@ -56,5 +80,9 @@ template void tools::common::contraction::contract_env_mps_mpo(      cx64 *     
                                                                const cx64 * const env_ptr , std::array<long,3> env_dims,
                                                                const cx64 * const mps_ptr , std::array<long,3> mps_dims,
                                                                const cx64 * const mpo_ptr , std::array<long,4> mpo_dims);
+template void tools::common::contraction::contract_env_mps_mpo(      cx128 *       res_ptr , std::array<long,3> res_dims,
+                                                               const cx128 * const env_ptr , std::array<long,3> env_dims,
+                                                               const cx128 * const mps_ptr , std::array<long,3> mps_dims,
+                                                               const cx128 * const mpo_ptr , std::array<long,4> mpo_dims);
 
 /* clang-format on */

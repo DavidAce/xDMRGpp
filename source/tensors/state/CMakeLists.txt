@@ -1,6 +1,12 @@
 add_source_target(xdmrg++-tensors-state-finite
         TARGET_SOURCES
         StateFinite.cpp
+        StateFinite.fp32.cpp
+        StateFinite.fp64.cpp
+        StateFinite.fp128.cpp
+        StateFinite.cx32.cpp
+        StateFinite.cx64.cpp
+        StateFinite.cx128.cpp
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

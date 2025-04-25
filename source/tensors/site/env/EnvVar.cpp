@@ -8,8 +8,13 @@
 #include "tools/common/log.h"
 #include <utility>
 
+template class EnvVar<fp32>;
+template class EnvVar<fp64>;
+template class EnvVar<fp128>;
+template class EnvVar<cx32>;
 template class EnvVar<cx64>;
 template class EnvVar<cx128>;
+
 
 template<typename Scalar>
 EnvVar<Scalar>::EnvVar(std::string side_, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) : EnvBase<Scalar>(std::move(side_), "var", mps, mpo) {
@@ -132,8 +137,8 @@ void EnvVar<Scalar>::refresh(const EnvVar &env, const MpsSite<Scalar> &mps, cons
 template<typename Scalar>
 void EnvVar<Scalar>::set_edge_dims(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) {
     Eigen::Tensor<Scalar, 1> edge;
-    if(side == "L") edge = tenx::asScalarType<Scalar>(mpo.get_MPO2_edge_left());
-    if(side == "R") edge = tenx::asScalarType<Scalar>(mpo.get_MPO2_edge_right());
+    if(side == "L") edge = mpo.template get_MPO2_edge_left<Scalar>();
+    if(side == "R") edge = mpo.template get_MPO2_edge_right<Scalar>();
     std::size_t unique_id_edge = hash::hash_buffer(edge.data(), static_cast<size_t>(edge.size()));
     if(unique_id_env and unique_id_env.value() == unique_id_edge) return;
     if constexpr(settings::debug)

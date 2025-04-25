@@ -20,6 +20,9 @@ function(pkg_install_dependencies  package_name)
         # Eigen3 numerical library
         pkg_install(Eigen3)
 
+        # C++ re-implementation of arpack
+        pkg_install(spectra)
+
         # cli11 for parsing cli arguments
         pkg_install(cli11)
 

@@ -13,6 +13,12 @@ long tools::finite::measure::bond_dimension_current(const StateFinite<Scalar> &s
         state.measurements.bond_dim = 1;
     return state.measurements.bond_dim.value();
 }
+template long tools::finite::measure::bond_dimension_current(const StateFinite<fp32> &state);
+template long tools::finite::measure::bond_dimension_current(const StateFinite<fp64> &state);
+template long tools::finite::measure::bond_dimension_current(const StateFinite<fp128> &state);
+template long tools::finite::measure::bond_dimension_current(const StateFinite<cx32> &state);
+template long tools::finite::measure::bond_dimension_current(const StateFinite<cx64> &state);
+template long tools::finite::measure::bond_dimension_current(const StateFinite<cx128> &state);
 
 template<typename Scalar>
 long tools::finite::measure::bond_dimension_midchain(const StateFinite<Scalar> &state) {
@@ -20,13 +26,25 @@ long tools::finite::measure::bond_dimension_midchain(const StateFinite<Scalar> &
     state.measurements.bond_mid = state.get_midchain_bond().dimension(0);
     return state.measurements.bond_mid.value();
 }
+template long tools::finite::measure::bond_dimension_midchain(const StateFinite<fp32> &state);
+template long tools::finite::measure::bond_dimension_midchain(const StateFinite<fp64> &state);
+template long tools::finite::measure::bond_dimension_midchain(const StateFinite<fp128> &state);
+template long tools::finite::measure::bond_dimension_midchain(const StateFinite<cx32> &state);
+template long tools::finite::measure::bond_dimension_midchain(const StateFinite<cx64> &state);
+template long tools::finite::measure::bond_dimension_midchain(const StateFinite<cx128> &state);
 
 template<typename Scalar>
 std::pair<long, long> tools::finite::measure::bond_dimensions(const StateFinite<Scalar> &state, size_t pos) {
     auto t_bond = tid::tic_scope("bond_dimensions", tid::level::highest);
-    assert(pos < state.get_length<size_t>());
+    assert(pos < state.template get_length<size_t>());
     return {state.mps_sites[pos]->get_chiL(), state.mps_sites[pos]->get_chiR()};
 }
+template std::pair<long, long> tools::finite::measure::bond_dimensions(const StateFinite<fp32> &state, size_t pos);
+template std::pair<long, long> tools::finite::measure::bond_dimensions(const StateFinite<fp64> &state, size_t pos);
+template std::pair<long, long> tools::finite::measure::bond_dimensions(const StateFinite<fp128> &state, size_t pos);
+template std::pair<long, long> tools::finite::measure::bond_dimensions(const StateFinite<cx32> &state, size_t pos);
+template std::pair<long, long> tools::finite::measure::bond_dimensions(const StateFinite<cx64> &state, size_t pos);
+template std::pair<long, long> tools::finite::measure::bond_dimensions(const StateFinite<cx128> &state, size_t pos);
 
 template<typename Scalar>
 std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<Scalar> &state) {
@@ -43,6 +61,13 @@ std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<Scal
     state.measurements.bond_dimensions = bond_dimensions;
     return state.measurements.bond_dimensions.value();
 }
+
+template std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<fp32> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<fp64> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<fp128> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<cx32> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<cx64> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<cx128> &state);
 
 template<typename Scalar>
 std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFinite<Scalar> &state) {
@@ -67,6 +92,12 @@ std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFini
     }
     return bond_dimensions;
 }
+template std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFinite<fp32> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFinite<fp64> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFinite<fp128> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFinite<cx32> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFinite<cx64> &state);
+template std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFinite<cx128> &state);
 
 template<typename Scalar>
 std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<Scalar> &state) {
@@ -75,3 +106,10 @@ std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<Scal
     for(const auto &mps : state.mps_sites) { spin_dimensions.emplace_back(mps->spin_dim()); }
     return spin_dimensions;
 }
+
+template std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<fp32> &state);
+template std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<fp64> &state);
+template std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<fp128> &state);
+template std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<cx32> &state);
+template std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<cx64> &state);
+template std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<cx128> &state);

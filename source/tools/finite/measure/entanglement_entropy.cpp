@@ -17,8 +17,12 @@ RealScalar<Scalar> tools::finite::measure::entanglement_entropy(const Eigen::Ten
     auto S     = Eigen::Tensor<Scalar, 0>(-L.square().contract(L.square().log().eval(), tenx::idx({0}, {0})));
     return std::abs(S(0));
 }
-template RealScalar<cx64>  tools::finite::measure::entanglement_entropy(const Eigen::Tensor<cx64, 1> &);
-template RealScalar<cx128> tools::finite::measure::entanglement_entropy(const Eigen::Tensor<cx128, 1> &);
+template fp32  tools::finite::measure::entanglement_entropy(const Eigen::Tensor<fp32, 1> &);
+template fp64  tools::finite::measure::entanglement_entropy(const Eigen::Tensor<fp64, 1> &);
+template fp128 tools::finite::measure::entanglement_entropy(const Eigen::Tensor<fp128, 1> &);
+template fp32  tools::finite::measure::entanglement_entropy(const Eigen::Tensor<cx32, 1> &);
+template fp64  tools::finite::measure::entanglement_entropy(const Eigen::Tensor<cx64, 1> &);
+template fp128 tools::finite::measure::entanglement_entropy(const Eigen::Tensor<cx128, 1> &);
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::entanglement_entropy_current(const StateFinite<Scalar> &state) {
@@ -31,8 +35,12 @@ RealScalar<Scalar> tools::finite::measure::entanglement_entropy_current(const St
     }
     return state.measurements.entanglement_entropy_current.value();
 }
-template RealScalar<cx64>  tools::finite::measure::entanglement_entropy_current(const StateFinite<cx64> &);
-template RealScalar<cx128> tools::finite::measure::entanglement_entropy_current(const StateFinite<cx128> &);
+template fp32  tools::finite::measure::entanglement_entropy_current(const StateFinite<fp32> &);
+template fp64  tools::finite::measure::entanglement_entropy_current(const StateFinite<fp64> &);
+template fp128 tools::finite::measure::entanglement_entropy_current(const StateFinite<fp128> &);
+template fp32  tools::finite::measure::entanglement_entropy_current(const StateFinite<cx32> &);
+template fp64  tools::finite::measure::entanglement_entropy_current(const StateFinite<cx64> &);
+template fp128 tools::finite::measure::entanglement_entropy_current(const StateFinite<cx128> &);
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::entanglement_entropy_midchain(const StateFinite<Scalar> &state) {
@@ -40,8 +48,12 @@ RealScalar<Scalar> tools::finite::measure::entanglement_entropy_midchain(const S
     state.measurements.entanglement_entropy_midchain = entanglement_entropy(state.get_midchain_bond());
     return state.measurements.entanglement_entropy_midchain.value();
 }
-template RealScalar<cx64>  tools::finite::measure::entanglement_entropy_midchain(const StateFinite<cx64> &);
-template RealScalar<cx128> tools::finite::measure::entanglement_entropy_midchain(const StateFinite<cx128> &);
+template fp32  tools::finite::measure::entanglement_entropy_midchain(const StateFinite<fp32> &);
+template fp64  tools::finite::measure::entanglement_entropy_midchain(const StateFinite<fp64> &);
+template fp128 tools::finite::measure::entanglement_entropy_midchain(const StateFinite<fp128> &);
+template fp32  tools::finite::measure::entanglement_entropy_midchain(const StateFinite<cx32> &);
+template fp64  tools::finite::measure::entanglement_entropy_midchain(const StateFinite<cx64> &);
+template fp128 tools::finite::measure::entanglement_entropy_midchain(const StateFinite<cx128> &);
 
 template<typename Scalar>
 std::vector<RealScalar<Scalar>> tools::finite::measure::entanglement_entropies(const StateFinite<Scalar> &state) {
@@ -58,14 +70,18 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::entanglement_entropies(c
         }
     }
     if(entanglement_entropies.size() != state.get_length() + 1) throw except::logic_error("entanglement_entropies.size() should be length+1");
-    if(entanglement_entropies.front() != 0.0) throw except::logic_error("First entropy should be 0. Got: {:.16f}", fp(entanglement_entropies.front()));
-    if(entanglement_entropies.back() != 0.0) throw except::logic_error("Last entropy should be 0. Got: {:.16f}", fp(entanglement_entropies.back()));
+    if(entanglement_entropies.front() != 0) throw except::logic_error("First entropy should be 0. Got: {:.16f}", fp(entanglement_entropies.front()));
+    if(entanglement_entropies.back() != 0) throw except::logic_error("Last entropy should be 0. Got: {:.16f}", fp(entanglement_entropies.back()));
     state.measurements.entanglement_entropy_midchain = entanglement_entropies[state.template get_length<size_t>() / 2];
     state.measurements.entanglement_entropies        = entanglement_entropies;
     return state.measurements.entanglement_entropies.value();
 }
-template std::vector<RealScalar<cx64>>  tools::finite::measure::entanglement_entropies(const StateFinite<cx64> &);
-template std::vector<RealScalar<cx128>> tools::finite::measure::entanglement_entropies(const StateFinite<cx128> &);
+template std::vector<fp32>  tools::finite::measure::entanglement_entropies(const StateFinite<fp32> &);
+template std::vector<fp64>  tools::finite::measure::entanglement_entropies(const StateFinite<fp64> &);
+template std::vector<fp128> tools::finite::measure::entanglement_entropies(const StateFinite<fp128> &);
+template std::vector<fp32>  tools::finite::measure::entanglement_entropies(const StateFinite<cx32> &);
+template std::vector<fp64>  tools::finite::measure::entanglement_entropies(const StateFinite<cx64> &);
+template std::vector<fp128> tools::finite::measure::entanglement_entropies(const StateFinite<cx128> &);
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::entanglement_entropy_log2(const StateFinite<Scalar> &state, size_t nsites /* sites to the left of the partition */) {
@@ -94,8 +110,12 @@ RealScalar<Scalar> tools::finite::measure::entanglement_entropy_log2(const State
         return std::abs(SE(0));
     }
 }
-template RealScalar<cx64>  tools::finite::measure::entanglement_entropy_log2(const StateFinite<cx64> &, size_t);
-template RealScalar<cx128> tools::finite::measure::entanglement_entropy_log2(const StateFinite<cx128> &, size_t);
+template fp32  tools::finite::measure::entanglement_entropy_log2(const StateFinite<fp32> &, size_t);
+template fp64  tools::finite::measure::entanglement_entropy_log2(const StateFinite<fp64> &, size_t);
+template fp128 tools::finite::measure::entanglement_entropy_log2(const StateFinite<fp128> &, size_t);
+template fp32  tools::finite::measure::entanglement_entropy_log2(const StateFinite<cx32> &, size_t);
+template fp64  tools::finite::measure::entanglement_entropy_log2(const StateFinite<cx64> &, size_t);
+template fp128 tools::finite::measure::entanglement_entropy_log2(const StateFinite<cx128> &, size_t);
 
 template<typename Scalar>
 std::vector<RealScalar<Scalar>> tools::finite::measure::entanglement_entropies_log2(const StateFinite<Scalar> &state) {
@@ -114,12 +134,17 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::entanglement_entropies_l
         }
     }
     if(entanglement_entropies.size() != state.get_length() + 1) throw except::logic_error("entanglement_entropies.size() should be length+1");
-    if(entanglement_entropies.front() != 0.0) throw except::logic_error("First entropy should be 0. Got: {:.16f}", fp(entanglement_entropies.front()));
-    if(entanglement_entropies.back() != 0.0) throw except::logic_error("Last entropy should be 0. Got: {:.16f}", fp(entanglement_entropies.back()));
+    if(entanglement_entropies.front() != 0) throw except::logic_error("First entropy should be 0. Got: {:.16f}", fp(entanglement_entropies.front()));
+    if(entanglement_entropies.back() != 0) throw except::logic_error("Last entropy should be 0. Got: {:.16f}", fp(entanglement_entropies.back()));
     return entanglement_entropies;
 }
-template std::vector<RealScalar<cx64>>  tools::finite::measure::entanglement_entropies_log2(const StateFinite<cx64> &);
-template std::vector<RealScalar<cx128>> tools::finite::measure::entanglement_entropies_log2(const StateFinite<cx128> &);
+
+template std::vector<fp32>  tools::finite::measure::entanglement_entropies_log2(const StateFinite<fp32> &);
+template std::vector<fp64>  tools::finite::measure::entanglement_entropies_log2(const StateFinite<fp64> &);
+template std::vector<fp128> tools::finite::measure::entanglement_entropies_log2(const StateFinite<fp128> &);
+template std::vector<fp32>  tools::finite::measure::entanglement_entropies_log2(const StateFinite<cx32> &);
+template std::vector<fp64>  tools::finite::measure::entanglement_entropies_log2(const StateFinite<cx64> &);
+template std::vector<fp128> tools::finite::measure::entanglement_entropies_log2(const StateFinite<cx128> &);
 
 template<typename Scalar>
 std::vector<RealScalar<Scalar>> tools::finite::measure::renyi_entropies(const StateFinite<Scalar> &state, double q) {
@@ -169,8 +194,13 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::renyi_entropies(const St
     }
     return renyi_q;
 }
-template std::vector<RealScalar<cx64>>  tools::finite::measure::renyi_entropies(const StateFinite<cx64> &, double);
-template std::vector<RealScalar<cx128>> tools::finite::measure::renyi_entropies(const StateFinite<cx128> &, double);
+
+template std::vector<fp32>  tools::finite::measure::renyi_entropies(const StateFinite<fp32> &, double);
+template std::vector<fp64>  tools::finite::measure::renyi_entropies(const StateFinite<fp64> &, double);
+template std::vector<fp128> tools::finite::measure::renyi_entropies(const StateFinite<fp128> &, double);
+template std::vector<fp32>  tools::finite::measure::renyi_entropies(const StateFinite<cx32> &, double);
+template std::vector<fp64>  tools::finite::measure::renyi_entropies(const StateFinite<cx64> &, double);
+template std::vector<fp128> tools::finite::measure::renyi_entropies(const StateFinite<cx128> &, double);
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::renyi_entropy_midchain(const StateFinite<Scalar> &state, double q) {
@@ -185,5 +215,9 @@ RealScalar<Scalar> tools::finite::measure::renyi_entropy_midchain(const StateFin
         renyi_q = RealScalar<Scalar>(1.0 / (1.0 - q)) * LC.pow(RealScalar<Scalar>(2.0 * q)).sum().log();
     return std::abs(renyi_q(0));
 }
-template RealScalar<cx64>  tools::finite::measure::renyi_entropy_midchain(const StateFinite<cx64> &, double);
-template RealScalar<cx128> tools::finite::measure::renyi_entropy_midchain(const StateFinite<cx128> &, double);
+template fp32  tools::finite::measure::renyi_entropy_midchain(const StateFinite<fp32> &, double);
+template fp64  tools::finite::measure::renyi_entropy_midchain(const StateFinite<fp64> &, double);
+template fp128 tools::finite::measure::renyi_entropy_midchain(const StateFinite<fp128> &, double);
+template fp32  tools::finite::measure::renyi_entropy_midchain(const StateFinite<cx32> &, double);
+template fp64  tools::finite::measure::renyi_entropy_midchain(const StateFinite<cx64> &, double);
+template fp128 tools::finite::measure::renyi_entropy_midchain(const StateFinite<cx128> &, double);

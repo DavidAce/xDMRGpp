@@ -4,11 +4,14 @@
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
+#include <tools/finite/measure.h>
 
-std::vector<double> tools::finite::measure::truncation_errors(const StateFinite &state) {
+using tools::finite::measure::RealScalar;
+template<typename Scalar>
+std::vector<fp64> tools::finite::measure::truncation_errors(const StateFinite<Scalar> &state) {
     if(state.measurements.truncation_errors) return state.measurements.truncation_errors.value();
-    auto                t_chi = tid::tic_scope("trunc", tid::level::highest);
-    std::vector<double> truncation_errors;
+    auto              t_chi = tid::tic_scope("trunc", tid::level::highest);
+    std::vector<fp64> truncation_errors;
     if(not state.has_center_point()) truncation_errors.emplace_back(0);
     for(const auto &mps : state.mps_sites) {
         truncation_errors.emplace_back(mps->get_truncation_error());
@@ -18,11 +21,14 @@ std::vector<double> tools::finite::measure::truncation_errors(const StateFinite 
     state.measurements.truncation_errors = truncation_errors;
     return state.measurements.truncation_errors.value();
 }
+template std::vector<fp64> tools::finite::measure::truncation_errors(const StateFinite<cx64> &state);
+template std::vector<fp64> tools::finite::measure::truncation_errors(const StateFinite<cx128> &state);
 
-std::vector<double> tools::finite::measure::truncation_errors_active(const StateFinite &state) {
+template<typename Scalar>
+std::vector<fp64> tools::finite::measure::truncation_errors_active(const StateFinite<Scalar> &state) {
     // Here we get the truncation erros of the bonds that were merged into the full state in the last step
-    // For instance, if the active sites are {2,3,4,5,6} this returns the 4 bonds connecting {2,3}, {3,4}, {4,5} and {5,6}
-    // If active sites is just {4}, it returns the bond between {4,5} when going right, and {3,4} when going left.
+    // For instance, if the active sites are {2, 3, 4, 5, 6}, this returns the 4 bonds connecting {2,3}, {3,4}, {4,5} and {5,6}
+    // If active_sites is just {4}, it returns the bond between {4,5} when going right, and {3,4} when going left.
     if(state.active_sites.empty()) throw except::logic_error("truncation_errors_active(): active_sites is empty");
     if(state.active_sites.size() == 1) {
         // In single-site DMRG the active site is a center "AC" site:
@@ -34,7 +40,7 @@ std::vector<double> tools::finite::measure::truncation_errors_active(const State
         return {state.get_mps_site(state.active_sites[0]).get_truncation_error_last()};
     }
     if(state.active_sites.size() == 2) return {state.get_mps_site(state.active_sites[0]).get_truncation_error_LC()};
-    std::vector<double> truncation_errors;
+    std::vector<fp64> truncation_errors;
     for(const auto &pos : state.active_sites) {
         if(&pos == &state.active_sites.front()) continue;
         const auto &mps = state.get_mps_site(pos);
@@ -42,3 +48,5 @@ std::vector<double> tools::finite::measure::truncation_errors_active(const State
     }
     return truncation_errors;
 }
+template std::vector<fp64> tools::finite::measure::truncation_errors_active(const StateFinite<cx64> &state);
+template std::vector<fp64> tools::finite::measure::truncation_errors_active(const StateFinite<cx128> &state);

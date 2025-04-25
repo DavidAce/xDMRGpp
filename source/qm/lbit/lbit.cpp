@@ -381,9 +381,10 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::get_unitary_mpo_layer(const Unitar
 
 /*! \brief Merge multiple MPO layers into a single one using SVD.
  */
-std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> &mpo_layers) {
+template<typename Scalar>
+std::vector<Eigen::Tensor<Scalar, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &mpo_layers) {
     auto t_mpomerge = tid::tic_scope("mpo-merge");
-    auto mpo_merged = std::vector<Eigen::Tensor<cx64, 4>>(mpo_layers.front());
+    auto mpo_merged = std::vector<Eigen::Tensor<Scalar, 4>>(mpo_layers.front());
     for(size_t idx = 1; idx < mpo_layers.size(); ++idx) { mpo_merged = merge_unitary_mpo_layers(mpo_merged, mpo_layers[idx]); }
     return mpo_merged;
 }
@@ -1246,8 +1247,8 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix2(const std::vector<
 }
 
 template<typename Scalar>
-Eigen::Tensor<qm::lbit::RealScalar<Scalar>, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<std::vector<qm::Gate>> &unitary_circuit, size_t sites, size_t max_num_states,
-                                                             double tol) {
+Eigen::Tensor<qm::lbit::RealScalar<Scalar>, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<std::vector<qm::Gate>> &unitary_circuit, size_t sites,
+                                                                                     size_t max_num_states, double tol) {
     /*! \brief Calculates the correlation < τ^z_i σ^z_j > for a product state with spins aligned along +x = [(1,1)^T]^{\otimes L}
      *
      * We make the approximation of the correlator
@@ -1355,7 +1356,7 @@ Eigen::Tensor<qm::lbit::RealScalar<Scalar>, 2> qm::lbit::get_lbit_correlation_ma
                 StateFinite<Scalar> state_j = state;
                 state_j.get_mps_site(j).apply_mpo(szj); // Apply σ^z_j on state j
                 bond_maxj          = std::max<long>(bond_maxj, state_j.get_largest_bond());
-                auto sziszj_ev     = tools::finite::ops::overlap(state_i, state_j);
+                auto sziszj_ev     = tools::finite::ops::overlap<Scalar>(state_i, state_j);
                 lbit_corrmat(i, j) = sziszj_ev;
                 t_j.toc();
             }
@@ -1656,7 +1657,7 @@ StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar> 
         // Check that the transform backwards is equal to the original state
         auto state_lbit_debug = state_real;
         tools::finite::mps::apply_circuit(state_lbit_debug, unitary_gates_2site_layers, CircuitOp::ADJ, true, GateMove::ON, svd_cfg);
-        auto overlap = tools::finite::ops::overlap(state_lbit, state_lbit_debug);
+        auto overlap = tools::finite::ops::overlap<Scalar>(state_lbit, state_lbit_debug);
         tools::log->info("Debug overlap after unitary circuit: {:.16f}", overlap);
         if(svd_cfg.truncation_limit.has_value())
             if(std::abs(overlap - 1.0) > 10 * svd_cfg.truncation_limit.value())
@@ -1664,10 +1665,13 @@ StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar> 
     }
     return state_real;
 }
-template<typename Scalar>
-StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar>                                &state_lbit,
-                                                      const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &unitary_gates_mpo_layers,
-                                                      const Eigen::Tensor<Scalar, 1> &ledge, const Eigen::Tensor<Scalar, 1> &redge, svd::config svd_cfg) {
+template StateFinite<cx64> qm::lbit::transform_to_real_basis(const StateFinite<cx64>                  &state_lbit,
+                                                             const std::vector<std::vector<qm::Gate>> &unitary_gates_2site_layers, svd::config svd_cfg);
+
+template<typename Scalar, typename T>
+StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar>                           &state_lbit,
+                                                      const std::vector<std::vector<Eigen::Tensor<T, 4>>> &unitary_gates_mpo_layers,
+                                                      const Eigen::Tensor<T, 1> &ledge, const Eigen::Tensor<T, 1> &redge, svd::config svd_cfg) {
     auto                t_map      = tid::tic_scope("l2r");
     StateFinite<Scalar> state_real = state_lbit; // Make a copy
     state_real.set_name("state_real");
@@ -1701,7 +1705,7 @@ StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar> 
             }
         }
         tools::finite::mps::normalize_state(state_lbit_debug, std::nullopt, NormPolicy::IFNEEDED);
-        auto overlap = tools::finite::ops::overlap(state_lbit, state_lbit_debug);
+        auto overlap = tools::finite::ops::overlap<Scalar>(state_lbit, state_lbit_debug);
         tools::log->info("Debug overlap after unitary circuit: {:.16f}", overlap);
         if(svd_cfg.truncation_limit.has_value())
             if(std::abs(overlap - 1.0) > 10 * svd_cfg.truncation_limit.value())
@@ -1709,6 +1713,9 @@ StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar> 
     }
     return state_real;
 }
+template StateFinite<cx64> qm::lbit::transform_to_real_basis(const StateFinite<cx64>                                &state_lbit,
+                                                             const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> &unitary_gates_mpo_layers,
+                                                             const Eigen::Tensor<cx64, 1> &ledge, const Eigen::Tensor<cx64, 1> &redge, svd::config svd_cfg);
 
 template<typename Scalar>
 StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar>                &state_real,
@@ -1730,10 +1737,10 @@ StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar> 
         // Check normalization
         for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized();
 
-        // Double-check the that transform operation backwards is equal to the original state
+        // Double-check that the transform operation backwards is equal to the original state
         auto state_real_debug = state_lbit;
         tools::finite::mps::apply_circuit(state_real_debug, unitary_gates_2site_layers, CircuitOp::NONE, true, GateMove::ON, svd_cfg);
-        auto overlap = tools::finite::ops::overlap(state_real, state_real_debug);
+        auto overlap = tools::finite::ops::overlap<Scalar>(state_real, state_real_debug);
         tools::log->info("Debug overlap: {:.16f}", overlap);
         if(svd_cfg.truncation_limit.has_value())
             if(std::abs(overlap - 1.0) > 10 * svd_cfg.truncation_limit.value())
@@ -1741,10 +1748,13 @@ StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar> 
     }
     return state_lbit;
 }
-template<typename Scalar>
-StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar>                                &state_real,
-                                                      const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> &unitary_gates_mpo_layers,
-                                                      const Eigen::Tensor<Scalar, 1> &ledge, const Eigen::Tensor<Scalar, 1> &redge, svd::config svd_cfg) {
+template StateFinite<cx64> qm::lbit::transform_to_lbit_basis(const StateFinite<cx64>                  &state_real,
+                                                             const std::vector<std::vector<qm::Gate>> &unitary_gates_2site_layers, svd::config svd_cfg);
+
+template<typename Scalar, typename T>
+StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar>                           &state_real,
+                                                      const std::vector<std::vector<Eigen::Tensor<T, 4>>> &unitary_gates_mpo_layers,
+                                                      const Eigen::Tensor<T, 1> &ledge, const Eigen::Tensor<T, 1> &redge, svd::config svd_cfg) {
     auto                t_map      = tid::tic_scope("r2l");
     StateFinite<Scalar> state_lbit = state_real; // Make a copy
     state_lbit.set_name("state_lbit");
@@ -1774,7 +1784,7 @@ StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar> 
             if((idx_layer + 1) % 1 == 0) { tools::finite::mps::normalize_state(state_real_debug, svd_cfg, NormPolicy::ALWAYS); }
         }
         tools::finite::mps::normalize_state(state_real_debug, std::nullopt, NormPolicy::IFNEEDED);
-        auto overlap = tools::finite::ops::overlap(state_real, state_real_debug);
+        auto overlap = tools::finite::ops::overlap<Scalar>(state_real, state_real_debug);
         tools::log->info("Debug overlap: {:.16f}", overlap);
         if(svd_cfg.truncation_limit.has_value())
             if(std::abs(overlap - 1.0) > 10 * svd_cfg.truncation_limit.value())
@@ -1782,3 +1792,6 @@ StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar> 
     }
     return state_lbit;
 }
+template StateFinite<cx64> qm::lbit::transform_to_lbit_basis(const StateFinite<cx64>                                &state_real,
+                                                             const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> &unitary_gates_mpo_layers,
+                                                             const Eigen::Tensor<cx64, 1> &ledge, const Eigen::Tensor<cx64, 1> &redge, svd::config svd_cfg);

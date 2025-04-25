@@ -15,7 +15,12 @@ add_source_target(xdmrg++-tools-common-prof
         )
 add_source_target(xdmrg++-tools-common-split
         TARGET_SOURCES
-        split.cpp
+        split/split.fp32.cpp
+        split/split.fp64.cpp
+        split/split.fp128.cpp
+        split/split.cx32.cpp
+        split/split.cx64.cpp
+        split/split.cx128.cpp
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

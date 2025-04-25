@@ -25,6 +25,10 @@ namespace eig {
         mutable std::vector<fp64> eigvals_imag_fp64;
         mutable std::vector<cx64> eigvals_cx64;
 
+        mutable std::vector<fp128> eigvals_real_fp128;
+        mutable std::vector<fp128> eigvals_imag_fp128;
+        mutable std::vector<cx128> eigvals_cx128;
+
         mutable std::vector<fp32> eigvecsR_real_fp32;
         mutable std::vector<fp32> eigvecsR_imag_fp32;
         mutable std::vector<fp32> eigvecsL_real_fp32;
@@ -39,6 +43,13 @@ namespace eig {
         mutable std::vector<cx64> eigvecsR_cx64;
         mutable std::vector<cx64> eigvecsL_cx64;
 
+        mutable std::vector<fp128> eigvecsR_real_fp128;
+        mutable std::vector<fp128> eigvecsR_imag_fp128;
+        mutable std::vector<fp128> eigvecsL_real_fp128;
+        mutable std::vector<fp128> eigvecsL_imag_fp128;
+        mutable std::vector<cx128> eigvecsR_cx128;
+        mutable std::vector<cx128> eigvecsL_cx128;
+
         void build_eigvecs_cx32() const;
         void build_eigvecs_fp32() const;
         void build_eigvals_cx32() const;
@@ -48,6 +59,11 @@ namespace eig {
         void build_eigvecs_fp64() const;
         void build_eigvals_cx64() const;
         void build_eigvals_fp64() const;
+
+        void build_eigvecs_cx128() const;
+        void build_eigvecs_fp128() const;
+        void build_eigvals_cx128() const;
+        void build_eigvals_fp128() const;
 
         struct Meta {
             eig::size_type rows           = 0;
@@ -102,7 +118,7 @@ namespace eig {
         template<typename Scalar>
         std::vector<Scalar> &get_eigvecs(Side side = Side::R) const;
 
-        template<Form form, Type type = Type::CX64, Side side = Side::R>
+        template<Form form, Type type, Side side = Side::R>
         auto &get_eigvecs() const {
             if constexpr(type == Type::FP32) {
                 if constexpr(form == Form::SYMM) return get_eigvecs<fp32, side>();
@@ -112,6 +128,10 @@ namespace eig {
                 if constexpr(form == Form::SYMM) return get_eigvecs<fp64, side>();
                 if constexpr(form == Form::NSYM) return get_eigvecs<cx64, side>();
             }
+            if constexpr(type == Type::FP128) {
+                if constexpr(form == Form::SYMM) return get_eigvecs<fp128, side>();
+                if constexpr(form == Form::NSYM) return get_eigvecs<cx128, side>();
+            }
             if constexpr(type == Type::CX32) {
                 if constexpr(form == Form::SYMM) return get_eigvecs<cx32, side>();
                 if constexpr(form == Form::NSYM) return get_eigvecs<cx32, side>();
@@ -119,6 +139,10 @@ namespace eig {
             if constexpr(type == Type::CX64) {
                 if constexpr(form == Form::SYMM) return get_eigvecs<cx64, side>();
                 if constexpr(form == Form::NSYM) return get_eigvecs<cx64, side>();
+            }
+            if constexpr(type == Type::CX128) {
+                if constexpr(form == Form::SYMM) return get_eigvecs<cx128, side>();
+                if constexpr(form == Form::NSYM) return get_eigvecs<cx128, side>();
             }
         }
 
@@ -133,15 +157,17 @@ namespace eig {
         template<typename Scalar>
         std::vector<Scalar> &get_eigvals() const;
 
-        template<Form form = Form::SYMM, Type type = Type::CX64>
+        template<Form form, Type type>
         auto &get_eigvals() const {
             if constexpr(form == Form::SYMM) {
                 if constexpr(type == Type::FP32 or type == Type::CX32) return get_eigvals<fp32>();
                 if constexpr(type == Type::FP64 or type == Type::CX64) return get_eigvals<fp64>();
+                if constexpr(type == Type::FP128 or type == Type::CX128) return get_eigvals<fp128>();
             }
             if constexpr(form == Form::NSYM) {
                 if constexpr(type == Type::FP32 or type == Type::CX32) return get_eigvals<cx32>();
                 if constexpr(type == Type::FP64 or type == Type::CX64) return get_eigvals<cx64>();
+                if constexpr(type == Type::FP128 or type == Type::CX128) return get_eigvals<cx128>();
             }
         }
 

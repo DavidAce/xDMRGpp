@@ -19,26 +19,27 @@ namespace settings {
     inline constexpr bool verbose_lbit = false;
 }
 
-std::string format_mpo(const Eigen::Tensor<cx128, 4> &mpo, fp128 J1_rand, const std::vector<fp128> &J2_rand, fp128 J3_rand) {
+template<typename C, typename R>
+std::string format_mpo(const Eigen::Tensor<C, 4> &mpo, R J1_rand, const std::vector<R> &J2_rand, R J3_rand) {
     std::string str;
     using namespace qm::spin::half;
     auto ext = std::array<long, 4>{1, 1, 2, 2};
     auto sh2 = std::array<long, 2>{2, 2};
     for(long i = 0; i < mpo.dimension(0); i++) {
         for(long j = 0; j < mpo.dimension(1); j++) {
-            auto                    off = std::array<long, 4>{i, j, 0, 0};
-            Eigen::Tensor<cx128, 2> mat = mpo.slice(off, ext).reshape(sh2);
-            if(tenx::MatrixMap(mat) == sz.cast<cx128>())
+            auto                off = std::array<long, 4>{i, j, 0, 0};
+            Eigen::Tensor<C, 2> mat = mpo.slice(off, ext).reshape(sh2);
+            if(tenx::MatrixMap(mat) == sz.cast<C>())
                 str.append("z   ");
-            else if(tenx::MatrixMap(mat) == id.cast<cx128>())
+            else if(tenx::MatrixMap(mat) == id.cast<C>())
                 str.append("i   ");
             else if(tenx::isZero(mat))
                 str.append("0   ");
             else {
-                if(tenx::MatrixMap(mat).isApprox(J1_rand * sz.cast<cx128>())) str.append(fmt::format("J1z "));
-                if(tenx::MatrixMap(mat).isApprox(J3_rand * sz.cast<cx128>())) str.append(fmt::format("J3z "));
+                if(tenx::MatrixMap(mat).isApprox(J1_rand * sz.cast<C>())) str.append(fmt::format("J1z "));
+                if(tenx::MatrixMap(mat).isApprox(J3_rand * sz.cast<C>())) str.append(fmt::format("J3z "));
                 for(const auto &[r, J2] : iter::enumerate(J2_rand)) {
-                    if(tenx::MatrixMap(mat).isApprox(J2 * sz.cast<cx128>())) str.append(fmt::format("J2{} ", r));
+                    if(tenx::MatrixMap(mat).isApprox(J2 * sz.cast<C>())) str.append(fmt::format("J2{} ", r));
                 }
             }
         }
@@ -47,9 +48,12 @@ std::string format_mpo(const Eigen::Tensor<cx128, 4> &mpo, fp128 J1_rand, const 
     return str;
 }
 
-
+template class LBit<fp32>;
+template class LBit<fp64>;
+template class LBit<fp128>;
+template class LBit<cx32>;
 template class LBit<cx64>;
-
+template class LBit<cx128>;
 
 template<typename Scalar>
 LBit<Scalar>::LBit(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {
@@ -246,22 +250,26 @@ void LBit<Scalar>::set_parameter(const std::string_view name, std::any value) {
 
   */
 template<typename Scalar>
-Eigen::Tensor<cx128, 4> LBit<Scalar>::get_mpo_q(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                                std::optional<std::vector<size_t>> skip) const {
-    using namespace qm::spin::half;
+Eigen::Tensor<typename LBit<Scalar>::QuadScalar, 4> LBit<Scalar>::get_mpo_q(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                                                            std::optional<std::vector<size_t>> skip) const {
     tools::log->debug("mpo({}): building lbit mpo", get_position());
     if(not all_mpo_parameters_have_been_set)
         throw except::runtime_error("mpo({}): can't build mpo: full lattice parameters haven't been set yet.", get_position());
 
     //    Eigen::Tensor<cx64, 2> n = tenx::TensorCast(0.5 * (id + sz));
-    auto                    eshift = cx128(energy_shift_per_site.real(), energy_shift_per_site.imag());
-    Eigen::Tensor<cx128, 2> Z      = tenx::TensorMap(sz).cast<cx128>();
-    Eigen::Tensor<cx128, 2> I      = tenx::TensorMap(id).cast<cx128>();
-    auto                    Rul    = settings::model::model_size - 1; // Range unsigned long (with "full range": R = L-1)
-    long                    R      = safe_cast<long>(Rul);            // Range
-    long                    F      = R + 2l;                          // Last index of mpo
+    auto Z   = tenx::asScalarType<QuadScalar>(qm::spin::half::tensor::sz);
+    auto I   = tenx::asScalarType<QuadScalar>(qm::spin::half::tensor::id);
+    auto Rul = settings::model::model_size - 1; // Range unsigned long (with "full range": R = L-1)
+    long R   = safe_cast<long>(Rul);            // Range
+    long F   = R + 2l;                          // Last index of mpo
 
-    Eigen::Tensor<cx128, 4> mpo_build_t;
+    auto eshift = QuadScalar{0};
+    if constexpr(sfinae::is_std_complex_v<Scalar>)
+        eshift = QuadScalar(std::real(energy_shift_per_site), std::imag(energy_shift_per_site));
+    else
+        eshift = QuadScalar(energy_shift_per_site);
+
+    Eigen::Tensor<QuadScalar, 4> mpo_build_t;
     mpo_build_t.resize(F + 1, F + 1, h5tb.param.spin_dim, h5tb.param.spin_dim);
     mpo_build_t.setZero();
 
@@ -273,13 +281,13 @@ Eigen::Tensor<cx128, 4> LBit<Scalar>::get_mpo_q(cx64 energy_shift_per_site, std:
         for(const auto &i : num::range<long>(2, R + 1)) { mpo_build_t.slice(tenx::array4{i, i - 1, 0, 0}, extent4).reshape(extent2) = I; }
 
     mpo_build_t.slice(tenx::array4{F - 1, 1, 0, 0}, extent4).reshape(extent2) = Z;
-    mpo_build_t.slice(tenx::array4{F, 0, 0, 0}, extent4).reshape(extent2)     = h5tb.param.J1_rand.to_floating_point<fp128>() * Z  -  eshift * I;
+    mpo_build_t.slice(tenx::array4{F, 0, 0, 0}, extent4).reshape(extent2)     = h5tb.param.J1_rand.to_floating_point<fp128>() * Z - eshift * I;
 
     if(R >= 1)
         for(const auto &i : num::range<long>(1, h5tb.param.J2_rand.size())) {
-            mpo_build_t.slice(tenx::array4{F, i, 0, 0}, extent4).reshape(extent2) = h5tb.param.J2_rand.at(safe_cast<size_t>(i)).to_floating_point<fp128>() * Z ;
+            mpo_build_t.slice(tenx::array4{F, i, 0, 0}, extent4).reshape(extent2) = h5tb.param.J2_rand.at(safe_cast<size_t>(i)).to_floating_point<fp128>() * Z;
         }
-    mpo_build_t.slice(tenx::array4{F, F - 1, 0, 0}, extent4).reshape(extent2) = h5tb.param.J3_rand.to_floating_point<fp128>() * Z ;
+    mpo_build_t.slice(tenx::array4{F, F - 1, 0, 0}, extent4).reshape(extent2) = h5tb.param.J3_rand.to_floating_point<fp128>() * Z;
 
     if(tenx::hasNaN(mpo_build_t)) {
         print_parameter_names();
@@ -397,10 +405,14 @@ Eigen::Tensor<cx128, 4> LBit<Scalar>::get_mpo_q(cx64 energy_shift_per_site, std:
 }
 
 template<typename Scalar>
-Eigen::Tensor<cx64, 4> LBit<Scalar>::get_mpo(cx64 energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
-                                             [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
+Eigen::Tensor<Scalar, 4> LBit<Scalar>::get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody,
+                                               [[maybe_unused]] std::optional<std::vector<size_t>> skip) const {
     auto mpo_t = get_mpo_q(energy_shift_per_site, nbody, skip);
-    return mpo_t.unaryExpr([](auto z) { return std::complex<fp64>(static_cast<fp64>(z.real()), static_cast<fp64>(z.imag())); });
+    if constexpr(sfinae::is_std_complex_v<Scalar>) {
+        return mpo_t.unaryExpr([](auto z) { return std::complex(static_cast<RealScalar>(std::real(z)), static_cast<RealScalar>(std::imag(z))); });
+    } else {
+        return mpo_t.unaryExpr([](auto z) { return static_cast<RealScalar>(z); });
+    }
 }
 
 // void LBit<Scalar>::build_mpo_q()
@@ -492,44 +504,6 @@ Eigen::Tensor<cx64, 4> LBit<Scalar>::get_mpo(cx64 energy_shift_per_site, std::op
 //
 //   */
 //
-// {
-//     using namespace qm::spin::half;
-//     tools::log->debug("mpo({}): building lbit mpo", get_position());
-//     if(not all_mpo_parameters_have_been_set)
-//         throw except::runtime_error("mpo({}): can't build mpo: full lattice parameters haven't been set yet.", get_position());
-//
-//     //    Eigen::Tensor<cx64, 2> n = tenx::TensorCast(0.5 * (id + sz));
-//     Eigen::Tensor<cx128, 2> Z = tenx::TensorMap(sz).cast<cx128>();
-//     Eigen::Tensor<cx128, 2> I = tenx::TensorMap(id).cast<cx128>();
-//     long                     R = safe_cast<long>(settings::model::model_size - 1);
-//     long                     F = R + 2l;
-//     mpo_internal_t.resize(F + 1, F + 1, h5tb.param.spin_dim, h5tb.param.spin_dim);
-//     mpo_internal_t.setZero();
-//
-//     mpo_internal_t.slice(tenx::array4{0, 0, 0, 0}, extent4).reshape(extent2) = I;
-//     mpo_internal_t.slice(tenx::array4{F, F, 0, 0}, extent4).reshape(extent2) = I;
-//     mpo_internal_t.slice(tenx::array4{1, 0, 0, 0}, extent4).reshape(extent2) = Z;
-//
-//     if(R >= 2)
-//         for(const auto &i : num::range<long>(2, R + 1)) { mpo_internal_t.slice(tenx::array4{i, i - 1, 0, 0}, extent4).reshape(extent2) = I; }
-//
-//     mpo_internal_t.slice(tenx::array4{F - 1, 1, 0, 0}, extent4).reshape(extent2) = Z;
-//     mpo_internal_t.slice(tenx::array4{F, 0, 0, 0}, extent4).reshape(extent2)     = h5tb.param.J1_rand.to_floating_point<fp128>() * Z - energy_shift_mpo * I;
-//
-//     if(R >= 1)
-//         for(const auto &i : num::range<long>(1, h5tb.param.J2_rand.size())) {
-//             mpo_internal_t.slice(tenx::array4{F, i, 0, 0}, extent4).reshape(extent2) =
-//                 h5tb.param.J2_rand.at(safe_cast<size_t>(i)).to_floating_point<fp128>() * Z;
-//         }
-//     mpo_internal_t.slice(tenx::array4{F, F - 1, 0, 0}, extent4).reshape(extent2) = h5tb.param.J3_rand.to_floating_point<fp128>() * Z;
-//
-//     if(tenx::hasNaN(mpo_internal_t)) {
-//         print_parameter_names();
-//         print_parameter_values();
-//         throw except::runtime_error("mpo({}): found nan", get_position());
-//     }
-//     unique_id = std::nullopt;
-// }
 
 template<typename Scalar>
 void LBit<Scalar>::randomize_hamiltonian() {
@@ -539,13 +513,13 @@ void LBit<Scalar>::randomize_hamiltonian() {
     // Note 1:
     //    * xi_Jcls: characteristic length scale
     //    * Random(...) are drawn randomly for each i,j,k according to some distribution.
-    //    * Exponential decay starts after 0 sites, so J2_wdth*exp(-1) sets the size of nearest neighbor interaction.
+    //    * Exponential decay starts after 0 sites, so J2_wdth*exp(-1) sets the size of the nearest neighbor interaction.
     //
-    // Note 2: the saturation time is predictable. The smallest interaction sets the longest time scale.
+    // Note 2: the saturation time is predictable. The smallest interaction sets the longest timescale.
     //      tmax ~ [J2_wdth * exp(-(L/2)/xi_Jcls)]^-1
     // We take the absolute value here to get the order of magnitude of the interactions.
     // Note 3: We take the full range of J2 so that we use the random number generator a fixed number of times,
-    // even if J2_span is shorter than full range.
+    // even if J2_span is shorter than the full range.
 
     using namespace settings::model::lbit;
     auto expw  = std::vector<fp128>{}; // The exponentially decaying weights

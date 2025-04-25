@@ -13,7 +13,7 @@ class EnvEne;
 template<typename Scalar>
 class EnvVar;
 
-template<typename Scalar = cx64>
+template<typename Scalar>
 class EdgesInfinite {
     public:
     private:
@@ -47,8 +47,13 @@ class EdgesInfinite {
     env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_var_blk() const;
     env_pair<Eigen::Tensor<Scalar, 3> &>       get_env_ene_blk();
     env_pair<Eigen::Tensor<Scalar, 3> &>       get_env_var_blk();
-    template<typename T>
-    [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_ene_blk_as() const;
-    template<typename T>
-    [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_var_blk_as() const;
+    // template<typename T>
+    // [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_ene_blk_as() const {
+    //     return {eneL->template get_block_as<T>(), eneR->template get_block_as<T>()};
+    // }
+    //
+    // template<typename T>
+    // [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_var_blk_as() const {
+    //     return {varL->template get_block_as<T>(), varR->template get_block_as<T>()};
+    // }
 };

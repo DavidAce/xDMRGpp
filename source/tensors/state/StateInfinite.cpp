@@ -2,6 +2,7 @@
 #include "config/settings.h"
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"
+#include "tensors/state/StateInfinite.impl.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
 #include "tools/common/split.h"
@@ -9,6 +10,10 @@
 #include "tools/infinite/measure.h"
 #include "tools/infinite/mps.h"
 
+template class StateInfinite<fp32>;
+template class StateInfinite<fp64>;
+template class StateInfinite<fp128>;
+template class StateInfinite<cx32>;
 template class StateInfinite<cx64>;
 template class StateInfinite<cx128>;
 
@@ -19,7 +24,7 @@ StateInfinite<Scalar>::StateInfinite() : MPS_A(std::make_unique<MpsSite<Scalar>>
 
 // We need to define the destructor and other special functions
 // because we enclose data in unique_ptr for this pimpl idiom.
-// Otherwise unique_ptr will forcibly inline its own default deleter.
+// Otherwise, unique_ptr will forcibly inline its own default deleter.
 // Here we follow "rule of five", so we must also define
 // our own copy/move ctor and copy/move assignments
 // This has the side effect that we must define our own
@@ -29,12 +34,13 @@ StateInfinite<Scalar>::StateInfinite() : MPS_A(std::make_unique<MpsSite<Scalar>>
 template<typename Scalar>
 StateInfinite<Scalar>::~StateInfinite() = default; // default dtor
 template<typename Scalar>
-StateInfinite<Scalar>::StateInfinite(StateInfinite &&other) = default; // default move ctor
+StateInfinite<Scalar>::StateInfinite(StateInfinite &&other) noexcept = default; // default move ctor
 template<typename Scalar>
-StateInfinite<Scalar> &StateInfinite<Scalar>::operator=(StateInfinite &&other) = default; // default move assign
+StateInfinite<Scalar> &StateInfinite<Scalar>::operator=(StateInfinite &&other) noexcept = default; // default move assign
 
 /* clang-format off */
-template<typename Scalar> StateInfinite<Scalar>::StateInfinite(const StateInfinite &other):
+template<typename Scalar>
+StateInfinite<Scalar>::StateInfinite(const StateInfinite &other) noexcept :
     MPS_A(std::make_unique<MpsSite<Scalar>>(*other.MPS_A)),
     MPS_B(std::make_unique<MpsSite<Scalar>>(*other.MPS_B)),
     swapped(other.swapped),
@@ -43,24 +49,22 @@ template<typename Scalar> StateInfinite<Scalar>::StateInfinite(const StateInfini
     algo(other.algo),
     measurements(other.measurements),
     lowest_recorded_variance(other.lowest_recorded_variance){
-
 }
-/* clang-format on */
 template<typename Scalar>
-StateInfinite<Scalar> &StateInfinite<Scalar>::operator=(const StateInfinite &other) {
-    // check for self-assignment
-    if(this != &other) {
-        MPS_A                    = std::make_unique<MpsSite<Scalar>>(*other.MPS_A);
-        MPS_B                    = std::make_unique<MpsSite<Scalar>>(*other.MPS_B);
-        swapped                  = other.swapped;
-        cache                    = other.cache;
-        name                     = other.name;
-        algo                     = other.algo;
-        measurements             = other.measurements;
-        lowest_recorded_variance = other.lowest_recorded_variance;
-    }
+StateInfinite<Scalar> & StateInfinite<Scalar>::operator=(const StateInfinite &other) noexcept{
+    if(this == &other) return *this;
+    MPS_A                    = std::make_unique<MpsSite<Scalar>>(*other.MPS_A);
+    MPS_B                    = std::make_unique<MpsSite<Scalar>>(*other.MPS_B);
+    swapped                  = other.swapped;
+    cache                    = other.cache;
+    name                     = other.name;
+    algo                     = other.algo;
+    measurements             = other.measurements;
+    lowest_recorded_variance = other.lowest_recorded_variance;
     return *this;
 }
+
+/* clang-format on */
 
 template<typename Scalar>
 void StateInfinite<Scalar>::initialize(ModelType model_type) {
@@ -255,6 +259,10 @@ template<typename Scalar>
 bool StateInfinite<Scalar>::has_nan() const {
     return MPS_A->has_nan() or MPS_B->has_nan();
 }
+template<typename Scalar>
+bool StateInfinite<Scalar>::is_swapped() const {
+    return swapped;
+}
 //
 // template<typename T>
 // Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> StateInfinite<Scalar>::get_H_local_matrix() const {
@@ -414,8 +422,8 @@ void StateInfinite<Scalar>::clear_cache() const {
 }
 template<typename Scalar>
 void StateInfinite<Scalar>::clear_measurements() const {
-    measurements                              = MeasurementsStateInfinite();
-    tools::common::views::components_computed = false;
+    measurements                                      = MeasurementsStateInfinite<Scalar>();
+    tools::common::views<Scalar>::components_computed = false;
 }
 
 template<typename Scalar>

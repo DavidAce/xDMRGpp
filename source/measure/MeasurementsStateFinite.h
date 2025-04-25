@@ -16,7 +16,7 @@ struct MeasurementsStateFinite {
     std::optional<std::vector<long>>            bond_dimensions                  = std::nullopt;
     std::optional<RealScalar>                   norm                             = std::nullopt;
     std::optional<std::array<RealScalar, 3>>    spin_components                  = std::nullopt;
-    std::optional<std::vector<RealScalar>>      truncation_errors                = std::nullopt;
+    std::optional<std::vector<double>>          truncation_errors                = std::nullopt;
     std::optional<RealScalar>                   entanglement_entropy_midchain    = std::nullopt;
     std::optional<RealScalar>                   entanglement_entropy_current     = std::nullopt;
     std::optional<std::vector<RealScalar>>      entanglement_entropies           = std::nullopt;

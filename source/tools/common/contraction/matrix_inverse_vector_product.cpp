@@ -29,9 +29,9 @@ template<typename Scalar_>
 class MatrixReplacement : public Eigen::EigenBase<MatrixReplacement<Scalar_>> {
     public:
     // Required typedefs, constants, and method:
-    typedef Scalar_ Scalar;
-    typedef double  RealScalar;
-    typedef int     StorageIndex;
+    using Scalar     = Scalar_;
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    typedef int StorageIndex;
     enum { ColsAtCompileTime = Eigen::Dynamic, MaxColsAtCompileTime = Eigen::Dynamic, IsRowMajor = false };
 
     const Scalar_      *envL = nullptr;
@@ -141,28 +141,12 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
     // Define the "matrix-free" matrix replacement.
     MatrixReplacement<Scalar> matRepl;
     matRepl.attachTensors(envL_ptr, envR_ptr, mpo_ptr, mps_dims, mpo_dims);
-    Eigen::Index                               MaxIters  = matRepl.rows();
-    double                                     tolerance = 1e-3;
-    Eigen::Map<tenx::VectorType<Scalar>>       res(res_ptr, matRepl.rows());
-    Eigen::Map<const tenx::VectorType<Scalar>> mps(mps_ptr, matRepl.rows());
+    auto MaxIters  = matRepl.rows();
+    auto tolerance = static_cast<typename MatrixReplacement<Scalar>::RealScalar>(1e-3);
+    auto res       = Eigen::Map<tenx::VectorType<Scalar>>(res_ptr, matRepl.rows());
+    auto mps       = Eigen::Map<const tenx::VectorType<Scalar>>(mps_ptr, matRepl.rows());
 
-    if constexpr(std::is_same_v<Scalar, double>) {
-        {
-            auto                            t_mativec = tid::tic_token("matrix_inverse_vector_product", tid::level::higher);
-            static tenx::VectorType<Scalar> guess_mr;
-            if(guess_mr.size() != res.size()) guess_mr = res;
-
-            Eigen::MINRES<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, Eigen::IdentityPreconditioner> solver;
-            solver.setMaxIterations(MaxIters);
-            solver.setTolerance(tolerance);
-            solver.compute(matRepl);
-            res = solver.solveWithGuess(mps, guess_mr);
-            tools::log->info("MR Preconditioner: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", mps.size(),
-                             static_cast<int>(solver.info()), solver.tolerance(), solver.error(), solver.iterations(), matRepl.counter,
-                             t_mativec->get_last_interval());
-            guess_mr = res;
-        }
-    } else {
+    if constexpr(tenx::sfinae::is_std_complex_v<Scalar>) {
         auto                            t_mativec = tid::tic_token("matrix_inverse_vector_product", tid::level::higher);
         static tenx::VectorType<Scalar> guess_cbs;
         if(guess_cbs.size() != res.size()) guess_cbs = res;
@@ -173,22 +157,57 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
         solver.compute(matRepl);
         res = solver.solveWithGuess(mps, guess_cbs);
         tools::log->info("CG Preconditioner: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", mps.size(),
-                         static_cast<int>(solver.info()), solver.tolerance(), solver.error(), solver.iterations(), matRepl.counter,
+                         static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.counter,
                          t_mativec->get_last_interval());
         guess_cbs = res;
+    } else {
+        auto                            t_mativec = tid::tic_token("matrix_inverse_vector_product", tid::level::higher);
+        static tenx::VectorType<Scalar> guess_mr;
+        if(guess_mr.size() != res.size()) guess_mr = res;
+
+        Eigen::MINRES<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, Eigen::IdentityPreconditioner> solver;
+        solver.setMaxIterations(MaxIters);
+        solver.setTolerance(tolerance);
+        solver.compute(matRepl);
+        res = solver.solveWithGuess(mps, guess_mr);
+        tools::log->info("MR Preconditioner: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", mps.size(),
+                         static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.counter,
+                         t_mativec->get_last_interval());
+        guess_mr = res;
     }
 
     //    guess = res;
 }
-
+template void tools::common::contraction::matrix_inverse_vector_product(fp32             *res_ptr,                                 //
+                                                                        const fp32 *const mps_ptr, std::array<long, 3> mps_dims,   //
+                                                                        const fp32 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
+                                                                        const fp32 *const envL_ptr, std::array<long, 3> envL_dims, //
+                                                                        const fp32 *const envR_ptr, std::array<long, 3> envR_dims);
 template void tools::common::contraction::matrix_inverse_vector_product(fp64             *res_ptr,                                 //
                                                                         const fp64 *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                         const fp64 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                         const fp64 *const envL_ptr, std::array<long, 3> envL_dims, //
                                                                         const fp64 *const envR_ptr, std::array<long, 3> envR_dims);
+template void tools::common::contraction::matrix_inverse_vector_product(fp128             *res_ptr,                                 //
+                                                                        const fp128 *const mps_ptr, std::array<long, 3> mps_dims,   //
+                                                                        const fp128 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
+                                                                        const fp128 *const envL_ptr, std::array<long, 3> envL_dims, //
+                                                                        const fp128 *const envR_ptr, std::array<long, 3> envR_dims);
+template void tools::common::contraction::matrix_inverse_vector_product(cx32             *res_ptr,                                 //
+                                                                        const cx32 *const mps_ptr, std::array<long, 3> mps_dims,   //
+                                                                        const cx32 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
+                                                                        const cx32 *const envL_ptr, std::array<long, 3> envL_dims, //
+                                                                        const cx32 *const   envR_ptr,                              //
+                                                                        std::array<long, 3> envR_dims);
 template void tools::common::contraction::matrix_inverse_vector_product(cx64             *res_ptr,                                 //
                                                                         const cx64 *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                         const cx64 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                         const cx64 *const envL_ptr, std::array<long, 3> envL_dims, //
                                                                         const cx64 *const   envR_ptr,                              //
+                                                                        std::array<long, 3> envR_dims);
+template void tools::common::contraction::matrix_inverse_vector_product(cx128             *res_ptr,                                 //
+                                                                        const cx128 *const mps_ptr, std::array<long, 3> mps_dims,   //
+                                                                        const cx128 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
+                                                                        const cx128 *const envL_ptr, std::array<long, 3> envL_dims, //
+                                                                        const cx128 *const  envR_ptr,                               //
                                                                         std::array<long, 3> envR_dims);

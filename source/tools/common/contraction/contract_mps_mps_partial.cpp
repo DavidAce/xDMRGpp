@@ -25,6 +25,10 @@ template void tools::common::contraction::contract_mps_mps_partial(      fp64 * 
                                                                    const fp64 * const mps1_ptr, std::array<long,3> mps1_dims,
                                                                    const fp64 * const mps2_ptr, std::array<long,3> mps2_dims,
                                                                    std::array<long,2> idx);
+template void tools::common::contraction::contract_mps_mps_partial(      fp128 *       res_ptr , std::array<long,2> res_dims,
+                                                                   const fp128 * const mps1_ptr, std::array<long,3> mps1_dims,
+                                                                   const fp128 * const mps2_ptr, std::array<long,3> mps2_dims,
+                                                                   std::array<long,2> idx);
 template void tools::common::contraction::contract_mps_mps_partial(      cx32 *       res_ptr , std::array<long,2> res_dims,
                                                                    const cx32 * const mps1_ptr, std::array<long,3> mps1_dims,
                                                                    const cx32 * const mps2_ptr, std::array<long,3> mps2_dims,
@@ -32,5 +36,9 @@ template void tools::common::contraction::contract_mps_mps_partial(      cx32 * 
 template void tools::common::contraction::contract_mps_mps_partial(      cx64 *       res_ptr , std::array<long,2> res_dims,
                                                                    const cx64 * const mps1_ptr, std::array<long,3> mps1_dims,
                                                                    const cx64 * const mps2_ptr, std::array<long,3> mps2_dims,
+                                                                   std::array<long,2> idx);
+template void tools::common::contraction::contract_mps_mps_partial(      cx128 *       res_ptr , std::array<long,2> res_dims,
+                                                                   const cx128 * const mps1_ptr, std::array<long,3> mps1_dims,
+                                                                   const cx128 * const mps2_ptr, std::array<long,3> mps2_dims,
                                                                    std::array<long,2> idx);
 /* clang-format on */

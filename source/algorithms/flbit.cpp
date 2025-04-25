@@ -36,12 +36,21 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <unsupported/Eigen/MatrixFunctions>
 
-flbit::flbit(std::shared_ptr<h5pp::File> h5file_) : AlgorithmFinite(std::move(h5file_), OptRitz::NONE, AlgorithmType::fLBIT) {
+// template class flbit<fp32>;
+// template class flbit<fp64>;
+// template class flbit<fp128>;
+// template class flbit<cx32>;
+template class flbit<cx64>;
+// template class flbit<cx128>;
+
+template<typename Scalar>
+flbit<Scalar>::flbit(std::shared_ptr<h5pp::File> h5file_) : AlgorithmFinite<Scalar>(std::move(h5file_), OptRitz::NONE, AlgorithmType::fLBIT) {
     tools::log->trace("Constructing class_flbit");
     tensors.state->set_name("state_real");
 }
 
-void flbit::resume() {
+template<typename Scalar>
+void flbit<Scalar>::resume() {
     // Resume can imply many things
     // 1) Resume a simulation which terminated prematurely
     // 2) Resume a previously successful simulation. This may be desireable if the config
@@ -122,7 +131,7 @@ void flbit::resume() {
     // TODO: We may still have some more things to do, e.g. the config may be asking for more states
 }
 
-void flbit::run_task_list(std::deque<flbit_task> &task_list) {
+template<typename Scalar> void flbit<Scalar>::run_task_list(std::deque<flbit_task> &task_list) {
     using namespace settings::strategy;
     while(not task_list.empty()) {
         auto task = task_list.front();
@@ -176,7 +185,7 @@ void flbit::run_task_list(std::deque<flbit_task> &task_list) {
     }
 }
 
-void flbit::run_default_task_list() {
+template<typename Scalar> void flbit<Scalar>::run_default_task_list() {
     std::deque<flbit_task> default_task_list = {
         flbit_task::INIT_DEFAULT,
         flbit_task::TIME_EVOLVE,
@@ -190,7 +199,7 @@ void flbit::run_default_task_list() {
     }
 }
 
-void flbit::run_preprocessing() {
+template<typename Scalar> void flbit<Scalar>::run_preprocessing() {
     tools::log->info("Running {} preprocessing", status.algo_type_sv());
     auto t_pre = tid::tic_scope("pre");
     status.clear();
@@ -203,8 +212,8 @@ void flbit::run_preprocessing() {
     tensors.state->set_name("state_real");
     initialize_state(ResetReason::INIT, settings::strategy::initial_state);
     tensors.move_center_point_to_inward_edge();
-    state_real_init = std::make_unique<StateFinite>(*tensors.state);
-    tools::finite::print::model(*tensors.model);
+    state_real_init = std::make_unique<StateFinite<Scalar>>(tensors.get_state());
+    tools::finite::print::model(tensors.get_model());
 
     create_unitary_circuit_gates();
 
@@ -227,16 +236,16 @@ void flbit::run_preprocessing() {
             auto svd_cfg           = svd::config(status.bond_lim, status.trnc_lim);
             svd_cfg.svd_lib        = svd::lib::lapacke;
             svd_cfg.svd_rtn        = svd::rtn::geauto;
-            StateFinite state_real = *tensors.state;
+            StateFinite state_real = tensors.get_state();
             if(settings::flbit::use_mpo_circuit) {
                 state_real = qm::lbit::transform_to_real_basis(*state_lbit, unitary_gates_mpo_layers, ledge, redge, svd_cfg);
 
             } else {
                 state_real = qm::lbit::transform_to_real_basis(*state_lbit, unitary_gates_2site_layers, svd_cfg);
             }
-            auto psi_lbit_t  = tools::finite::mps::mps2tensor(*state_lbit);
-            auto psi_real1_t = tools::finite::mps::mps2tensor(*tensors.state);
-            auto psi_real2_t = tools::finite::mps::mps2tensor(state_real);
+            auto psi_lbit_t  = tools::finite::mps::mps2tensor<Scalar>(*state_lbit);
+            auto psi_real1_t = tools::finite::mps::mps2tensor<Scalar>(tensors.get_state());
+            auto psi_real2_t = tools::finite::mps::mps2tensor<Scalar>(state_real);
             auto u_circuit_t =
                 qm::lbit::get_unitary_circuit_as_tensor(unitary_gates_2site_layers); // TODO: For some reason this is a transpose away from our typical circuit
             auto        psi_lbit_v            = tenx::VectorMap(psi_lbit_t);
@@ -265,11 +274,11 @@ void flbit::run_preprocessing() {
     tools::log->info("Finished {} preprocessing", status.algo_type_sv());
 }
 
-void flbit::run_algorithm() {
+template<typename Scalar> void flbit<Scalar>::run_algorithm() {
     if(tensors.state->get_name().empty()) tensors.state->set_name("state_real");
     if(not state_lbit) transform_to_lbit_basis();
     if(time_points.empty()) create_time_points();
-    if(cmp_t(status.delta_t.to_floating_point<cx128>(), 0.0)) update_time_step();
+    if(cmp_t(status.delta_t.template to_floating_point<cx128>(), 0.0)) update_time_step();
     tools::log->info("Starting {} algorithm with model [{}] for state [{}]", status.algo_type_sv(), enum2sv(settings::model::model_type),
                      tensors.state->get_name());
     if(not tensors.position_is_inward_edge()) throw except::logic_error("Put the state on an edge!");
@@ -293,15 +302,15 @@ void flbit::run_algorithm() {
     status.algorithm_has_finished = true;
 }
 
-void flbit::run_algorithm_parallel() {
+template<typename Scalar> void flbit<Scalar>::run_algorithm_parallel() {
     if(tensors.state->get_name().empty()) tensors.state->set_name("state_real");
     if(not state_lbit) transform_to_lbit_basis();
     if(not state_lbit_init) {
-        state_lbit_init = std::make_unique<StateFinite>(*state_lbit);
+        state_lbit_init = std::make_unique<StateFinite<Scalar>>(*state_lbit);
         tools::finite::mps::normalize_state(*state_lbit_init, std::nullopt, NormPolicy::ALWAYS);
     }
     if(time_points.empty()) create_time_points();
-    if(cmp_t(status.delta_t.to_floating_point<cx128>(), 0.0)) update_time_step();
+    if(cmp_t(status.delta_t.template to_floating_point<cx128>(), 0.0)) update_time_step();
     tools::log->info("Starting {} algorithm with model [{}] for state [{}]", status.algo_type_sv(), enum2sv(settings::model::model_type),
                      tensors.state->get_name());
     if(not tensors.position_is_inward_edge()) throw except::logic_error("Put the state on an edge!");
@@ -314,7 +323,7 @@ void flbit::run_algorithm_parallel() {
     for(size_t tidx = 0; tidx < time_points.size(); ++tidx) {
         auto t_step                       = tid::tic_scope("step");
         auto gates_tevo                   = flbit_impl::get_time_evolution_gates(time_points[tidx], ham_swap_gates);
-        auto state_tevo                   = StateFinite();
+        auto state_tevo                   = StateFinite<Scalar>();
         auto status_tevo                  = AlgorithmStatus();
         std::tie(state_tevo, status_tevo) = // Avoid structured binding here due to a bug in clang <= 15
             flbit_impl::update_state(tidx, time_points[tidx], *state_lbit_init, gates_tevo, unitary_gates_2site_layers, status_init);
@@ -325,19 +334,19 @@ void flbit::run_algorithm_parallel() {
 #pragma omp ordered
         {
             status_tevo.event = StorageEvent::ITERATION;
-            tools::finite::h5::save::simulation(*h5file, state_tevo, *tensors.model, *tensors.edges, status_tevo, CopyPolicy::OFF);
+            tools::finite::h5::save::simulation(*h5file, state_tevo, tensors.get_model(), tensors.get_edges(), status_tevo, CopyPolicy::OFF);
             status_tevo.event = StorageEvent::NONE;
         }
         tools::log->trace("Finished step {}, iter {}, pos {}, dir {}", status_tevo.step, status_tevo.iter, status_tevo.position, status_tevo.direction);
         if(tidx + 1 == time_points.size()) {
-            status         = status_tevo;
-            *tensors.state = state_tevo;
+            status              = status_tevo;
+            tensors.get_state() = state_tevo;
         }
     }
     status.algorithm_has_finished = true;
 }
 
-void flbit::run_algorithm2() {
+template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
     // Get the interacting Hamiltonian in the diagonal l-bit basis in matrix form
     auto t_run = tid::tic_scope("run");
     auto t_eff = tid::tic_scope("eff");
@@ -377,11 +386,11 @@ void flbit::run_algorithm2() {
 
             auto pattern = fmt::format("b{}", tools::get_bitfield(sites.size(), bitseqs[idx],
                                                                                        BitOrder::Reverse)); // Sort states with "1" appearing left to right
-            auto state_i = StateFinite(AlgorithmType::fLBIT, sites.size(), 0, 2);
+            auto state_i = StateFinite<Scalar>(AlgorithmType::fLBIT, sites.size(), 0, 2);
             tools::finite::mps::init::set_product_state_on_axis_using_pattern(state_i, StateInitType::REAL, "z", pattern);
             tools::finite::mps::apply_circuit(state_i, u_and, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_circuit(state_i, u_mbl, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
-            hamiltonian_eff_diagonal[static_cast<long>(idx)] = tools::finite::measure::expectation_value(state_i, state_i, mpos);
+            hamiltonian_eff_diagonal[static_cast<long>(idx)] = tools::finite::measure::expectation_value<Scalar>(state_i, state_i, mpos);
             if(num::mod<size_t>(idx, bitseqs.size() / 64) == 0)
                 tools::log->info("{0:>6}/{1} {2} {3:.3e} s (thread {4:<2}/{5}): ⟨Ψ_i U_and† U_mbl H' U_mbl† U_and |Ψ_i⟩ = {6:.16f}{7:+.16f}", idx,
                                                       bitseqs.size(), pattern, t_eff->get_time(), omp_get_thread_num(), omp_get_num_threads(),
@@ -392,9 +401,9 @@ void flbit::run_algorithm2() {
                          }
                          {
         tools::log->info("Generating u_and^dagger psi_init");
-        auto u_and_adj_state_init = *tensors.state;
+        auto u_and_adj_state_init = tensors.get_state();
         tools::finite::mps::apply_circuit(u_and_adj_state_init, u_and, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
-        const auto u_and_adj_psi_init_tensor = tools::finite::mps::mps2tensor(u_and_adj_state_init);
+        const auto u_and_adj_psi_init_tensor = tools::finite::mps::mps2tensor<Scalar>(u_and_adj_state_init);
         const auto u_and_adj_psi_init_vector = tenx::VectorMap(u_and_adj_psi_init_tensor);
         tools::log->info("Starting time evolution");
 
@@ -425,13 +434,13 @@ void flbit::run_algorithm2() {
                 return std::exp(-1.0i * static_cast<fp64>(fmod_th_128.value()));
             };
             //            Eigen::VectorXcd tevo_eff_diagonal = (-1.0i * t_f64 * hamiltonian_eff_diagonal).array().exp();
-            Eigen::VectorXcd tevo_eff_diagonal = hamiltonian_eff_diagonal.unaryExpr(tevo_op);
+            VecType tevo_eff_diagonal = hamiltonian_eff_diagonal.unaryExpr(tevo_op);
             // Time evolve
             tools::log->debug("Time-evolving: {}", t_f64);
-            Eigen::VectorXcd psi_eff = tevo_eff_diagonal.asDiagonal() * u_and_adj_psi_init_vector;
+            VecType psi_eff = tevo_eff_diagonal.asDiagonal() * u_and_adj_psi_init_vector;
             tools::log->debug("Merging into state");
 
-            auto mps_eff = tenx::TensorMap(psi_eff, psi_eff.size(), 1, 1);
+            auto mps_eff = tenx::TensorCast(psi_eff, psi_eff.size(), 1, 1);
             // Merge these psi into the current state
             tools::finite::mps::merge_multisite_mps(state_eff, mps_eff, sites, 0, MergeEvent::GATE, svd_cfg);
             tools::finite::mps::apply_circuit(state_eff, u_and, CircuitOp::NONE, true, GateMove::ON, svd_cfg);
@@ -440,7 +449,7 @@ void flbit::run_algorithm2() {
             status_eff.phys_time = abs(time);
             status_eff.iter      = tidx + 1;
             status_eff.step      = status_eff.iter * settings::model::model_size;
-            status_eff.position  = state_eff.get_position<long>();
+            status_eff.position  = state_eff.template get_position<long>();
             status_eff.direction = state_eff.get_direction();
             status_eff.wall_time = tid::get_unscoped("t_tot").get_time();
             status_eff.algo_time = t_eff->get_time();
@@ -459,15 +468,16 @@ void flbit::run_algorithm2() {
     }
 }
 
-void flbit::update_state() {
+template<typename Scalar>
+void flbit<Scalar>::update_state() {
     /*!
      * \fn void update_state()
      */
-    auto delta_t = status.delta_t.to_floating_point<cx128>();
+    auto delta_t = status.delta_t.template to_floating_point<cx128>();
     tools::log->debug("Starting fLBIT: iter {} | Δt = ({:.2e}, {:.2e})", status.iter, f128_t(std::real(delta_t)), f128_t(std::imag(delta_t)));
     if(not state_lbit) throw except::logic_error("state_lbit == nullptr: Set the state in lbit basis before running an flbit step");
     if(not state_lbit_init) {
-        state_lbit_init = std::make_unique<StateFinite>(*state_lbit);
+        state_lbit_init = std::make_unique<StateFinite<Scalar>>(*state_lbit);
         tools::finite::mps::normalize_state(*state_lbit_init, std::nullopt, NormPolicy::ALWAYS);
     }
     *state_lbit = *state_lbit_init;
@@ -483,11 +493,11 @@ void flbit::update_state() {
 
     status.iter += 1;
     status.step += settings::model::model_size;
-    status.position  = tensors.get_position<long>();
+    status.position  = tensors.template get_position<long>();
     status.direction = tensors.state->get_direction();
 }
 
-void flbit::update_time_step() {
+template<typename Scalar> void flbit<Scalar>::update_time_step() {
     if(time_points.empty()) create_time_points();
     tools::log->trace("Updating time step");
     auto t_updtstep = tid::tic_scope("update_time_step");
@@ -498,12 +508,13 @@ void flbit::update_time_step() {
     }
     status.delta_t = time_points[status.iter];
     if(settings::flbit::time_scale == TimeScale::LOGSPACED)
-        if(cmp_t(status.delta_t.to_floating_point<cx128>(), 0.0)) throw except::logic_error("Expected nonzero delta_t after time step update");
-    tools::log->debug("Time step iter {} | Δt = {} | t = {:8.2e}", status.iter, status.delta_t.to_floating_point<cx64>(),
-                      status.phys_time.to_floating_point<fp64>());
+        if(cmp_t(status.delta_t.template to_floating_point<cx128>(), 0.0)) throw except::logic_error("Expected nonzero delta_t after time step update");
+    tools::log->debug("Time step iter {} | Δt = {} | t = {:8.2e}", status.iter, status.delta_t.template to_floating_point<cx64>(),
+                      status.phys_time.template to_floating_point<fp64>());
 }
 
-void flbit::check_convergence() {
+template<typename Scalar>
+void flbit<Scalar>::check_convergence() {
     if(not tensors.position_is_inward_edge()) return;
     auto t_con = tid::tic_scope("check_conv");
     //    check_convergence_entg_entropy();
@@ -531,7 +542,8 @@ void flbit::check_convergence() {
     }
 }
 
-void flbit::create_time_points() {
+template<typename Scalar>
+void flbit<Scalar>::create_time_points() {
     auto  t_crt = tid::tic_scope("create_time_points");
     cx128 time_start(static_cast<fp128>(settings::flbit::time_start_real), static_cast<fp128>(settings::flbit::time_start_imag));
     cx128 time_final(static_cast<fp128>(settings::flbit::time_final_real), static_cast<fp128>(settings::flbit::time_final_imag));
@@ -578,7 +590,8 @@ void flbit::create_time_points() {
         throw except::logic_error("Got time_points.size():[{}] != settings::flbit::time_num_steps:[{}]", time_points.size(), settings::flbit::time_num_steps);
 }
 
-void flbit::create_hamiltonian_gates() {
+template<typename Scalar>
+void flbit<Scalar>::create_hamiltonian_gates() {
     // Create the hamiltonian gates with n-site terms
     //
     // Note for 2-body terms
@@ -725,7 +738,8 @@ void flbit::create_hamiltonian_gates() {
     tensors.model->clear_cache();
 }
 
-void flbit::update_time_evolution_gates() {
+template<typename Scalar>
+void flbit<Scalar>::update_time_evolution_gates() {
     // Create the time evolution operators
     if(time_points.empty()) create_time_points();
     update_time_step();
@@ -734,7 +748,7 @@ void flbit::update_time_evolution_gates() {
 
     if(not has_swap_gates and not has_slow_gates) throw except::logic_error("Hamiltonian gates have not been constructed");
     if(has_swap_gates and has_slow_gates) tools::log->warn("Both swap/non-swap gates have been constructed: Normally only one type should be used");
-    auto delta_t = status.delta_t.to_floating_point<cx128>();
+    auto delta_t = status.delta_t.template to_floating_point<cx128>();
     if(has_swap_gates) {
         auto t_upd = tid::tic_scope("upd_time_evo_swap_gates");
         tools::log->debug("Updating time evolution swap gates to iter {} | Δt = ({:.2e}, {:.2e})", status.iter, f128_t(std::real(delta_t)),
@@ -755,7 +769,7 @@ void flbit::update_time_evolution_gates() {
     }
 }
 
-void flbit::create_unitary_circuit_gates() {
+template<typename Scalar> void flbit<Scalar>::create_unitary_circuit_gates() {
     if(unitary_gates_2site_layers.size() == settings::model::lbit::u_depth) return;
     if(settings::model::model_type == ModelType::lbit) {
         std::vector<double> fields;
@@ -779,7 +793,8 @@ void flbit::create_unitary_circuit_gates() {
     }
 }
 
-void flbit::time_evolve_lbit_state() {
+template<typename Scalar>
+void flbit<Scalar>::time_evolve_lbit_state() {
     auto t_evo          = tid::tic_scope("time_evo");
     auto svd_cfg        = svd::config(status.bond_lim, status.trnc_lim);
     svd_cfg.svd_lib     = svd::lib::lapacke;
@@ -788,7 +803,7 @@ void flbit::time_evolve_lbit_state() {
     bool has_slow_gates = not time_gates_1body.empty() or not time_gates_2body.empty() or not time_gates_3body.empty();
     if(has_swap_gates and has_slow_gates) throw except::logic_error("Both swap and non-swap time evolution gates found");
     if(not has_swap_gates and not has_slow_gates) throw except::logic_error("None of swap or non-swap time evolution gates found");
-    auto delta_t = status.delta_t.to_floating_point<cx128>();
+    auto delta_t = status.delta_t.template to_floating_point<cx128>();
     if(has_swap_gates) {
         tools::log->debug("Applying time evolution swap gates Δt = ({:.2e}, {:.2e})", f128_t(std::real(delta_t)), f128_t(std::imag(delta_t)));
         tools::finite::mps::apply_swap_gates(*state_lbit, time_swap_gates_1body, CircuitOp::NONE, GateMove::AUTO, svd_cfg);
@@ -821,53 +836,56 @@ void flbit::time_evolve_lbit_state() {
             tools::finite::mps::apply_gates(state_lbit_debug, time_gates_1body, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
         }
         tools::finite::mps::normalize_state(state_lbit_debug, std::nullopt, NormPolicy::IFNEEDED);
-        auto overlap = tools::finite::ops::overlap(*state_lbit_init, state_lbit_debug);
+        auto overlap = tools::finite::ops::overlap<Scalar>(*state_lbit_init, state_lbit_debug);
         tools::log->info("Debug overlap after time evolution: {:.16f}", overlap);
         if(std::abs(overlap - 1.0) > 10 * status.trnc_lim)
             throw except::runtime_error("State overlap after backwards time evolution is not 1: Got {:.16f}", overlap);
     }
 }
 
-void flbit::transform_to_real_basis() {
+template<typename Scalar>
+void flbit<Scalar>::transform_to_real_basis() {
     if(unitary_gates_2site_layers.size() != settings::model::lbit::u_depth) create_unitary_circuit_gates();
     auto t_map      = tid::tic_scope("l2r");
     auto svd_cfg    = svd::config(status.bond_lim, status.trnc_lim);
     svd_cfg.svd_lib = svd::lib::lapacke;
     svd_cfg.svd_rtn = svd::rtn::geauto;
-    if(not tensors.state) tensors.state = std::make_unique<StateFinite>(*state_lbit);
+    if(not tensors.state) tensors.state = std::make_unique<StateFinite<Scalar>>(*state_lbit);
     if(settings::flbit::use_mpo_circuit) {
-        *tensors.state = qm::lbit::transform_to_real_basis(*state_lbit, unitary_gates_mpo_layers, ledge, redge, svd_cfg);
+        tensors.get_state() = qm::lbit::transform_to_real_basis(*state_lbit, unitary_gates_mpo_layers, ledge, redge, svd_cfg);
 
     } else {
-        *tensors.state = qm::lbit::transform_to_real_basis(*state_lbit, unitary_gates_2site_layers, svd_cfg);
+        tensors.get_state() = qm::lbit::transform_to_real_basis(*state_lbit, unitary_gates_2site_layers, svd_cfg);
     }
     tensors.clear_measurements();
     tensors.clear_cache();
-    status.position  = tensors.get_position<long>();
+    status.position  = tensors.template get_position<long>();
     status.direction = tensors.state->get_direction();
 }
 
-void flbit::transform_to_lbit_basis() {
+template<typename Scalar>
+void flbit<Scalar>::transform_to_lbit_basis() {
     if(unitary_gates_2site_layers.size() != settings::model::lbit::u_depth) create_unitary_circuit_gates();
     auto t_map      = tid::tic_scope("r2l");
     auto svd_cfg    = svd::config(status.bond_lim, status.trnc_lim);
     svd_cfg.svd_lib = svd::lib::lapacke;
     svd_cfg.svd_rtn = svd::rtn::geauto;
-    if(not state_lbit) state_lbit = std::make_unique<StateFinite>(*tensors.state);
+    if(not state_lbit) state_lbit = std::make_unique<StateFinite<Scalar>>(tensors.get_state());
     if(settings::flbit::use_mpo_circuit) {
-        *state_lbit = qm::lbit::transform_to_lbit_basis(*tensors.state, unitary_gates_mpo_layers, ledge, redge, svd_cfg);
+        *state_lbit = qm::lbit::transform_to_lbit_basis(tensors.get_state(), unitary_gates_mpo_layers, ledge, redge, svd_cfg);
     } else {
-        *state_lbit = qm::lbit::transform_to_lbit_basis(*tensors.state, unitary_gates_2site_layers, svd_cfg);
+        *state_lbit = qm::lbit::transform_to_lbit_basis(tensors.get_state(), unitary_gates_2site_layers, svd_cfg);
     }
-    status.position  = tensors.get_position<long>();
+    status.position  = tensors.template get_position<long>();
     status.direction = tensors.state->get_direction();
 }
 
-void flbit::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
-    AlgorithmFinite::write_to_file(*tensors.state, *tensors.model, *tensors.edges, storage_event, copy_policy);
+template<typename Scalar>
+void flbit<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
+    AlgorithmFinite<Scalar>::write_to_file(tensors.get_state(), tensors.get_model(), tensors.get_edges(), storage_event, copy_policy);
     //    if(settings::storage::mps::state_lbit::policy != StoragePolicy::NONE) {
     //    if (not state_lbit) transform_to_lbit_basis();
-    //    AlgorithmFinite::write_to_file(*state_lbit, *tensors.model, *tensors.edges, storage_event, copy_policy);
+    //    AlgorithmFinite::write_to_file(*state_lbit, tensors.get_model(), tensors.get_edges(), storage_event, copy_policy);
     //    }
 
     if(h5file and storage_event == StorageEvent::INIT) {
@@ -997,7 +1015,7 @@ void flbit::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
         for(auto nrps : num::range(0, num_rps)) {
             auto eig_sol        = eig::solver();
             auto pattern        = std::string();
-            auto state_lbit_rps = StateFinite(AlgorithmType::fLBIT, settings::model::model_size, 0);
+            auto state_lbit_rps = StateFinite<Scalar>(AlgorithmType::fLBIT, settings::model::model_size, 0);
             tools::finite::mps::initialize_state(state_lbit_rps, StateInit::PRODUCT_STATE_NEEL_SHUFFLED, StateInitType::REAL, "+z", false, 1, pattern);
             tools::finite::mps::normalize_state(state_lbit_rps, svd_cfg, NormPolicy::ALWAYS);
             auto state_real_rps = qm::lbit::transform_to_real_basis(state_lbit_rps, unitary_gates_2site_layers,
@@ -1043,7 +1061,8 @@ void flbit::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
     }
 }
 
-void flbit::print_status(const AlgorithmStatus &st, const TensorsFinite &ts) {
+template<typename Scalar>
+void flbit<Scalar>::print_status(const AlgorithmStatus &st, const TensorsFinite<Scalar> &ts) {
     if(num::mod(st.iter, settings::print_freq(st.algo_type)) != 0) return;
     if(settings::print_freq(st.algo_type) == 0) return;
     auto        t_print = tid::tic_scope("print");
@@ -1079,4 +1098,4 @@ void flbit::print_status(const AlgorithmStatus &st, const TensorsFinite &ts) {
     tools::log->info(report);
 }
 
-void flbit::print_status() { print_status(status, tensors); }
+template<typename Scalar> void flbit<Scalar>::print_status() { print_status(status, tensors); }

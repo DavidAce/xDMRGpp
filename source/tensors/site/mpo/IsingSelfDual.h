@@ -10,11 +10,12 @@ namespace h5pp::hid {
 template<typename Scalar>
 class IsingSelfDual : public MpoSite<Scalar> {
     private:
-    h5tb_ising_selfdual    h5tb;
-    [[nodiscard]] double   get_coupling() const;
-    [[nodiscard]] double   get_field() const;
+    h5tb_ising_selfdual      h5tb;
+    [[nodiscard]] double     get_coupling() const;
+    [[nodiscard]] double     get_field() const;
     Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                   std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+                                     std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    using RealScalar = typename MpoSite<Scalar>::RealScalar;
     using MpoSite<Scalar>::extent2;
     using MpoSite<Scalar>::extent4;
     using MpoSite<Scalar>::all_mpo_parameters_have_been_set;
@@ -37,15 +38,15 @@ class IsingSelfDual : public MpoSite<Scalar> {
     void set_realization_averages(double J_avrg_, double h_avrg_);
     // Functions that final the base
     [[nodiscard]] std::unique_ptr<MpoSite<Scalar>> clone() const final;
-    [[nodiscard]] long                     get_spin_dimension() const final;
-    [[nodiscard]] TableMap                 get_parameters() const final;
-    [[nodiscard]] std::any                 get_parameter(std::string_view name) const final;
-    void                                   set_parameter(std::string_view name, std::any value) final;
-    void                                   print_parameter_names() const final;
-    void                                   print_parameter_values() const final;
-    void                                   set_parameters(TableMap &parameters) final;
-    void                                   randomize_hamiltonian() final;
-    void                                   set_averages(std::vector<TableMap> all_parameters, bool infinite = false) final;
-    void                                   save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const final;
-    void                                   load_hamiltonian(const h5pp::File &file, std::string_view model_prefix) final;
+    [[nodiscard]] long                             get_spin_dimension() const final;
+    [[nodiscard]] TableMap                         get_parameters() const final;
+    [[nodiscard]] std::any                         get_parameter(std::string_view name) const final;
+    void                                           set_parameter(std::string_view name, std::any value) final;
+    void                                           print_parameter_names() const final;
+    void                                           print_parameter_values() const final;
+    void                                           set_parameters(TableMap &parameters) final;
+    void                                           randomize_hamiltonian() final;
+    void                                           set_averages(std::vector<TableMap> all_parameters, bool infinite = false) final;
+    void                                           save_hamiltonian(h5pp::File &file, std::string_view hamiltonian_table_path) const final;
+    void                                           load_hamiltonian(const h5pp::File &file, std::string_view model_prefix) final;
 };

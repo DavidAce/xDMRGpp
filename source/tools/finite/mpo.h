@@ -13,30 +13,52 @@ class ModelFinite;
 namespace svd {
     struct config;
 }
-/* clang-format off */
 namespace tools::finite::mpo {
-    template<typename Scalar> extern std::pair<Eigen::Tensor<Scalar, 4>,Eigen::Tensor<Scalar, 4>>
-                                          swap_mpo    (const Eigen::Tensor<Scalar, 4> & mpoL, const Eigen::Tensor<Scalar, 4> & mpoR);
-    template<typename Scalar> extern void swap_sites  (ModelFinite<Scalar> & model, size_t posL, size_t posR, std::vector<size_t> & sites);
-
     template<typename Scalar>
-    extern std::vector<Eigen::Tensor<Scalar,4>> get_mpos_with_edges (const std::vector<Eigen::Tensor<Scalar,4>> & mpos, const Eigen::Tensor<Scalar,1> & Ledge, const Eigen::Tensor<Scalar,1> & Redge);
-    // extern std::vector<Eigen::Tensor<cx128,4>>  get_mpos_with_edges_t (const std::vector<Eigen::Tensor<cx128,4>> & mpos, const Eigen::Tensor<cx128,1> & Ledge, const Eigen::Tensor<cx128,1> & Redge);
+    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    /* clang-format off */
+    template <typename Scalar> extern std::pair<Eigen::Tensor<Scalar, 4>,Eigen::Tensor<Scalar, 4>>
+                                          swap_mpo    (const Eigen::Tensor<Scalar, 4> & mpoL, const Eigen::Tensor<Scalar, 4> & mpoR);
+    template <typename Scalar> extern void swap_sites  (ModelFinite<Scalar> & model, size_t posL, size_t posR, std::vector<size_t> & sites);
 
-    template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_compressed_mpos (std::vector<Eigen::Tensor<Scalar, 4>> mpos, MpoCompress mpoCompress);
-    template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_compressed_mpos (const std::vector<Eigen::Tensor<Scalar,4>> & mpos, const Eigen::Tensor<Scalar,1> & Ledge, const Eigen::Tensor<Scalar,1> & Redge, MpoCompress mpoCompress);
+    template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_mpos_with_edges (const std::vector<Eigen::Tensor<Scalar,4>> & mpos, const Eigen::Tensor<Scalar,1> & Ledge, const Eigen::Tensor<Scalar,1> & Redge);
     template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_svdcompressed_mpos (std::vector<Eigen::Tensor<Scalar, 4>> mpos);
-    template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_svdcompressed_mpos (const std::vector<Eigen::Tensor<Scalar,4>> & mpos, const Eigen::Tensor<Scalar,1> & Ledge, const Eigen::Tensor<Scalar,1> & Redge);
     template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_inverted_mpos (const std::vector<Eigen::Tensor<Scalar,4>> & mpos);
-    template<typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_deparallelized_mpos (std::vector<Eigen::Tensor<Scalar, 4>> mpos);
-    template<typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_deparallelized_mpos (const std::vector<Eigen::Tensor<Scalar,4>> & mpos, const Eigen::Tensor<Scalar,1> & Ledge, const Eigen::Tensor<Scalar,1> & Redge);
-    template<typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_deprojected_mpos (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model);
-    template<typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_merged_mpos(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn,
+    template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_deparallelized_mpos (std::vector<Eigen::Tensor<Scalar, 4>> mpos);
+    template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_deprojected_mpos (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model);
+    template <typename Scalar> extern std::vector<Eigen::Tensor<Scalar,4>> get_merged_mpos(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn,
                                                               const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_md,
                                                               const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_up,
                                                               const svd::config &svd_cfg);
+    /* clang-format on */
 
-
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 4>> get_compressed_mpos(std::vector<Eigen::Tensor<Scalar, 4>> mpos, MpoCompress mpoComp) {
+        switch(mpoComp) {
+            case MpoCompress::NONE: return mpos;
+            case MpoCompress::SVD: return get_svdcompressed_mpos(mpos);
+            case MpoCompress::DPL: return get_deparallelized_mpos(mpos);
+            default: return mpos;
+        }
+    }
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 4>> get_svdcompressed_mpos(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos, const Eigen::Tensor<Scalar, 1> &Ledge,
+                                                                 const Eigen::Tensor<Scalar, 1> &Redge) {
+        return get_svdcompressed_mpos(get_mpos_with_edges(mpos, Ledge, Redge));
+    }
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 4>> get_deparallelized_mpos(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos, const Eigen::Tensor<Scalar, 1> &Ledge,
+                                                                  const Eigen::Tensor<Scalar, 1> &Redge) {
+        return get_deparallelized_mpos(get_mpos_with_edges(mpos, Ledge, Redge));
+    }
+    template<typename Scalar>
+    std::vector<Eigen::Tensor<Scalar, 4>> get_compressed_mpos(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos, const Eigen::Tensor<Scalar, 1> &Ledge,
+                                                              const Eigen::Tensor<Scalar, 1> &Redge, MpoCompress mpoComp) {
+        switch(mpoComp) {
+            case MpoCompress::NONE: return mpos;
+            case MpoCompress::SVD: return get_svdcompressed_mpos(mpos, Ledge, Redge);
+            case MpoCompress::DPL: return get_deparallelized_mpos(mpos, Ledge, Redge);
+            default: return mpos;
+        }
+    }
 }
-
-/* clang-format on */

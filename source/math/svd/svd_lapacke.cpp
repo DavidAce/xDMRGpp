@@ -108,9 +108,10 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     assert(rows > 0);
     assert(cols > 0);
 
-    MatrixType<Scalar> A = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols); // gets destroyed in some routines
-    if(svd_save != svd::save::NONE) save_svd(A);
-    if(svd_save == svd::save::FAIL) saveMetaData.A = A;
+    MatrixType<Scalar> A    = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols); // gets destroyed in some routines
+    auto               dump = internal::DumpSVD<Scalar>();
+    dump.svd_save           = svd_save;
+    if(dump.svd_save != svd::save::NONE) dump.A = A;
     //    saveMetaData.svd_is_running = true; // TODO: REMOVE THIS LINE! We don't really want to save it every time!!
     //    saveMetaData.svd_save = save::ALL;  // TODO: REMOVE THIS LINE! We don't really want to save it every time!!
     //    saveMetaData.A = A; // TODO: REMOVE THIS LINE! We don't really want to save it every time!!
@@ -118,10 +119,10 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     auto t_suffix = benchmark ? fmt::format("{}", num::next_multiple<int>(sizeS, 5)) : "";
 
     // Initialize containers
-    MatrixType<Scalar>           U;
-    VectorType<RealType<Scalar>> S;
-    MatrixType<Scalar>           V;
-    MatrixType<Scalar>           VT;
+    MatrixType<Scalar>             U;
+    VectorType<RealScalar<Scalar>> S;
+    MatrixType<Scalar>             V;
+    MatrixType<Scalar>             VT;
     log->trace("Starting SVD with lapacke | rows {} | cols {}", rows, cols);
 
     int info   = 0;
@@ -787,17 +788,14 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
             if(!errmsg.empty()) throw except::runtime_error(errmsg);
         }
     } catch(const except::runtime_error &ex) {
-        // #if !defined(NDEBUG)
-        if(svd_save == svd::save::FAIL) {
-            saveMetaData.U                = U;
-            saveMetaData.S                = S;
-            saveMetaData.VT               = VT;
-            saveMetaData.rank             = rank;
-            saveMetaData.truncation_error = truncation_error;
-            saveMetaData.info             = info;
+        if(dump.svd_save == svd::save::FAIL) {
+            dump.U                = U;
+            dump.S                = S;
+            dump.VT               = VT;
+            dump.rank             = rank;
+            dump.truncation_error = truncation_error;
+            dump.info             = info;
         }
-
-        save_svd(); // Used on failure only if svd_save == svd::save::FAIL
         throw except::runtime_error("Lapacke SVD error \n"
                                     "  Singular values  = {::.5e}\n"
                                     "  Truncation Error = {:.4e}\n"
@@ -805,12 +803,15 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                                     "  Dims             = ({}, {})\n"
                                     "  Lapacke info     : {}\n"
                                     "  Error message    : {}\n",
-                                    S, truncation_error, rank, rows, cols, info, ex.what());
+                                    fv(S), truncation_error, rank, rows, cols, info, ex.what());
     }
-
-    if(svd_save != save::NONE) {
-        save_svd<Scalar>(U, S, VT, info);
-        saveMetaData = svd::internal::SaveMetaData{}; // Clear
+    if(dump.svd_save == svd::save::ALL or dump.svd_save == svd::save::LAST) {
+        dump.U                = U;
+        dump.S                = S;
+        dump.VT               = VT;
+        dump.rank             = rank;
+        dump.truncation_error = truncation_error;
+        dump.info             = info;
     }
     if(log->level() == spdlog::level::trace)
         log->trace("SVD with Lapacke finished successfully | truncation limit {:<8.2e} | rank {:<4} | nonzeros {:<4} | rank_max {:<4} | {:>4} x {:<4} | trunc "
@@ -821,7 +822,9 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     return std::make_tuple(U, S, VT);
 }
 
-template std::tuple<svd::MatrixType<fp32>, svd::VectorType<fp32>, svd::MatrixType<fp32>> svd::solver::do_svd_lapacke(const fp32 *, long, long) const;
-template std::tuple<svd::MatrixType<fp64>, svd::VectorType<fp64>, svd::MatrixType<fp64>> svd::solver::do_svd_lapacke(const fp64 *, long, long) const;
-template std::tuple<svd::MatrixType<cx32>, svd::VectorType<cx32>, svd::MatrixType<cx32>> svd::solver::do_svd_lapacke(const cx32 *, long, long) const;
-template std::tuple<svd::MatrixType<cx64>, svd::VectorType<cx64>, svd::MatrixType<cx64>> svd::solver::do_svd_lapacke(const cx64 *, long, long) const;
+template std::tuple<svd::MatrixType<fp32>, svd::VectorType<fp32>, svd::MatrixType<fp32>>    svd::solver::do_svd_lapacke(const fp32 *, long, long) const;
+template std::tuple<svd::MatrixType<fp64>, svd::VectorType<fp64>, svd::MatrixType<fp64>>    svd::solver::do_svd_lapacke(const fp64 *, long, long) const;
+template std::tuple<svd::MatrixType<fp128>, svd::VectorType<fp128>, svd::MatrixType<fp128>> svd::solver::do_svd_lapacke(const fp128 *, long, long) const;
+template std::tuple<svd::MatrixType<cx32>, svd::VectorType<cx32>, svd::MatrixType<cx32>>    svd::solver::do_svd_lapacke(const cx32 *, long, long) const;
+template std::tuple<svd::MatrixType<cx64>, svd::VectorType<cx64>, svd::MatrixType<cx64>>    svd::solver::do_svd_lapacke(const cx64 *, long, long) const;
+template std::tuple<svd::MatrixType<cx128>, svd::VectorType<cx128>, svd::MatrixType<cx128>> svd::solver::do_svd_lapacke(const cx128 *, long, long) const;

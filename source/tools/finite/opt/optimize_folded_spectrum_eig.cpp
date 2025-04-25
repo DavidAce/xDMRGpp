@@ -14,12 +14,13 @@
 
 namespace tools::finite::opt::internal {
 
-    template<typename Scalar>
-    void optimize_folded_spectrum_eig_executor(const TensorsFinite &tensors, const opt_mps &initial_mps, std::vector<opt_mps> &results, OptMeta &meta) {
+    template<typename CalcType, typename Scalar>
+    void optimize_folded_spectrum_eig_executor(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results,
+                                               OptMeta &meta) {
         // Solve the folded spectrum problem H²v=E²x (H² is positive definite)
         if(meta.optRitz == OptRitz::NONE) return;
         eig::solver solver;
-        auto        matrix = tensors.get_effective_hamiltonian_squared<Scalar>();
+        auto        matrix = tensors.template get_effective_hamiltonian_squared<CalcType>();
         auto        nev    = std::min<int>(static_cast<int>(matrix.dimension(0)), meta.eigs_nev.value_or(1));
         auto        il     = 1;
         auto        iu     = nev;
@@ -79,10 +80,20 @@ namespace tools::finite::opt::internal {
         // fmt::print("\n");
         // }
     }
+    template void optimize_folded_spectrum_eig_executor<fp64>(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps,
+                                                              std::vector<opt_mps<fp64>> &results, OptMeta &meta);
+    template void optimize_folded_spectrum_eig_executor<fp64>(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps,
+                                                              std::vector<opt_mps<cx64>> &results, OptMeta &meta);
+    template void optimize_folded_spectrum_eig_executor<cx64>(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps,
+                                                              std::vector<opt_mps<cx64>> &results, OptMeta &meta);
 
-    opt_mps optimize_folded_spectrum_eig(const TensorsFinite &tensors, const opt_mps &initial_mps, [[maybe_unused]] const AlgorithmStatus &status,
-                                         OptMeta &meta) {
-        if(meta.optSolver == OptSolver::EIGS) return optimize_folded_spectrum(tensors, initial_mps, status, meta);
+    template<typename Scalar>
+    opt_mps<Scalar> optimize_folded_spectrum_eig(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
+                                                 [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+        if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
+            throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
+        }
+        if(meta.optSolver == OptSolver::EIGS) return optimize_folded_spectrum(tensors, initial_mps, status, meta, elog);
 
         initial_mps.validate_initial_mps();
 
@@ -92,14 +103,23 @@ namespace tools::finite::opt::internal {
 
         tools::log->debug("optimize_folded_spectrum_eig: ritz {} | type {} | algo {}", enum2sv(meta.optRitz), enum2sv(meta.optType), enum2sv(meta.optAlgo));
 
-        reports::eigs_add_entry(initial_mps, spdlog::level::debug);
-        auto                 t_var = tid::tic_scope("eig-xdmrg", tid::level::higher);
-        std::vector<opt_mps> results;
-        switch(meta.optType) {
-            case OptType::FP64: optimize_folded_spectrum_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CX64: optimize_folded_spectrum_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
-            default: throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
+        elog.eigs_add_entry(initial_mps, spdlog::level::debug);
+        auto                         t_var = tid::tic_scope("eig-xdmrg", tid::level::higher);
+        std::vector<opt_mps<Scalar>> results;
+        if constexpr(sfinae::is_std_complex_v<Scalar>) {
+            switch(meta.optType) {
+                case OptType::FP64: optimize_folded_spectrum_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
+                case OptType::CX64: optimize_folded_spectrum_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+                default: throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
+            }
+        } else {
+            switch(meta.optType) {
+                case OptType::FP64: optimize_folded_spectrum_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
+                case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
+                default: throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
+            }
         }
+
         auto t_post = tid::tic_scope("post");
         if(results.empty()) {
             meta.optExit = OptExit::FAIL_ERROR;
@@ -107,10 +127,19 @@ namespace tools::finite::opt::internal {
         }
 
         if(results.size() >= 2) {
-            std::sort(results.begin(), results.end(), Comparator(meta)); // Smallest eigenvalue (i.e. variance) wins
+            std::sort(results.begin(), results.end(), Comparator<Scalar>(meta)); // Smallest eigenvalue (i.e. variance) wins
         }
 
-        for(const auto &mps : results) reports::eigs_add_entry(mps, spdlog::level::debug);
+        for(const auto &mps : results) elog.eigs_add_entry(mps, spdlog::level::debug);
         return results.front();
     }
+    /* clang-format off */
+    template opt_mps<fp32>  internal::optimize_folded_spectrum_eig(const TensorsFinite<fp32> &tensors, const opt_mps<fp32> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp32> &elog);
+    template opt_mps<fp64>  internal::optimize_folded_spectrum_eig(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp64> &elog);
+    template opt_mps<fp128> internal::optimize_folded_spectrum_eig(const TensorsFinite<fp128> &tensors, const opt_mps<fp128> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<fp128> &elog);
+    template opt_mps<cx32>  internal::optimize_folded_spectrum_eig(const TensorsFinite<cx32> &tensors, const opt_mps<cx32> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx32> &elog);
+    template opt_mps<cx64>  internal::optimize_folded_spectrum_eig(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx64> &elog);
+    template opt_mps<cx128> internal::optimize_folded_spectrum_eig(const TensorsFinite<cx128> &tensors, const opt_mps<cx128> &initial_mps, [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<cx128> &elog);
+    /* clang-format on */
+
 }

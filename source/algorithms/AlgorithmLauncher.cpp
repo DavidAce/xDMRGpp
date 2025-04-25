@@ -165,11 +165,56 @@ void AlgorithmLauncher::setup_temp_path() {
 
 void AlgorithmLauncher::run_algorithms() {
     if(h5file) h5file->writeDataset(false, "common/finished_all");
-    run_idmrg();
-    run_fdmrg();
-    run_flbit();
-    run_xdmrg();
-    run_itebd();
+    switch(settings::precision::algoScalar) {
+        case ScalarType::FP32: {
+            run_idmrg<fp32>();
+            run_fdmrg<fp32>();
+            run_flbit<fp32>();
+            run_xdmrg<fp32>();
+            run_itebd<fp32>();
+            break;
+        }
+        case ScalarType::FP64: {
+            run_idmrg<fp64>();
+            run_fdmrg<fp64>();
+            run_flbit<fp64>();
+            run_xdmrg<fp64>();
+            run_itebd<fp64>();
+            break;
+        }
+        case ScalarType::FP128: {
+            run_idmrg<fp128>();
+            run_fdmrg<fp128>();
+            run_flbit<fp128>();
+            run_xdmrg<fp128>();
+            run_itebd<fp128>();
+            break;
+        }
+        case ScalarType::CX32: {
+            run_idmrg<cx32>();
+            run_fdmrg<cx32>();
+            run_flbit<cx32>();
+            run_xdmrg<cx32>();
+            run_itebd<cx32>();
+            break;
+        }
+        case ScalarType::CX64: {
+            run_idmrg<cx64>();
+            run_fdmrg<cx64>();
+            run_flbit<cx64>();
+            run_xdmrg<cx64>();
+            run_itebd<cx64>();
+            break;
+        }
+        case ScalarType::CX128: {
+            run_idmrg<cx128>();
+            run_fdmrg<cx128>();
+            run_flbit<cx128>();
+            run_xdmrg<cx128>();
+            run_itebd<cx128>();
+            break;
+        }
+    }
 
     if(h5file) {
         h5file->writeDataset(true, "common/finished_all");
@@ -177,43 +222,50 @@ void AlgorithmLauncher::run_algorithms() {
     }
     tools::log->info("All simulations finished");
 }
-
+template<typename Scalar>
 void AlgorithmLauncher::run_idmrg() {
     if(settings::idmrg::on) {
-        idmrg idmrg(h5file);
+        idmrg<Scalar> idmrg(h5file);
         idmrg.run();
     }
 }
 
+template<typename Scalar>
 void AlgorithmLauncher::run_fdmrg() {
     if(settings::fdmrg::on) {
-        fdmrg fdmrg(h5file);
+        fdmrg<Scalar> fdmrg(h5file);
         fdmrg.run();
     }
 }
 
+template<typename Scalar>
 void AlgorithmLauncher::run_flbit() {
     if(settings::flbit::on) {
-        flbit flbit(h5file);
-        try {
-            flbit.run();
-        } catch(const except::resume_error &ex) {
-            tools::log->error("Failed to resume simulation: {}", ex.what());
-            if(settings::storage::file_collision_policy == FileCollisionPolicy::REVIVE) {
-                tools::log->warn("Truncating file [{}]", settings::storage::output_filepath);
-                h5pp::fs::remove(settings::storage::output_filepath);
-                rnd::seed(settings::input::seed); // Restart the rng from the same seed
-                start_h5file();
-                setup_temp_path();
+        if constexpr(std::is_same_v<Scalar, cx64>) {
+            flbit<Scalar> flbit(h5file);
+            try {
                 flbit.run();
+            } catch(const except::resume_error &ex) {
+                tools::log->error("Failed to resume simulation: {}", ex.what());
+                if(settings::storage::file_collision_policy == FileCollisionPolicy::REVIVE) {
+                    tools::log->warn("Truncating file [{}]", settings::storage::output_filepath);
+                    h5pp::fs::remove(settings::storage::output_filepath);
+                    rnd::seed(settings::input::seed); // Restart the rng from the same seed
+                    start_h5file();
+                    setup_temp_path();
+                    flbit.run();
+                }
             }
+        } else {
+            throw except::runtime_error("flbit is only supported for cx64. Got [{}]", sfinae::type_name<Scalar>());
         }
     }
 }
 
+template<typename Scalar>
 void AlgorithmLauncher::run_xdmrg() {
     if(settings::xdmrg::on) {
-        xdmrg xdmrg(h5file);
+        xdmrg<Scalar> xdmrg(h5file);
         try {
             xdmrg.run();
         } catch(const except::resume_error &ex) {
@@ -230,9 +282,14 @@ void AlgorithmLauncher::run_xdmrg() {
     }
 }
 
+template<typename Scalar>
 void AlgorithmLauncher::run_itebd() {
     if(settings::itebd::on) {
-        itebd itebd(h5file);
-        itebd.run();
+        if constexpr(std::is_same_v<Scalar, cx64>) {
+            itebd<Scalar> itebd(h5file);
+            itebd.run();
+        } else {
+            throw except::runtime_error("itebd is only supported for cx64. Got [{}]", sfinae::type_name<Scalar>());
+        }
     }
 }

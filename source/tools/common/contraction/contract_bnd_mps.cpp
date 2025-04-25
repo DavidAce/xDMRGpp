@@ -3,7 +3,6 @@
 #include "math/tenx.h"
 #include <fmt/ranges.h>
 
-
 /* clang-format off */
 using namespace tools::common::contraction;
 
@@ -27,11 +26,17 @@ template void tools::common::contraction::contract_bnd_mps(      fp32 *       re
 template void tools::common::contraction::contract_bnd_mps(      fp64 *       res_ptr, std::array<long,3> res_dims,
                                                            const fp64 * const bnd_ptr, std::array<long,1> bnd_dims,
                                                            const fp64 * const mps_ptr, std::array<long,3> mps_dims);
+template void tools::common::contraction::contract_bnd_mps(      fp128 *       res_ptr, std::array<long,3> res_dims,
+                                                           const fp128 * const bnd_ptr, std::array<long,1> bnd_dims,
+                                                           const fp128 * const mps_ptr, std::array<long,3> mps_dims);
 template void tools::common::contraction::contract_bnd_mps(      cx32 *       res_ptr, std::array<long,3> res_dims,
                                                            const cx32 * const bnd_ptr, std::array<long,1> bnd_dims,
                                                            const cx32 * const mps_ptr, std::array<long,3> mps_dims);
 template void tools::common::contraction::contract_bnd_mps(      cx64 *       res_ptr, std::array<long,3> res_dims,
                                                            const cx64 * const bnd_ptr, std::array<long,1> bnd_dims,
                                                            const cx64 * const mps_ptr, std::array<long,3> mps_dims);
+template void tools::common::contraction::contract_bnd_mps(      cx128 *       res_ptr, std::array<long,3> res_dims,
+                                                           const cx128 * const bnd_ptr, std::array<long,1> bnd_dims,
+                                                           const cx128 * const mps_ptr, std::array<long,3> mps_dims);
 
 /* clang-format on */

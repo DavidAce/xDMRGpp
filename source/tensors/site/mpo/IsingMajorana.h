@@ -8,14 +8,9 @@ namespace h5pp::hid {
     class h5t;
 }
 
-template<typename Scalar = cx64>
+template<typename Scalar>
 class IsingMajorana : public MpoSite<Scalar> {
-    protected:
-    h5tb_ising_majorana    h5tb;
-    [[nodiscard]] double   get_coupling() const;
-    [[nodiscard]] double   get_field() const;
-    Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
-                                   std::optional<std::vector<size_t>> skip = std::nullopt) const final;
+    using RealScalar = typename MpoSite<Scalar>::RealScalar;
     using MpoSite<Scalar>::extent2;
     using MpoSite<Scalar>::extent4;
     using MpoSite<Scalar>::all_mpo_parameters_have_been_set;
@@ -25,12 +20,19 @@ class IsingMajorana : public MpoSite<Scalar> {
     using MpoSite<Scalar>::get_position;
     using MpoSite<Scalar>::unique_id;
     using MpoSite<Scalar>::unique_id_sq;
+    using MpoSite<Scalar>::mpo_internal;
     using MpoSite<Scalar>::mpo_squared;
     using MpoSite<Scalar>::build_mpo;
     using MpoSite<Scalar>::build_mpo_squared;
+    using TableMap = typename MpoSite<Scalar>::TableMap;
+
+    h5tb_ising_majorana      h5tb;
+    [[nodiscard]] RealScalar get_coupling() const;
+    [[nodiscard]] RealScalar get_field() const;
+    Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
+                                     std::optional<std::vector<size_t>> skip = std::nullopt) const final;
 
     public:
-    using TableMap = typename MpoSite<Scalar>::TableMap;
 
     explicit IsingMajorana(ModelType model_type_, size_t position_);
 

@@ -126,6 +126,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     std::array<double, 3> mat_costs_cmp = {};
     std::array<double, 2> mat_costs_trf = {};
     switch(prec) {
+            /* clang-format off */
         case Precision::SINGLE: {
             mat_costs_rho = is_real ? state.template get_reduced_density_matrix_cost<fp32>(sites) : state.template get_reduced_density_matrix_cost<cx32>(sites);
             mat_costs_cmp = is_real ? state.template get_reduced_density_matrix_cost<fp32>(cites) : state.template get_reduced_density_matrix_cost<cx32>(cites);
@@ -138,6 +139,13 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
             mat_costs_trf = is_real ? state.template get_transfer_matrix_costs<fp64>(sites, side) : state.template get_transfer_matrix_costs<cx64>(sites, side);
             break;
         }
+        case Precision::QUADRUPLE: {
+            mat_costs_rho = is_real ? state.template get_reduced_density_matrix_cost<fp128>(sites) : state.template get_reduced_density_matrix_cost<cx128>(sites);
+            mat_costs_cmp = is_real ? state.template get_reduced_density_matrix_cost<fp128>(cites) : state.template get_reduced_density_matrix_cost<cx128>(cites);
+            mat_costs_trf = is_real ? state.template get_transfer_matrix_costs<fp128>(sites, side) : state.template get_transfer_matrix_costs<cx128>(sites, side);
+            break;
+        }
+            /* clang-format on */
     }
 
     auto min_cost_rho_idx = std::distance(mat_costs_rho.begin(), std::min_element(mat_costs_rho.begin(), mat_costs_rho.end()));
@@ -235,6 +243,40 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                 }
                 solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
                 evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp64>(solver.result)); // Eigenvalues
+            }
+            break;
+        }
+        case Precision::QUADRUPLE: {
+            if(is_real) {
+                Eigen::Tensor<fp128, 2> mat;
+                if(min_cost_idx == 0) {
+                    mat      = state.template get_reduced_density_matrix<fp128>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                    // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after rho");
+                } else if(min_cost_idx == 1) {
+                    mat      = state.template get_reduced_density_matrix<fp128>(cites);
+                    mat_time = tid::get("rho").get_last_interval();
+                    // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after cmp");
+                } else if(min_cost_idx == 2) {
+                    mat      = state.template get_transfer_matrix<fp128>(sites, side);
+                    mat_time = tid::get("trf").get_last_interval();
+                }
+                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
+                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp128>(solver.result)); // Eigenvalues
+            } else {
+                Eigen::Tensor<fp128, 2> mat;
+                if(min_cost_idx == 0) {
+                    mat      = state.template get_reduced_density_matrix<fp128>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                } else if(min_cost_idx == 1) {
+                    mat      = state.template get_reduced_density_matrix<fp128>(sites);
+                    mat_time = tid::get("rho").get_last_interval();
+                } else if(min_cost_idx == 2) {
+                    mat      = state.template get_transfer_matrix<fp128>(sites, side);
+                    mat_time = tid::get("trf").get_last_interval();
+                }
+                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
+                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp128>(solver.result)); // Eigenvalues
             }
             break;
         }

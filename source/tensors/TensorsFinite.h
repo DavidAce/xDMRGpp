@@ -5,9 +5,14 @@
 #include "math/svd/config.h"
 #include "measure/MeasurementsTensorsFinite.h"
 #include "tensors/site/env/EnvPair.h"
+#include "tid/tid.h"
+#include "tools/common/log.h"
 #include <array>
 #include <complex>
 #include <memory>
+#include <tensors/edges/EdgesFinite.h>
+#include <tensors/model/ModelFinite.h>
+#include <tensors/state/StateFinite.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 
 class TensorsLocal;
@@ -22,7 +27,8 @@ struct BondExpansionResult;
 namespace tools::finite::opt {
     struct OptMeta;
 }
-template<typename Scalar = cx64>
+
+template<typename Scalar>
 class TensorsFinite {
     using OptMeta    = tools::finite::opt::OptMeta;
     using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
@@ -36,10 +42,12 @@ class TensorsFinite {
         std::optional<Eigen::Tensor<T, 2>> effective_hamiltonian_squared    = std::nullopt;
     };
 
-    mutable Cache<fp32> cache_fp32;
-    mutable Cache<fp64> cache_fp64;
-    mutable Cache<cx32> cache_cx32;
-    mutable Cache<cx64> cache_cx64;
+    mutable Cache<fp32>  cache_fp32;
+    mutable Cache<fp64>  cache_fp64;
+    mutable Cache<fp128> cache_fp128;
+    mutable Cache<cx32>  cache_cx32;
+    mutable Cache<cx64>  cache_cx64;
+    mutable Cache<cx128> cache_cx128;
     template<typename T>
     Cache<T> &get_cache();
     template<typename T>
@@ -81,9 +89,9 @@ class TensorsFinite {
                           std::string &pattern);
     void normalize_state(std::optional<svd::config> svd_cfg = std::nullopt, NormPolicy policy = NormPolicy::IFNEEDED);
     /* clang-format off */
-    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 3>            &get_multisite_mps() const;
-    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo() const;
-    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo_squared() const;
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 3>            &get_multisite_mps() const { return state-> template get_multisite_mps<T>();}
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo() const { return model->template get_multisite_mpo<T>();}
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo_squared() const { return model-> template get_multisite_mpo<T>();}
     [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_ene_blk() const;
     [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_var_blk() const;
     template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_ene_blk_as() const;
@@ -137,7 +145,7 @@ class TensorsFinite {
     size_t              move_center_point_to_pos(long pos, std::optional<svd::config> svd_cfg = std::nullopt);
     size_t              move_center_point_to_inward_edge(std::optional<svd::config> svd_cfg = std::nullopt);
     size_t              move_center_point_to_middle(std::optional<svd::config> svd_cfg = std::nullopt);
-    void merge_multisite_mps(const Eigen::Tensor<cx64, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg = std::nullopt,
+    void merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg = std::nullopt,
                              LogPolicy log_policy = LogPolicy::SILENT);
 
     BondExpansionResult<Scalar> expand_bonds(const OptMeta &optMeta);
@@ -160,3 +168,75 @@ class TensorsFinite {
     void clear_measurements(LogPolicy logPolicy = LogPolicy::SILENT) const;
     void clear_cache(LogPolicy logPolicy = LogPolicy::SILENT) const;
 };
+
+template<typename T>
+extern Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &envL, const Eigen::Tensor<T, 3> &envR);
+
+template<typename Scalar>
+template<typename T>
+T TensorsFinite<Scalar>::get_position() const {
+    return state->template get_position<T>();
+}
+
+template<typename Scalar>
+template<typename T>
+T TensorsFinite<Scalar>::get_length() const {
+    assert(state->get_length() == model->get_length());
+    assert(state->get_length() == edges->get_length());
+    return state->template get_length<T>();
+}
+
+template<typename Scalar>
+template<typename T>
+const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian() const {
+    auto  t_ham = tid::tic_scope("ham");
+    auto &cache = get_cache<T>();
+    if(cache.effective_hamiltonian and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian.value();
+    const auto &mpo = get_multisite_mpo<T>();
+    const auto &env = get_multisite_env_ene_blk_as<T>();
+    tools::log->trace("Contracting effective multisite Hamiltonian");
+    cache.cached_sites_hamiltonian = active_sites;
+    cache.effective_hamiltonian    = contract_mpo_env<T>(mpo, env.L, env.R);
+    return cache.effective_hamiltonian.value();
+}
+
+template<typename Scalar>
+template<typename T>
+const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian_squared() const {
+    auto  t_ham = tid::tic_scope("ham²");
+    auto &cache = get_cache<T>();
+    if(cache.effective_hamiltonian_squared and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian_squared.value();
+
+    tools::log->trace("TensorsFinite<Scalar>::get_effective_hamiltonian_squared(): contracting active sites {}", active_sites);
+    const auto &mpo                        = get_multisite_mpo_squared<T>();
+    const auto &env                        = get_multisite_env_var_blk_as<T>();
+    cache.cached_sites_hamiltonian_squared = active_sites;
+    cache.effective_hamiltonian_squared    = contract_mpo_env<T>(mpo, env.L, env.R);
+    return cache.effective_hamiltonian_squared.value();
+}
+
+template<typename Scalar>
+template<typename T>
+env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_var_blk_as() const {
+    return std::as_const(*edges).template get_multisite_env_var_blk_as<T>();
+}
+
+template<typename Scalar>
+template<typename T>
+env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_ene_blk_as() const {
+    return std::as_const(*edges).template get_multisite_env_ene_blk_as<T>();
+}
+
+template<typename Scalar>
+template<typename T>
+typename TensorsFinite<Scalar>::template Cache<T> &TensorsFinite<Scalar>::get_cache() const {
+    /* clang-format off */
+  if constexpr(std::is_same_v<T, fp32>) { return cache_fp32; }
+  else if constexpr(std::is_same_v<T, fp64>) { return cache_fp64; }
+  else if constexpr(std::is_same_v<T, fp128>) { return cache_fp128; }
+  else if constexpr(std::is_same_v<T, cx32>) { return cache_cx32; }
+  else if constexpr(std::is_same_v<T, cx64>) { return cache_cx64; }
+  else if constexpr(std::is_same_v<T, cx128>) { return cache_cx128; }
+  else throw std::logic_error("unrecognized cache type T");
+    /* clang-format on */
+}

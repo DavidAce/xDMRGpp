@@ -175,7 +175,7 @@ namespace tools::finite::h5 {
         if(algo_type != AlgorithmType::fLBIT) {
             auto measurements_path = fmt::format("{}/measurements", state_prefix);
             auto expected_measurements =
-                h5file.readTableRecords<std::optional<h5pp_table_measurements_finite::table>>(measurements_path, h5pp::TableSelection::LAST);
+                h5file.readTableRecords<std::optional<typename h5pp_table_measurements_finite<Scalar>::table>>(measurements_path, h5pp::TableSelection::LAST);
             if(expected_measurements and expected_measurements->iter == status.iter) {
                 // In this case we have loaded state_real from file.
                 // In the fLBIT case, the MPO's belong to state_lbit, so measuring the energy on state_real w.r.t the lbit-hamiltonian makes no sense.

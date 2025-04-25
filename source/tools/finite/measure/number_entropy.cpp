@@ -454,7 +454,7 @@ std::vector<RealScalar<Scalar>> compute_probability_rrp(const StateFinite<Scalar
     auto                            state_pos = state.template get_position<long>();
     auto                            state_len = state.template get_length<long>();
     std::vector<RealScalar<Scalar>> probability(safe_cast<size_t>(state_len + 1), 0.0);
-    RealScalar<Scalar>              probability_sum = 0.0;
+    auto                            probability_sum = RealScalar<Scalar>{0};
     // Figure out which schmidt values to use
     auto                                 t_figout = tid::tic_scope("figout", tid::level::highest);
     Eigen::Tensor<RealScalar<Scalar>, 1> schmidt_values;
@@ -469,8 +469,8 @@ std::vector<RealScalar<Scalar>> compute_probability_rrp(const StateFinite<Scalar
     t_figout.toc();
 
     // Create optional slots for each schmidt value
-    auto   t_slots                   = tid::tic_scope("slots", tid::level::highest);
-    double amplitude_cutoff          = 1e-4;
+    auto t_slots                     = tid::tic_scope("slots", tid::level::highest);
+    auto amplitude_cutoff            = RealScalar<Scalar>{1e-4f};
     using MatrixReal                 = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorReal                 = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
     MatrixReal      ampacc_sq_matrix = MatrixReal::Zero(schmidt_values.size(), state_len + 1);
@@ -500,7 +500,7 @@ std::vector<RealScalar<Scalar>> compute_probability_rrp(const StateFinite<Scalar
             auto ssq = schmidt_squared[alpha];      // The value λ² is added to probability if the amplitude is greater than cutoff.
             // Check that the probability would not grow too large, in case we are erroneously considering an amplitude
             // This is important when we work with a small cutoff, where sometimes numerical noise is mistaken for a signal.
-            bool accept = asq > amplitude_cutoff and probability_sum + ssq <= 1.0 + 1e-8;
+            bool accept = asq > amplitude_cutoff and probability_sum + ssq <= RealScalar<Scalar>{1} + RealScalar<Scalar>{1e-8f};
             if(accept) {
                 if constexpr(side == Side::LEFT) {
                     if(state_pos < tgt_pos) {
@@ -542,7 +542,7 @@ std::vector<RealScalar<Scalar>> compute_probability_rrp(const StateFinite<Scalar
                 std::string_view cacheh_str = a.cache_hit ? "cache" : "";
                 tools::log->info("pos {:>2} | n {:>2} | bits {} | 1-P {:10.3e} | a({:>4})² {:9.3e} (cut {:8.2e}) | λ({:>4})² "
                                  "{:9.3e} [{:6}|{:5}]",
-                                 tgt_pos, n, a.to_string(), 1 - probability_sum, alpha, asq, amplitude_cutoff, alpha, ssq, accept_str, cacheh_str);
+                                 tgt_pos, n, a.to_string(), fp(1 - probability_sum), alpha, asq, fp(amplitude_cutoff), alpha, ssq, accept_str, cacheh_str);
             }
         }
         if(schmidt_taken.isOnes()) break;                                                    // All schmidt values squared have been added to probability
@@ -550,17 +550,17 @@ std::vector<RealScalar<Scalar>> compute_probability_rrp(const StateFinite<Scalar
         while(schmidt_taken(max_alpha - 1) == 1 and max_alpha >= min_alpha + 1) max_alpha--; // Decrease max_alpha to skip the last taken schmidt values
     }
     // Sanity check on probabilities
-    auto p_sum = std::accumulate(probability.begin(), probability.end(), 0.0);
+    auto p_sum = std::accumulate(probability.begin(), probability.end(), RealScalar<Scalar>{0});
     tools::log->trace("p(n)[{:2}] = {:18.16f}", tgt_pos, fp(p_sum));
-    if(std::abs(p_sum - 1.0) > 1e-4) {
-        tools::log->dump_backtrace();
-        tools::log->info("p(n)[{:>2}] = {:18.16f}", tgt_pos, p_sum);
-        throw except::runtime_error("p_sum - 1.0 = {:.8e}", fp(p_sum - 1.0));
-    }
-    if(std::abs(p_sum - 1.0) > 1e-8) {
+    if(std::abs(p_sum - RealScalar<Scalar>{1}) > RealScalar<Scalar>{1e-4f}) {
         tools::log->dump_backtrace();
         tools::log->info("p(n)[{:>2}] = {:18.16f}", tgt_pos, fp(p_sum));
-        tools::log->warn("p_sum - 1.0 = {:.8e}", fp(p_sum - 1.0));
+        throw except::runtime_error("p_sum - 1.0 = {:.8e}", fp(p_sum - RealScalar<Scalar>{1}));
+    }
+    if(std::abs(p_sum - RealScalar<Scalar>{1}) > RealScalar<Scalar>{1e-8f}) {
+        tools::log->dump_backtrace();
+        tools::log->info("p(n)[{:>2}] = {:18.16f}", tgt_pos, fp(p_sum));
+        tools::log->warn("p_sum - 1.0 = {:.8e}", fp(p_sum - RealScalar<Scalar>{1}));
     }
     return probability;
 }
@@ -680,7 +680,7 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::number_entropies(const S
             if(mps->get_label() == "B") throw except::logic_error("Expected A/AC site, got B");
             auto amplitudes                     = generate_amplitude_list_rrp<Scalar, From::A>(state_llen, pos);
             auto probability                    = compute_probability_rrp<Scalar, Side::LEFT>(state_copy, pos, amplitudes, cache);
-            auto number_entropy                 = -std::accumulate(probability.begin(), probability.end(), 0.0, von_neumann_sum);
+            auto number_entropy                 = -std::accumulate(probability.begin(), probability.end(), RealScalar<Scalar>{0}, von_neumann_sum);
             number_entropies[idx]               = std::abs(number_entropy);
             auto                psize           = safe_cast<long>(probability.size());
             std::array<long, 2> offset          = {0, pos + 1};
@@ -698,7 +698,7 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::number_entropies(const S
             if(mps->get_label() != "B") throw except::logic_error("Expected B site, got {}", mps->get_label());
             auto amplitudes                     = generate_amplitude_list_rrp<Scalar, From::B>(state_llen, pos);
             auto probability                    = compute_probability_rrp<Scalar, Side::LEFT>(state_copy, pos, amplitudes, cache);
-            auto number_entropy                 = -std::accumulate(probability.begin(), probability.end(), 0.0, von_neumann_sum);
+            auto number_entropy                 = -std::accumulate(probability.begin(), probability.end(), RealScalar<Scalar>{0}, von_neumann_sum);
             number_entropies[idx]               = std::abs(number_entropy);
             auto                psize           = safe_cast<long>(probability.size());
             std::array<long, 2> offset          = {0, pos};
@@ -734,6 +734,12 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::number_entropies(const S
     */
     /* clang-format on */
 }
+template std::vector<fp32>  tools::finite::measure::number_entropies(const StateFinite<fp32> &state);
+template std::vector<fp64>  tools::finite::measure::number_entropies(const StateFinite<fp64> &state);
+template std::vector<fp128> tools::finite::measure::number_entropies(const StateFinite<fp128> &state);
+template std::vector<fp32>  tools::finite::measure::number_entropies(const StateFinite<cx32> &state);
+template std::vector<fp64>  tools::finite::measure::number_entropies(const StateFinite<cx64> &state);
+template std::vector<fp128> tools::finite::measure::number_entropies(const StateFinite<cx128> &state);
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::number_entropy_current(const StateFinite<Scalar> &state) {
@@ -749,6 +755,10 @@ RealScalar<Scalar> tools::finite::measure::number_entropy_current(const StateFin
     } else
         return 0;
 }
+template fp32  tools::finite::measure::number_entropy_current(const StateFinite<fp32> &state);
+template fp64  tools::finite::measure::number_entropy_current(const StateFinite<fp64> &state);
+template fp128 tools::finite::measure::number_entropy_current(const StateFinite<fp128> &state);
+template fp32  tools::finite::measure::number_entropy_current(const StateFinite<cx32> &state);
 template fp64  tools::finite::measure::number_entropy_current(const StateFinite<cx64> &state);
 template fp128 tools::finite::measure::number_entropy_current(const StateFinite<cx128> &state);
 
@@ -766,6 +776,13 @@ RealScalar<Scalar> tools::finite::measure::number_entropy_midchain(const StateFi
     } else
         return 0;
 }
+
+template fp32  tools::finite::measure::number_entropy_midchain(const StateFinite<fp32> &state);
+template fp64  tools::finite::measure::number_entropy_midchain(const StateFinite<fp64> &state);
+template fp128 tools::finite::measure::number_entropy_midchain(const StateFinite<fp128> &state);
+template fp32  tools::finite::measure::number_entropy_midchain(const StateFinite<cx32> &state);
+template fp64  tools::finite::measure::number_entropy_midchain(const StateFinite<cx64> &state);
+template fp128 tools::finite::measure::number_entropy_midchain(const StateFinite<cx128> &state);
 
 // template<typename AmplitudesT, typename CacheT>
 // std::vector<double> compute_probability(const StateFinite<Scalar> &state, long tgt_pos, AmplitudesT &amplitudes, CacheT &cache) {

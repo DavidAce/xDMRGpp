@@ -1,4 +1,6 @@
 #include "EdgesFinite.h"
+#include "EdgesFinite.impl.h"
+//
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
@@ -10,6 +12,10 @@
 #include "tensors/site/env/EnvVar.h"
 #include "tools/common/log.h"
 
+template class EdgesFinite<fp32>;
+template class EdgesFinite<fp64>;
+template class EdgesFinite<fp128>;
+template class EdgesFinite<cx32>;
 template class EdgesFinite<cx64>;
 template class EdgesFinite<cx128>;
 
@@ -312,26 +318,6 @@ env_pair<Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_var_blk(size_t
 }
 
 template<typename Scalar>
-template<typename T>
-env_pair<Eigen::Tensor<T, 3>> EdgesFinite<Scalar>::get_env_ene_blk_as(size_t posL, size_t posR) const {
-    return {get_env_ene(posL).L.template get_block_as<T>(), get_env_ene(posR).R.template get_block_as<T>()};
-}
-template env_pair<Eigen::Tensor<fp32, 3>> EdgesFinite<>::get_env_ene_blk_as<fp32>(size_t posL, size_t posR) const;
-template env_pair<Eigen::Tensor<fp64, 3>> EdgesFinite<>::get_env_ene_blk_as<fp64>(size_t posL, size_t posR) const;
-template env_pair<Eigen::Tensor<cx32, 3>> EdgesFinite<>::get_env_ene_blk_as<cx32>(size_t posL, size_t posR) const;
-template env_pair<Eigen::Tensor<cx64, 3>> EdgesFinite<>::get_env_ene_blk_as<cx64>(size_t posL, size_t posR) const;
-
-template<typename Scalar>
-template<typename T>
-env_pair<Eigen::Tensor<T, 3>> EdgesFinite<Scalar>::get_env_var_blk_as(size_t posL, size_t posR) const {
-    return {get_env_var(posL).L.template get_block_as<T>(), get_env_var(posR).R.template get_block_as<T>()};
-}
-template env_pair<Eigen::Tensor<fp32, 3>> EdgesFinite<>::get_env_var_blk_as(size_t posL, size_t posR) const;
-template env_pair<Eigen::Tensor<fp64, 3>> EdgesFinite<>::get_env_var_blk_as(size_t posL, size_t posR) const;
-template env_pair<Eigen::Tensor<cx32, 3>> EdgesFinite<>::get_env_var_blk_as(size_t posL, size_t posR) const;
-template env_pair<Eigen::Tensor<cx64, 3>> EdgesFinite<>::get_env_var_blk_as(size_t posL, size_t posR) const;
-
-template<typename Scalar>
 env_pair<const EnvEne<Scalar> &> EdgesFinite<Scalar>::get_multisite_env_ene(std::optional<std::vector<size_t>> sites) const {
     if(not sites) sites = active_sites;
     if(sites.value().empty()) throw std::runtime_error("Could not get edges: active site list is empty");
@@ -382,27 +368,6 @@ env_pair<Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_env_var_
     auto envs = get_multisite_env_var(std::move(sites));
     return {envs.L.get_block(), envs.R.get_block()};
 }
-template<typename Scalar>
-template<typename T>
-env_pair<Eigen::Tensor<T, 3>> EdgesFinite<Scalar>::get_multisite_env_ene_blk_as(std::optional<std::vector<size_t>> sites) const {
-    const auto &envs = get_multisite_env_ene(std::move(sites));
-    return {envs.L.template get_block_as<T>(), envs.R.template get_block_as<T>()};
-}
-template env_pair<Eigen::Tensor<fp32, 3>> EdgesFinite<>::get_multisite_env_ene_blk_as(std::optional<std::vector<size_t>> sites) const;
-template env_pair<Eigen::Tensor<fp64, 3>> EdgesFinite<>::get_multisite_env_ene_blk_as(std::optional<std::vector<size_t>> sites) const;
-template env_pair<Eigen::Tensor<cx32, 3>> EdgesFinite<>::get_multisite_env_ene_blk_as(std::optional<std::vector<size_t>> sites) const;
-template env_pair<Eigen::Tensor<cx64, 3>> EdgesFinite<>::get_multisite_env_ene_blk_as(std::optional<std::vector<size_t>> sites) const;
-
-template<typename Scalar>
-template<typename T>
-env_pair<Eigen::Tensor<T, 3>> EdgesFinite<Scalar>::get_multisite_env_var_blk_as(std::optional<std::vector<size_t>> sites) const {
-    const auto &envs = get_multisite_env_var(std::move(sites));
-    return {envs.L.template get_block_as<T>(), envs.R.template get_block_as<T>()};
-}
-template env_pair<Eigen::Tensor<fp32, 3>> EdgesFinite<>::get_multisite_env_var_blk_as(std::optional<std::vector<size_t>> sites) const;
-template env_pair<Eigen::Tensor<fp64, 3>> EdgesFinite<>::get_multisite_env_var_blk_as(std::optional<std::vector<size_t>> sites) const;
-template env_pair<Eigen::Tensor<cx32, 3>> EdgesFinite<>::get_multisite_env_var_blk_as(std::optional<std::vector<size_t>> sites) const;
-template env_pair<Eigen::Tensor<cx64, 3>> EdgesFinite<>::get_multisite_env_var_blk_as(std::optional<std::vector<size_t>> sites) const;
 
 template<typename Scalar>
 std::pair<std::vector<size_t>, std::vector<size_t>> EdgesFinite<Scalar>::get_active_ids() const {

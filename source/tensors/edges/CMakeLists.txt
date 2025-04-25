@@ -1,6 +1,12 @@
 add_source_target(xdmrg++-tensors-edges-finite
         TARGET_SOURCES
         EdgesFinite.cpp
+        EdgesFinite.fp32.cpp
+        EdgesFinite.fp64.cpp
+        EdgesFinite.fp128.cpp
+        EdgesFinite.cx32.cpp
+        EdgesFinite.cx64.cpp
+        EdgesFinite.cx128.cpp
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

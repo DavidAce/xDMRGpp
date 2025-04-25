@@ -43,7 +43,6 @@ void AlgorithmBase::init_bond_dimension_limits() {
     // Sanity check
     if(status.bond_lim == 0) throw except::runtime_error("Bond dimension limit invalid: {}", status.bond_lim);
     tools::log->info("Initialized bond dimension limits: min {} lim {} max {}", status.bond_min, status.bond_lim, status.bond_max);
-
 }
 
 void AlgorithmBase::init_truncation_error_limits() {
@@ -65,7 +64,8 @@ void AlgorithmBase::init_truncation_error_limits() {
     tools::log->info("Initialized truncation error limits: max {:8.2e} lim {:8.2e} min {:8.2e}", status.trnc_max, status.trnc_lim, status.trnc_min);
 }
 
-size_t AlgorithmBase::count_convergence(const std::vector<double> &Y_vec, double threshold, size_t start_idx) {
+template<typename T>
+size_t AlgorithmBase::count_convergence(const std::vector<T> &Y_vec, T threshold, size_t start_idx) {
     size_t scount = 0; // Counts how many converged points there have been since saturation (start_idx)
     for(const auto &[i, y] : iter::enumerate(Y_vec)) {
         if(i < start_idx) continue;
@@ -80,10 +80,15 @@ size_t AlgorithmBase::count_convergence(const std::vector<double> &Y_vec, double
     }
     return std::max(scount, rcount);
 }
+template size_t AlgorithmBase::count_convergence(const std::vector<fp32> &Y_vec, fp32 threshold, size_t start_idx);
+template size_t AlgorithmBase::count_convergence(const std::vector<fp64> &Y_vec, fp64 threshold, size_t start_idx);
+template size_t AlgorithmBase::count_convergence(const std::vector<fp128> &Y_vec, fp128 threshold, size_t start_idx);
 
-AlgorithmBase::SaturationReport AlgorithmBase::check_saturation(const std::vector<double> &Y_vec, double sensitivity, SaturationPolicy policy) {
-    SaturationReport report;
-    constexpr size_t min_data_points = 2;
+
+template<typename T>
+AlgorithmBase::SaturationReport<T> AlgorithmBase::check_saturation(const std::vector<T> &Y_vec, T sensitivity, SaturationPolicy policy) {
+    SaturationReport<T> report;
+    constexpr size_t    min_data_points = 2;
     if(Y_vec.size() < min_data_points) { return report; }
 
     report.Y_vec = Y_vec;
@@ -116,12 +121,12 @@ AlgorithmBase::SaturationReport AlgorithmBase::check_saturation(const std::vecto
     // In the last point, the min/max gap shrinks to zero. Fix that by using the last two values
     report.Y_min.back() = std::min(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
     report.Y_max.back() = std::max(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
-    for(size_t i = 0; i < report.Y_vec.size(); ++i) report.Y_mid[i] = 0.5 * (report.Y_min[i] + report.Y_max[i]);
+    for(size_t i = 0; i < report.Y_vec.size(); ++i) report.Y_mid[i] = static_cast<T>(0.5) * (report.Y_min[i] + report.Y_max[i]);
     // The fix to min/max causes the last to entries in Y_mid to be identical. Here we fix that.
-    report.Y_mid.back() = 0.5 * (report.Y_mid.back() + report.Y_vec.back());
+    report.Y_mid.back() = static_cast<T>(0.5) * (report.Y_mid.back() + report.Y_vec.back());
 
     for(size_t i = 1; i < report.Y_vec.size(); ++i) report.Y_dif[i] = report.Y_mid[i] - report.Y_mid[i - 1];
-    report.Y_dif[0] = report.Y_dif[1]; // Fill with second value
+    report.Y_dif[0] = report.Y_dif[1]; // Fill with the second value
 
     if(not num::all_equal(report.Y_vec.size(), report.Y_min.size(), report.Y_max.size(), report.Y_sat.size()))
         throw except::logic_error("Report vectors are not equal size:\n Y_vec {}\n Y_min {}\n Y_max {}\n Y_sat {}", report.Y_vec.size(), report.Y_min.size(),
@@ -152,13 +157,13 @@ AlgorithmBase::SaturationReport AlgorithmBase::check_saturation(const std::vecto
     report.Y_min_std.back() = report.Y_min_std.rbegin()[1]; // The last entry is always zero, so just reuse the penultimate entry
     report.Y_max_std.back() = report.Y_max_std.rbegin()[1]; // The last entry is always zero, so just reuse the penultimate entry
     report.Y_mid_std.back() = report.Y_mid_std.rbegin()[1]; // The last entry is always zero, so just reuse the penultimate entry
-    report.Y_mov_std        = stat::stdev_moving(report.Y_vec, 0.20);
+    report.Y_mov_std        = stat::stdev_moving(report.Y_vec, static_cast<T>(0.20));
 
     // auto idx90 = report.Y_vec.size() * 8ul/10ul;
     // auto fluctuation =  std::max(report.Y_vec_std.at(idx90), sensitivity);
     for(size_t i = 0; i < report.Y_sat.size(); ++i) {
         // Saturated if the std is below 1 sigma compared to the surrounding fluctuations.
-        auto fluctuation = std::max(sensitivity, report.Y_mov_std[i] * 0.341);
+        auto fluctuation = std::max<T>(sensitivity, report.Y_mov_std[i] * static_cast<T>(0.341));
         bool vec_sat     = report.Y_vec_std[i] < fluctuation and has_flag(policy, SaturationPolicy::val);
         bool avg_sat     = report.Y_avg_std[i] < sensitivity and has_flag(policy, SaturationPolicy::avg);
         bool med_sat     = report.Y_med_std[i] < sensitivity and has_flag(policy, SaturationPolicy::med);
@@ -185,3 +190,7 @@ AlgorithmBase::SaturationReport AlgorithmBase::check_saturation(const std::vecto
     report.has_saturated     = report.saturated_count > 0;
     return report;
 }
+
+template AlgorithmBase::SaturationReport<fp32>  AlgorithmBase::check_saturation(const std::vector<fp32> &Y_vec, fp32 sensitivity, SaturationPolicy policy);
+template AlgorithmBase::SaturationReport<fp64>  AlgorithmBase::check_saturation(const std::vector<fp64> &Y_vec, fp64 sensitivity, SaturationPolicy policy);
+template AlgorithmBase::SaturationReport<fp128> AlgorithmBase::check_saturation(const std::vector<fp128> &Y_vec, fp128 sensitivity, SaturationPolicy policy);

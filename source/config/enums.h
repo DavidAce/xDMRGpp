@@ -201,8 +201,11 @@ enum class CachePolicy {
     allow_bitops
 };
 
+/*! Sets the storage type for the state and model */
+enum class ScalarType { FP32, FP64, FP128, CX32, CX64, CX128 };
+
 /*! Used to calculate the information lattice */
-enum class Precision { SINGLE, DOUBLE };
+enum class Precision { SINGLE, DOUBLE, QUADRUPLE };
 
 /*! The reason that we are invoking a storage call */
 enum class StorageEvent : int {
@@ -672,6 +675,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         LbitCircuitGateWeightKind,
         ProjectionPolicy,
         CachePolicy,
+        ScalarType,
         Precision,
         ModelType,
         EdgeStatus,
@@ -825,6 +829,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
     if constexpr(std::is_same_v<T, Precision>) {
         if(item == Precision::SINGLE)                                   return "SINGLE";
         if(item == Precision::DOUBLE)                                   return "DOUBLE";
+        if(item == Precision::QUADRUPLE)                                return "QUADRUPLE";
     }
     if constexpr(std::is_same_v<T, ModelType>) {
         if(item == ModelType::ising_tf_rf)                              return "ising_tf_rf";
@@ -1023,6 +1028,14 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == RandomizerMode::SELECT1)                            return "SELECT1";
         if(item == RandomizerMode::ASIS)                               return "ASIS";
     }
+    if constexpr(std::is_same_v<T,ScalarType>){
+        if(item == ScalarType::FP32)                                   return "FP32";
+        if(item == ScalarType::FP64)                                   return "FP64";
+        if(item == ScalarType::FP128)                                  return "FP128";
+        if(item == ScalarType::CX32)                                   return "CX32";
+        if(item == ScalarType::CX64)                                   return "CX64";
+        if(item == ScalarType::CX128)                                  return "CX128";
+    }
     if constexpr(std::is_same_v<T,OptType>){
         if(item == OptType::FP32)                                      return "FP32";
         if(item == OptType::FP64)                                      return "FP64";
@@ -1106,6 +1119,7 @@ constexpr auto sv2enum(std::string_view item) {
         LbitCircuitGateWeightKind,
         ProjectionPolicy,
         CachePolicy,
+        ScalarType,
         Precision,
         ModelType,
         EdgeStatus,
@@ -1292,6 +1306,7 @@ constexpr auto sv2enum(std::string_view item) {
     if constexpr(std::is_same_v<T, Precision>) {
         if(item == "SINGLE")                                 return Precision::SINGLE;
         if(item == "DOUBLE")                                 return Precision::DOUBLE;
+        if(item == "QUADRUPLE")                              return Precision::QUADRUPLE;
     }
     if constexpr(std::is_same_v<T, EdgeStatus>) {
         if(item == "STALE")                                 return EdgeStatus::STALE ;
@@ -1489,13 +1504,21 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "SELECT1")                               return RandomizerMode::SELECT1;
         if(item == "ASIS")                                  return RandomizerMode::ASIS;
     }
-    if constexpr(std::is_same_v<T,OptType>){
+    if constexpr(std::is_same_v<T,ScalarType>){
+        if(item == "FP32")                                  return ScalarType::FP32;
+        if(item == "FP64")                                  return ScalarType::FP64;
+        if(item == "FP128")                                 return ScalarType::FP128;
+        if(item == "CX32")                                  return ScalarType::CX32;
+        if(item == "CX64")                                  return ScalarType::CX64;
+        if(item == "CX128")                                 return ScalarType::CX128;
+    }
+    if constexpr(std::is_same_v<T, OptType>){
         if(item == "FP32")                                  return OptType::FP32;
         if(item == "FP64")                                  return OptType::FP64;
-        if(item == "FP128")                                  return OptType::FP128;
+        if(item == "FP128")                                 return OptType::FP128;
         if(item == "CX32")                                  return OptType::CX32;
         if(item == "CX64")                                  return OptType::CX64;
-        if(item == "CX128")                                  return OptType::CX128;
+        if(item == "CX128")                                 return OptType::CX128;
     }
 
     if constexpr(std::is_same_v<T,OptAlgo>){

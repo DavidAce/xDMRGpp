@@ -46,6 +46,10 @@ template fp64 tools::common::contraction::expectation_value(const fp64 * const m
                                                             const fp64 * const mpo_ptr,  std::array<long,4> mpo_dims,
                                                             const fp64 * const envL_ptr, std::array<long,3> envL_dims,
                                                             const fp64 * const envR_ptr, std::array<long,3> envR_dims);
+template fp128 tools::common::contraction::expectation_value(const fp128 * const mps_ptr,  std::array<long,3> mps_dims,
+                                                             const fp128 * const mpo_ptr,  std::array<long,4> mpo_dims,
+                                                             const fp128 * const envL_ptr, std::array<long,3> envL_dims,
+                                                             const fp128 * const envR_ptr, std::array<long,3> envR_dims);
 template cx32 tools::common::contraction::expectation_value(const cx32 * const mps_ptr,  std::array<long,3> mps_dims,
                                                             const cx32 * const mpo_ptr,  std::array<long,4> mpo_dims,
                                                             const cx32 * const envL_ptr, std::array<long,3> envL_dims,
@@ -54,6 +58,10 @@ template cx64 tools::common::contraction::expectation_value(const cx64 * const m
                                                             const cx64 * const mpo_ptr,  std::array<long,4> mpo_dims,
                                                             const cx64 * const envL_ptr, std::array<long,3> envL_dims,
                                                             const cx64 * const envR_ptr, std::array<long,3> envR_dims);
+template cx128 tools::common::contraction::expectation_value(const cx128 * const mps_ptr,  std::array<long,3> mps_dims,
+                                                             const cx128 * const mpo_ptr,  std::array<long,4> mpo_dims,
+                                                             const cx128 * const envL_ptr, std::array<long,3> envL_dims,
+                                                             const cx128 * const envR_ptr, std::array<long,3> envR_dims);
 /* clang-format on */
 
 /* clang-format off */
@@ -104,6 +112,11 @@ template fp64 tools::common::contraction::expectation_value(const fp64 * const b
                                                             const fp64 * const mpo_ptr,  std::array<long,4> mpo_dims,
                                                             const fp64 * const envL_ptr, std::array<long,3> envL_dims,
                                                             const fp64 * const envR_ptr, std::array<long,3> envR_dims);
+template fp128 tools::common::contraction::expectation_value(const fp128 * const bra_ptr,  std::array<long,3> bra_dims,
+                                                             const fp128 * const ket_ptr,  std::array<long,3> ket_dims,
+                                                             const fp128 * const mpo_ptr,  std::array<long,4> mpo_dims,
+                                                             const fp128 * const envL_ptr, std::array<long,3> envL_dims,
+                                                             const fp128 * const envR_ptr, std::array<long,3> envR_dims);
 template cx32 tools::common::contraction::expectation_value(const cx32 * const bra_ptr,  std::array<long,3> bra_dims,
                                                             const cx32 * const ket_ptr,  std::array<long,3> ket_dims,
                                                             const cx32 * const mpo_ptr,  std::array<long,4> mpo_dims,
@@ -114,5 +127,10 @@ template cx64 tools::common::contraction::expectation_value(const cx64 * const b
                                                             const cx64 * const mpo_ptr,  std::array<long,4> mpo_dims,
                                                             const cx64 * const envL_ptr, std::array<long,3> envL_dims,
                                                             const cx64 * const envR_ptr, std::array<long,3> envR_dims);
+template cx128 tools::common::contraction::expectation_value(const cx128 * const bra_ptr,  std::array<long,3> bra_dims,
+                                                             const cx128 * const ket_ptr,  std::array<long,3> ket_dims,
+                                                             const cx128 * const mpo_ptr,  std::array<long,4> mpo_dims,
+                                                             const cx128 * const envL_ptr, std::array<long,3> envL_dims,
+                                                             const cx128 * const envR_ptr, std::array<long,3> envR_dims);
 
 

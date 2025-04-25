@@ -22,39 +22,40 @@
 #include <h5pp/details/h5ppEigen.h>
 #include <tensors/edges/EdgesFinite.h>
 
-tools::finite::opt::opt_mps tools::finite::opt::get_opt_initial_mps(const TensorsFinite &tensors, const OptMeta &meta) {
-    auto    t_init = tid::tic_scope("initial_mps", tid::level::higher);
-    opt_mps initial_mps;
+template<typename Scalar>
+tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_opt_initial_mps(const TensorsFinite<Scalar> &tensors, const OptMeta &meta) {
+    auto            t_init = tid::tic_scope("initial_mps", tid::level::higher);
+    opt_mps<Scalar> initial_mps;
     initial_mps.set_name("initial_mps");
     initial_mps.set_sites(tensors.active_sites);
-    initial_mps.set_length(tensors.get_length<size_t>());
-    initial_mps.set_tensor(tensors.get_multisite_mps<cx64>());
+    initial_mps.set_length(tensors.template get_length<size_t>());
+    initial_mps.set_tensor(tensors.template get_multisite_mps<Scalar>());
     initial_mps.set_energy(tools::finite::measure::energy(tensors));
     initial_mps.set_eshift(tools::finite::measure::energy_shift(tensors));
-    initial_mps.set_hsquared(std::real(tools::finite::measure::expval_hamiltonian_squared<cx64>(tensors)));
+    initial_mps.set_hsquared(std::real(tools::finite::measure::expval_hamiltonian_squared(tensors)));
     initial_mps.set_variance(tools::finite::measure::energy_variance(tensors));
-    initial_mps.set_rnorm_H1(tools::finite::measure::residual_norm_H1<cx64>(tensors));
-    initial_mps.set_rnorm_H2(tools::finite::measure::residual_norm_H2<cx64>(tensors));
+    initial_mps.set_rnorm_H1(tools::finite::measure::residual_norm_H1(tensors));
+    initial_mps.set_rnorm_H2(tools::finite::measure::residual_norm_H2(tensors));
     initial_mps.set_overlap(1.0);
 
     switch(meta.optAlgo) {
         case OptAlgo::DMRG:
         case OptAlgo::DMRGX:
         case OptAlgo::HYBRID_DMRGX: {
-            auto H1 = tools::finite::measure::expval_hamiltonian<cx64>(tensors);
+            auto H1 = tools::finite::measure::expval_hamiltonian(tensors);
             initial_mps.set_eigs_eigval(std::real(H1));
             break;
         }
         case OptAlgo::XDMRG: {
             // (H-Eshift)v =  <H²> v
-            auto H2 = tools::finite::measure::expval_hamiltonian_squared<cx64>(tensors);
+            auto H2 = tools::finite::measure::expval_hamiltonian_squared(tensors);
             initial_mps.set_eigs_eigval(std::real(H2));
             break;
         }
         case OptAlgo::GDMRG: {
             // (H-Eshift)v =  <H¹>/<H²> (H-Eshift)²v
-            auto H1 = tools::finite::measure::expval_hamiltonian<cx64>(tensors);         // <H>
-            auto H2 = tools::finite::measure::expval_hamiltonian_squared<cx64>(tensors); // <H²>
+            auto H1 = tools::finite::measure::expval_hamiltonian(tensors);         // <H>
+            auto H2 = tools::finite::measure::expval_hamiltonian_squared(tensors); // <H²>
             initial_mps.set_eigs_eigval(std::real(H1) / std::real(H2));
             break;
         }
@@ -65,12 +66,20 @@ tools::finite::opt::opt_mps tools::finite::opt::get_opt_initial_mps(const Tensor
     tensors.clear_measurements();
     return initial_mps;
 }
+template tools::finite::opt::opt_mps<fp32>  tools::finite::opt::get_opt_initial_mps(const TensorsFinite<fp32> &tensors, const OptMeta &meta);
+template tools::finite::opt::opt_mps<fp64>  tools::finite::opt::get_opt_initial_mps(const TensorsFinite<fp64> &tensors, const OptMeta &meta);
+template tools::finite::opt::opt_mps<fp128> tools::finite::opt::get_opt_initial_mps(const TensorsFinite<fp128> &tensors, const OptMeta &meta);
+template tools::finite::opt::opt_mps<cx32>  tools::finite::opt::get_opt_initial_mps(const TensorsFinite<cx32> &tensors, const OptMeta &meta);
+template tools::finite::opt::opt_mps<cx64>  tools::finite::opt::get_opt_initial_mps(const TensorsFinite<cx64> &tensors, const OptMeta &meta);
+template tools::finite::opt::opt_mps<cx128> tools::finite::opt::get_opt_initial_mps(const TensorsFinite<cx128> &tensors, const OptMeta &meta);
 
-tools::finite::opt::opt_mps tools::finite::opt::find_ground_state(const TensorsFinite &tensors, const opt_mps &initial_mps, const AlgorithmStatus &status,
-                                                                  OptMeta &meta) {
+template<typename Scalar>
+tools::finite::opt::opt_mps<Scalar> tools::finite::opt::find_ground_state(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
+                                                                          const AlgorithmStatus &status, OptMeta &meta) {
     auto t_opt  = tid::tic_scope("opt");
-    auto result = internal::optimize_energy(tensors, initial_mps, status, meta);
-    tools::finite::opt::reports::print_eigs_report();
+    auto elog   = reports::eigs_log<Scalar>();
+    auto result = internal::optimize_energy(tensors, initial_mps, status, meta, elog);
+    elog.print_eigs_report();
     // Finish up
     result.set_optsolver(meta.optSolver);
     result.set_optalgo(meta.optAlgo);
@@ -78,9 +87,18 @@ tools::finite::opt::opt_mps tools::finite::opt::find_ground_state(const TensorsF
     result.validate_result();
     return result;
 }
+/* clang-format off */
+template tools::finite::opt::opt_mps<fp32>  tools::finite::opt::find_ground_state(const TensorsFinite<fp32> &tensors, const opt_mps<fp32> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<fp64>  tools::finite::opt::find_ground_state(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<fp128> tools::finite::opt::find_ground_state(const TensorsFinite<fp128> &tensors, const opt_mps<fp128> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<cx32>  tools::finite::opt::find_ground_state(const TensorsFinite<cx32> &tensors, const opt_mps<cx32> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<cx64>  tools::finite::opt::find_ground_state(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<cx128> tools::finite::opt::find_ground_state(const TensorsFinite<cx128> &tensors, const opt_mps<cx128> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+/* clang-format on */
 
-tools::finite::opt::opt_mps tools::finite::opt::get_updated_state(const TensorsFinite &tensors, const opt_mps &initial_mps, const AlgorithmStatus &status,
-                                                                  OptMeta &meta) {
+template<typename Scalar>
+tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
+                                                                          const AlgorithmStatus &status, OptMeta &meta) {
     auto t_opt = tid::tic_scope("opt");
     tools::log->trace("Starting optimization: algo [{}] | solver [{}] | type [{}] | ritz [{}] | position [{}] | sites {} | shape {} = {}",
                       enum2sv(meta.optAlgo), enum2sv(meta.optSolver), enum2sv(meta.optType), enum2sv(meta.optRitz), status.position, tensors.active_sites,
@@ -91,32 +109,35 @@ tools::finite::opt::opt_mps tools::finite::opt::get_updated_state(const TensorsF
     if(initial_mps.get_sites() != tensors.active_sites)
         throw except::runtime_error("mismatch in active sites: initial_mps {} | active {}", initial_mps.get_sites(), tensors.active_sites);
 
-    opt_mps result;
+    opt_mps<Scalar>           result;
+    reports::eigs_log<Scalar> elog;
+    reports::subs_log<Scalar> slog;
     // Dispatch optimization to the correct routine depending on the chosen algorithm
     switch(meta.optAlgo) {
         case OptAlgo::DMRG: {
-            result = internal::optimize_energy(tensors, initial_mps, status, meta);
+            result = internal::optimize_energy(tensors, initial_mps, status, meta, elog);
             break;
         }
         case OptAlgo::DMRGX: {
-            result = internal::optimize_overlap(tensors, initial_mps, status, meta);
+            result = internal::optimize_overlap(tensors, initial_mps, status, meta, slog);
             break;
         }
         case OptAlgo::HYBRID_DMRGX: {
-            result = internal::optimize_subspace_variance(tensors, initial_mps, status, meta);
+            result = internal::optimize_subspace_variance(tensors, initial_mps, status, meta, elog);
             break;
         }
         case OptAlgo::XDMRG: {
-            result = internal::optimize_folded_spectrum(tensors, initial_mps, status, meta);
+            result = internal::optimize_folded_spectrum(tensors, initial_mps, status, meta, elog);
             break;
         }
         case OptAlgo::GDMRG: {
-            result = internal::optimize_generalized_shift_invert(tensors, initial_mps, status, meta);
+            result = internal::optimize_generalized_shift_invert(tensors, initial_mps, status, meta, elog);
             break;
         }
     }
 
-    tools::finite::opt::reports::print_eigs_report();
+    slog.print_subs_report();
+    elog.print_eigs_report();
 
     // Finish up
     result.set_optsolver(meta.optSolver);
@@ -125,6 +146,14 @@ tools::finite::opt::opt_mps tools::finite::opt::get_updated_state(const TensorsF
     result.validate_result();
     return result;
 }
+/* clang-format off */
+template tools::finite::opt::opt_mps<fp32>  tools::finite::opt::get_updated_state(const TensorsFinite<fp32> &tensors, const opt_mps<fp32> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<fp64>  tools::finite::opt::get_updated_state(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<fp128> tools::finite::opt::get_updated_state(const TensorsFinite<fp128> &tensors, const opt_mps<fp128> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<cx32>  tools::finite::opt::get_updated_state(const TensorsFinite<cx32> &tensors, const opt_mps<cx32> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<cx64>  tools::finite::opt::get_updated_state(const TensorsFinite<cx64> &tensors, const opt_mps<cx64> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+template tools::finite::opt::opt_mps<cx128> tools::finite::opt::get_updated_state(const TensorsFinite<cx128> &tensors, const opt_mps<cx128> &initial_mps, const AlgorithmStatus &status, OptMeta &meta);
+/* clang-format on */
 
 double tools::finite::opt::internal::windowed_func_abs(double x, double window) {
     if(std::abs(x) >= window)
@@ -186,39 +215,49 @@ long tools::finite::opt::internal::get_ops(long d, long chiL, long chiR, long m)
 }
 
 namespace tools::finite::opt::internal {
-    bool comparator::energy(const opt_mps &lhs, const opt_mps &rhs) {
+    template<typename Scalar>
+    bool comparator::energy(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
         // The eigenvalue solver on H gives results sorted in energy
         if(lhs.get_eigs_idx() != rhs.get_eigs_idx()) return lhs.get_eigs_idx() < rhs.get_eigs_idx();
         return lhs.get_energy() < rhs.get_energy();
     }
 
-    bool comparator::energy_absolute(const opt_mps &lhs, const opt_mps &rhs) { return std::abs(lhs.get_energy()) < std::abs(rhs.get_energy()); }
+    template<typename Scalar>
+    bool comparator::energy_absolute(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
+        return std::abs(lhs.get_energy()) < std::abs(rhs.get_energy());
+    }
 
-    bool comparator::energy_distance(const opt_mps &lhs, const opt_mps &rhs, double target) {
+    template<typename Scalar>
+    bool comparator::energy_distance(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs, RealScalar<Scalar> target) {
         if(std::isnan(target)) throw except::logic_error("Energy target for comparison is NAN");
         auto diff_energy_lhs = std::abs(lhs.get_energy() - target);
         auto diff_energy_rhs = std::abs(rhs.get_energy() - target);
         return diff_energy_lhs < diff_energy_rhs;
     }
 
-    bool comparator::variance(const opt_mps &lhs, const opt_mps &rhs) {
+    template<typename Scalar>
+    bool comparator::variance(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
         // The eigenvalue solver on (H-E)² gives results sorted in variance
         return lhs.get_variance() < rhs.get_variance();
     }
 
-    bool comparator::gradient(const opt_mps &lhs, const opt_mps &rhs) { return lhs.get_grad_max() < rhs.get_grad_max(); }
-    bool comparator::eigval(const opt_mps &lhs, const opt_mps &rhs) {
+    template<typename Scalar>
+    bool comparator::gradient(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
+        return lhs.get_grad_max() < rhs.get_grad_max();
+    }
+    template<typename Scalar>
+    bool comparator::eigval(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
         auto leig     = lhs.get_eigs_eigval();
         auto reig     = rhs.get_eigs_eigval();
         auto lvar     = lhs.get_variance();
         auto rvar     = rhs.get_variance();
         auto diff_eig = std::abs(leig - reig);
         auto diff_var = std::abs(lvar - rvar);
-        auto same_eig = std::abs(diff_eig) < 10 * std::numeric_limits<double>::epsilon();
-        auto same_var = std::abs(diff_var) < 10 * std::numeric_limits<double>::epsilon();
+        auto same_eig = std::abs(diff_eig) < std::numeric_limits<RealScalar<Scalar>>::epsilon() * 10;
+        auto same_var = std::abs(diff_var) < std::numeric_limits<RealScalar<Scalar>>::epsilon() * 10;
         if(same_eig and same_var) {
             // There is no clear winner. We should therefore stick to comparing overlap for the sake of stability.
-            auto has_overlap = lhs.get_overlap() + rhs.get_overlap() > std::sqrt(2);
+            auto has_overlap = lhs.get_overlap() + rhs.get_overlap() > std::sqrt(RealScalar<Scalar>{2});
             if(has_overlap) {
                 // Favor comparing overlaps for stability when everything else is too similar. This requires that one or both sufficient overlap to begin with.
                 tools::log->warn("comparator::eigval: degeneracy detected -- comparing overlap");
@@ -232,18 +271,19 @@ namespace tools::finite::opt::internal {
         }
         return leig < reig;
     }
-    bool comparator::eigval_absolute(const opt_mps &lhs, const opt_mps &rhs) {
+    template<typename Scalar>
+    bool comparator::eigval_absolute(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
         auto leig     = std::abs(lhs.get_eigs_eigval());
         auto reig     = std::abs(rhs.get_eigs_eigval());
         auto lvar     = lhs.get_variance();
         auto rvar     = rhs.get_variance();
         auto diff_eig = std::abs(leig - reig);
         auto diff_var = std::abs(lvar - rvar);
-        auto same_eig = std::abs(diff_eig) < 10 * std::numeric_limits<double>::epsilon();
-        auto same_var = std::abs(diff_var) < 10 * std::numeric_limits<double>::epsilon();
+        auto same_eig = std::abs(diff_eig) < std::numeric_limits<RealScalar<Scalar>>::epsilon() * 10;
+        auto same_var = std::abs(diff_var) < std::numeric_limits<RealScalar<Scalar>>::epsilon() * 10;
         if(same_eig and same_var) {
             // There is no clear winner. We should therefore stick to comparing overlap for the sake of stability.
-            auto has_overlap = lhs.get_overlap() + rhs.get_overlap() > std::sqrt(2);
+            auto has_overlap = lhs.get_overlap() + rhs.get_overlap() > std::sqrt(RealScalar<Scalar>{2});
             if(has_overlap) {
                 // Favor comparing overlaps for stability when everything else is too similar. This requires that one or both sufficient overlap to begin with.
                 tools::log->warn("comparator::eigval: degeneracy detected -- comparing overlap");
@@ -258,17 +298,29 @@ namespace tools::finite::opt::internal {
         return leig < reig;
     }
 
-    bool comparator::overlap(const opt_mps &lhs, const opt_mps &rhs) { return lhs.get_overlap() > rhs.get_overlap(); }
-
-    bool comparator::eigval_and_overlap(const opt_mps &lhs, const opt_mps &rhs) {
-        double ratio = std::max(lhs.get_eigs_eigval(), rhs.get_eigs_eigval()) / std::min(lhs.get_eigs_eigval(), rhs.get_eigs_eigval());
-        if(ratio < 10 and lhs.get_overlap() >= std::sqrt(0.5)) return comparator::overlap(lhs, rhs);
+    template<typename Scalar>
+    bool comparator::overlap(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
+        return lhs.get_overlap() > rhs.get_overlap();
+    }
+    template<typename Scalar>
+    bool comparator::eigval_and_overlap(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
+        auto ratio = std::max(lhs.get_eigs_eigval(), rhs.get_eigs_eigval()) / std::min(lhs.get_eigs_eigval(), rhs.get_eigs_eigval());
+        if(ratio < RealScalar<Scalar>{10} and lhs.get_overlap() >= std::sqrt(RealScalar<Scalar>{0.5})) return comparator::overlap(lhs, rhs);
         return comparator::eigval(lhs, rhs);
     }
 
-    Comparator::Comparator(const OptMeta &meta_, double target_energy_) : meta(&meta_), target_energy(target_energy_) {}
+    template struct Comparator<fp32>;
+    template struct Comparator<fp64>;
+    template struct Comparator<fp128>;
+    template struct Comparator<cx32>;
+    template struct Comparator<cx64>;
+    template struct Comparator<cx128>;
 
-    bool Comparator::operator()(const opt_mps &lhs, const opt_mps &rhs) {
+    template<typename Scalar>
+    Comparator<Scalar>::Comparator(const OptMeta &meta_, RealScalar<Scalar> target_energy_) : meta(&meta_), target_energy(target_energy_) {}
+
+    template<typename Scalar>
+    bool Comparator<Scalar>::operator()(const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
         if(not meta) throw except::logic_error("No opt_meta given to comparator");
         switch(meta->optRitz) {
             case OptRitz::SR: return comparator::eigval(lhs, rhs);
@@ -281,9 +333,10 @@ namespace tools::finite::opt::internal {
         }
         return comparator::eigval(lhs, rhs);
     }
-
-    EigIdxComparator::EigIdxComparator(OptRitz ritz_, double shift_, double *data_, long size_) : ritz(ritz_), shift(shift_), eigvals(data_, size_) {}
-    bool EigIdxComparator::operator()(long lidx, long ridx) {
+    template<typename Scalar>
+    EigIdxComparator<Scalar>::EigIdxComparator(OptRitz ritz_, Scalar shift_, Scalar *data_, long size_) : ritz(ritz_), shift(shift_), eigvals(data_, size_) {}
+    template<typename Scalar>
+    bool EigIdxComparator<Scalar>::operator()(long lidx, long ridx) {
         auto lhs = eigvals[lidx];
         auto rhs = eigvals[ridx];
         switch(ritz) {

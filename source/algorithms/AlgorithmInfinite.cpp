@@ -12,14 +12,23 @@
 #include "tools/infinite/h5.h"
 #include "tools/infinite/measure.h"
 
-AlgorithmInfinite::AlgorithmInfinite(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz opt_ritz_, AlgorithmType algo_type)
+template class AlgorithmInfinite<fp32>;
+template class AlgorithmInfinite<fp64>;
+template class AlgorithmInfinite<fp128>;
+template class AlgorithmInfinite<cx32>;
+template class AlgorithmInfinite<cx64>;
+template class AlgorithmInfinite<cx128>;
+
+template<typename Scalar>
+AlgorithmInfinite<Scalar>::AlgorithmInfinite(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz opt_ritz_, AlgorithmType algo_type)
     : AlgorithmBase(std::move(h5ppFile_), opt_ritz_, algo_type) {
     tools::log->trace("Constructing algorithm infinite");
     tensors.initialize(settings::model::model_type);
     tensors.state->set_algorithm(status.algo_type);
 }
 
-void AlgorithmInfinite::run() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::run() {
     if(not settings::algorithm_is_on(status.algo_type)) return;
     auto t_tot = tid::get_unscoped("t_tot", tid::level::normal).tic_token();
     run_preprocessing();
@@ -27,30 +36,35 @@ void AlgorithmInfinite::run() {
     run_postprocessing();
 }
 
-void AlgorithmInfinite::run_preprocessing() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::run_preprocessing() {
     status.clear();
     initialize_model(); // First use of random!
     init_bond_dimension_limits();
     write_to_file(StorageEvent::MODEL);
 }
 
-void AlgorithmInfinite::run_postprocessing() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::run_postprocessing() {
     auto t_pos = tid::tic_scope("post");
     write_to_file(StorageEvent::FINISHED);
     copy_from_tmp(StorageEvent::FINISHED);
     print_status_full();
 }
 
-void AlgorithmInfinite::initialize_model() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::initialize_model() {
     tools::log->info("Initializing model");
     tensors.initialize_model();
     clear_convergence_status();
 }
 
-void AlgorithmInfinite::update_precision_limit(std::optional<double> energy_upper_bound) {
-    if(not energy_upper_bound) energy_upper_bound = tools::infinite::measure::energy_per_site_mpo(tensors) * static_cast<double>(status.iter);
-    // The variance precision limit depends on the Hamiltonian operator norm ~ largest eigenvalue.
-    // We can get a rough order of magnitude etimate the largest eigenvalue by adding the absolute value of all the
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::update_precision_limit(std::optional<double> energy_upper_bound) {
+    if(not energy_upper_bound)
+        energy_upper_bound = static_cast<double>(tools::infinite::measure::energy_per_site_mpo(tensors)) * static_cast<double>(status.iter);
+    // The variance precision limit depends on the Hamiltonian operator norm ~ the largest eigenvalue.
+    // We can get a rough order of magnitude estimate the largest eigenvalue by adding the absolute value of all the
     // Hamiltonian couplings and fields.
     double energy_abs                 = std::abs(energy_upper_bound.value());
     double digits10                   = std::numeric_limits<double>::digits10;
@@ -61,7 +75,8 @@ void AlgorithmInfinite::update_precision_limit(std::optional<double> energy_uppe
     tools::log->info("Estimated limit on energy variance precision: {:.3e}", status.energy_variance_prec_limit);
 }
 
-void AlgorithmInfinite::update_bond_dimension_limit() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::update_bond_dimension_limit() {
     status.bond_limit_has_reached_max = status.bond_lim >= status.bond_max;
     if(settings::strategy::bond_increase_when == UpdatePolicy::NEVER) {
         status.bond_lim = status.bond_max;
@@ -121,7 +136,8 @@ void AlgorithmInfinite::update_bond_dimension_limit() {
     if(status.bond_lim > status.bond_max) throw except::runtime_error("bond_lim is larger than get_bond_max! {} > {}", status.bond_lim, status.bond_max);
 }
 
-void AlgorithmInfinite::update_truncation_error_limit() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::update_truncation_error_limit() {
     if(status.trnc_lim == 0.0) throw std::runtime_error("trnc_lim is zero!");
     status.trnc_min                   = settings::precision::svd_truncation_min;
     status.trnc_limit_has_reached_min = status.trnc_lim <= status.trnc_min;
@@ -173,8 +189,9 @@ void AlgorithmInfinite::update_truncation_error_limit() {
     if(status.trnc_lim < status.trnc_min) throw except::logic_error("trnc_lim is smaller than trnc_min ! {:8.2e} > {:8.2e}", status.trnc_lim, status.trnc_min);
 }
 
-void AlgorithmInfinite::initialize_state([[maybe_unused]] ResetReason reason, std::optional<std::string> sector, std::optional<bool> use_eigenspinors,
-                                         std::optional<std::string> pattern) {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::initialize_state([[maybe_unused]] ResetReason reason, std::optional<std::string> sector, std::optional<bool> use_eigenspinors,
+                                                 std::optional<std::string> pattern) {
     tools::log->trace("Initializing state");
     if(not sector) sector = settings::strategy::initial_axis;
     if(not pattern) pattern = settings::strategy::initial_pattern;
@@ -186,7 +203,8 @@ void AlgorithmInfinite::initialize_state([[maybe_unused]] ResetReason reason, st
     clear_convergence_status();
 }
 
-void AlgorithmInfinite::clear_convergence_status() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::clear_convergence_status() {
     tools::log->trace("Clearing saturation status");
     var_mpo_iter.clear();
     var_ham_iter.clear();
@@ -211,7 +229,8 @@ void AlgorithmInfinite::clear_convergence_status() {
     status.trnc_limit_has_reached_min = false;
 }
 
-void AlgorithmInfinite::check_convergence_variance_mpo(std::optional<double> threshold, std::optional<double> sensitivity) {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::check_convergence_variance_mpo(std::optional<RealScalar> threshold, std::optional<RealScalar> sensitivity) {
     tools::log->debug("Checking convergence of variance mpo");
     if(not threshold) threshold = settings::precision::variance_convergence_threshold;
     if(not sensitivity) sensitivity = settings::precision::variance_saturation_sensitivity;
@@ -222,7 +241,8 @@ void AlgorithmInfinite::check_convergence_variance_mpo(std::optional<double> thr
     if(report.has_computed) { status.variance_mpo_saturated_for = report.saturated_count; }
 }
 
-void AlgorithmInfinite::check_convergence_variance_ham(std::optional<double> threshold, std::optional<double> sensitivity) {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::check_convergence_variance_ham(std::optional<RealScalar> threshold, std::optional<RealScalar> sensitivity) {
     tools::log->trace("Checking convergence of variance ham");
     if(not threshold) threshold = settings::precision::variance_convergence_threshold;
     if(not sensitivity) sensitivity = settings::precision::variance_saturation_sensitivity;
@@ -233,7 +253,8 @@ void AlgorithmInfinite::check_convergence_variance_ham(std::optional<double> thr
     if(report.has_computed) { status.variance_ham_saturated_for = report.saturated_count; }
 }
 
-void AlgorithmInfinite::check_convergence_variance_mom(std::optional<double> threshold, std::optional<double> sensitivity) {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::check_convergence_variance_mom(std::optional<RealScalar> threshold, std::optional<RealScalar> sensitivity) {
     tools::log->trace("Checking convergence of variance mom");
     if(not threshold) threshold = settings::precision::variance_convergence_threshold;
     if(not sensitivity) sensitivity = settings::precision::variance_saturation_sensitivity;
@@ -244,10 +265,11 @@ void AlgorithmInfinite::check_convergence_variance_mom(std::optional<double> thr
     if(report.has_computed) { status.variance_mom_saturated_for = report.saturated_count; }
 }
 
-void AlgorithmInfinite::check_convergence_entg_entropy(std::optional<double> sensitivity) {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::check_convergence_entg_entropy(std::optional<RealScalar> sensitivity) {
     tools::log->debug("Checking convergence of entanglement");
     if(not sensitivity) sensitivity = settings::precision::entropy_saturation_sensitivity;
-    entropy_iter.emplace_back(tools::infinite::measure::entanglement_entropy(*tensors.state));
+    entropy_iter.emplace_back(tools::infinite::measure::entanglement_entropy(tensors.get_state()));
     auto report = check_saturation(entropy_iter, sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mov);
     if(report.has_computed) {
         status.entanglement_saturated_for = report.saturated_count;
@@ -255,14 +277,15 @@ void AlgorithmInfinite::check_convergence_entg_entropy(std::optional<double> sen
     }
 }
 
-void AlgorithmInfinite::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
     status.event = storage_event;
     auto sinfo   = StorageInfo(status, tensors.state->get_name());
     tools::log->debug("Writing to file: Reason [{}] | state prefix [{}]", enum2sv(sinfo.storage_event), sinfo.get_state_prefix());
     // Start saving tensors and metadata
-    tools::infinite::h5::save::bonds(*h5file, sinfo, *tensors.state);
-    tools::infinite::h5::save::state(*h5file, sinfo, *tensors.state);
-    tools::infinite::h5::save::edges(*h5file, sinfo, *tensors.edges);
+    tools::infinite::h5::save::bonds(*h5file, sinfo, tensors.get_state());
+    tools::infinite::h5::save::state(*h5file, sinfo, tensors.get_state());
+    tools::infinite::h5::save::edges(*h5file, sinfo, tensors.get_edges());
     if(storage_event == StorageEvent::PROJECTION) {
         status.event = StorageEvent::NONE;
         return; // Some storage reasons should not go further. Like projection.
@@ -273,12 +296,13 @@ void AlgorithmInfinite::write_to_file(StorageEvent storage_event, CopyPolicy cop
     tools::common::h5::save::status(*h5file, sinfo, status);
     tools::common::h5::save::timer(*h5file, sinfo);
     tools::common::h5::save::memory(*h5file, sinfo);
-    // Copy from temporary location to destination depending on given policy
+    // Copy from temporary location to destination depending on a given policy
     copy_from_tmp(storage_event, copy_policy);
     status.event = StorageEvent::NONE;
 }
 
-void AlgorithmInfinite::print_status() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::print_status() {
     if(num::mod(status.iter, settings::print_freq(status.algo_type)) != 0) { return; }
     if(settings::print_freq(status.algo_type) == 0) { return; }
     //    compute_observables();
@@ -289,31 +313,35 @@ void AlgorithmInfinite::print_status() {
 
     switch(status.algo_type) {
         case AlgorithmType::iDMRG:
-            report += fmt::format("E/L: mpo {:<20.16f} ham {:<20.16f} mom {:<20.16f}", tools::infinite::measure::energy_per_site_mpo(tensors),
-                                  tools::infinite::measure::energy_per_site_ham(tensors), tools::infinite::measure::energy_per_site_mom(tensors));
+            report += fmt::format("E/L: mpo {:<20.16f} ham {:<20.16f} mom {:<20.16f}",
+                                  fp(tools::infinite::measure::energy_per_site_mpo(tensors)), //
+                                  fp(tools::infinite::measure::energy_per_site_ham(tensors)), //
+                                  fp(tools::infinite::measure::energy_per_site_mom(tensors)));
             break;
         case AlgorithmType::iTEBD:
-            report += fmt::format("E/L: ham {:<20.16f} mom {:<20.16f}", tools::infinite::measure::energy_per_site_ham(tensors),
-                                  tools::infinite::measure::energy_per_site_mom(tensors));
+            report += fmt::format("E/L: ham {:<20.16f} mom {:<20.16f}", fp(tools::infinite::measure::energy_per_site_ham(tensors)),
+                                  fp(tools::infinite::measure::energy_per_site_mom(tensors)));
             break;
         default: throw except::runtime_error("Wrong simulation type");
     }
 
     switch(status.algo_type) {
         case AlgorithmType::iDMRG:
-            report +=
-                fmt::format("lg σ²H: mpo {:<10.6f} ham {:<10.6f} mom {:<10.6f}", tools::infinite::measure::energy_variance_per_site_mpo(tensors),
-                            tools::infinite::measure::energy_variance_per_site_ham(tensors), tools::infinite::measure::energy_variance_per_site_mom(tensors));
+            report += fmt::format("lg σ²H: mpo {:<10.6f} ham {:<10.6f} mom {:<10.6f}",
+                                  fp(tools::infinite::measure::energy_variance_per_site_mpo(tensors)), //
+                                  fp(tools::infinite::measure::energy_variance_per_site_ham(tensors)), //
+                                  fp(tools::infinite::measure::energy_variance_per_site_mom(tensors)));
             break;
         case AlgorithmType::iTEBD:
-            report += fmt::format("lg σ²H: ham {:<10.6f} mom {:<10.6f}", tools::infinite::measure::energy_variance_per_site_ham(tensors),
-                                  tools::infinite::measure::energy_variance_per_site_mom(tensors));
+            report += fmt::format("lg σ²H: ham {:<10.6f} mom {:<10.6f}",
+                                  fp(tools::infinite::measure::energy_variance_per_site_ham(tensors)), //
+                                  fp(tools::infinite::measure::energy_variance_per_site_mom(tensors)));
             break;
         default: throw except::runtime_error("Wrong simulation type");
     }
-    report += fmt::format("ε: {:<8.2e} ", tools::infinite::measure::truncation_error(*tensors.state));
-    report += fmt::format("Sₑ(l): {:<10.8f} ", tools::infinite::measure::entanglement_entropy(*tensors.state));
-    report += fmt::format("χmax: {:<3} χlim: {:<3} χ: {:<3} ", status.bond_max, status.bond_lim, tools::infinite::measure::bond_dimension(*tensors.state));
+    report += fmt::format("ε: {:<8.2e} ", tools::infinite::measure::truncation_error(tensors.get_state()));
+    report += fmt::format("Sₑ(l): {:<10.8f} ", fp(tools::infinite::measure::entanglement_entropy(tensors.get_state())));
+    report += fmt::format("χmax: {:<3} χlim: {:<3} χ: {:<3} ", status.bond_max, status.bond_lim, tools::infinite::measure::bond_dimension(tensors.get_state()));
     report += fmt::format("Sites: {:6}", tensors.get_length());
 
     report += fmt::format("stk: {:<1} ", status.algorithm_has_stuck_for);
@@ -331,7 +359,8 @@ void AlgorithmInfinite::print_status() {
     tools::log->info(report);
 }
 
-void AlgorithmInfinite::print_status_full() {
+template<typename Scalar>
+void AlgorithmInfinite<Scalar>::print_status_full() {
     using namespace std;
     using namespace tools::infinite::measure;
     tools::log->info("{:=^60}", "");
@@ -339,32 +368,32 @@ void AlgorithmInfinite::print_status_full() {
     tools::log->info("Iterations            = {:<16d}", status.iter);
     switch(status.algo_type) {
         case AlgorithmType::iDMRG:
-            tools::log->info("Energy MPO            = {:<16.16f}", tools::infinite::measure::energy_per_site_mpo(tensors));
-            tools::log->info("Energy HAM            = {:<16.16f}", tools::infinite::measure::energy_per_site_ham(tensors));
-            tools::log->info("Energy MOM            = {:<16.16f}", tools::infinite::measure::energy_per_site_mom(tensors));
+            tools::log->info("Energy MPO            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_mpo(tensors)));
+            tools::log->info("Energy HAM            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_ham(tensors)));
+            tools::log->info("Energy MOM            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_mom(tensors)));
             break;
         case AlgorithmType::iTEBD:
-            tools::log->info("Energy HAM            = {:<16.16f}", tools::infinite::measure::energy_per_site_ham(tensors));
-            tools::log->info("Energy MOM            = {:<16.16f}", tools::infinite::measure::energy_per_site_mom(tensors));
+            tools::log->info("Energy HAM            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_ham(tensors)));
+            tools::log->info("Energy MOM            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_mom(tensors)));
             break;
         default: throw except::runtime_error("Wrong simulation type");
     }
     switch(status.algo_type) {
         case AlgorithmType::iDMRG:
-            tools::log->info("lg σ²H MPO         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_mpo(tensors));
-            tools::log->info("lg σ²H HAM         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_ham(tensors));
-            tools::log->info("lg σ²H MOM         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_mom(tensors));
+            tools::log->info("lg σ²H MPO         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_mpo(tensors)));
+            tools::log->info("lg σ²H HAM         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_ham(tensors)));
+            tools::log->info("lg σ²H MOM         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_mom(tensors)));
             break;
         case AlgorithmType::iTEBD:
-            tools::log->info("lg σ²H HAM         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_ham(tensors));
-            tools::log->info("lg σ²H MOM         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_mom(tensors));
+            tools::log->info("lg σ²H HAM         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_ham(tensors)));
+            tools::log->info("lg σ²H MOM         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_mom(tensors)));
             break;
         default: throw except::runtime_error("Wrong simulation type");
     }
-    tools::log->info("Truncation error      = {:<8.2e}", tools::infinite::measure::truncation_error(*tensors.state));
-    tools::log->info("Entanglement Entropy  = {:<16.16f}", tools::infinite::measure::entanglement_entropy(*tensors.state));
+    tools::log->info("Truncation error      = {:<8.2e}", tools::infinite::measure::truncation_error(tensors.get_state()));
+    tools::log->info("Entanglement Entropy  = {:<16.16f}", fp(tools::infinite::measure::entanglement_entropy(tensors.get_state())));
     tools::log->info("χmax                  = {:<16d}", status.bond_max);
-    tools::log->info("χ                     = {:<16d}", tools::infinite::measure::bond_dimension(*tensors.state));
+    tools::log->info("χ                     = {:<16d}", tools::infinite::measure::bond_dimension(tensors.get_state()));
 
     switch(status.algo_type) {
         case AlgorithmType::iDMRG: break;

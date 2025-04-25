@@ -24,7 +24,6 @@ namespace settings {
     inline constexpr bool debug_cls = false;
 }
 
-
 /*! \brief Merge two MPO layers into a single one using SVD.
  *
  * Step 1:
@@ -65,12 +64,13 @@ namespace settings {
  *
  * @endverbatim
  */
-std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx64, 4>> &mpos_dn,
-                                                                       const std::vector<Eigen::Tensor<cx64, 4>> &mpos_up, bool adj_dn) {
+template<typename Scalar>
+std::vector<Eigen::Tensor<Scalar, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_dn,
+                                                                         const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_up, bool adj_dn) {
     if(mpos_dn.size() != mpos_up.size()) throw except::logic_error("size mismatch: {} != {}", mpos_dn.size(), mpos_up.size());
     if constexpr(settings::debug_cls) tools::log->debug("Merging mpos dn and up");
     auto t_merge         = tid::tic_scope("merge2");
-    auto mpos            = std::vector<Eigen::Tensor<cx64, 4>>(mpos_dn.size());
+    auto mpos            = std::vector<Eigen::Tensor<Scalar, 4>>(mpos_dn.size());
     auto cfg             = svd::config();
     cfg.rank_max         = settings::flbit::cls::mpo_circuit_svd_bondlim;
     cfg.truncation_limit = settings::flbit::cls::mpo_circuit_svd_trnclim;
@@ -82,8 +82,8 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
 
     {
         // Initialize a dummy SV to start contracting from the left
-        auto mpo_du = Eigen::Tensor<cx64, 4>();
-        auto SV     = Eigen::Tensor<cx64, 2>();
+        auto mpo_du = Eigen::Tensor<Scalar, 4>();
+        auto SV     = Eigen::Tensor<Scalar, 2>();
         SV.resize(std::array<long, 2>{1, mpos_dn.front().dimension(0) * mpos_up.front().dimension(0)});
         SV.setConstant(1.0);
         for(size_t idx = 0; idx < mpos.size(); ++idx) {
@@ -96,7 +96,7 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
                 auto rsh_mpo4      = std::array<long, 4>{SV.dimension(0), dd[1] * du[1], du[2], (adj_dn ? dd[2] : dd[3])}; // Dims of the new mpo_dmu to split
                 auto idx_contract1 = tenx::idx({1}, {0});
                 auto idx_contract2 = adj_dn ? tenx::idx({1, 4}, {0, 3}) : tenx::idx({1, 3}, {0, 3});
-                auto mpos_dn_idx_  = adj_dn ? Eigen::Tensor<cx64, 4>(mpos_dn[idx].conjugate()) : mpos_dn[idx];
+                auto mpos_dn_idx_  = adj_dn ? Eigen::Tensor<Scalar, 4>(mpos_dn[idx].conjugate()) : mpos_dn[idx];
                 mpo_du.resize(rsh_mpo4);
                 mpo_du.device(*threads->dev) =
                     SV.reshape(rsh_svl3).contract(mpos_dn_idx_, idx_contract1).contract(mpos_up[idx], idx_contract2).shuffle(shf5).reshape(rsh_mpo4);
@@ -117,8 +117,8 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
     // Now compress once backwards
     {
         auto t_back = tid::tic_scope("back");
-        auto mpoUS  = Eigen::Tensor<cx64, 4>();
-        auto US     = Eigen::Tensor<cx64, 2>();
+        auto mpoUS  = Eigen::Tensor<Scalar, 4>();
+        auto US     = Eigen::Tensor<Scalar, 2>();
         US.resize(std::array<long, 2>{mpos.back().dimension(1), 1});
         US.setConstant(1.0);
         for(size_t idx = mpos.size() - 1; idx < mpos.size(); --idx) {
@@ -142,7 +142,12 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
 
     return mpos;
 }
-
+template std::vector<Eigen::Tensor<cx32, 4>>  qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx32, 4>> &mpos_dn,
+                                                                                 const std::vector<Eigen::Tensor<cx32, 4>> &mpos_up, bool adj_dn);
+template std::vector<Eigen::Tensor<cx64, 4>>  qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx64, 4>> &mpos_dn,
+                                                                                 const std::vector<Eigen::Tensor<cx64, 4>> &mpos_up, bool adj_dn);
+template std::vector<Eigen::Tensor<cx128, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx128, 4>> &mpos_dn,
+                                                                                 const std::vector<Eigen::Tensor<cx128, 4>> &mpos_up, bool adj_dn);
 /*! \brief Merge two MPO layers into a single one using SVD.
  *
  * Step 1:
@@ -181,15 +186,16 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
  *
  * @endverbatim
  */
-std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx64, 4>> &mpos_dn,
-                                                                       const std::vector<Eigen::Tensor<cx64, 4>> &mpos_md,
-                                                                       const std::vector<Eigen::Tensor<cx64, 4>> &mpos_up) {
+template<typename Scalar>
+std::vector<Eigen::Tensor<Scalar, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_dn,
+                                                                         const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_md,
+                                                                         const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_up) {
     if(mpos_md.empty()) return merge_unitary_mpo_layers(mpos_dn, mpos_up, true);
     if(mpos_dn.size() != mpos_up.size()) throw except::logic_error("size mismatch: {} != {}", mpos_dn.size(), mpos_up.size());
     if(mpos_dn.size() != mpos_md.size()) throw except::logic_error("size mismatch: {} != {}", mpos_dn.size(), mpos_md.size());
     if constexpr(settings::debug_cls) tools::log->debug("Merging mpos dn md up");
     auto t_merge         = tid::tic_scope("merge3");
-    auto mpos            = std::vector<Eigen::Tensor<cx64, 4>>(mpos_dn.size());
+    auto mpos            = std::vector<Eigen::Tensor<Scalar, 4>>(mpos_dn.size());
     auto cfg             = svd::config();
     cfg.rank_max         = settings::flbit::cls::mpo_circuit_svd_bondlim;
     cfg.truncation_limit = settings::flbit::cls::mpo_circuit_svd_trnclim;
@@ -200,8 +206,8 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
     auto &threads        = tenx::threads::get();
     {
         // Initialize a dummy SV to start contracting from the left
-        auto mpo_dmu = Eigen::Tensor<cx64, 4>();
-        auto SV      = Eigen::Tensor<cx64, 2>();
+        auto mpo_dmu = Eigen::Tensor<Scalar, 4>();
+        auto SV      = Eigen::Tensor<Scalar, 2>();
         SV.resize(std::array<long, 2>{1, mpos_dn.front().dimension(0) * mpos_md.front().dimension(0) * mpos_up.front().dimension(0)});
         SV.setConstant(1.0);
         for(size_t idx = 0; idx < mpos.size(); ++idx) {
@@ -216,11 +222,11 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
                 auto           rsh_mpo4 = std::array<long, 4>{SV.dimension(0), dd[1] * dm[1] * du[1], du[2], dd[2]}; // Dims of the new mpo_dmu to split
                 mpo_dmu.resize(rsh_mpo4);
                 mpo_dmu.device(*threads->dev) = SV.reshape(rsh_svl4)
-                                                   .contract(mpos_dn[idx].conjugate(), tenx::idx({1}, {0}))
-                                                   .contract(mpos_md[idx], tenx::idx({1, 5}, {0, 3}))
-                                                   .contract(mpos_up[idx], tenx::idx({1, 5}, {0, 3}))
-                                                   .shuffle(shf6)
-                                                   .reshape(rsh_mpo4);
+                                                    .contract(mpos_dn[idx].conjugate(), tenx::idx({1}, {0}))
+                                                    .contract(mpos_md[idx], tenx::idx({1, 5}, {0, 3}))
+                                                    .contract(mpos_up[idx], tenx::idx({1, 5}, {0, 3}))
+                                                    .shuffle(shf6)
+                                                    .reshape(rsh_mpo4);
             }
             if(idx + 1 < mpos.size()) {
                 auto t_split            = tid::tic_scope("split");
@@ -238,8 +244,8 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
     // Now compress once backwards
     {
         auto t_back = tid::tic_scope("back");
-        auto mpoUS  = Eigen::Tensor<cx64, 4>();
-        auto US     = Eigen::Tensor<cx64, 2>();
+        auto mpoUS  = Eigen::Tensor<Scalar, 4>();
+        auto US     = Eigen::Tensor<Scalar, 2>();
         US.resize(std::array<long, 2>{mpos.back().dimension(1), 1});
         US.setConstant(1.0);
         for(size_t idx = mpos.size() - 1; idx < mpos.size(); --idx) {
@@ -263,6 +269,15 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::merge_unitary_mpo_layers(const std
 
     return mpos;
 }
+template std::vector<Eigen::Tensor<cx32, 4>>  qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx32, 4>> &mpos_dn,
+                                                                                 const std::vector<Eigen::Tensor<cx32, 4>> &mpos_md,
+                                                                                 const std::vector<Eigen::Tensor<cx32, 4>> &mpos_up);
+template std::vector<Eigen::Tensor<cx64, 4>>  qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx64, 4>> &mpos_dn,
+                                                                                 const std::vector<Eigen::Tensor<cx64, 4>> &mpos_md,
+                                                                                 const std::vector<Eigen::Tensor<cx64, 4>> &mpos_up);
+template std::vector<Eigen::Tensor<cx128, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx128, 4>> &mpos_dn,
+                                                                                 const std::vector<Eigen::Tensor<cx128, 4>> &mpos_md,
+                                                                                 const std::vector<Eigen::Tensor<cx128, 4>> &mpos_up);
 
 Eigen::Tensor<cx64, 1> qm::lbit::get_lbit_2point_correlator5(const std::vector<std::vector<Eigen::Tensor<cx64, 4>>> &mpo_layers, const Eigen::Matrix2cd &szi,
                                                              size_t pos_szi, const Eigen::Matrix2cd &szj) {
@@ -311,8 +326,8 @@ Eigen::Tensor<cx64, 1> qm::lbit::get_lbit_2point_correlator5(const std::vector<s
                               : mpo_id;
             temp4.resize(result.dimension(0), mpo_op.dimension(1), mpo_op.dimension(2), mpo_op.dimension(3));
             temp4.device(*threads->dev) = result.contract(mpo_op, idx1);
-            temp2                      = temp4.trace(trc2);
-            result                     = temp2 / temp2.constant(2.0);
+            temp2                       = temp4.trace(trc2);
+            result                      = temp2 / temp2.constant(2.0);
         }
     }
 
@@ -366,8 +381,8 @@ Eigen::Tensor<cx64, 1> qm::lbit::get_lbit_2point_correlator6(const std::vector<s
             const auto &mpo_op = mpo_layer_md[pos_res];
             temp4.resize(result.dimension(0), mpo_op.dimension(1), mpo_op.dimension(2), mpo_op.dimension(3));
             temp4.device(*threads->dev) = result.contract(mpo_op, idx1);
-            temp2                      = temp4.trace(trc2);
-            result                     = temp2 / temp2.constant(2.0);
+            temp2                       = temp4.trace(trc2);
+            result                      = temp2 / temp2.constant(2.0);
         }
     }
 

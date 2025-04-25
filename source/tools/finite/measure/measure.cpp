@@ -22,6 +22,10 @@ template<typename Scalar>
 size_t tools::finite::measure::length(const TensorsFinite<Scalar> &tensors) {
     return tensors.get_length();
 }
+template size_t tools::finite::measure::length(const TensorsFinite<fp32> &tensors);
+template size_t tools::finite::measure::length(const TensorsFinite<fp64> &tensors);
+template size_t tools::finite::measure::length(const TensorsFinite<fp128> &tensors);
+template size_t tools::finite::measure::length(const TensorsFinite<cx32> &tensors);
 template size_t tools::finite::measure::length(const TensorsFinite<cx64> &tensors);
 template size_t tools::finite::measure::length(const TensorsFinite<cx128> &tensors);
 
@@ -29,6 +33,10 @@ template<typename Scalar>
 size_t tools::finite::measure::length(const StateFinite<Scalar> &state) {
     return state.get_length();
 }
+template size_t tools::finite::measure::length(const StateFinite<fp32> &tensors);
+template size_t tools::finite::measure::length(const StateFinite<fp64> &tensors);
+template size_t tools::finite::measure::length(const StateFinite<fp128> &tensors);
+template size_t tools::finite::measure::length(const StateFinite<cx32> &tensors);
 template size_t tools::finite::measure::length(const StateFinite<cx64> &tensors);
 template size_t tools::finite::measure::length(const StateFinite<cx128> &tensors);
 
@@ -45,8 +53,8 @@ RealScalar<Scalar> tools::finite::measure::norm(const StateFinite<Scalar> &state
         norm = tools::common::contraction::contract_mps_norm(mps.get_M());
     } else {
         tools::log->trace("Measuring norm on full chain");
-        Eigen::Tensor<cx64, 2> chain;
-        Eigen::Tensor<cx64, 2> temp;
+        Eigen::Tensor<Scalar, 2> chain;
+        Eigen::Tensor<Scalar, 2> temp;
         bool                   first   = true;
         auto                  &threads = tenx::threads::get();
 
@@ -68,5 +76,9 @@ RealScalar<Scalar> tools::finite::measure::norm(const StateFinite<Scalar> &state
     state.measurements.norm = std::abs(norm);
     return state.measurements.norm.value();
 }
+template fp32  tools::finite::measure::norm(const StateFinite<fp32> &state, bool full);
+template fp64  tools::finite::measure::norm(const StateFinite<fp64> &state, bool full);
+template fp128 tools::finite::measure::norm(const StateFinite<fp128> &state, bool full);
+template fp32  tools::finite::measure::norm(const StateFinite<cx32> &state, bool full);
 template fp64  tools::finite::measure::norm(const StateFinite<cx64> &state, bool full);
 template fp128 tools::finite::measure::norm(const StateFinite<cx128> &state, bool full);

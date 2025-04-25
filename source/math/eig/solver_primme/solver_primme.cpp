@@ -144,7 +144,7 @@ std::string getLogMessage(struct primme_params *primme, [[maybe_unused]] int *ba
     }
     auto &solver     = *static_cast<eig::solver *>(primme->monitor);
     auto &result     = solver.result;
-    auto &eigvals    = result.get_eigvals<eig::Form::SYMM>();
+    auto &eigvals    = result.get_eigvals<eig::Form::SYMM, eig::Type::FP64>();
     auto  get_eigval = [&](long idx) -> double {
         // double eigval      = std::numeric_limits<double>::quiet_NaN();
         bool lockedValid = numLocked != nullptr and * numLocked > 0 and lockedEvals != nullptr;
@@ -223,7 +223,7 @@ void monitorFun([[maybe_unused]] void *basisEvals, [[maybe_unused]] int *basisSi
         bool lockedValid = numLocked != nullptr and * numLocked > 0 and lockedEvals != nullptr and lockedNorms != nullptr;
         bool basisValid  = basisSize != nullptr and * basisSize > 0 and basisEvals != nullptr and basisNorms != nullptr;
         if(lockedValid) {
-            auto &eigvals = result.get_eigvals<eig::Form::SYMM>();
+            auto &eigvals = result.get_eigvals<eig::Form::SYMM, eig::Type::FP64>();
             for(size_t idx = 0; idx < static_cast<size_t>(*numLocked); ++idx) {
                 if(idx < result.meta.residual_norms.size()) result.meta.residual_norms[idx] = static_cast<double *>(lockedNorms)[idx];
                 if(idx < eigvals.size()) eigvals[idx] = static_cast<double *>(lockedEvals)[idx];
@@ -231,7 +231,7 @@ void monitorFun([[maybe_unused]] void *basisEvals, [[maybe_unused]] int *basisSi
         }
         if(basisValid) {
             size_t lockOffset = lockedValid ? static_cast<size_t>(*numLocked) : 0ul;
-            auto  &eigvals    = result.get_eigvals<eig::Form::SYMM>();
+            auto  &eigvals    = result.get_eigvals<eig::Form::SYMM, eig::Type::FP64>();
             for(size_t idx = 0; idx < static_cast<size_t>(*basisSize); ++idx) {
                 if(idx + lockOffset < result.meta.residual_norms.size()) result.meta.residual_norms[idx + lockOffset] = static_cast<double *>(basisNorms)[idx];
                 if(idx + lockOffset < eigvals.size()) eigvals[idx + lockOffset] = static_cast<double *>(basisEvals)[idx];
@@ -433,7 +433,7 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
                     primme.numEvals, primme.maxMatvecs, primme.eps, primme.maxBasisSize, primme.minRestartSize, primme.restartingParams.maxPrevRetain,
                     primme.maxBlockSize, projToString(primme.projectionParams.projection));
     // Allocate space
-    auto &eigvals = result.get_eigvals<eig::Form::SYMM>();
+    auto &eigvals = result.get_eigvals<eig::Form::SYMM, eig::Type::FP64>();
     auto &eigvecs = result.get_eigvecs<Scalar, eig::Form::SYMM>();
     eigvals.resize(static_cast<size_t>(primme.numEvals));
     eigvecs.resize(static_cast<size_t>(primme.numEvals) * static_cast<size_t>(primme.n));

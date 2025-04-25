@@ -16,35 +16,34 @@ namespace svd {
     template<typename Scalar>
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     template<typename T>
-    using RealType = std::conditional_t<tenx::sfinae::is_single_prec_v<T>, fp32, std::conditional_t<tenx::sfinae::is_double_prec_v<T>, fp64, void>>;
+    using RealScalar = typename Eigen::NumTraits<T>::Real;
 
     namespace internal {
         // LAPACK uses internal workspace arrays which can be reused for the duration of the program.
         // Call clear() to recover this memory space
         void clear_lapack();
-        struct SaveMetaData {
-            using VectorFp32 = Eigen::Matrix<fp32, Eigen::Dynamic, 1>;
-            using VectorFp64 = Eigen::Matrix<fp64, Eigen::Dynamic, 1>;
-            using MatrixFp32 = Eigen::Matrix<fp32, Eigen::Dynamic, Eigen::Dynamic>;
-            using MatrixFp64 = Eigen::Matrix<fp64, Eigen::Dynamic, Eigen::Dynamic>;
-            using MatrixCx32 = Eigen::Matrix<cx32, Eigen::Dynamic, Eigen::Dynamic>;
-            using MatrixCx64 = Eigen::Matrix<cx64, Eigen::Dynamic, Eigen::Dynamic>;
-            std::variant<MatrixFp32, MatrixFp64, MatrixCx32, MatrixCx64> A, U, VT;
-            std::variant<VectorFp32, VectorFp64>                         S;
-            int                                                          info             = 0;
-            long                                                         rank             = -1;
-            long                                                         rank_max         = -1;
-            long                                                         rank_min         = -1;
-            double                                                       truncation_lim   = -1.0;
-            double                                                       truncation_error = -1.0;
-            size_t                                                       switchsize_gejsv = -1ul;
-            size_t                                                       switchsize_gesvd = -1ul;
-            size_t                                                       switchsize_gesdd = -1ul;
-            svd::lib                                                     svd_lib;
-            svd::rtn                                                     svd_rtn;
-            svd::save                                                    svd_save;
-            bool                                                         svd_is_running = false;
-            bool                                                         at_quick_exit  = false;
+
+        template<typename Scalar>
+        struct DumpSVD {
+            using Real       = typename Eigen::NumTraits<Scalar>::Real;
+            using Cplx       = std::complex<Real>;
+            using VectorReal = Eigen::Matrix<Real, Eigen::Dynamic, 1>;
+            using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+            MatrixType A, U, VT;
+            VectorReal S;
+            int        info             = 0;
+            long       rank             = -1;
+            long       rank_max         = -1;
+            long       rank_min         = -1;
+            double     truncation_lim   = -1.0;
+            double     truncation_error = -1.0;
+            size_t     switchsize_gejsv = -1ul;
+            size_t     switchsize_gesvd = -1ul;
+            size_t     switchsize_gesdd = -1ul;
+            svd::lib   svd_lib;
+            svd::rtn   svd_rtn;
+            svd::save  svd_save;
+            ~DumpSVD();
         };
 
     }
@@ -55,56 +54,8 @@ namespace svd {
         mutable double                       truncation_error = 0; // Stores the last truncation error
         mutable long                         rank             = 0; // Stores the last rank
         inline static long long              count            = 0; // Count the number of svd invocations for this execution
-        inline static internal::SaveMetaData saveMetaData     = {};
-
-        static void save_svd();
-
-        template<typename Scalar>
-        void save_svd(const MatrixType<Scalar> &A, std::optional<svd::save> override = std::nullopt) const;
-        template<typename Scalar>
-        void save_svd(const MatrixType<Scalar> &U, const VectorType<Scalar> &S, const MatrixType<Scalar> &VT, int info) const;
-        template<typename Scalar>
-        std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_lapacke(const Scalar *mat_ptr, long rows, long cols) const;
-
-        template<typename Scalar>
-        std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_eigen(const Scalar *mat_ptr, long rows, long cols) const;
-
-        template<typename Scalar>
-        std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_rsvd(const Scalar *mat_ptr, long rows, long cols) const;
-
-        void copy_config(const svd::config &svd_cfg);
-
-        template<typename T>
-        [[nodiscard]] std::pair<long, fp64> get_rank_from_truncation_error(const T &S) const{
-            VectorType<fp64> truncation_errors(S.size() + 1);
-            for(long s = 0; s <= S.size(); s++) { truncation_errors[s] = S.bottomRows(S.size() - s).norm(); } // Last one should be zero, i.e. no truncation
-            auto rank_    = (truncation_errors.array() >= truncation_lim).count();
-            auto rank_lim = S.size();
-            if(rank_max > 0) rank_lim = std::min(S.size(), rank_max);
-            rank_ = std::min(rank_, rank_lim);
-            if(rank_min > 0) rank_ = std::max(rank_, std::min(S.size(),
-                                                              rank_min)); // Make sure we don't overtruncate in some cases (e.g. when stashing)
-            if(rank_ <= 0) {
-                if(log)
-                    log->error("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.2e} | error {:8.2e}", S.size(), rank_,
-                               rank_lim, truncation_lim, truncation_errors[rank_]);
-                throw std::logic_error("rank <= 0");
-            }
-            return {rank_, truncation_errors[rank_]};
-        }
-
-
-
-        template<typename Scalar>
-        void print_matrix(const Scalar *mat_ptr, long rows, long cols, std::string_view tag, long dec = 8) const;
-        template<typename Scalar>
-        void print_vector(const Scalar *vec_ptr, long size, std::string_view tag, long dec = 8) const;
 
         public:
-        solver();
-        solver(const svd::config &svd_cfg);
-        solver(std::optional<svd::config> svd_cfg);
-
         long   rank_max       = -1;                                     /*!< -1 means determine from given matrix */
         long   rank_min       = -1;                                     /*!< -1 means disabled. */
         double truncation_lim = std::numeric_limits<double>::epsilon(); /*!< Truncation error limit, discard all lambda_i for highest i satisfying
@@ -119,6 +70,47 @@ namespace svd {
         svd::save                    svd_save         = svd::save::NONE;
         std::optional<svdx_select_t> svdx_select      = std::nullopt;
         bool                         benchmark        = false;
+
+        private:
+        template<typename Scalar>
+        std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_lapacke(const Scalar *mat_ptr, long rows, long cols) const;
+
+        template<typename Scalar>
+        std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_eigen(const Scalar *mat_ptr, long rows, long cols) const;
+
+        template<typename Scalar>
+        std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_rsvd(const Scalar *mat_ptr, long rows, long cols) const;
+
+        void copy_config(const svd::config &svd_cfg);
+
+        template<typename T>
+        [[nodiscard]] std::pair<long, fp64> get_rank_from_truncation_error(const T &S) const {
+            VectorType<fp64> truncation_errors(S.size() + 1);
+            for(long s = 0; s <= S.size(); s++) { truncation_errors[s] = static_cast<fp64>(S.bottomRows(S.size() - s).norm()); } // Last one should be zero, i.e. no truncation
+            auto rank_    = (truncation_errors.array() >= truncation_lim).count();
+            auto rank_lim = S.size();
+            if(rank_max > 0) rank_lim = std::min(S.size(), rank_max);
+            rank_ = std::min(rank_, rank_lim);
+            if(rank_min > 0) rank_ = std::max(rank_, std::min(S.size(),
+                                                              rank_min)); // Make sure we don't overtruncate in some cases (e.g. when stashing)
+            if(rank_ <= 0) {
+                if(log)
+                    log->error("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.2e} | error {:8.2e}", S.size(), rank_, rank_lim, truncation_lim,
+                               truncation_errors[rank_]);
+                throw std::logic_error("rank <= 0");
+            }
+            return {rank_, truncation_errors[rank_]};
+        }
+
+        template<typename Scalar>
+        void print_matrix(const Scalar *mat_ptr, long rows, long cols, std::string_view tag, long dec = 8) const;
+        template<typename Scalar>
+        void print_vector(const Scalar *vec_ptr, long size, std::string_view tag, long dec = 8) const;
+
+        public:
+        solver();
+        solver(const svd::config &svd_cfg);
+        solver(std::optional<svd::config> svd_cfg);
 
         void set_config(const svd::config &svd_cfg);
         void set_config(std::optional<svd::config> svd_cfg);

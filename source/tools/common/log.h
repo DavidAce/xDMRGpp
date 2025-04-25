@@ -2,7 +2,7 @@
 #include "io/spdlog.h"
 #include <memory>
 #include <optional>
-
+#include <stdfloat>
 namespace tools {
     inline std::shared_ptr<spdlog::logger> log;
 

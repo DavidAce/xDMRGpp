@@ -8,13 +8,17 @@
 #include "tensors/TensorsInfinite.h"
 #include "tools/common/log.h"
 
-void tools::infinite::print::print_hamiltonians(const ModelInfinite &model) {
+template<typename Scalar>
+void tools::infinite::print::print_hamiltonians(const ModelInfinite<Scalar> &model) {
     model.get_mpo_siteA().print_parameter_names();
     model.get_mpo_siteA().print_parameter_values();
     model.get_mpo_siteB().print_parameter_values();
 }
+template void tools::infinite::print::print_hamiltonians(const ModelInfinite<cx64> &model);
+template void tools::infinite::print::print_hamiltonians(const ModelInfinite<cx128> &model);
 
-void tools::infinite::print::dimensions(const TensorsInfinite &tensors) {
+template<typename Scalar>
+void tools::infinite::print::dimensions(const TensorsInfinite<Scalar> &tensors) {
     const auto &mpsa = tensors.state->get_mps_siteA().dimensions();
     const auto &mpsb = tensors.state->get_mps_siteB().dimensions();
     std::string strA = "Site A ";
@@ -39,3 +43,6 @@ void tools::infinite::print::dimensions(const TensorsInfinite &tensors) {
     tools::log->info(strA);
     tools::log->info(strB);
 }
+
+template void tools::infinite::print::dimensions(const TensorsInfinite<cx64> &tensors);
+template void tools::infinite::print::dimensions(const TensorsInfinite<cx128> &tensors);

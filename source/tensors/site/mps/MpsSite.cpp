@@ -21,42 +21,15 @@ namespace settings {
     inline constexpr bool verbose_apply_mpo = false;
 }
 
+template class MpsSite<fp32>;
+template class MpsSite<fp64>;
+template class MpsSite<fp128>;
+template class MpsSite<cx32>;
 template class MpsSite<cx64>;
 template class MpsSite<cx128>;
 
 template<typename Scalar>
 MpsSite<Scalar>::MpsSite() = default;
-
-template<typename Scalar>
-template<typename T3>
-requires is_valid_tensor3<T3>
-MpsSite<Scalar>::MpsSite(const T3 &M_, size_t pos, std::string_view label_) {
-    set_position(pos);
-    set_label(label_);
-    set_M(M_);
-}
-template MpsSite<>::MpsSite(const Eigen::Tensor<fp64, 3> &M_, size_t pos, std::string_view label_);
-template MpsSite<>::MpsSite(const Eigen::Tensor<cx64, 3> &M_, size_t pos, std::string_view label_);
-template MpsSite<>::MpsSite(const Eigen::TensorMap<Eigen::Tensor<fp64, 3>> &M_, size_t pos, std::string_view label_);
-template MpsSite<>::MpsSite(const Eigen::TensorMap<Eigen::Tensor<cx64, 3>> &M_, size_t pos, std::string_view label_);
-
-template<typename Scalar>
-MpsSite<Scalar>::MpsSite(const Eigen::Tensor<cx64, 3> &M_, const std::optional<Eigen::Tensor<cx64, 1>> &L_, size_t pos, double error, std::string_view label_) {
-    set_position(pos);
-    set_label(label_);
-    set_M(M_);
-    if(L_) set_L(L_.value());
-    set_truncation_error(error);
-}
-
-template<typename Scalar>
-MpsSite<Scalar>::MpsSite(const Eigen::Tensor<fp64, 3> &M_, const std::optional<Eigen::Tensor<fp64, 1>> &L_, size_t pos, double error, std::string_view label_) {
-    set_position(pos);
-    set_label(label_);
-    set_M(M_);
-    if(L_) set_L(L_.value());
-    set_truncation_error(error);
-}
 
 // We need to define the destructor and other special functions
 // because we enclose data in unique_ptr for this pimpl idiom.
@@ -77,6 +50,8 @@ template<typename Scalar>
 MpsSite<Scalar>::MpsSite(const MpsSite &other) = default;
 template<typename Scalar>
 MpsSite<Scalar> &MpsSite<Scalar>::operator=(const MpsSite &other) = default;
+
+
 
 template<typename Scalar>
 bool MpsSite<Scalar>::isCenter() const {
@@ -120,14 +95,14 @@ bool MpsSite<Scalar>::has_nan() const {
     }
 }
 template<typename Scalar>
-bool MpsSite<Scalar>::is_normalized(double prec) const {
+bool MpsSite<Scalar>::is_normalized(RealScalar prec) const {
     if constexpr(!settings::debug) {
         if(is_norm_cached.has_value()) return is_norm_cached.value();
     }
     auto t_dbg = tid::tic_token("is_normalized", tid::level::highest);
     if(isCenter() or get_label() == "AC") {
         auto norm      = tools::common::contraction::contract_mps_norm(get_M());
-        is_norm_cached = std::abs(std::abs(norm) - RealScalar(1.0)) <= prec;
+        is_norm_cached = std::abs(std::abs(norm) - RealScalar{1}) <= prec;
         return is_norm_cached.value();
     }
     if(get_label() == "A") {
@@ -172,9 +147,9 @@ void MpsSite<Scalar>::assert_dimensions() const {
 }
 
 template<typename Scalar>
-void MpsSite<Scalar>::assert_normalized(double prec) const {
+void MpsSite<Scalar>::assert_normalized(RealScalar prec) const {
     if(not is_normalized(prec))
-        throw except::runtime_error("MpsSite<Scalar>::assert_normalized({0:.2e}): {1}^dagger {1} is not normalized at pos {2}", prec, get_label(),
+        throw except::runtime_error("MpsSite<Scalar>::assert_normalized({0:.2e}): {1}^dagger {1} is not normalized at pos {2}", fp(prec), get_label(),
                                     get_position());
 }
 
@@ -295,32 +270,6 @@ void MpsSite<Scalar>::set_position(const size_t position_) {
     position = position_;
     MC.reset();
 }
-template<typename Scalar>
-template<typename T>
-T MpsSite<Scalar>::get_position() const {
-    if(position) {
-        return safe_cast<T>(position.value());
-    } else {
-        throw std::runtime_error("MpsSite<Scalar>::get_position(): Position hasn't been set on mps site.");
-    }
-}
-
-template size_t             MpsSite<>::get_position<size_t>() const;
-template long               MpsSite<>::get_position<long>() const;
-template int                MpsSite<>::get_position<int>() const;
-template unsigned long long MpsSite<>::get_position<unsigned long long>() const; // hsize_t from hdf5
-
-template<typename Scalar>
-template<typename T>
-[[nodiscard]] bool MpsSite<Scalar>::is_at_position(T pos) const {
-    return std::cmp_equal(get_position(), pos);
-}
-
-template bool MpsSite<>::is_at_position(size_t pos) const;
-template bool MpsSite<>::is_at_position(unsigned pos) const;
-template bool MpsSite<>::is_at_position(long pos) const;
-template bool MpsSite<>::is_at_position(int pos) const;
-template bool MpsSite<>::is_at_position(unsigned long long pos) const; // hsize_t from hdf5
 
 template<typename Scalar>
 void MpsSite<Scalar>::set_truncation_error(double error /* Negative is ignored */) {
@@ -500,40 +449,6 @@ void MpsSite<Scalar>::apply_mpo(const Eigen::Tensor<Scalar, 2> &mpo, bool adjoin
 }
 
 template<typename Scalar>
-template<typename T3>
-requires is_valid_tensor3<T3>
-void MpsSite<Scalar>::stash_U(const T3 &U, size_t dst) const {
-    U_stash = stash<Eigen::Tensor<Scalar, 3>>{.data = tenx::asScalarType<Scalar>(U), .error = 0, .pos_dst = dst};
-}
-template void MpsSite<>::stash_U(const Eigen::Tensor<cx64, 3> &U, size_t dst) const;
-template void MpsSite<>::stash_U(const Eigen::Tensor<fp64, 3> &U, size_t dst) const;
-template void MpsSite<>::stash_U(const Eigen::TensorMap<Eigen::Tensor<cx64, 3>> &U, size_t dst) const;
-template void MpsSite<>::stash_U(const Eigen::TensorMap<Eigen::Tensor<fp64, 3>> &U, size_t dst) const;
-
-template<typename Scalar>
-template<typename T1>
-requires is_valid_tensor1<T1>
-void MpsSite<Scalar>::stash_S(const T1 &S, double error, size_t dst) const {
-    S_stash = stash<Eigen::Tensor<Scalar, 1>>{.data = tenx::asScalarType<Scalar>(S), .error = error, .pos_dst = dst};
-}
-template void MpsSite<>::stash_S(const Eigen::Tensor<cx64, 1> &S, double error, size_t dst) const;
-template void MpsSite<>::stash_S(const Eigen::Tensor<fp64, 1> &S, double error, size_t dst) const;
-template void MpsSite<>::stash_S(const Eigen::TensorMap<Eigen::Tensor<cx64, 1>> &S, double error, size_t dst) const;
-template void MpsSite<>::stash_S(const Eigen::TensorMap<Eigen::Tensor<fp64, 1>> &S, double error, size_t dst) const;
-
-template<typename Scalar>
-template<typename T1>
-requires is_valid_tensor1<T1>
-void MpsSite<Scalar>::stash_C(const T1 &C, double error, size_t dst) const {
-    C_stash = stash<Eigen::Tensor<Scalar, 1>>{.data = tenx::asScalarType<Scalar>(C), .error = error, .pos_dst = dst};
-}
-
-template void MpsSite<>::stash_C(const Eigen::Tensor<cx64, 1> &S, double error, size_t dst) const;
-template void MpsSite<>::stash_C(const Eigen::Tensor<fp64, 1> &S, double error, size_t dst) const;
-template void MpsSite<>::stash_C(const Eigen::TensorMap<Eigen::Tensor<cx64, 1>> &S, double error, size_t dst) const;
-template void MpsSite<>::stash_C(const Eigen::TensorMap<Eigen::Tensor<fp64, 1>> &S, double error, size_t dst) const;
-
-template<typename Scalar>
 void MpsSite<Scalar>::stash_S(const std::pair<Eigen::Tensor<Scalar, 1>, double> &S_and_error, size_t dst) const {
     S_stash = stash<Eigen::Tensor<Scalar, 1>>{S_and_error.first, S_and_error.second, dst};
 }
@@ -542,17 +457,6 @@ template<typename Scalar>
 void MpsSite<Scalar>::stash_C(const std::pair<Eigen::Tensor<Scalar, 1>, double> &C_and_error, size_t dst) const {
     C_stash = stash<Eigen::Tensor<Scalar, 1>>{C_and_error.first, C_and_error.second, dst};
 }
-
-template<typename Scalar>
-template<typename T3>
-requires is_valid_tensor3<T3>
-void MpsSite<Scalar>::stash_V(const T3 &V, size_t dst) const {
-    V_stash = stash<Eigen::Tensor<Scalar, 3>>{.data = tenx::asScalarType<Scalar>(V), .error = 0, .pos_dst = dst};
-}
-template void MpsSite<>::stash_V(const Eigen::Tensor<cx64, 3> &V, size_t dst) const;
-template void MpsSite<>::stash_V(const Eigen::Tensor<fp64, 3> &V, size_t dst) const;
-template void MpsSite<>::stash_V(const Eigen::TensorMap<Eigen::Tensor<cx64, 3>> &V, size_t dst) const;
-template void MpsSite<>::stash_V(const Eigen::TensorMap<Eigen::Tensor<fp64, 3>> &V, size_t dst) const;
 
 template<typename Scalar>
 std::optional<stash<Eigen::Tensor<Scalar, 3>>> &MpsSite<Scalar>::get_U_stash() const {

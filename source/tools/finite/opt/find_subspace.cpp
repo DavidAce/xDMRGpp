@@ -10,6 +10,7 @@
 #include "math/eig/matvec/matvec_mpo.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/linalg.h"
+#include "math/num.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/state/StateFinite.h"
@@ -59,19 +60,29 @@ std::vector<int> subspace::generate_nev_list(int rows) {
     return nev_list;
 }
 
-template<typename Scalar>
-std::vector<opt_mps> subspace::find_subspace(const TensorsFinite &tensors, const OptMeta &meta) {
-    const auto &state = *tensors.state;
-    const auto &model = *tensors.model;
+template<typename T, typename Scalar>
+std::vector<opt_mps<Scalar>> subspace::find_subspace(const TensorsFinite<Scalar> &tensors, const OptMeta &meta, reports::subs_log<Scalar> &slog) {
+    const auto &state = tensors.get_state();
+    const auto &model = tensors.get_model();
     tools::log->trace("find_subspace ...");
     auto t_find = tid::tic_scope("find");
 
-    Eigen::MatrixXcd eigvecs;
-    Eigen::VectorXd  eigvals;
+    using tools::finite::opt::MatrixType;
+    using tools::finite::opt::RealScalar;
+    using tools::finite::opt::VectorReal;
+
+    using R       = RealScalar<T>;
+    using VectorR = VectorReal<T>;
+    using VectorT = VectorType<T>;
+    using MatrixT = MatrixType<T>;
+    static_assert(std::is_same_v<R, RealScalar<Scalar>>);
+
+    MatrixT eigvecs;
+    VectorR eigvals;
     // Determine the eigval target (shift)
-    double eigval_target = 0;
+    RealScalar<Scalar> eigval_target = 0;
     if(meta.eigv_target.has_value()) {
-        eigval_target = meta.eigv_target.value();
+        eigval_target = static_cast<RealScalar<Scalar>>(meta.eigv_target.value());
     } else {
         switch(meta.optAlgo) {
             case OptAlgo::HYBRID_DMRGX: {
@@ -94,14 +105,14 @@ std::vector<opt_mps> subspace::find_subspace(const TensorsFinite &tensors, const
                     case OptRitz::IS: [[fallthrough]];
                     case OptRitz::TE: {
                         if(model.has_energy_shifted_mpo()) {
-                            eigval_target = 0.0; // E-Eshf Should be close to 0
+                            eigval_target = R{0}; // E-Eshf Should be close to 0
                         } else {
                             eigval_target = tools::finite::measure::energy(tensors);
                         }
                         break;
                     }
                     case OptRitz::SM: {
-                        eigval_target = 0.0;
+                        eigval_target = R{0};
                         break;
                     }
                 }
@@ -118,49 +129,50 @@ std::vector<opt_mps> subspace::find_subspace(const TensorsFinite &tensors, const
 
     // If the mps is small enough you can afford full diag.
     if(tensors.state->active_problem_size() <= settings::precision::eig_max_size) {
-        std::tie(eigvecs, eigvals) = find_subspace_lapack<Scalar>(tensors);
+        std::tie(eigvecs, eigvals) = find_subspace_lapack<T>(tensors, slog);
     } else {
         // {
         // auto [eigvecs_test, eigvals_test] = find_subspace_lapack<Scalar>(tensors);
         // fmt::print("primme eigvals\n");
         // for(auto &&[idx, eigv] : iter::enumerate(eigvals_test)) { fmt::print("idx {:3} | {:.16f}\n", idx, eigv); }
         // }
-        std::tie(eigvecs, eigvals) = find_subspace_primme<Scalar>(tensors, eigval_target, meta);
+        std::tie(eigvecs, eigvals) = find_subspace_primme<T>(tensors, eigval_target, meta, slog);
 
         // fmt::print("primme eigvals\n");
         // for(auto &&[idx, eigv] : iter::enumerate(eigvals)) { fmt::print("idx {:3} | {:.16f}\n", idx, eigv); }
     }
     /* clang-format off */
-    tools::log->trace("Eigval range         : {:.16f} --> {:.16f}", eigvals.minCoeff(), eigvals.maxCoeff());
-    tools::log->trace("Energy range         : {:.16f} --> {:.16f}", eigvals.minCoeff() + model.get_energy_shift_mpo(), eigvals.maxCoeff() + model.get_energy_shift_mpo());
+    // tools::log->trace("Eigval range         : {:.16f} --> {:.16f}", fp(eigvals.minCoeff()), fp(eigvals.maxCoeff()));
+    // tools::log->trace("Energy range         : {:.16f} --> {:.16f}", fp(eigvals.minCoeff() + model.get_energy_shift_mpo()), fp(eigvals.maxCoeff() + model.get_energy_shift_mpo()));
     /* clang-format on */
-    reports::print_subs_report();
-
-    if constexpr(std::is_same<Scalar, double>::value) {
+    slog.print_subs_report();
+    if constexpr(sfinae::is_std_complex_v<T>) {
         tenx::subtract_phase(eigvecs);
-        double trunc = eigvecs.imag().cwiseAbs().sum();
-        if(trunc > 1e-12) tools::log->warn("truncating imag of eigvecs, sum: {}", trunc);
+        R trunc = eigvecs.imag().cwiseAbs().sum();
+        if(num::gt(trunc, 1e-12)) tools::log->warn("truncating imag of eigvecs, sum: {:.3e}", fp(trunc));
         eigvecs = eigvecs.real();
     }
-    const auto     &multisite_mps = state.get_multisite_mps<cx64>();
-    const auto      multisite_vec = Eigen::Map<const Eigen::VectorXcd>(multisite_mps.data(), multisite_mps.size());
-    auto            energy_shift  = model.get_energy_shift_mpo();
-    Eigen::VectorXd overlaps      = (multisite_vec.adjoint() * eigvecs).cwiseAbs().real();
+    const auto &multisite_mps = state.template get_multisite_mps<T>();
+    const auto  multisite_vec = Eigen::Map<const VectorT>(multisite_mps.data(), multisite_mps.size());
+    R           energy_shift  = static_cast<R>(std::real(model.get_energy_shift_mpo()));
+    VectorR     overlaps      = (multisite_vec.adjoint() * eigvecs).cwiseAbs().real();
 
     double eigvec_time = 0;
-    for(const auto &item : reports::subs_log) { eigvec_time += item.ham_time + item.lu_time + item.eig_time; }
+    for(const auto &item : slog.entries) { eigvec_time += item.ham_time + item.lu_time + item.eig_time; }
 
-    std::vector<opt_mps> subspace;
+    std::vector<opt_mps<Scalar>> subspace;
     subspace.reserve(safe_cast<size_t>(eigvals.size()));
     for(long idx = 0; idx < eigvals.size(); idx++) {
         // Important to normalize the eigenvectors that we get from the solver: they are not always well normalized when we get them!
-        auto eigvec_i = tenx::TensorCast(eigvecs.col(idx).normalized(), multisite_mps.dimensions());
-        subspace.emplace_back(fmt::format("eigenvector {}", idx), eigvec_i, tensors.active_sites, energy_shift, eigvals(idx), std::nullopt, overlaps(idx),
-                              tensors.get_length());
+        auto                  eigvec_i = tenx::TensorCast(eigvecs.col(idx).normalized(), multisite_mps.dimensions());
+        static constexpr auto nan      = std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
+        subspace.emplace_back(opt_mps<Scalar>(fmt::format("eigenvector {}", idx), tenx::asScalarType<Scalar>(eigvec_i), tensors.active_sites,
+                                              static_cast<RealScalar<Scalar>>(energy_shift), static_cast<RealScalar<Scalar>>(eigvals(idx)), nan,
+                                              static_cast<RealScalar<Scalar>>(overlaps(idx)), tensors.get_length()));
         subspace.back().is_basis_vector = true;
         subspace.back().set_time(eigvec_time);
-        subspace.back().set_mv(reports::subs_log.size());
-        subspace.back().set_iter(reports::subs_log.size());
+        subspace.back().set_mv(slog.size());
+        subspace.back().set_iter(slog.size());
         subspace.back().set_eigs_idx(idx);
         subspace.back().set_eigs_eigval(eigvals(idx));
         subspace.back().set_eigs_ritz(enum2sv(meta.optRitz));
@@ -170,36 +182,53 @@ std::vector<opt_mps> subspace::find_subspace(const TensorsFinite &tensors, const
     }
     return subspace;
 }
+/* clang-format off */
+template std::vector<opt_mps<fp32>> subspace::find_subspace<fp32>(const TensorsFinite<fp32> &tensors, const OptMeta &meta, reports::subs_log<fp32> &subs_log);
+template std::vector<opt_mps<fp64>> subspace::find_subspace<fp64>(const TensorsFinite<fp64> &tensors, const OptMeta &meta, reports::subs_log<fp64> &subs_log);
+template std::vector<opt_mps<fp128>> subspace::find_subspace<fp128>(const TensorsFinite<fp128> &tensors, const OptMeta &meta, reports::subs_log<fp128> &subs_log);
+template std::vector<opt_mps<cx32>> subspace::find_subspace<fp32>(const TensorsFinite<cx32> &tensors, const OptMeta &meta, reports::subs_log<cx32> &subs_log);
+template std::vector<opt_mps<cx64>> subspace::find_subspace<fp64>(const TensorsFinite<cx64> &tensors, const OptMeta &meta, reports::subs_log<cx64> &subs_log);
+template std::vector<opt_mps<cx128>> subspace::find_subspace<fp128>(const TensorsFinite<cx128> &tensors, const OptMeta &meta, reports::subs_log<cx128> &subs_log);
+template std::vector<opt_mps<cx32>> subspace::find_subspace<cx32>(const TensorsFinite<cx32> &tensors, const OptMeta &meta, reports::subs_log<cx32> &subs_log);
+template std::vector<opt_mps<cx64>> subspace::find_subspace<cx64>(const TensorsFinite<cx64> &tensors, const OptMeta &meta, reports::subs_log<cx64> &subs_log);
+template std::vector<opt_mps<cx128>> subspace::find_subspace<cx128>(const TensorsFinite<cx128> &tensors, const OptMeta &meta, reports::subs_log<cx128> &subs_log);
+/* clang-format on */
 
-template std::vector<opt_mps> subspace::find_subspace<cx64>(const TensorsFinite &tensors, const OptMeta &meta);
-
-template std::vector<opt_mps> subspace::find_subspace<fp64>(const TensorsFinite &tensors, const OptMeta &meta);
-
-template<typename Scalar>
-std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_part(const TensorsFinite &tensors, double energy_target, const OptMeta &meta) {
+template<typename T, typename Scalar>
+std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_part(const TensorsFinite<Scalar> &tensors, RealScalar<Scalar> energy_target,
+                                                                     const OptMeta &meta, reports::subs_log<Scalar> &slog) {
     tools::log->trace("Finding subspace -- partial");
     auto  t_iter = tid::tic_scope("part");
     auto &t_lu   = tid::get("lu_decomp");
 
+    using tools::finite::opt::MatrixType;
+    using tools::finite::opt::RealScalar;
+    using tools::finite::opt::VectorReal;
+
+    using R       = RealScalar<T>;
+    using VectorR = VectorReal<T>;
+    using VectorT = VectorType<T>;
+    using MatrixT = MatrixType<T>;
+
     // Initial mps and a vector map
-    const auto                        &multisite_mps = tensors.state->get_multisite_mps<cx64>();
-    Eigen::Map<const Eigen::VectorXcd> multisite_vector(multisite_mps.data(), multisite_mps.size());
-    const auto                         problem_size = multisite_mps.size();
+    const auto               &multisite_mps = tensors.state->template get_multisite_mps<T>();
+    Eigen::Map<const VectorT> multisite_vector(multisite_mps.data(), multisite_mps.size());
+    const auto                problem_size = multisite_mps.size();
 
     // Mutable initial mps vector used for initial guess in arpack
-    Eigen::Tensor<Scalar, 3> init = tensors.state->get_multisite_mps<Scalar>();
+    Eigen::Tensor<T, 3> init = tensors.state->template get_multisite_mps<T>();
 
     // Get the local effective Hamiltonian as a matrix
-    const auto &effective_hamiltonian = tensors.get_effective_hamiltonian<Scalar>();
+    const auto &effective_hamiltonian = tensors.template get_effective_hamiltonian<T>();
     double      time_ham              = tid::get("ham").get_last_interval();
 
     // Create the dense matrix object for the eigenvalue solver
-    MatVecDense<Scalar> hamiltonian(effective_hamiltonian.data(), effective_hamiltonian.dimension(0), false, eig::Form::SYMM, eig::Side::R);
+    MatVecDense<T> hamiltonian(effective_hamiltonian.data(), effective_hamiltonian.dimension(0), false, eig::Form::SYMM, eig::Side::R);
 
     // Create a reusable config for multiple nev trials
     eig::settings config;
     config.tol             = settings::precision::eigs_tol_min;
-    config.sigma           = cx64(energy_target, 0.0);
+    config.sigma           = cx64(static_cast<fp64>(energy_target), 0.0);
     config.shift_invert    = eig::Shinv::ON;
     config.compute_eigvecs = eig::Vecs::ON;
     config.ritz            = eig::Ritz::LM;
@@ -207,8 +236,8 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_part(const 
     std::string reason = "exhausted";
 
     // Initialize eigvals/eigvecs containers that store the results
-    Eigen::VectorXd  eigvals;
-    Eigen::MatrixXcd eigvecs;
+    VectorR eigvals;
+    MatrixT eigvecs;
     for(auto nev : generate_nev_list(safe_cast<int>(problem_size))) {
         eig::solver solver;
         solver.config        = config;
@@ -222,38 +251,44 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_part(const 
         solver.eigs(hamiltonian);
         t_lu += *hamiltonian.t_factorOP;
 
-        eigvals = eig::view::get_eigvals<fp64>(solver.result);
-        eigvecs = eig::view::get_eigvecs<cx64>(solver.result, eig::Side::R);
+        eigvals = eig::view::get_eigvals<R>(solver.result);
+        eigvecs = eig::view::get_eigvecs<T>(solver.result, eig::Side::R);
 
         // Check the quality of the subspace
-        Eigen::VectorXd overlaps       = (multisite_vector.adjoint() * eigvecs).cwiseAbs().real();
-        double          max_overlap    = overlaps.maxCoeff();
-        double          min_overlap    = overlaps.minCoeff();
-        double          sq_sum_overlap = overlaps.cwiseAbs2().sum();
-        double          subspace_error = 1.0 - sq_sum_overlap;
-        reports::subs_add_entry(nev, max_overlap, min_overlap, subspace_error, solver.result.meta.time_total, time_ham, t_lu.get_last_interval(),
-                                solver.result.meta.iter, solver.result.meta.num_mv, solver.result.meta.num_pc);
+        VectorR overlaps       = (multisite_vector.adjoint() * eigvecs).cwiseAbs().real();
+        R       max_overlap    = overlaps.maxCoeff();
+        R       min_overlap    = overlaps.minCoeff();
+        R       sq_sum_overlap = overlaps.cwiseAbs2().sum();
+        R       subspace_error = R{1} - sq_sum_overlap;
+        slog.subs_add_entry(nev, max_overlap, min_overlap, subspace_error, solver.result.meta.time_total, time_ham, t_lu.get_last_interval(),
+                            solver.result.meta.iter, solver.result.meta.num_mv, solver.result.meta.num_pc);
         time_ham = 0;
-        if(max_overlap > 1.0 + 1e-6) throw except::runtime_error("max_overlap larger than one: {:.16f}", max_overlap);
-        if(sq_sum_overlap > 1.0 + 1e-6) throw except::runtime_error("eps larger than one: {:.16f}", sq_sum_overlap);
-        if(min_overlap < 0.0) throw except::runtime_error("min_overlap smaller than zero: {:.16f}", min_overlap);
-        if(subspace_error < meta.subspace_tol.value_or(1e-10)) {
-            reason = fmt::format("subspace error is low enough: {:.3e} < tolerance {:.3e}", subspace_error, meta.subspace_tol.value_or(1e-10));
+        if(num::gt(max_overlap, 1.0 + 1e-6)) throw except::runtime_error("max_overlap larger than one: {:.16f}", fp(max_overlap));
+        if(num::gt(sq_sum_overlap, 1.0 + 1e-6)) throw except::runtime_error("eps larger than one: {:.16f}", fp(sq_sum_overlap));
+        if(num::lt(min_overlap, 0.0)) throw except::runtime_error("min_overlap smaller than zero: {:.16f}", fp(min_overlap));
+        if(num::lt(subspace_error, meta.subspace_tol.value_or(1e-10f))) {
+            reason = fmt::format("subspace error is low enough: {:.3e} < tolerance {:.3e}", fp(subspace_error), meta.subspace_tol.value_or(1e-10));
             break;
         }
-        if(meta.optAlgo == OptAlgo::DMRGX and sq_sum_overlap >= 1.0 / std::sqrt(2.0)) {
-            reason = fmt::format("Overlap is sufficient:  {:.16f} >= threshold {:.16f}", max_overlap, 1.0 / std::sqrt(2.0));
+        if(meta.optAlgo == OptAlgo::DMRGX and sq_sum_overlap >= R{1} / std::sqrt(R{2})) {
+            reason = fmt::format("Overlap is sufficient:  {:.16f} >= threshold {:.16f}", fp(max_overlap), 1.0 / std::sqrt(2.0));
             break;
         }
     }
     tools::log->debug("Finished iterative eigensolver -- reason: {}", reason);
     return {eigvecs, eigvals};
 }
-
-template std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_part<cx64>(const TensorsFinite &tensors, double energy_target,
-                                                                                         const OptMeta &meta);
-template std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_part<fp64>(const TensorsFinite &tensors, double energy_target,
-                                                                                         const OptMeta &meta);
+/* clang-format off */
+template std::pair<MatrixType<fp32>, VectorReal<fp32>> subspace::find_subspace_part<fp32>(const TensorsFinite<fp32> &tensors, RealScalar<fp32> energy_target, const OptMeta &meta, reports::subs_log<fp32> &slog);
+template std::pair<MatrixType<fp64>, VectorReal<fp64>> subspace::find_subspace_part<fp64>(const TensorsFinite<fp64> &tensors, RealScalar<fp64> energy_target, const OptMeta &meta, reports::subs_log<fp64> &slog);
+template std::pair<MatrixType<fp128>, VectorReal<fp128>> subspace::find_subspace_part<fp128>(const TensorsFinite<fp128> &tensors, RealScalar<fp128> energy_target, const OptMeta &meta, reports::subs_log<fp128> &slog);
+template std::pair<MatrixType<fp32>, VectorReal<cx32>> subspace::find_subspace_part<fp32>(const TensorsFinite<cx32> &tensors, RealScalar<cx32> energy_target, const OptMeta &meta, reports::subs_log<cx32> &slog);
+template std::pair<MatrixType<fp64>, VectorReal<cx64>> subspace::find_subspace_part<fp64>(const TensorsFinite<cx64> &tensors, RealScalar<cx64> energy_target, const OptMeta &meta, reports::subs_log<cx64> &slog);
+template std::pair<MatrixType<fp128>, VectorReal<cx128>> subspace::find_subspace_part<fp128>(const TensorsFinite<cx128> &tensors, RealScalar<cx128> energy_target, const OptMeta &meta, reports::subs_log<cx128> &slog);
+template std::pair<MatrixType<cx32>, VectorReal<cx32>> subspace::find_subspace_part<cx32>(const TensorsFinite<cx32> &tensors, RealScalar<cx32> energy_target, const OptMeta &meta, reports::subs_log<cx32> &slog);
+template std::pair<MatrixType<cx64>, VectorReal<cx64>> subspace::find_subspace_part<cx64>(const TensorsFinite<cx64> &tensors, RealScalar<cx64> energy_target, const OptMeta &meta, reports::subs_log<cx64> &slog);
+template std::pair<MatrixType<cx128>, VectorReal<cx128>> subspace::find_subspace_part<cx128>(const TensorsFinite<cx128> &tensors, RealScalar<cx128> energy_target, const OptMeta &meta, reports::subs_log<cx128> &slog);
+/* clang-format on */
 
 // template<typename Scalar>
 // void preconditioner(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *ierr) {
@@ -310,17 +345,17 @@ void convTestFun([[maybe_unused]] double *eval, [[maybe_unused]] void *evec, dou
                 // Check the quality of the subspace
                 const auto initial_vec = Eigen::Map<const VectorType>(static_cast<Scalar *>(config.initial_guess.front().ptr), eigvecs.rows());
                 // const auto      initial_vec = Eigen::Map<const Eigen::VectorXcd>(static_cast<cx64 *>(config.initial_guess.front().ptr), eigvecs.rows());
-                Eigen::VectorXd overlaps = (initial_vec.adjoint() * eigvecs).cwiseAbs().real();
-
-                double max_overlap    = overlaps.maxCoeff();
-                double min_overlap    = overlaps.minCoeff();
-                double sq_sum_overlap = overlaps.cwiseAbs2().sum();
-                double subspace_error = 1.0 - sq_sum_overlap;
-                if(max_overlap > 1.0 + 1e-6) tools::log->debug("max_overlap larger than one: {:.16f}", max_overlap);
-                if(sq_sum_overlap > 1.0 + 1e-6) tools::log->debug("eps larger than one: {:.16f}", sq_sum_overlap);
-                if(min_overlap < 0.0) tools::log->debug("min_overlap smaller than zero: {:.16f}", min_overlap);
-                tools::log->debug("subspace_error: {:.16f} | eigvecs: {} x {} (of {})", subspace_error, eigvecs.rows(), eigvecs.cols(), cols);
-                result.meta.subspace_ok = subspace_error < config.subspace_tol.value();
+                VectorReal<Scalar> overlaps = (initial_vec.adjoint() * eigvecs).cwiseAbs().real();
+                using R                     = RealScalar<Scalar>;
+                R max_overlap               = overlaps.maxCoeff();
+                R min_overlap               = overlaps.minCoeff();
+                R sq_sum_overlap            = overlaps.cwiseAbs2().sum();
+                R subspace_error            = R{1} - sq_sum_overlap;
+                if(num::gt(max_overlap, 1.0 + 1e-6)) tools::log->debug("max_overlap larger than one: {:.16f}", fp(max_overlap));
+                if(num::gt(sq_sum_overlap, 1.0 + 1e-6)) tools::log->debug("eps larger than one: {:.16f}", fp(sq_sum_overlap));
+                if(num::lt(min_overlap, 0.0)) tools::log->debug("min_overlap smaller than zero: {:.16f}", fp(min_overlap));
+                tools::log->debug("subspace_error: {:.16f} | eigvecs: {} x {} (of {})", fp(subspace_error), eigvecs.rows(), eigvecs.cols(), cols);
+                result.meta.subspace_ok = num::lt(subspace_error, config.subspace_tol.value());
             }
             result.meta.last_conv_iter = primme->stats.numOuterIterations;
             result.meta.last_conv_mvec = primme->stats.numMatvecs;
@@ -336,25 +371,31 @@ void convTestFun([[maybe_unused]] double *eval, [[maybe_unused]] void *evec, dou
     *ierr = 0;
 }
 
-template<typename Scalar>
-std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(const TensorsFinite &tensors, double eigval_shift, const OptMeta &meta) {
-    tools::log->trace("find_subspace_primme: ritz {} | target eigval {:.16f} | subspace tolerance {:.3e} | type {}", enum2sv(meta.optRitz), eigval_shift,
+template<typename T, typename Scalar>
+std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const TensorsFinite<Scalar> &tensors, RealScalar<Scalar> eigval_shift,
+                                                                       const OptMeta &meta, reports::subs_log<Scalar> &slog) {
+    tools::log->trace("find_subspace_primme: ritz {} | target eigval {:.16f} | subspace tolerance {:.3e} | type {}", enum2sv(meta.optRitz), fp(eigval_shift),
                       meta.subspace_tol.value_or(1e-10), sfinae::type_name<Scalar>());
-    auto t_iter      = tid::tic_scope("part");
-    using VectorType = Eigen::Matrix<fp64, Eigen::Dynamic, 1>;                // We always have real eigenvalues
-    using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>; // We may have real or complex eigenvectors
+    auto t_iter = tid::tic_scope("part");
+    using tools::finite::opt::MatrixType;
+    using tools::finite::opt::RealScalar;
+    using tools::finite::opt::VectorReal;
 
+    using R       = RealScalar<T>;
+    using VectorR = VectorReal<T>;
+    using VectorT = VectorType<T>;
+    using MatrixT = MatrixType<T>;
     // Initial mps and a vector map
-    const auto &initial_mps = tensors.state->get_multisite_mps<cx64>();
-    const auto  initial_vec = Eigen::Map<const Eigen::VectorXcd>(initial_mps.data(), initial_mps.size());
+    const auto &initial_mps = tensors.state->template get_multisite_mps<T>();
+    const auto  initial_vec = Eigen::Map<const VectorT>(initial_mps.data(), initial_mps.size());
 
     // Mutable initial mps vector used for initial guess
-    Eigen::Tensor<Scalar, 3> init = tensors.state->get_multisite_mps<Scalar>();
+    Eigen::Tensor<T, 3> init = tensors.state->template get_multisite_mps<T>();
 
     // Get the local effective Hamiltonian in mps/mpo form
     const auto &mpos          = tensors.get_model().get_mpo_active();
     const auto &enve          = tensors.get_edges().get_ene_active();
-    auto        hamiltonian   = MatVecMPOS<Scalar>(mpos, enve);
+    auto        hamiltonian   = MatVecMPOS<T>(mpos, enve);
     hamiltonian.factorization = eig::Factorization::LU;
 
     // Create a reusable config for multiple nev trials
@@ -367,7 +408,7 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(cons
     config.shift_invert        = eig::Shinv::OFF;
     config.maxIter             = settings::precision::eigs_iter_max; // We need them to actually converge;
     config.ritz                = eig::Ritz::primme_closest_abs;
-    config.primme_targetShifts = {eigval_shift};
+    config.primme_targetShifts = {static_cast<double>(eigval_shift)};
     // config.primme_projection    = "primme_proj_refined";
     config.compute_eigvecs    = eig::Vecs::ON;
     config.primme_locking     = 1;
@@ -384,7 +425,7 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(cons
         hamiltonian.factorization  = eig::Factorization::LU;
         config.shift_invert        = eig::Shinv::ON;
         config.ritz                = eig::Ritz::primme_largest_abs;
-        config.sigma               = cx64(eigval_shift, 0.0);
+        config.sigma               = cx64(static_cast<double>(eigval_shift), 0.0);
         config.primme_projection   = "primme_proj_default";
         config.primme_locking      = true;
         config.primme_targetShifts = {};
@@ -397,8 +438,8 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(cons
     std::string reason = "exhausted";
 
     // Initialize eigvals/eigvecs containers that store the results
-    VectorType eigvals;
-    MatrixType eigvecs;
+    VectorR eigvals;
+    MatrixT eigvecs;
     // tools::log->info("initial: \n{}\n", linalg::matrix::to_string(initial_vec.transpose().real(), 8));
     auto nev_list = std::vector<int>{static_cast<int>(settings::precision::max_subspace_size)};
     // for(int nev = 2; nev <= static_cast<int>(settings::precision::max_subspace_size); nev *= 4) { nev_list.emplace_back(nev); }
@@ -413,7 +454,7 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(cons
         // Set the new initial guess if we are doing one more round
         if(eigvecs.size() == 0) {
             solver.config.initial_guess.push_back({init.data(), 0});
-            config.primme_targetShifts = {eigval_shift};
+            config.primme_targetShifts = {static_cast<double>(eigval_shift)};
         } else {
             for(long n = 0; n < eigvecs.cols(); ++n) { solver.config.initial_guess.push_back({eigvecs.col(n).data(), n}); }
             // if(solver.config.shift_invert == eig::Shinv::OFF) {
@@ -424,12 +465,12 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(cons
         tools::log->trace("Running eigensolver | nev {} | ncv {} | factorization {} | initial guesses {}", solver.config.maxNev.value(),
                           solver.config.maxNcv.value(), eig::FactorizationToString(hamiltonian.factorization), solver.config.initial_guess.size());
         solver.eigs(hamiltonian);
-        auto &eigvals_vec = solver.result.get_eigvals<fp64>();
-        auto &eigvecs_vec = solver.result.get_eigvecs<Scalar, eig::Form::SYMM>();
+        auto &eigvals_vec = solver.result.get_eigvals<RealScalar<T>>();
+        auto &eigvecs_vec = solver.result.get_eigvecs<T, eig::Form::SYMM>();
         auto  rows        = static_cast<long>(hamiltonian.rows());
         auto  cols        = static_cast<long>(solver.config.maxNev.value());
-        eigvals           = Eigen::Map<VectorType>(eigvals_vec.data(), cols);
-        eigvecs           = Eigen::Map<MatrixType>(eigvecs_vec.data(), rows, cols);
+        eigvals           = Eigen::Map<VectorR>(eigvals_vec.data(), cols);
+        eigvecs           = Eigen::Map<MatrixT>(eigvecs_vec.data(), rows, cols);
 
         // eigvals = eig::view::get_eigvals<fp64>(solver.result, false);
         // eigvecs = eig::view::get_eigvecs<Scalar>(solver.result, eig::Side::R, false);
@@ -454,64 +495,80 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme(cons
         // }
 
         // Check the quality of the subspace
-        Eigen::VectorXd overlaps = (initial_vec.adjoint() * eigvecs).cwiseAbs().real();
+        VectorR overlaps = (initial_vec.adjoint() * eigvecs).cwiseAbs().real();
         // tools::log->info("eigvecs: \n{}\n", linalg::matrix::to_string(eigvecs.real(), 8));
         // tools::log->info("norms  : \n{}\n", linalg::matrix::to_string(eigvecs.colwise().norm(), 8));
         // tools::log->info("eigvals: \n{}\n", linalg::matrix::to_string(eigvals.real().transpose(), 8));
         // tools::log->info("overlaps: \n{}\n", linalg::matrix::to_string(overlaps.real().transpose(), 8));
 
-        double max_overlap    = overlaps.maxCoeff();
-        double min_overlap    = overlaps.minCoeff();
-        double sq_sum_overlap = overlaps.cwiseAbs2().sum();
-        double subspace_error = 1.0 - sq_sum_overlap;
+        R      max_overlap    = overlaps.maxCoeff();
+        R      min_overlap    = overlaps.minCoeff();
+        R      sq_sum_overlap = overlaps.cwiseAbs2().sum();
+        R      subspace_error = R{1} - sq_sum_overlap;
         double lu_time        = hamiltonian.t_factorOP.get()->get_last_interval();
         double ham_time       = hamiltonian.t_genMat.get()->get_last_interval();
-        reports::subs_add_entry(nev, max_overlap, min_overlap, subspace_error, solver.result.meta.time_total, ham_time, lu_time, solver.result.meta.iter,
-                                solver.result.meta.num_mv, solver.result.meta.num_pc);
+        slog.subs_add_entry(nev, max_overlap, min_overlap, subspace_error, solver.result.meta.time_total, ham_time, lu_time, solver.result.meta.iter,
+                            solver.result.meta.num_mv, solver.result.meta.num_pc);
         // if(max_overlap > 1.0 + 1e-6) throw except::runtime_error("max_overlap larger than one: {:.16f}", max_overlap);
         // if(sq_sum_overlap > 1.0 + 1e-6) throw except::runtime_error("eps larger than one: {:.16f}", sq_sum_overlap);
         // if(min_overlap < 0.0) throw except::runtime_error("min_overlap smaller than zero: {:.16f}", min_overlap);
-        if(max_overlap > 1.0 + 1e-6) tools::log->debug("max_overlap larger than one: {:.16f}", max_overlap);
-        if(sq_sum_overlap > 1.0 + 1e-6) tools::log->debug("eps larger than one: {:.16f}", sq_sum_overlap);
-        if(min_overlap < 0.0) tools::log->debug("min_overlap smaller than zero: {:.16f}", min_overlap);
+        if(num::gt(max_overlap, 1.0 + 1e-6)) tools::log->debug("max_overlap larger than one: {:.16f}", fp(max_overlap));
+        if(num::gt(sq_sum_overlap, 1.0 + 1e-6)) tools::log->debug("eps larger than one: {:.16f}", fp(sq_sum_overlap));
+        if(num::lt(min_overlap, 0.0)) tools::log->debug("min_overlap smaller than zero: {:.16f}", fp(min_overlap));
 
-        tools::log->debug("Found {} eigenpairs | nev {} converged {} | subspace error {:.3e} | iters {}", eigvals.size(), nev, eigvecs.cols(), subspace_error,
-                          solver.result.meta.iter);
+        tools::log->debug("Found {} eigenpairs | nev {} converged {} | subspace error {:.3e} | iters {}", eigvals.size(), nev, eigvecs.cols(),
+                          fp(subspace_error), solver.result.meta.iter);
 
-        if(subspace_error < meta.subspace_tol.value_or(1e-10)) {
-            reason = fmt::format("subspace error is low enough: {:.3e} < threshold {:.3e}", subspace_error, meta.subspace_tol.value_or(1e-10));
+        if(num::lt(subspace_error, static_cast<R>(meta.subspace_tol.value_or(1e-10)))) {
+            reason = fmt::format("subspace error is low enough: {:.3e} < threshold {:.3e}", fp(subspace_error), meta.subspace_tol.value_or(1e-10));
             break;
         }
-        if(meta.optAlgo == OptAlgo::DMRGX and sq_sum_overlap >= 1.0 / std::sqrt(2.0)) {
-            reason = fmt::format("Overlap is sufficient:  {:.16f} >= threshold {:.16f}", max_overlap, 1.0 / std::sqrt(2.0));
+        if(meta.optAlgo == OptAlgo::DMRGX and num::geq(sq_sum_overlap, 1.0 / std::sqrt(2.0))) {
+            reason = fmt::format("Overlap is sufficient:  {:.16f} >= threshold {:.16f}", fp(max_overlap), 1.0 / std::sqrt(2.0));
             break;
         }
     }
     tools::log->debug("Finished iterative eigensolver -- reason: {}", reason);
     if(eigvals.size() == 0 or eigvecs.size() == 0) {
-        eigvecs = Eigen::Map<MatrixType>(init.data(), init.size(), 1);
+        eigvecs = Eigen::Map<MatrixType<T>>(init.data(), init.size(), 1);
         eigvals.resize(1);
         eigvals(0) = eigval_shift;
         return std::make_pair(eigvecs, eigvals);
     }
 
     if(config.shift_invert == eig::Shinv::ON)
-        for(auto &e : eigvals) e = 1.0 / e + eigval_shift;
+        for(auto &e : eigvals) e = R{1} / e + eigval_shift;
 
     return std::make_pair(eigvecs, eigvals);
 }
+/* clang-format off */
+template std::pair<MatrixType<fp32>, VectorReal<fp32>> subspace::find_subspace_primme<fp32>(const TensorsFinite<fp32> &tensors, fp32 energy_target, const OptMeta &meta, reports::subs_log<fp32> &slog);
+template std::pair<MatrixType<fp64>, VectorReal<fp64>> subspace::find_subspace_primme<fp64>(const TensorsFinite<fp64> &tensors, fp64 energy_target, const OptMeta &meta, reports::subs_log<fp64> &slog);
+template std::pair<MatrixType<fp128>, VectorReal<fp128>> subspace::find_subspace_primme<fp128>(const TensorsFinite<fp128> &tensors, fp128 energy_target, const OptMeta &meta, reports::subs_log<fp128> &slog);
+template std::pair<MatrixType<fp32>, VectorReal<cx32>> subspace::find_subspace_primme<fp32>(const TensorsFinite<cx32> &tensors, fp32 energy_target, const OptMeta &meta, reports::subs_log<cx32> &slog);
+template std::pair<MatrixType<fp64>, VectorReal<cx64>> subspace::find_subspace_primme<fp64>(const TensorsFinite<cx64> &tensors, fp64 energy_target, const OptMeta &meta, reports::subs_log<cx64> &slog);
+template std::pair<MatrixType<fp128>, VectorReal<cx128>> subspace::find_subspace_primme<fp128>(const TensorsFinite<cx128> &tensors, fp128 energy_target, const OptMeta &meta, reports::subs_log<cx128> &slog);
+template std::pair<MatrixType<cx32>, VectorReal<cx32>> subspace::find_subspace_primme<cx32>(const TensorsFinite<cx32> &tensors, fp32 energy_target, const OptMeta &meta, reports::subs_log<cx32> &slog);
+template std::pair<MatrixType<cx64>, VectorReal<cx64>> subspace::find_subspace_primme<cx64>(const TensorsFinite<cx64> &tensors, fp64 energy_target, const OptMeta &meta, reports::subs_log<cx64> &slog);
+template std::pair<MatrixType<cx128>, VectorReal<cx128>> subspace::find_subspace_primme<cx128>(const TensorsFinite<cx128> &tensors, fp128 energy_target, const OptMeta &meta, reports::subs_log<cx128> &slog);
+/* clang-format on */
 
-template std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme<cx64>(const TensorsFinite &tensors, double eigval_target,
-                                                                                           const OptMeta &meta);
-template std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_primme<fp64>(const TensorsFinite &tensors, double eigval_target,
-                                                                                           const OptMeta &meta);
+//
+// template std::pair<MatrixType<fp64>, VectorReal<fp64>> subspace::find_subspace_primme<fp64>(const TensorsFinite<fp64> &tensors, double eigval_target,
+//                                                                                             const OptMeta &meta, reports::subs_log<fp64> &slog);
+// template std::pair<MatrixType<fp64>, VectorReal<fp64>> subspace::find_subspace_primme<fp64>(const TensorsFinite<cx64> &tensors, double eigval_target,
+//                                                                                             const OptMeta &meta, reports::subs_log<cx64> &slog);
+// template std::pair<MatrixType<cx64>, VectorReal<cx64>> subspace::find_subspace_primme<cx64>(const TensorsFinite<cx64> &tensors, double eigval_target,
+//                                                                                             const OptMeta &meta, reports::subs_log<cx64> &slog);
 
-template<typename Scalar>
-std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_lapack(const TensorsFinite &tensors) {
+template<typename T, typename Scalar>
+std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_lapack(const TensorsFinite<Scalar> &tensors, reports::subs_log<Scalar> &slog) {
     tools::log->trace("find_subspace_lapack");
     auto t_full = tid::tic_scope("full");
+    using R     = RealScalar<T>;
+    static_assert(std::is_same_v<R, RealScalar<Scalar>>);
     // Generate the Hamiltonian matrix
-    auto effective_hamiltonian = tensors.get_effective_hamiltonian<Scalar>();
+    auto effective_hamiltonian = tensors.template get_effective_hamiltonian<T>();
 
     // Create a solver and diagonalize the local effective Hamiltonian
     eig::solver solver;
@@ -520,38 +577,54 @@ std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_lapack(cons
 
     tools::log->debug("Finished eigensolver -- reason: Full diagonalization");
 
-    const auto &multisite_mps = tensors.state->get_multisite_mps<cx64>();
-    const auto  multisite_vec = Eigen::Map<const Eigen::VectorXcd>(multisite_mps.data(), multisite_mps.size());
+    const auto &multisite_mps = tensors.state->template get_multisite_mps<T>();
+    const auto  multisite_vec = Eigen::Map<const VectorType<T>>(multisite_mps.data(), multisite_mps.size());
 
-    auto            eigvals  = eig::view::get_eigvals<double>(solver.result);
-    auto            eigvecs  = eig::view::get_eigvecs<Scalar>(solver.result);
-    Eigen::VectorXd overlaps = (multisite_vec.adjoint() * eigvecs).cwiseAbs().real();
-    int             idx;
-    double          max_overlap    = overlaps.maxCoeff(&idx);
-    double          min_overlap    = overlaps.minCoeff();
-    double          sq_sum_overlap = overlaps.cwiseAbs2().sum();
-    double          subspace_error = 1.0 - sq_sum_overlap;
-    long            nev            = eigvecs.cols();
-    auto            time_eig       = tid::get("eig").get_last_interval();
-    auto            time_ham       = tid::get("ham").get_last_interval();
-    reports::subs_add_entry(nev, max_overlap, min_overlap, subspace_error, time_eig, time_ham, 0, 1, 0, 0);
+    auto          eigvals  = eig::view::get_eigvals<R>(solver.result);
+    auto          eigvecs  = eig::view::get_eigvecs<T>(solver.result);
+    VectorReal<T> overlaps = (multisite_vec.adjoint() * eigvecs).cwiseAbs().real();
+    int           idx;
+    R             max_overlap    = overlaps.maxCoeff(&idx);
+    R             min_overlap    = overlaps.minCoeff();
+    R             sq_sum_overlap = overlaps.cwiseAbs2().sum();
+    R             subspace_error = R{1} - sq_sum_overlap;
+    long          nev            = eigvecs.cols();
+    auto          time_eig       = tid::get("eig").get_last_interval();
+    auto          time_ham       = tid::get("ham").get_last_interval();
+    slog.subs_add_entry(nev, max_overlap, min_overlap, subspace_error, time_eig, time_ham, 0, 1, 0, 0);
     return {eigvecs, eigvals};
 }
+/* clang-format off */
+template std::pair<MatrixType<fp32>, VectorReal<fp32>> subspace::find_subspace_lapack<fp32>(const TensorsFinite<fp32> &tensors, reports::subs_log<fp32> &slog);
+template std::pair<MatrixType<fp64>, VectorReal<fp64>> subspace::find_subspace_lapack<fp64>(const TensorsFinite<fp64> &tensors, reports::subs_log<fp64> &slog);
+template std::pair<MatrixType<fp128>, VectorReal<fp128>> subspace::find_subspace_lapack<fp128>(const TensorsFinite<fp128> &tensors, reports::subs_log<fp128> &slog);
+template std::pair<MatrixType<fp32>, VectorReal<cx32>> subspace::find_subspace_lapack<fp32>(const TensorsFinite<cx32> &tensors, reports::subs_log<cx32> &slog);
+template std::pair<MatrixType<fp64>, VectorReal<cx64>> subspace::find_subspace_lapack<fp64>(const TensorsFinite<cx64> &tensors, reports::subs_log<cx64> &slog);
+template std::pair<MatrixType<fp128>, VectorReal<cx128>> subspace::find_subspace_lapack<fp128>(const TensorsFinite<cx128> &tensors, reports::subs_log<cx128> &slog);
+template std::pair<MatrixType<cx32>, VectorReal<cx32>> subspace::find_subspace_lapack<cx32>(const TensorsFinite<cx32> &tensors, reports::subs_log<cx32> &slog);
+template std::pair<MatrixType<cx64>, VectorReal<cx64>> subspace::find_subspace_lapack<cx64>(const TensorsFinite<cx64> &tensors, reports::subs_log<cx64> &slog);
+template std::pair<MatrixType<cx128>, VectorReal<cx128>> subspace::find_subspace_lapack<cx128>(const TensorsFinite<cx128> &tensors, reports::subs_log<cx128> &slog);
+/* clang-format on */
 
-template std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_lapack<cx64>(const TensorsFinite &tensors);
-template std::pair<Eigen::MatrixXcd, Eigen::VectorXd> subspace::find_subspace_lapack<fp64>(const TensorsFinite &tensors);
-
-template<typename T>
-MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs) {
-    // First, make sure every candidate is actually a basis vector, otherwise this computation would turn difficult if we have to skip rows and columns
+template<typename T, typename Scalar>
+MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
+                                                    const std::vector<opt_mps<Scalar>> &eigvecs) {
+    if constexpr(sfinae::is_std_complex_v<T>) {
+        bool eigvecs_are_real = std::all_of(eigvecs.begin(), eigvecs.end(), [](const opt_mps<Scalar> &eigvec) { return tenx::isReal(eigvec.get_tensor()); });
+        if(eigvecs_are_real and model.is_real() and edges.is_real()) {
+            using Real = typename Eigen::NumTraits<T>::Real;
+            return get_hamiltonian_in_subspace<Real>(model, edges, eigvecs).template cast<T>();
+        }
+    }
+    // First, make sure every candidate is actually a basis vector; otherwise this computation would turn difficult if we have to skip rows and columns
     auto t_ham = tid::tic_scope("ham_sub");
     for(const auto &eigvec : eigvecs)
         if(not eigvec.is_basis_vector)
             throw std::runtime_error("One eigvec is not a basis vector. When constructing a hamiltonian subspace matrix, make sure the candidates are all "
                                      "eigenvectors/basis vectors");
 
-    const auto &env1 = edges.get_multisite_env_ene_blk_as<T>();
-    const auto &mpo1 = model.get_multisite_mpo<T>();
+    const auto &env1 = edges.template get_multisite_env_ene_blk_as<T>();
+    const auto &mpo1 = model.template get_multisite_mpo<T>();
 
     tools::log->trace("Generating H² in a subspace of {} eigenvectors of H", eigvecs.size());
     long dim0   = mpo1.dimension(2);
@@ -563,11 +636,11 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, co
     Eigen::Tensor<T, 3> H1_mps(dim0, dim1, dim2); // The local hamiltonian multiplied by mps at column j.
     MatrixType<T>       H1_sub(eignum, eignum);   // The local hamiltonian projected to the subspace (spanned by eigvecs)
     for(auto col = 0; col < eignum; col++) {
-        const auto mps_j = std::next(eigvecs.begin(), col)->get_tensor_as<T>();
+        const auto mps_j = std::next(eigvecs.begin(), col)->template get_tensor_as<T>();
         tools::common::contraction::matrix_vector_product(H1_mps, mps_j, mpo1, env1.L, env1.R);
         auto &threads = tenx::threads::get();
         for(auto row = col; row < eignum; row++) {
-            const auto mps_i            = std::next(eigvecs.begin(), row)->get_tensor_as<T>();
+            const auto mps_i            = std::next(eigvecs.begin(), row)->template get_tensor_as<T>();
             H1_ij.device(*threads->dev) = mps_i.conjugate().contract(H1_mps, tenx::idx({0, 1, 2}, {0, 1, 2}));
             H1_sub(row, col)            = H1_ij(0);
             if constexpr(sfinae::is_std_complex_v<T>) {
@@ -580,14 +653,33 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, co
     return H1_sub;
 }
 
-// Explicit instantiations
-template MatrixType<fp32> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs);
-template MatrixType<fp64> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs);
-template MatrixType<cx32> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs);
-template MatrixType<cx64> subspace::get_hamiltonian_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs);
+/* clang-format off */
+template MatrixType<fp32> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const std::vector<opt_mps<fp32>> &eigvecs);
+template MatrixType<fp32> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const std::vector<opt_mps<cx32>> &eigvecs);
+template MatrixType<cx32> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const std::vector<opt_mps<cx32>> &eigvecs);
 
-template<typename T>
-MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges, const std::vector<opt_mps> &eigvecs) {
+
+template MatrixType<fp64> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const std::vector<opt_mps<fp64>> &eigvecs);
+template MatrixType<fp64> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const std::vector<opt_mps<cx64>> &eigvecs);
+template MatrixType<cx64> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const std::vector<opt_mps<cx64>> &eigvecs);
+
+template MatrixType<fp128> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const std::vector<opt_mps<fp128>> &eigvecs);
+template MatrixType<fp128> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const std::vector<opt_mps<cx128>> &eigvecs);
+template MatrixType<cx128> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const std::vector<opt_mps<cx128>> &eigvecs);
+
+/* clang-format on */
+
+template<typename T, typename Scalar>
+MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
+                                                            const std::vector<opt_mps<Scalar>> &eigvecs) {
+    if constexpr(sfinae::is_std_complex_v<T>) {
+        bool eigvecs_are_real = std::all_of(eigvecs.begin(), eigvecs.end(), [](const opt_mps<Scalar> &eigvec) { return tenx::isReal(eigvec.get_tensor()); });
+        if(eigvecs_are_real and model.is_real() and edges.is_real()) {
+            using Real = typename Eigen::NumTraits<T>::Real;
+            return get_hamiltonian_squared_in_subspace<Real>(model, edges, eigvecs).template cast<T>();
+        }
+    }
+
     // First, make sure every candidate is actually a basis vector, otherwise this computation would turn difficult if we have to skip rows and columns
     auto t_ham = tid::tic_scope("ham²_sub");
     for(const auto &eigvec : eigvecs)
@@ -595,8 +687,8 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &m
             throw std::runtime_error("One eigvec is not a basis vector. When constructing a hamiltonian subspace matrix, make sure the candidates are all "
                                      "eigenvectors/basis vectors");
 
-    const auto &env2 = edges.get_multisite_env_var_blk_as<T>();
-    const auto &mpo2 = model.get_multisite_mpo_squared<T>();
+    const auto &env2 = edges.template get_multisite_env_var_blk_as<T>();
+    const auto &mpo2 = model.template get_multisite_mpo_squared<T>();
 
     tools::log->trace("Generating H² in a subspace of {} eigenvectors of H", eigvecs.size());
     long dim0   = mpo2.dimension(2);
@@ -608,11 +700,11 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &m
     Eigen::Tensor<T, 3> H2_mps(dim0, dim1, dim2); // The local hamiltonian multiplied by mps at column j.
     MatrixType<T>       H2_sub(eignum, eignum);   // The local hamiltonian projected to the subspace (spanned by eigvecs)
     for(auto col = 0; col < eignum; col++) {
-        const auto mps_j = std::next(eigvecs.begin(), col)->get_tensor_as<T>();
+        const auto mps_j = std::next(eigvecs.begin(), col)->template get_tensor_as<T>();
         tools::common::contraction::matrix_vector_product(H2_mps, mps_j, mpo2, env2.L, env2.R);
         auto &threads = tenx::threads::get();
         for(auto row = col; row < eignum; row++) {
-            const auto mps_i            = std::next(eigvecs.begin(), row)->get_tensor_as<T>();
+            const auto mps_i            = std::next(eigvecs.begin(), row)->template get_tensor_as<T>();
             H2_ij.device(*threads->dev) = mps_i.conjugate().contract(H2_mps, tenx::idx({0, 1, 2}, {0, 1, 2}));
             H2_sub(row, col)            = H2_ij(0);
             if constexpr(sfinae::is_std_complex_v<T>) {
@@ -625,12 +717,17 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &m
     return H2_sub;
 }
 
-// Explicit instantiations
-template MatrixType<fp32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges,
-                                                                        const std::vector<opt_mps> &eigvecs);
-template MatrixType<fp64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges,
-                                                                        const std::vector<opt_mps> &eigvecs);
-template MatrixType<cx32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges,
-                                                                        const std::vector<opt_mps> &eigvecs);
-template MatrixType<cx64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite &model, const EdgesFinite &edges,
-                                                                        const std::vector<opt_mps> &eigvecs);
+/* clang-format off */
+template MatrixType<fp32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const std::vector<opt_mps<fp32>> &eigvecs);
+template MatrixType<fp32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const std::vector<opt_mps<cx32>> &eigvecs);
+template MatrixType<cx32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const std::vector<opt_mps<cx32>> &eigvecs);
+
+
+template MatrixType<fp64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const std::vector<opt_mps<fp64>> &eigvecs);
+template MatrixType<fp64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const std::vector<opt_mps<cx64>> &eigvecs);
+template MatrixType<cx64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const std::vector<opt_mps<cx64>> &eigvecs);
+
+template MatrixType<fp128> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const std::vector<opt_mps<fp128>> &eigvecs);
+template MatrixType<fp128> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const std::vector<opt_mps<cx128>> &eigvecs);
+template MatrixType<cx128> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const std::vector<opt_mps<cx128>> &eigvecs);
+/* clang-format on */
