@@ -8,7 +8,7 @@ template<typename Scalar> class EdgesInfinite;
 template<typename Scalar>
 class AlgorithmInfinite : public AlgorithmBase {
     protected:
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
 
     public:
     // Inherit the constructor of class_algorithm_base

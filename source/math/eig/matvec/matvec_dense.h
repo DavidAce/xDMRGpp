@@ -15,7 +15,7 @@ template<typename Scalar_>
 class MatVecDense {
     public:
     using Scalar      = Scalar_;
-    using Real        = typename Eigen::NumTraits<Scalar>::Real;
+    using Real        = decltype(std::real(std::declval<Scalar>()));
     using Cplx        = std::complex<Real>;
     using MatrixType  = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorType  = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
@@ -57,6 +57,7 @@ class MatVecDense {
     // Various utility functions
     mutable long                             num_mv = 0;
     mutable long                             num_op = 0;
+    mutable long                             num_pc = 0;
     void                                     print() const;
     void                                     set_shift(Cplx sigma_);
     void                                     set_mode(const eig::Form form_);

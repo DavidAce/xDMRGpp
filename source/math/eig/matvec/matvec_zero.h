@@ -22,7 +22,7 @@ template<typename T>
 class MatVecZero {
     public:
     using Scalar     = T;
-    using Real       = typename Eigen::NumTraits<Scalar>::Real;
+    using Real       = decltype(std::real(std::declval<Scalar>()));
     using Cplx       = std::complex<Real>;
     using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorType = Eigen::Matrix<T, Eigen::Dynamic, 1>;
@@ -70,6 +70,7 @@ class MatVecZero {
     // Various utility functions
     mutable long num_mv = 0;
     mutable long num_op = 0;
+    mutable long num_pc = 0;
     void         print() const;
     void         reset();
     void         set_shift(Cplx shift);

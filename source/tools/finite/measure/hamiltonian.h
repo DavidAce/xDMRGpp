@@ -27,7 +27,7 @@ struct env_pair;
 
 namespace tools::finite::measure {
     /* clang-format off */
-    template<typename Scalar> using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
     template<typename Scalar> [[nodiscard]] Scalar expval_hamiltonian                        (const Eigen::Tensor<Scalar, 3> &mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges);
     template<typename Scalar> [[nodiscard]] Scalar expval_hamiltonian                        (const Eigen::Tensor<Scalar, 3> &mps, const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpo_refs, const env_pair<const EnvEne<Scalar> &> &envs);
     template<typename Scalar> [[nodiscard]] Scalar expval_hamiltonian_squared                (const Eigen::Tensor<Scalar, 3> &mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges);

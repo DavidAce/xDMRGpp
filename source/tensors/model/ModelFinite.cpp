@@ -362,7 +362,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpos_energy_shift
 template<typename Scalar>
 void ModelFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
     if(std::abs(get_energy_shift_mpo() - energy_shift) <= std::numeric_limits<RealScalar>::epsilon()) { return; }
-    tools::log->trace("Shifting MPO energy: {:.16f} {:+.16f}i", fp(std::real(energy_shift)), fp(std::imag(energy_shift)));
+    tools::log->trace("Shifting MPO energy: {:.16f}", fp(energy_shift));
     Scalar energy_shift_per_site = energy_shift / static_cast<RealScalar>(get_length());
     for(const auto &mpo : MPO) mpo->set_energy_shift_mpo(energy_shift_per_site);
     clear_cache();

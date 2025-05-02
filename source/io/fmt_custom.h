@@ -161,16 +161,17 @@ struct fmt::formatter<fp<T>> {
             case fmt::presentation_type::general: fmtType = std::chars_format::general; break;
             default: fmtType = std::chars_format::general; break;
         }
-        std::string_view sign = specs_.sign() == fmt::sign::plus ? "+" : "";
 
-        auto to_chars_internal = [&](const auto &v, std::string_view sign_internal) -> std::string {
+        auto to_chars_internal = [&](const auto &v) -> std::string {
             using V = std::remove_cvref_t<decltype(v)>;
             static_assert(std::is_floating_point_v<V>);
 
             constexpr auto bsize = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
             char           buffer[bsize]; // Temporary buffer for conversion
             size_t         off = 0;
-            if(!sign_internal.empty() and v >= V(0.0)) {
+            std::string_view sign_internal = specs_.sign() == fmt::sign::plus ? "+" : "";
+
+            if(!sign_internal.empty() and v >= V{0}) {
                 buffer[0] = '+';
                 off       = 1;
             }
@@ -191,28 +192,15 @@ struct fmt::formatter<fp<T>> {
         };
         std::string valstr;
         if constexpr(sfinae::is_std_complex_v<T>) {
-            valstr = fmt::format("({},{})", to_chars_internal(std::real(value.value), sign), to_chars_internal(std::imag(value.value), sign));
-        }
-        // else if constexpr(sfinae::is_iterable_v<T> and sfinae::has_value_type_v<T>) {
-        //     auto valstrs = std::vector<std::string>();
-        //     if constexpr(sfinae::is_std_complex_v<typename T::value_type>) {
-        //         std::transform(value.value.begin(), value.value.end(), std::back_inserter(valstrs), [&](const auto &v) -> std::string {
-        //             return fmt::format("({},{})", to_chars_internal(std::real(v), sign), to_chars_internal(std::imag(v), sign));
-        //         });
-        //     } else {
-        //         std::transform(value.value.begin(), value.value.end(), std::back_inserter(valstrs),
-        //                        [&](const auto &v) -> std::string { return to_chars_internal(v, sign); });
-        //     }
-        //     valstr = fmt::format("[{}]", fmt::join(valstrs, ", "));
-        // }
-        else {
-            valstr = to_chars_internal(value.value, sign);
+            valstr = fmt::format("({},{})", to_chars_internal(std::real(value.value)), to_chars_internal(std::imag(value.value)));
+        } else {
+            valstr = to_chars_internal(value.value);
         }
 
         switch(specs_.align()) {
-            case fmt::align::left: return fmt::format_to(ctx.out(), "{}{:<{}}", sign, valstr, specs_.width);
-            case fmt::align::right: return fmt::format_to(ctx.out(), "{}{:>{}}", sign, valstr, specs_.width);
-            case fmt::align::center: return fmt::format_to(ctx.out(), "{}{:^{}}", sign, valstr, specs_.width);
+            case fmt::align::left: return fmt::format_to(ctx.out(), "{:<{}}", valstr, specs_.width);
+            case fmt::align::right: return fmt::format_to(ctx.out(), "{:>{}}", valstr, specs_.width);
+            case fmt::align::center: return fmt::format_to(ctx.out(), "{:^{}}", valstr, specs_.width);
             default: return fmt::format_to(ctx.out(), "{:<{}}", valstr, specs_.width);
         }
     }

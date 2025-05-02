@@ -1,6 +1,8 @@
 #include "math/tenx/fwd_decl.h"
 // Eigen goes first
 #include "debug/exceptions.h"
+#include "InvMatVecCfg.h"
+#include "JacobiPreconditioner.h"
 #include "math/cast.h"
 #include "math/tenx.h"
 #include "tid/tid.h"
@@ -8,8 +10,8 @@
 #include "tools/common/log.h"
 #include <complex>
 #include <Eigen/IterativeLinearSolvers>
-#include <fmt/ranges.h>
 #include <unsupported/Eigen/IterativeSolvers>
+#include <variant>
 
 template<typename Scalar_>
 class MatrixReplacement;
@@ -17,7 +19,7 @@ template<typename T>
 using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
 namespace Eigen::internal {
-    // MatrixReplacement looks-like a SparseMatrix, so let's inherits its traits:
+    // MatrixReplacement looks-like a Dense Matrix, so let's inherits its traits:
     template<typename Scalar_>
     struct traits<MatrixReplacement<Scalar_>> : public Eigen::internal::traits<DenseMatrix<Scalar_>> {};
 
@@ -30,7 +32,7 @@ class MatrixReplacement : public Eigen::EigenBase<MatrixReplacement<Scalar_>> {
     public:
     // Required typedefs, constants, and method:
     using Scalar     = Scalar_;
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     typedef int StorageIndex;
     enum { ColsAtCompileTime = Eigen::Dynamic, MaxColsAtCompileTime = Eigen::Dynamic, IsRowMajor = false };
 
@@ -54,7 +56,7 @@ class MatrixReplacement : public Eigen::EigenBase<MatrixReplacement<Scalar_>> {
     Eigen::Product<MatrixReplacement, Rhs, Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs> &x) const {
         return Eigen::Product<MatrixReplacement, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
     }
-
+    void _check_template_params() {};
     // Custom API:
     MatrixReplacement() = default;
 
@@ -83,14 +85,14 @@ class MatrixReplacement : public Eigen::EigenBase<MatrixReplacement<Scalar_>> {
 namespace Eigen::internal {
 
     template<typename Rhs, typename ReplScalar>
-    struct generic_product_impl<MatrixReplacement<ReplScalar>, Rhs, DenseShape, DenseShape, GemvProduct> // GEMV stands for matrix-vector
+    struct generic_product_impl<MatrixReplacement<ReplScalar>, Rhs, DenseShape, DenseShape, GemvProduct>
         : generic_product_impl_base<MatrixReplacement<ReplScalar>, Rhs, generic_product_impl<MatrixReplacement<ReplScalar>, Rhs>> {
         typedef typename Product<MatrixReplacement<ReplScalar>, Rhs>::Scalar Scalar;
 
         template<typename Dest>
         static void scaleAndAddTo(Dest &dst, const MatrixReplacement<ReplScalar> &mat, const Rhs &rhs, const Scalar &alpha) {
-            // This method should implement "dst += alpha * lhs * rhs" inplace,
-            // however, for iterative solvers, alpha is always equal to 1, so let's not worry about it.
+            // This method should implement "dst += alpha * lhs * rhs" inplace; however, for iterative solvers, alpha is always equal to 1, so let's not worry
+            // about it.
             assert(alpha == Scalar(1) && "scaling is not implemented");
             EIGEN_ONLY_USED_FOR_DEBUG(alpha);
             mat.tmp.resize(static_cast<size_t>(dst.size()));
@@ -110,7 +112,8 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
                                                                const Scalar *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                const Scalar *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                               const Scalar *const envR_ptr, std::array<long, 3> envR_dims) {
+                                                               const Scalar *const envR_ptr, std::array<long, 3> envR_dims, //
+                                                               InvMatVecCfg<Scalar> cfg) {
     // Here we return x <-- A^-1 * b
     // Where A^-1 * b is obtained by solving
     //       A*x = b
@@ -141,73 +144,96 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
     // Define the "matrix-free" matrix replacement.
     MatrixReplacement<Scalar> matRepl;
     matRepl.attachTensors(envL_ptr, envR_ptr, mpo_ptr, mps_dims, mpo_dims);
-    auto MaxIters  = matRepl.rows();
-    auto tolerance = static_cast<typename MatrixReplacement<Scalar>::RealScalar>(1e-3);
-    auto res       = Eigen::Map<tenx::VectorType<Scalar>>(res_ptr, matRepl.rows());
-    auto mps       = Eigen::Map<const tenx::VectorType<Scalar>>(mps_ptr, matRepl.rows());
+    auto res = Eigen::Map<tenx::VectorType<Scalar>>(res_ptr, matRepl.rows());
+    auto mps = Eigen::Map<const tenx::VectorType<Scalar>>(mps_ptr, matRepl.rows());
 
-    if constexpr(tenx::sfinae::is_std_complex_v<Scalar>) {
-        auto                            t_mativec = tid::tic_token("matrix_inverse_vector_product", tid::level::higher);
-        static tenx::VectorType<Scalar> guess_cbs;
-        if(guess_cbs.size() != res.size()) guess_cbs = res;
-        Eigen::ConjugateGradient<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, Eigen::IdentityPreconditioner> solver;
-        // Eigen::ConjugateGradient<MatrixReplacement<Scalar>, Eigen::Upper|Eigen::Lower,  Eigen::IdentityPreconditioner> solver;
-        solver.setMaxIterations(MaxIters);
-        solver.setTolerance(tolerance);
+    using DefSolverType = Eigen::ConjugateGradient<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, JacobiPreconditioner<Scalar>>;
+    using IndSolverType = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                         //
+                                             Eigen::BiCGSTAB<MatrixReplacement<Scalar>, JacobiPreconditioner<Scalar>>, //
+                                             Eigen::MINRES<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, JacobiPreconditioner<Scalar>>>;
+    std::variant<IndSolverType, DefSolverType> solverVariant;
+    if(cfg.matdef == MatDef::IND)
+        solverVariant.template emplace<0>();
+    else
+        solverVariant.template emplace<1>();
+
+    auto                            t_mativec = tid::tic_token("matrix_inverse_vector_product", tid::level::higher);
+    static tenx::VectorType<Scalar> guess;
+    if(guess.size() != res.size()) guess = res;
+
+    auto get_solver_name = [&]() -> std::string {
+        if(std::holds_alternative<DefSolverType>(solverVariant)) return "Eigen::ConjugateGradient";
+        if(std::holds_alternative<IndSolverType>(solverVariant))
+            if constexpr(sfinae::is_std_complex_v<Scalar>)
+                return "Eigen::BiCGSTAB";
+            else
+                return "Eigen::MINRES";
+        return "Unknown solver";
+    };
+
+    auto run = [&](auto &solver) {
+        solver.setMaxIterations(cfg.maxiters);
+        solver.setTolerance(cfg.tolerance);
+        if(cfg.invdiag != nullptr) {
+            auto invdiag = Eigen::Map<const tenx::VectorType<Scalar>>(cfg.invdiag, matRepl.rows());
+            if(invdiag.allFinite()) { solver.preconditioner().set_invdiag(invdiag); }
+        }
         solver.compute(matRepl);
-        res = solver.solveWithGuess(mps, guess_cbs);
-        tools::log->info("CG Preconditioner: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", mps.size(),
+        res = solver.solveWithGuess(mps, guess);
+        if(std::isnan(solver.error())) throw except::runtime_error("NaN in solver");
+        tools::log->info("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", get_solver_name, mps.size(),
                          static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.counter,
                          t_mativec->get_last_interval());
-        guess_cbs = res;
-    } else {
-        auto                            t_mativec = tid::tic_token("matrix_inverse_vector_product", tid::level::higher);
-        static tenx::VectorType<Scalar> guess_mr;
-        if(guess_mr.size() != res.size()) guess_mr = res;
+    };
 
-        Eigen::MINRES<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, Eigen::IdentityPreconditioner> solver;
-        solver.setMaxIterations(MaxIters);
-        solver.setTolerance(tolerance);
-        solver.compute(matRepl);
-        res = solver.solveWithGuess(mps, guess_mr);
-        tools::log->info("MR Preconditioner: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", mps.size(),
-                         static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.counter,
-                         t_mativec->get_last_interval());
-        guess_mr = res;
+    try {
+        std::visit(run, solverVariant);
+    } catch(const std::exception &e) {
+        if(std::holds_alternative<DefSolverType>(solverVariant)) {
+            tools::log->error("Exception in {}: {}\n Trying another solver...", get_solver_name(), e.what());
+            solverVariant.template emplace<1>();
+            std::visit(run, solverVariant);
+        } else {
+            tools::log->error("Exception in {}: {}", get_solver_name(), e.what());
+            throw;
+        }
     }
 
-    //    guess = res;
+    guess = res;
 }
 template void tools::common::contraction::matrix_inverse_vector_product(fp32             *res_ptr,                                 //
                                                                         const fp32 *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                         const fp32 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                         const fp32 *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                                        const fp32 *const envR_ptr, std::array<long, 3> envR_dims);
+                                                                        const fp32 *const envR_ptr, std::array<long, 3> envR_dims, //
+                                                                        InvMatVecCfg<fp32> cfg);
 template void tools::common::contraction::matrix_inverse_vector_product(fp64             *res_ptr,                                 //
                                                                         const fp64 *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                         const fp64 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                         const fp64 *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                                        const fp64 *const envR_ptr, std::array<long, 3> envR_dims);
+                                                                        const fp64 *const envR_ptr, std::array<long, 3> envR_dims, //
+                                                                        InvMatVecCfg<fp64> cfg);
 template void tools::common::contraction::matrix_inverse_vector_product(fp128             *res_ptr,                                 //
                                                                         const fp128 *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                         const fp128 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                         const fp128 *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                                        const fp128 *const envR_ptr, std::array<long, 3> envR_dims);
+                                                                        const fp128 *const envR_ptr, std::array<long, 3> envR_dims, //
+                                                                        InvMatVecCfg<fp128> cfg);
 template void tools::common::contraction::matrix_inverse_vector_product(cx32             *res_ptr,                                 //
                                                                         const cx32 *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                         const cx32 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                         const cx32 *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                                        const cx32 *const   envR_ptr,                              //
-                                                                        std::array<long, 3> envR_dims);
+                                                                        const cx32 *const envR_ptr, std::array<long, 3> envR_dims, //
+                                                                        InvMatVecCfg<cx32> cfg);
 template void tools::common::contraction::matrix_inverse_vector_product(cx64             *res_ptr,                                 //
                                                                         const cx64 *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                         const cx64 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                         const cx64 *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                                        const cx64 *const   envR_ptr,                              //
-                                                                        std::array<long, 3> envR_dims);
+                                                                        const cx64 *const envR_ptr, std::array<long, 3> envR_dims, //
+                                                                        InvMatVecCfg<cx64> cfg);
 template void tools::common::contraction::matrix_inverse_vector_product(cx128             *res_ptr,                                 //
                                                                         const cx128 *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                                         const cx128 *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                         const cx128 *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                                        const cx128 *const  envR_ptr,                               //
-                                                                        std::array<long, 3> envR_dims);
+                                                                        const cx128 *const envR_ptr, std::array<long, 3> envR_dims, //
+                                                                        InvMatVecCfg<cx128> cfg);

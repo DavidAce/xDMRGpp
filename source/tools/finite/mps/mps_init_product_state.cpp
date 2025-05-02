@@ -9,7 +9,6 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
 #include <bitset>
 #include <fmt/ranges.h>
 
@@ -52,7 +51,6 @@ std::string tools::get_bitfield(size_t nbits, size_t pattern, BitOrder bitOrder)
     return bitfield;
 }
 
-
 /*!
  * There are many ways to generate an initial product state based on the
  * arguments (axis ,use_eigenspinors, pattern) = (string,bool,std::string).
@@ -84,7 +82,7 @@ std::string tools::get_bitfield(size_t nbits, size_t pattern, BitOrder bitOrder)
 */
 template<typename Scalar>
 void tools::finite::mps::init::random_product_state(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, bool use_eigenspinors,
-                                                    std::string &pattern){
+                                                    std::string &pattern) {
     tools::log->debug("Setting random product state of type {} on axis {}", enum2sv(type), axis);
     state.clear_measurements();
     state.clear_cache();
@@ -207,7 +205,6 @@ template void tools::finite::mps::init::set_product_state_neel_dislocated(StateF
 template void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<cx128> &state, StateInitType type, std::string_view axis, std::string &pattern);
 /* clang-format on */
 
-
 template<typename Scalar>
 void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     tools::log->debug("Setting domain-wall initial state of type {} on axis {} {}", enum2sv(type), axis,
@@ -301,13 +298,16 @@ template<typename Scalar>
 void tools::finite::mps::init::set_product_state_neel(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     tools::log->debug("Setting Néel state of type {} on axis {} {}", enum2sv(type), axis, pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
 
-    Eigen::Tensor<cx64, 1> L(1);
-    L.setConstant(cx64{1.0, 0.0});
+    using Real = typename StateFinite<Scalar>::RealScalar;
+    using Cplx = std::complex<Real>;
+
+    Eigen::Tensor<Real, 1> L(1);
+    L.setConstant(Real{1});
     auto axus = qm::spin::half::get_axis_unsigned(axis);
     if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
-    Eigen::Tensor<cx64, 3> spin_up = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
-    Eigen::Tensor<cx64, 3> spin_dn = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
+    Eigen::Tensor<Cplx, 3> spin_up = tenx::asScalarType<Cplx>(get_spinor(axus, +1)).reshape(tenx::array3{2, 1, 1});
+    Eigen::Tensor<Cplx, 3> spin_dn = tenx::asScalarType<Cplx>(get_spinor(axus, -1)).reshape(tenx::array3{2, 1, 1});
     // Eigen::Tensor<cx64, 3> spin_up = tenx::TensorCast(qm::spin::half::get_spinor(axus, +1), 2, 1, 1);
     // Eigen::Tensor<cx64, 3> spin_dn = tenx::TensorCast(qm::spin::half::get_spinor(axus, -1), 2, 1, 1);
     auto bitfield = tools::get_bitfield(state.get_length(), pattern);
@@ -509,7 +509,8 @@ template void tools::finite::mps::init::set_random_product_state_on_axis_using_e
 /* clang-format on */
 
 template<typename Scalar>
-void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, [[maybe_unused]] std::string &pattern) {
+void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
+                                                                [[maybe_unused]] std::string &pattern) {
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
     auto axus = qm::spin::half::get_axis_unsigned(axis);

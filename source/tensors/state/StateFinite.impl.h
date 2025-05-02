@@ -7,6 +7,7 @@
 #include "math/num.h"
 #include "math/tenx.h"
 #include "StateFinite.h"
+#include "StateFinite/contract.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
@@ -22,7 +23,9 @@ StateFinite<Scalar>::StateFinite(const StateFinite<T> &other) noexcept {
     convrates            = other.convrates;
     mps_sites.clear();
     mps_sites.reserve(other.mps_sites.size());
-    for(const auto &mps_other : other.mps_sites) { mps_sites.emplace_back(std::make_unique<MpsSite<Scalar>>(*mps_other)); }
+    for(const auto &mps_other : other.mps_sites) {
+        if(mps_other != nullptr) mps_sites.emplace_back(std::make_unique<MpsSite<Scalar>>(*mps_other));
+    }
     active_sites = other.active_sites;
     popcount     = other.popcount;
 
@@ -179,27 +182,32 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_reduced_density_matrix(const std::v
                     // If it is the only site, we also need it to include the right schmidt values.
                     bool use_multisite = mps.get_label() == "B" or sites.size() == 1;
                     M                  = use_multisite ? get_multisite_mps<T>({i}, true) : mps.template get_M_as<T>();
-                    auto dim           = M.dimensions();
-                    rho_temp.resize(std::array{dim[0], dim[0], dim[2], dim[2]});
-                    rho_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({1}, {1})).shuffle(std::array{0, 2, 1, 3});
+                    contract_Mconj_M_1_1(rho_temp, M, threads);
+                    // auto dim           = M.dimensions();
+                    // rho_temp.resize(std::array{dim[0], dim[0], dim[2], dim[2]});
+                    // rho_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({1}, {1})).shuffle(std::array{0, 2, 1, 3});
+
                 } else {
                     // This site could be A, AC or B. Only A lacks schmidt values on the right, so we use multisite when the last site is A.
                     bool use_multisite = i == sites.back() and mps.get_label() == "A";
                     M                  = use_multisite ? get_multisite_mps<T>({i}, true) : mps.template get_M_as<T>();
-                    auto mps_dim       = M.dimensions();
-                    auto rho_dim       = rho_temp.dimensions();
-                    bool do_trace      = std::find(sites.begin(), sites.end(), i) == sites.end();
+                    // auto mps_dim       = M.dimensions();
+                    // auto rho_dim       = rho_temp.dimensions();
+                    bool do_trace = std::find(sites.begin(), sites.end(), i) == sites.end();
                     if(do_trace) {
-                        auto new_dim = std::array{rho_dim[0], rho_dim[1], mps_dim[2], mps_dim[2]};
-                        rho_temp2.resize(new_dim);
-                        rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {1})).contract(M, tenx::idx({2, 3}, {1, 0}));
+                        contract_rho_M_Mconj_2_1_23_10(rho_temp2, rho_temp, M, threads);
+                        // auto new_dim = std::array{rho_dim[0], rho_dim[1], mps_dim[2], mps_dim[2]};
+                        // rho_temp2.resize(new_dim);
+                        // rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {1})).contract(M, tenx::idx({2, 3}, {1, 0}));
+
                     } else {
-                        auto new_dim = std::array{rho_dim[0] * mps_dim[0], rho_dim[1] * mps_dim[0], mps_dim[2], mps_dim[2]};
-                        rho_temp2.resize(new_dim);
-                        rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {1}))
-                                                              .contract(M, tenx::idx({2}, {1}))
-                                                              .shuffle(std::array{0, 2, 1, 4, 3, 5})
-                                                              .reshape(new_dim);
+                        contract_rho_Mconj_M_2_1_2_1(rho_temp2, rho_temp, M, threads);
+                        // auto new_dim = std::array{rho_dim[0] * mps_dim[0], rho_dim[1] * mps_dim[0], mps_dim[2], mps_dim[2]};
+                        // rho_temp2.resize(new_dim);
+                        // rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {1}))
+                        // .contract(M, tenx::idx({2}, {1}))
+                        // .shuffle(std::array{0, 2, 1, 4, 3, 5})
+                        // .reshape(new_dim);
                     }
                     rho_temp = std::move(rho_temp2);
                     if constexpr(debug_cache) {
@@ -220,27 +228,30 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_reduced_density_matrix(const std::v
                     // If it is the only site, we also need it to include the left schmidt values.
                     bool use_multisite = mps.get_label() == "A" or sites.size() == 1;
                     M                  = use_multisite ? get_multisite_mps<T>({i}, true) : mps.template get_M_as<T>();
-                    auto dim           = M.dimensions();
-                    rho_temp.resize(std::array{dim[0], dim[0], dim[1], dim[1]});
-                    rho_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({2}, {2})).shuffle(std::array{0, 2, 1, 3});
+                    contract_Mconj_M_2_2(rho_temp, M, threads);
+                    // auto dim           = M.dimensions();
+                    // rho_temp.resize(std::array{dim[0], dim[0], dim[1], dim[1]});
+                    // rho_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({2}, {2})).shuffle(std::array{0, 2, 1, 3});
                 } else {
                     // This site could be A, AC or B. Only B lacks schmidt values on the left, so we use multisite when the first site is B.
                     bool use_multisite = i == sites.front() and mps.get_label() == "B";
                     M                  = use_multisite ? get_multisite_mps<T>({i}, true) : mps.template get_M_as<T>();
-                    auto mps_dim       = M.dimensions();
-                    auto rho_dim       = rho_temp.dimensions();
-                    bool do_trace      = std::find(sites.begin(), sites.end(), i) == sites.end();
+                    // auto mps_dim       = M.dimensions();
+                    // auto rho_dim       = rho_temp.dimensions();
+                    bool do_trace = std::find(sites.begin(), sites.end(), i) == sites.end();
                     if(do_trace) {
-                        auto new_dim = std::array{rho_dim[0], rho_dim[1], mps_dim[1], mps_dim[1]};
-                        rho_temp2.resize(new_dim);
-                        rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {2})).contract(M, tenx::idx({2, 3}, {2, 0}));
+                        contract_rho_Mconj_M_2_2_23_20(rho_temp2, rho_temp, M, threads);
+                        // auto new_dim = std::array{rho_dim[0], rho_dim[1], mps_dim[1], mps_dim[1]};
+                        // rho_temp2.resize(new_dim);
+                        // rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {2})).contract(M, tenx::idx({2, 3}, {2, 0}));
                     } else {
-                        auto new_dim = std::array{rho_dim[0] * mps_dim[0], rho_dim[1] * mps_dim[0], mps_dim[1], mps_dim[1]};
-                        rho_temp2.resize(new_dim);
-                        rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {2}))
-                                                              .contract(M, tenx::idx({2}, {2}))
-                                                              .shuffle(std::array{2, 0, 4, 1, 3, 5})
-                                                              .reshape(new_dim);
+                        contract_rho_Mconj_M_2_2_2_2(rho_temp2, rho_temp, M, threads);
+                        // auto new_dim = std::array{rho_dim[0] * mps_dim[0], rho_dim[1] * mps_dim[0], mps_dim[1], mps_dim[1]};
+                        // rho_temp2.resize(new_dim);
+                        // rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {2}))
+                        //                                       .contract(M, tenx::idx({2}, {2}))
+                        //                                       .shuffle(std::array{2, 0, 4, 1, 3, 5})
+                        //                                       .reshape(new_dim);
                     }
                     rho_temp = std::move(rho_temp2);
                     if constexpr(debug_cache) {
@@ -384,11 +395,13 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
     if constexpr(debug_transfer_matrix) tools::log->trace("cost_t2b {} | cost_s2s {} ({})", costs[0], costs[1], side);
     if(min_cost_idx == 0 /* top to bottom */) {
         if constexpr(debug_transfer_matrix) tools::log->trace("from top");
-        auto mps                  = get_multisite_mps<T>(sites, true);
-        auto dim                  = std::array{mps.dimension(1) * mps.dimension(2), mps.dimension(1) * mps.dimension(2)};
+        auto M                    = get_multisite_mps<T>(sites, true);
+        auto dim                  = std::array{M.dimension(1) * M.dimension(2), M.dimension(1) * M.dimension(2)};
         auto res                  = Eigen::Tensor<T, 2>(dim);
-        res.device(*threads->dev) = mps.conjugate().contract(mps, tenx::idx({0}, {0})).reshape(dim);
+        contract_Mconj_M_0_0( res, M, threads);
         return res;
+        // res.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).reshape(dim);
+        // return res;
     } else {
         auto trf_temp = Eigen::Tensor<T, 4>(); // Will accumulate the sites
         auto M        = Eigen::Tensor<T, 3>();
@@ -420,18 +433,20 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     // If it is the only site, we also need it to include the right schmidt values.
                     bool use_multisite = mps.get_label() == "B" or sites.size() == 1;
                     M                  = use_multisite ? get_multisite_mps<T>({i}) : mps.template get_M_as<T>();
-                    auto dim           = M.dimensions();
-                    trf_temp.resize(std::array{dim[1], dim[1], dim[2], dim[2]});
-                    trf_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).shuffle(std::array{0, 2, 1, 3});
+                    // auto dim           = M.dimensions();
+                    contract_Mconj_M_0_0(trf_temp, M, threads);
+                    // trf_temp.resize(std::array{dim[1], dim[1], dim[2], dim[2]});
+                    // trf_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).shuffle(std::array{0, 2, 1, 3});
                 } else {
                     // This site could be A, AC or B. Only A lacks schmidt values on the right, so we use multisite when the last site is A.
                     bool use_multisite = i == sites.back() and mps.get_label() == "A";
                     M                  = use_multisite ? get_multisite_mps<T>({i}) : mps.template get_M_as<T>();
-                    auto mps_dim       = M.dimensions();
-                    auto trf_dim       = trf_temp.dimensions();
-                    auto new_dim       = std::array{trf_dim[0], trf_dim[1], mps_dim[2], mps_dim[2]};
-                    trf_tmp4.resize(new_dim);
-                    trf_tmp4.device(*threads->dev) = trf_temp.contract(M.conjugate(), tenx::idx({2}, {1})).contract(M, tenx::idx({2, 3}, {1, 0}));
+                    // auto mps_dim       = M.dimensions();
+                    // auto trf_dim       = trf_temp.dimensions();
+                    // auto new_dim       = std::array{trf_dim[0], trf_dim[1], mps_dim[2], mps_dim[2]};
+                    contract_trf_Mconj_M_2_1_23_10(trf_tmp4, trf_temp, M, threads);
+                    // trf_tmp4.resize(new_dim);
+                    // trf_tmp4.device(*threads->dev) = trf_temp.contract(M.conjugate(), tenx::idx({2}, {1})).contract(M, tenx::idx({2, 3}, {1, 0}));
                     trf_temp                       = std::move(trf_tmp4);
                 }
                 save_trf_into_cache<T>(trf_temp, sites, i, "l2r");
@@ -449,9 +464,10 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     // If it is the only site, we also need it to include the left schmidt values.
                     bool use_multisite = mps.get_label() == "A" or sites.size() == 1;
                     M                  = use_multisite ? get_multisite_mps<T>({i}) : mps.template get_M_as<T>();
-                    auto dim           = M.dimensions();
-                    trf_temp.resize(std::array{dim[1], dim[1], dim[2], dim[2]});
-                    trf_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).shuffle(std::array{0, 2, 1, 3});
+                    // auto dim           = M.dimensions();
+                    contract_Mconj_M_0_0(trf_temp, M, threads);
+                    // trf_temp.resize(std::array{dim[1], dim[1], dim[2], dim[2]});
+                    // trf_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).shuffle(std::array{0, 2, 1, 3});
 
                     // auto dim = M.dimensions();
                     // trf_temp.resize(std::array{dim[2], dim[2], dim[1], dim[1]});
@@ -461,14 +477,17 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     // This site could be A, AC or B. Only B lacks schmidt values on the left, so we use multisite when the first site is B.
                     bool use_multisite = i == sites.front() and mps.get_label() == "B";
                     M                  = use_multisite ? get_multisite_mps<T>({i}) : mps.template get_M_as<T>();
-                    auto mps_dim       = M.dimensions();
-                    auto trf_dim       = trf_temp.dimensions();
-                    auto tm5_dim       = std::array{mps_dim[0], mps_dim[1], trf_dim[0], trf_dim[2], trf_dim[3]};
-                    auto new_dim       = std::array{mps_dim[1], mps_dim[1], trf_dim[2], trf_dim[3]};
-                    trf_tmp5.resize(tm5_dim);
-                    trf_tmp5.device(*threads->dev) = M.contract(trf_temp, tenx::idx({2}, {1}));
-                    trf_temp.resize(new_dim);
-                    trf_temp.device(*threads->dev) = M.conjugate().contract(trf_tmp5, tenx::idx({0, 2}, {0, 2}));
+                    // auto mps_dim       = M.dimensions();
+                    // auto trf_dim       = trf_temp.dimensions();
+                    // auto tm5_dim       = std::array{mps_dim[0], mps_dim[1], trf_dim[0], trf_dim[2], trf_dim[3]};
+                    // auto new_dim       = std::array{mps_dim[1], mps_dim[1], trf_dim[2], trf_dim[3]};
+                    contract_M_trf_2_1(trf_tmp5, M, trf_temp, threads);
+                    // trf_tmp5.resize(tm5_dim);
+                    // trf_tmp5.device(*threads->dev) = M.contract(trf_temp, tenx::idx({2}, {1}));
+                    contract_Mconj_trf5_02_02(trf_temp, M, trf_tmp5, threads);
+                    // trf_temp.resize(new_dim);
+                    // trf_temp.device(*threads->dev) = M.conjugate().contract(trf_tmp5, tenx::idx({0, 2}, {0, 2}));
+
                 }
                 save_trf_into_cache<T>(trf_temp, sites, i, "r2l");
             }

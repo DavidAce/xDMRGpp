@@ -134,6 +134,7 @@ void eig::solver::MultOPv_wrapper(void *x, int *ldx, void *y, int *ldy, int *blo
     matrix_ptr->MultOPv(x, ldx, y, ldy, blockSize, primme, ierr);
 }
 
+template<typename Scalar>
 std::string getLogMessage(struct primme_params *primme, [[maybe_unused]] int *basisSize = 0, [[maybe_unused]] void *basisFlags = nullptr,
                           [[maybe_unused]] void *basisEvals = nullptr, [[maybe_unused]] void *basisNorms = nullptr, [[maybe_unused]] int *numLocked = 0,
                           [[maybe_unused]] void *lockedEvals = nullptr, [[maybe_unused]] void *lockedNorms = nullptr) {
@@ -142,34 +143,39 @@ std::string getLogMessage(struct primme_params *primme, [[maybe_unused]] int *ba
                            primme->stats.numMatvecs, primme->n, primme->stats.estimateMinEVal, primme->stats.elapsedTime,
                            primme->stats.numOuterIterations / primme->stats.elapsedTime, primme->stats.numMatvecs / primme->stats.timeMatvec);
     }
-    auto &solver     = *static_cast<eig::solver *>(primme->monitor);
-    auto &result     = solver.result;
-    auto &eigvals    = result.get_eigvals<eig::Form::SYMM, eig::Type::FP64>();
-    auto  get_eigval = [&](long idx) -> double {
-        // double eigval      = std::numeric_limits<double>::quiet_NaN();
+    auto &solver = *static_cast<eig::solver *>(primme->monitor);
+    auto &result = solver.result;
+
+    using Real                 = decltype(std::real(std::declval<Scalar>()));
+    std::vector<Real> &eigvals = result.get_eigvals<Scalar, eig::Form::SYMM>();
+
+    auto get_eigval = [&](long idx) -> Real {
         bool lockedValid = numLocked != nullptr and * numLocked > 0 and lockedEvals != nullptr;
         bool basisValid  = basisSize != nullptr and * basisSize > 0 and basisEvals != nullptr;
         if(lockedValid) {
             if(idx < *numLocked)
-                return static_cast<double *>(lockedEvals)[idx];
+                return static_cast<Real *>(lockedEvals)[idx];
             else if(basisValid and idx - *numLocked < *basisSize)
-                return static_cast<double *>(basisEvals)[idx - *numLocked];
+                return static_cast<Real *>(basisEvals)[idx - *numLocked];
         }
-        if(basisValid) { return static_cast<double *>(basisEvals)[idx]; }
-        auto eigvmap = Eigen::Map<const Eigen::VectorXd>(eigvals.data(), safe_cast<long>(eigvals.size()));
+        if(basisValid) { return static_cast<Real *>(basisEvals)[idx]; }
+        using VectorR = Eigen::Matrix<Real, Eigen::Dynamic, 1>;
+        auto eigvmap  = Eigen::Map<const VectorR>(eigvals.data(), safe_cast<long>(eigvals.size()));
+        auto sigma    = static_cast<Real>(std::real(solver.config.sigma.value_or(0.0)));
         if(solver.config.shift_invert == eig::Shinv::ON) {
-            if(idx < eigvmap.size()) return 1.0 / (eigvmap[idx]) + std::real(solver.config.sigma.value_or(0.0));
+            if(idx < eigvmap.size()) return Real{1} / (eigvmap[idx] + sigma);
             return 0.0;
         } else {
-            if(idx < eigvmap.size() and eigvmap[idx] != 0.0) return eigvmap[idx];
+            if(idx < eigvmap.size() and eigvmap[idx] != Real{0}) return eigvmap[idx];
             switch(primme->target) {
                 case primme_target::primme_closest_abs: [[fallthrough]];
                 case primme_target::primme_closest_geq: [[fallthrough]];
-                case primme_target::primme_closest_leq: return result.meta.last_eval;
-                case primme_target::primme_smallest: return primme->stats.estimateMinEVal;
-                case primme_target::primme_largest: return primme->stats.estimateMaxEVal;
-                case primme_target::primme_largest_abs: return std::max(std::abs(primme->stats.estimateMinEVal), std::abs(primme->stats.estimateMaxEVal));
-                default: return primme->stats.estimateMinEVal;
+                case primme_target::primme_closest_leq: return static_cast<Real>(result.meta.last_eval);
+                case primme_target::primme_smallest: return static_cast<Real>(primme->stats.estimateMinEVal);
+                case primme_target::primme_largest: return static_cast<Real>(primme->stats.estimateMaxEVal);
+                case primme_target::primme_largest_abs:
+                    return static_cast<Real>(std::max(std::abs(primme->stats.estimateMinEVal), std::abs(primme->stats.estimateMaxEVal)));
+                default: return static_cast<Real>(primme->stats.estimateMinEVal);
             }
         }
     };
@@ -184,6 +190,7 @@ std::string getLogMessage(struct primme_params *primme, [[maybe_unused]] int *ba
                        eig::TypeToString(solver.config.type), eig::MethodToString(solver.config.primme_method));
 }
 
+template<typename Scalar>
 void monitorFun([[maybe_unused]] void *basisEvals, [[maybe_unused]] int *basisSize, [[maybe_unused]] int *basisFlags, [[maybe_unused]] int *iblock,
                 [[maybe_unused]] int *blockSize, [[maybe_unused]] void *basisNorms, [[maybe_unused]] int *numConverged, [[maybe_unused]] void *lockedEvals,
                 [[maybe_unused]] int *numLocked, [[maybe_unused]] int *lockedFlags, [[maybe_unused]] void *lockedNorms, [[maybe_unused]] int *inner_its,
@@ -222,22 +229,23 @@ void monitorFun([[maybe_unused]] void *basisEvals, [[maybe_unused]] int *basisSi
 
         bool lockedValid = numLocked != nullptr and * numLocked > 0 and lockedEvals != nullptr and lockedNorms != nullptr;
         bool basisValid  = basisSize != nullptr and * basisSize > 0 and basisEvals != nullptr and basisNorms != nullptr;
+        using Real       = decltype(std::real(std::declval<Scalar>()));
         if(lockedValid) {
-            auto &eigvals = result.get_eigvals<eig::Form::SYMM, eig::Type::FP64>();
+            auto &eigvals = result.get_eigvals<Scalar, eig::Form::SYMM>();
             for(size_t idx = 0; idx < static_cast<size_t>(*numLocked); ++idx) {
-                if(idx < result.meta.residual_norms.size()) result.meta.residual_norms[idx] = static_cast<double *>(lockedNorms)[idx];
-                if(idx < eigvals.size()) eigvals[idx] = static_cast<double *>(lockedEvals)[idx];
+                if(idx < result.meta.residual_norms.size()) result.meta.residual_norms[idx] = static_cast<Real *>(lockedNorms)[idx];
+                if(idx < eigvals.size()) eigvals[idx] = static_cast<Real *>(lockedEvals)[idx];
             }
         }
         if(basisValid) {
             size_t lockOffset = lockedValid ? static_cast<size_t>(*numLocked) : 0ul;
             auto  &eigvals    = result.get_eigvals<eig::Form::SYMM, eig::Type::FP64>();
             for(size_t idx = 0; idx < static_cast<size_t>(*basisSize); ++idx) {
-                if(idx + lockOffset < result.meta.residual_norms.size()) result.meta.residual_norms[idx + lockOffset] = static_cast<double *>(basisNorms)[idx];
-                if(idx + lockOffset < eigvals.size()) eigvals[idx + lockOffset] = static_cast<double *>(basisEvals)[idx];
+                if(idx + lockOffset < result.meta.residual_norms.size()) result.meta.residual_norms[idx + lockOffset] = static_cast<Real *>(basisNorms)[idx];
+                if(idx + lockOffset < eigvals.size()) eigvals[idx + lockOffset] = static_cast<Real *>(basisEvals)[idx];
             }
-            result.meta.last_rnorm = static_cast<double *>(basisNorms)[0];
-            result.meta.last_eval  = static_cast<double *>(basisEvals)[0];
+            result.meta.last_rnorm = static_cast<Real *>(basisNorms)[0];
+            result.meta.last_eval  = static_cast<Real *>(basisEvals)[0];
         }
 
         // // Terminate if the residual norm is good enough
@@ -298,13 +306,15 @@ void monitorFun([[maybe_unused]] void *basisEvals, [[maybe_unused]] int *basisSi
         }
 
         if(eig::log->level() <= level) {
-            eig::log->log(level, "{}{}{} | {}", getLogMessage(primme, basisSize, basisFlags, basisEvals, basisNorms, numLocked, lockedEvals, lockedNorms),
-                          basisMessage, nlockMessage, eventMessage);
+            eig::log->log(level, "{}{}{} | {}",
+                          getLogMessage<Scalar>(primme, basisSize, basisFlags, basisEvals, basisNorms, numLocked, lockedEvals, lockedNorms), basisMessage,
+                          nlockMessage, eventMessage);
             result.meta.last_log_time = primme->stats.elapsedTime;
             result.meta.last_log_iter = primme->stats.numMatvecs;
         }
     } else {
-        eig::log->trace("{} | {}", getLogMessage(primme, basisSize, basisFlags, basisEvals, basisNorms, numLocked, lockedEvals, lockedNorms), eventMessage);
+        eig::log->trace("{} | {}", getLogMessage<Scalar>(primme, basisSize, basisFlags, basisEvals, basisNorms, numLocked, lockedEvals, lockedNorms),
+                        eventMessage);
     }
 }
 
@@ -313,11 +323,14 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     using Scalar  = typename MatrixProductType::Scalar;
     auto t_primme = tid::tic_scope("primme", tid::level::higher);
     auto t_prep   = tid::tic_scope("prep");
+    eig::log->warn("Setting up PRIMME ...");
+    using Real = decltype(std::real(std::declval<Scalar>()));
     if constexpr(MatrixProductType::can_shift) {
         if(config.sigma) {
             auto t_shift = tid::tic_scope("shift", tid::level::highest);
             eig::log->debug("Setting shift with sigma = {}", std::real(config.sigma.value()));
-            matrix.set_shift(config.sigma.value());
+            auto sigma = std::complex<Real>(static_cast<Real>(std::real(config.sigma.value())), static_cast<Real>(std::imag(config.sigma.value())));
+            matrix.set_shift(sigma);
             if constexpr(MatrixProductType::can_shift_invert) {
                 if(config.shift_invert == Shinv::ON) {
                     eig::log->debug("Enabling shift-invert mode");
@@ -345,8 +358,8 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
 
     if(matrix.isReadyFactorOp()) { primme.matrixMatvec = eig::solver::MultOPv_wrapper<MatrixProductType>; }
 
-    primme.monitorFun = monitorFun; // Set the function which prints log output
-    primme.monitor    = this;       // Make eig objects visible from within monitorFun
+    primme.monitorFun = monitorFun<Scalar>; // Set the function which prints log output
+    primme.monitor    = this;               // Make eig objects visible from within monitorFun
 
     // Set mass matrix if given
     if(config.primme_massMatrixMatvec) {
@@ -373,11 +386,14 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
 
     /* Set problem parameters */
     // https://www.cs.wm.edu/~andreas/software/doc/appendix.html#c.primme_params.eps
-    primme.n                           = matrix.rows();                                                                /*!< set problem dimension */
-    primme.numEvals                    = config.maxNev.value_or(1);                                                    /*!<  Number of desired eigenpairs */
-    primme.eps                         = std::max(config.tol.value_or(1e-12), std::numeric_limits<double>::epsilon()); /*!< 1e-12 is good, see link above. */
-    primme.locking                     = config.primme_locking.value_or(1);                                            // Use locking by default
-    primme.target                      = RitzToTarget(config.ritz.value_or(Ritz::primme_smallest));
+    auto eps        = std::numeric_limits<Real>::epsilon();
+    auto tol_def    = eps * Real{1e4};
+    auto tol_min    = eps * Real{1e1};
+    primme.n        = matrix.rows();                                                                                 /*!< set problem dimension */
+    primme.numEvals = config.maxNev.value_or(1);                                                                     /*!<  Number of desired eigenpairs */
+    primme.eps      = static_cast<double>(std::max<Real>(static_cast<Real>(config.tol.value_or(tol_def)), tol_min)); /*!< 1e-12 is good, see link above. */
+    primme.locking  = config.primme_locking.value_or(1);                                                             // Use locking by default
+    primme.target   = RitzToTarget(config.ritz.value_or(Ritz::primme_smallest));
     primme.projectionParams.projection = stringToProj(config.primme_projection.value_or("primme_proj_default"));
     // #pragma message "Decide what to do about maxmatvecs"
     primme.maxMatvecs                          = config.maxIter.value_or(primme.maxMatvecs);
@@ -433,7 +449,7 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
                     primme.numEvals, primme.maxMatvecs, primme.eps, primme.maxBasisSize, primme.minRestartSize, primme.restartingParams.maxPrevRetain,
                     primme.maxBlockSize, projToString(primme.projectionParams.projection));
     // Allocate space
-    auto &eigvals = result.get_eigvals<eig::Form::SYMM, eig::Type::FP64>();
+    auto &eigvals = result.get_eigvals<Scalar, eig::Form::SYMM>();
     auto &eigvecs = result.get_eigvecs<Scalar, eig::Form::SYMM>();
     eigvals.resize(static_cast<size_t>(primme.numEvals));
     eigvecs.resize(static_cast<size_t>(primme.numEvals) * static_cast<size_t>(primme.n));
@@ -456,33 +472,51 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     /* Call primme  */
     /* clang-format off */
     int info = 0;
+    static_assert(eig::sfinae::is_any_v<Scalar, fp32, fp64, cx32,cx64>);
+    using Real = decltype(std::real(std::declval<Scalar>()));
+    auto res = std::vector<Real>(static_cast<size_t>(primme.numEvals));
+    eig::log->warn("Running some PRIMME ... {}", sfinae::type_name<Scalar>());
+
+    if constexpr(std::is_same_v<Scalar, fp32>) {
+        try {
+            auto t_sprimme = tid::tic_scope("sprimme");
+            info = sprimme(eigvals.data(), eigvecs.data(), res.data(), &primme);
+        } catch(const std::exception &ex) { eig::log->error("sprimme has exited with error: info {} | msg: {}", info, ex.what()); } catch(...) {
+            eig::log->error("sprimme has exited with error: info {}", info);
+        }
+    }
     if constexpr(std::is_same_v<Scalar, fp64>) {
         try {
             auto t_dprimme = tid::tic_scope("dprimme");
-            info = dprimme(eigvals.data(), eigvecs.data(), result.meta.residual_norms.data(), &primme);
-            auto t_ortho = tid::tic_token("ortho", tid::level::higher, primme.stats.timeOrtho);
-            auto t_dense = tid::tic_token("dense", tid::level::higher, primme.stats.timeDense);
-            auto t_glsum = tid::tic_token("glsum", tid::level::higher, primme.stats.timeGlobalSum);
-            auto t_matvec = tid::tic_token("matvec", tid::level::higher, primme.stats.timeMatvec);
-            auto t_precond = tid::tic_token("precond", tid::level::higher, primme.stats.timePrecond);
+            info = dprimme(eigvals.data(), eigvecs.data(), res.data(), &primme);
         } catch(const std::exception &ex) { eig::log->error("dprimme has exited with error: info {} | msg: {}", info, ex.what()); } catch(...) {
             eig::log->error("dprimme has exited with error: info {}", info);
         }
-    } else if constexpr(std::is_same_v<typename MatrixProductType::Scalar, cx64>) {
+    }
+    if constexpr(std::is_same_v<Scalar, cx32>) {
+        try {
+            auto t_cprimme = tid::tic_scope("cprimme");
+            info = cprimme(eigvals.data(), eigvecs.data(), res.data(), &primme);
+        } catch(const std::exception &ex) { eig::log->error("cprimme has exited with error: info {} | msg: {}", info, ex.what()); } catch(...) {
+            eig::log->error("cprimme has exited with error: info {}", info);
+        }
+    }
+    if constexpr(std::is_same_v<typename MatrixProductType::Scalar, cx64>) {
         try {
             auto t_zprimme = tid::tic_scope("zprimme");
-            info = zprimme(eigvals.data(), eigvecs.data(), result.meta.residual_norms.data(), &primme);
-            auto t_ortho = tid::tic_token("ortho", tid::level::higher, primme.stats.timeOrtho);
-            auto t_dense = tid::tic_token("dense", tid::level::higher, primme.stats.timeDense);
-            auto t_glsum = tid::tic_token("glsum", tid::level::higher, primme.stats.timeGlobalSum);
-            auto t_matvec = tid::tic_token("matvec", tid::level::higher, primme.stats.timeMatvec);
-            auto t_precond = tid::tic_token("precond", tid::level::higher, primme.stats.timePrecond);
-        } catch(const std::exception &ex) { eig::log->error("zprimme has exited with error: info {} | msg: {}", info, ex.what()); } catch(...) {
+            info = zprimme(eigvals.data(), eigvecs.data(), res.data(), &primme);
+         } catch(const std::exception &ex) { eig::log->error("zprimme has exited with error: info {} | msg: {}", info, ex.what()); } catch(...) {
             eig::log->error("zprimme has exited with error: info {}", info);
         }
-    } else {
-        throw std::runtime_error("Primme: type not implemented {}", eig::sfinae::type_name<typename MatrixProductType::Scalar>());
     }
+    result.meta.residual_norms = std::vector<double>(res.begin(), res.end());
+
+    auto t_ortho = tid::tic_token("ortho", tid::level::higher, primme.stats.timeOrtho);
+    auto t_dense = tid::tic_token("dense", tid::level::higher, primme.stats.timeDense);
+    auto t_glsum = tid::tic_token("glsum", tid::level::higher, primme.stats.timeGlobalSum);
+    auto t_matvec = tid::tic_token("matvec", tid::level::higher, primme.stats.timeMatvec);
+    auto t_precond = tid::tic_token("precond", tid::level::higher, primme.stats.timePrecond);
+
     /* clang-format on */
 
     if(info == 0) {
@@ -496,7 +530,7 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
         switch(info) {
             case -1: eig::log->error("PRIMME_UNEXPECTED_FAILURE (exit {}): set printLevel > 0 to see the call stack", info); break;
             case -2: eig::log->error("PRIMME_MALLOC_FAILURE (exit {}): eith<er CPU or GPU", info); break;
-            case -3: eig::log->debug("{}", getLogMessage(&primme)); break;
+            case -3: eig::log->debug("{}", getLogMessage<Scalar>(&primme)); break;
             case -4: eig::log->error("PRIMME_ARGUMENT_IS_NULL (exit {})", info); break;
             case -5: eig::log->error("PRIMME_INVALID_ARG n < 0 or nLocal < 0 or nLocal > n (exit {})", info); break;
             case -6: eig::log->error("PRIMME_INVALID_ARG numProcs < 1 (exit {})", info); break;
@@ -541,13 +575,27 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     return info;
 }
 
+template int eig::solver::eigs_primme(MatVecMPO<fp32> &matrix);
+template int eig::solver::eigs_primme(MatVecMPO<cx32> &matrix);
 template int eig::solver::eigs_primme(MatVecMPO<fp64> &matrix);
 template int eig::solver::eigs_primme(MatVecMPO<cx64> &matrix);
+
+template int eig::solver::eigs_primme(MatVecMPOS<fp32> &matrix);
+template int eig::solver::eigs_primme(MatVecMPOS<cx32> &matrix);
 template int eig::solver::eigs_primme(MatVecMPOS<fp64> &matrix);
 template int eig::solver::eigs_primme(MatVecMPOS<cx64> &matrix);
+
+template int eig::solver::eigs_primme(MatVecZero<fp32> &matrix);
+template int eig::solver::eigs_primme(MatVecZero<cx32> &matrix);
 template int eig::solver::eigs_primme(MatVecZero<fp64> &matrix);
 template int eig::solver::eigs_primme(MatVecZero<cx64> &matrix);
+
+template int eig::solver::eigs_primme(MatVecDense<fp32> &matrix);
+template int eig::solver::eigs_primme(MatVecDense<cx32> &matrix);
 template int eig::solver::eigs_primme(MatVecDense<fp64> &matrix);
 template int eig::solver::eigs_primme(MatVecDense<cx64> &matrix);
+
+template int eig::solver::eigs_primme(MatVecSparse<fp32> &matrix);
+template int eig::solver::eigs_primme(MatVecSparse<cx32> &matrix);
 template int eig::solver::eigs_primme(MatVecSparse<fp64> &matrix);
 template int eig::solver::eigs_primme(MatVecSparse<cx64> &matrix);

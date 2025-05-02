@@ -647,7 +647,7 @@ std::size_t MpoSite<Scalar>::get_unique_id_sq() const {
 template<typename Scalar>
 template<typename T>
 Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_left(const Eigen::Tensor<T, 4> &mpo) const {
-    using Real = typename Eigen::NumTraits<T>::Real;
+    using Real = decltype(std::real(std::declval<T>()));
     if(mpo.size() == 0) throw except::runtime_error("mpo({}): can't build the left edge: mpo has not been built yet", get_position());
     auto                ldim = mpo.dimension(0);
     Eigen::Tensor<T, 1> ledge(ldim);
@@ -720,7 +720,7 @@ template Eigen::Tensor<cx128, 1> MpoSite<cx64>::get_MPO_edge_left(const Eigen::T
 template<typename Scalar>
 template<typename T>
 Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO_edge_right(const Eigen::Tensor<T, 4> &mpo) const {
-    using Real = typename Eigen::NumTraits<T>::Real;
+    using Real = decltype(std::real(std::declval<T>()));
     if(mpo.size() == 0) throw except::runtime_error("mpo({}): can't build the right edge: mpo has not been built yet", get_position());
     auto                rdim = mpo.dimension(1);
     Eigen::Tensor<T, 1> redge(rdim);
@@ -807,7 +807,7 @@ template Eigen::Tensor<cx128, 4> MpoSite<cx128>::apply_edge_right(const Eigen::T
 template<typename Scalar>
 template<typename T>
 Eigen::Tensor<T, 1> MpoSite<Scalar>::get_MPO2_edge_left() const {
-    using Real = typename Eigen::NumTraits<T>::Real;
+    using Real = decltype(std::real(std::declval<T>()));
     if(mpo_squared.has_value()) {
         auto ldim = mpo_squared->dimension(0);
         if(ldim == 1) {

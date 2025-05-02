@@ -4,7 +4,7 @@
 
 template<typename Scalar>
 struct InfoAnalysis {
-    using RealScalar  = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar  = decltype(std::real(std::declval<Scalar>()));
     using RealArrayX  = Eigen::Array<RealScalar, Eigen::Dynamic, 1>;
     using RealArrayXX = Eigen::Array<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
 

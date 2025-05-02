@@ -125,6 +125,12 @@ namespace eig {
         }
     }
     inline std::string_view LibToString(std::optional<Lib> lib) { return lib ? LibToString(lib.value()) : "Lib:NONE"; }
+    inline eig::Lib         StringToLib(std::string_view libstr) {
+        if(libstr == "ARPACK") return Lib::ARPACK;
+        if(libstr == "PRIMME") return Lib::PRIMME;
+        if(libstr == "SPECTRA") return Lib::SPECTRA;
+        throw std::logic_error("The string does not match any eig::Lib");
+    }
 
     constexpr std::string_view TypeToString(Type type) {
         switch(type) {

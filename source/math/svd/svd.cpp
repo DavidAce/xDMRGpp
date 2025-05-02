@@ -1,5 +1,6 @@
 #include "math/svd.h"
 #include "tid/tid.h"
+#include <debug/exceptions.h>
 #include <Eigen/QR>
 #include <fmt/ranges.h>
 
@@ -137,8 +138,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         //        log->info("sizeS = {} | lim {} | {} {} {} | {} ", sizeS, rank_lim, switchsize_gejsv, switchsize_gesvd, switchsize_gesdd,
         //        enum2sv(svd_rtn));
     }
-
-
+    if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar>) svd_lib = svd::lib::eigen;
 #pragma omp atomic
     count++;
     switch(svd_lib) {
@@ -180,8 +180,13 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                 else
                     return do_svd_eigen(mat_ptr, rows, cols);
             } catch(const std::exception &ex) {
-                log->warn("{} {} failed to perform SVD: {} | Trying Eigen", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
-                return do_svd_lapacke(mat_ptr, rows, cols);
+                if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar>) {
+                    throw except::runtime_error("{} {} failed to perform SVD: {} | No other libraries to try with quadruple precision", enum2sv(svd_lib),
+                                                enum2sv(svd_rtn), std::string_view(ex.what()));
+                } else {
+                    log->warn("{} {} failed to perform SVD: {} | Trying Lapack", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
+                    return do_svd_lapacke(mat_ptr, rows, cols);
+                }
             }
             break;
         }
@@ -205,10 +210,7 @@ void svd::solver::print_matrix([[maybe_unused]] const Scalar *mat_ptr, [[maybe_u
     auto A = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>>(mat_ptr, rows, cols);
     log->warn("Matrix [{}] with dimensions {}x{}\n", tag, rows, cols);
     for(long r = 0; r < A.rows(); r++) {
-        if constexpr(tenx::sfinae::is_std_complex_v<Scalar>)
-            for(long c = 0; c < A.cols(); c++) fmt::print("({1:.{0}f},{2:+.{0}f}) ", dec, std::real(A(r, c)), std::imag(A(r, c)));
-        else
-            for(long c = 0; c < A.cols(); c++) fmt::print("{1:.{0}f} ", dec, A(r, c));
+        for(long c = 0; c < A.cols(); c++) fmt::print("({1:.{0}f}) ", dec, fp(A(r, c)));
         fmt::print("\n");
     }
 #endif
@@ -216,8 +218,10 @@ void svd::solver::print_matrix([[maybe_unused]] const Scalar *mat_ptr, [[maybe_u
 
 template void svd::solver::print_matrix<fp32>(const fp32 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
 template void svd::solver::print_matrix<fp64>(const fp64 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
+template void svd::solver::print_matrix<fp128>(const fp128 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
 template void svd::solver::print_matrix<cx32>(const cx32 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
 template void svd::solver::print_matrix<cx64>(const cx64 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
+template void svd::solver::print_matrix<cx128>(const cx128 *vec_ptr, long rows, long cols, std::string_view tag, long dec) const;
 
 template<typename Scalar>
 void svd::solver::print_vector([[maybe_unused]] const Scalar *vec_ptr, [[maybe_unused]] long size, [[maybe_unused]] std::string_view tag,
@@ -225,17 +229,16 @@ void svd::solver::print_vector([[maybe_unused]] const Scalar *vec_ptr, [[maybe_u
 #if !defined(NDEBUG)
     auto V = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(vec_ptr, size);
     log->warn("Vector [{}] with size {}\n", tag, size);
-    if constexpr(tenx::sfinae::is_std_complex_v<Scalar>)
-        for(long i = 0; i < V.size(); i++) fmt::print("({1:.{0}f},{2:+.{0}f})\n", dec, std::real(V[i]), std::imag(V[i]));
-    else
-        for(long i = 0; i < V.size(); i++) fmt::print("{1:.{0}f}\n", dec, V[i]);
+    for(long i = 0; i < V.size(); i++) fmt::print("{1:.{0}f}\n", dec, fp(V[i]));
 #endif
 }
 
 template void svd::solver::print_vector<fp32>(const fp32 *vec_ptr, long size, std::string_view tag, long dec) const;
 template void svd::solver::print_vector<fp64>(const fp64 *vec_ptr, long size, std::string_view tag, long dec) const;
+template void svd::solver::print_vector<fp128>(const fp128 *vec_ptr, long size, std::string_view tag, long dec) const;
 template void svd::solver::print_vector<cx32>(const cx32 *vec_ptr, long size, std::string_view tag, long dec) const;
 template void svd::solver::print_vector<cx64>(const cx64 *vec_ptr, long size, std::string_view tag, long dec) const;
+template void svd::solver::print_vector<cx128>(const cx128 *vec_ptr, long size, std::string_view tag, long dec) const;
 
 // template<typename Scalar>
 // std::pair<long, fp64> svd::solver::get_rank_from_truncation_error(const VectorType<Scalar> &S) const {
@@ -324,7 +327,7 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
      *
      *
      */
-    using Real                         = typename Eigen::NumTraits<Scalar>::Real;
+    using Real                         = decltype(std::real(std::declval<Scalar>()));
     auto                     dim0      = mpo.dimension(2);
     auto                     dim1      = mpo.dimension(3);
     auto                     dim2      = mpo.dimension(0);
@@ -416,8 +419,8 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
     auto Smax = S.real().maxCoeff();
 
     // Stabilize by inserting avgS *  1/avgS
-    using R = RealScalar<Scalar>;
-    auto avgS        = num::next_power_of_two<R>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
+    using R   = RealScalar<Scalar>;
+    auto avgS = num::next_power_of_two<R>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
     if(avgS > 1) {
         S /= avgS;
         std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);

@@ -6,7 +6,6 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
 #include "tools/finite/mps.h"
 
 template<typename Scalar>

@@ -9,7 +9,7 @@
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
@@ -99,19 +99,34 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const T
 
     std::vector<opt_mps<Scalar>> subspace;
     auto                         slog = reports::subs_log<Scalar>();
-    if constexpr(sfinae::is_std_complex_v<Scalar>) {
+    if constexpr(sfinae::is_any_v<Scalar, fp32, cx32>) {
+        switch(meta.optType) {
+            case OptType::FP32: subspace = internal::subspace::find_subspace<fp32>(tensors, meta, slog); break;
+            case OptType::CX32: subspace = internal::subspace::find_subspace<cx32>(tensors, meta, slog); break;
+            default:
+                throw except::runtime_error("optimize_subspace_variance<{}>(): not implemented for type {}", sfinae::type_name<Scalar>(),
+                                            enum2sv(meta.optType));
+        }
+    }
+    if constexpr(sfinae::is_any_v<Scalar, fp64, cx64>) {
         switch(meta.optType) {
             case OptType::FP64: subspace = internal::subspace::find_subspace<fp64>(tensors, meta, slog); break;
             case OptType::CX64: subspace = internal::subspace::find_subspace<cx64>(tensors, meta, slog); break;
-            default: throw except::runtime_error("optimize_subspace_variance(): not implemented for type {}", enum2sv(meta.optType));
-        }
-    } else {
-        switch(meta.optType) {
-            case OptType::FP64: subspace = internal::subspace::find_subspace<fp64>(tensors, meta, slog); break;
-            case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
-            default: throw except::runtime_error("optimize_subspace_variance(): not implemented for type {}", enum2sv(meta.optType));
+            default:
+                throw except::runtime_error("optimize_subspace_variance<{}>(): not implemented for type {}", sfinae::type_name<Scalar>(),
+                                            enum2sv(meta.optType));
         }
     }
+    if constexpr(sfinae::is_any_v<Scalar, fp128, cx128>) {
+        switch(meta.optType) {
+            case OptType::FP128: subspace = internal::subspace::find_subspace<fp128>(tensors, meta, slog); break;
+            case OptType::CX128: subspace = internal::subspace::find_subspace<cx128>(tensors, meta, slog); break;
+            default:
+                throw except::runtime_error("optimize_subspace_variance<{}>(): not implemented for type {}", sfinae::type_name<Scalar>(),
+                                            enum2sv(meta.optType));
+        }
+    }
+
     tools::log->trace("Subspace found with {} eigenvectors", subspace.size());
     slog.print_subs_report();
 
@@ -165,16 +180,19 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const T
 
     auto t_eigs = tid::tic_scope("eigs");
     tools::log->trace("Optimizing subspace | {}", enum2sv(meta.optType));
-    if constexpr(std::is_same_v<Scalar, fp32> || std::is_same_v<Scalar, cx32>) {
+    using Real = decltype(std::real(std::declval<Scalar>()));
+    if constexpr(sfinae::is_any_v<Scalar, fp32, cx32>) {
         switch(meta.optType) {
             case OptType::FP32: {
                 auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<fp32>(model, edges, subspace);
-                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
+                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, Real{0}, Real{1});
+                extract_results_subspace<fp32>(tensors, initial_mps, meta, solver, subspace, results);
                 break;
             }
             case OptType::CX32: {
                 auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<cx32>(model, edges, subspace);
-                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
+                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, Real{0}, Real{1});
+                extract_results_subspace<cx32>(tensors, initial_mps, meta, solver, subspace, results);
                 break;
             }
             default:
@@ -182,16 +200,18 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const T
                                             enum2sv(meta.optType));
         }
     }
-    if constexpr(std::is_same_v<Scalar, fp64> || std::is_same_v<Scalar, cx64>) {
+    if constexpr(sfinae::is_any_v<Scalar, fp64, cx64>) {
         switch(meta.optType) {
             case OptType::FP64: {
                 auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<fp64>(model, edges, subspace);
-                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
+                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, Real{0}, Real{1});
+                extract_results_subspace<fp64>(tensors, initial_mps, meta, solver, subspace, results);
                 break;
             }
             case OptType::CX64: {
                 auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<cx64>(model, edges, subspace);
-                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
+                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, Real{0}, Real{1});
+                extract_results_subspace<cx64>(tensors, initial_mps, meta, solver, subspace, results);
                 break;
             }
             default:
@@ -199,16 +219,18 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const T
                                             enum2sv(meta.optType));
         }
     }
-    if constexpr(std::is_same_v<Scalar, fp128> || std::is_same_v<Scalar, cx128>) {
+    if constexpr(sfinae::is_any_v<Scalar, fp128, cx128>) {
         switch(meta.optType) {
             case OptType::FP128: {
                 auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<fp128>(model, edges, subspace);
-                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
+                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, Real{0}, Real{1});
+                extract_results_subspace<fp128>(tensors, initial_mps, meta, solver, subspace, results);
                 break;
             }
             case OptType::CX128: {
                 auto H2_subspace = subspace::get_hamiltonian_squared_in_subspace<cx128>(model, edges, subspace);
-                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, 0.0, 1.0);
+                solver.eig<eig::Form::SYMM>(H2_subspace.data(), H2_subspace.rows(), 'I', 1, 1, Real{0}, Real{1});
+                extract_results_subspace<cx128>(tensors, initial_mps, meta, solver, subspace, results);
                 break;
             }
             default:
@@ -216,8 +238,6 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const T
                                             enum2sv(meta.optType));
         }
     }
-
-    extract_results_subspace(tensors, initial_mps, meta, solver, subspace, results);
 
     if(results.empty()) {
         meta.optExit = OptExit::FAIL_ERROR;

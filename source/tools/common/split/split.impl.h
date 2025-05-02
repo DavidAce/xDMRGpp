@@ -113,7 +113,7 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
         if(chiL * chiR > 512 * 512 and tenx::isReal(multisite_mps)) {
             auto t_real = tid::tic_scope("isReal", tid::level::highest);
             tools::log->debug("split_mps: converting to real: chiL({}) * chiR({}) > 512 * 512", chiL, chiR);
-            using RealScalar                                = typename Eigen::NumTraits<T>::Real;
+            using RealScalar                                = decltype(std::real(std::declval<T>()));
             Eigen::Tensor<RealScalar, 3> multisite_mps_real = multisite_mps.real();
             return split_mps<Scalar>(multisite_mps_real, spin_dims, positions, center_position, svd_cfg);
         }

@@ -101,13 +101,12 @@ namespace stat {
     template<typename ContainerType>
     [[nodiscard]] typename ContainerType::value_type variance(const ContainerType &X, std::optional<size_t> start_point = std::nullopt,
                                                               std::optional<size_t> end_point = std::nullopt) {
-        using value_type = typename ContainerType::value_type;
+        using value_type  = typename ContainerType::value_type;
         auto [x_it, x_en] = get_start_end_iterators(X, start_point, end_point);
         auto n            = static_cast<value_type>(std::distance(x_it, x_en));
         if(n == 0) return 0.0;
         auto X_mean = stat::mean(X, start_point, end_point);
-        auto sum    = std::accumulate(x_it, x_en, static_cast<value_type>(0.0),
-                                      [&X_mean](auto x1, auto x2) { return x1 + (x2 - X_mean) * (x2 - X_mean); });
+        auto sum    = std::accumulate(x_it, x_en, static_cast<value_type>(0.0), [&X_mean](auto x1, auto x2) { return x1 + (x2 - X_mean) * (x2 - X_mean); });
         return sum / n;
     }
     template<typename ContainerType>
@@ -135,7 +134,7 @@ namespace stat {
         auto [x_it, x_en] = get_start_end_iterators(X, start_point, end_point);
         long idx0         = std::distance(X.begin(), x_it);
         long idxN         = std::distance(X.begin(), x_en);
-        long xlen         = std::distance(x_it, x_en);                                             // Number of points to consider in X
+        long xlen         = std::distance(x_it, x_en);                                                 // Number of points to consider in X
         long wlen         = std::max<long>(2, safe_cast<long>(width * static_cast<value_type>(xlen))); // Number of points in the moving window
         while(x_it != x_en) {
             long idx_beg = std::distance(X.begin(), x_it); // Center around x_it
@@ -245,40 +244,44 @@ namespace stat {
     }
 
     /*! \brief Contains the result from fitting (X,Y) data to Y = M + KX */
+    template<typename T>
+    requires std::is_floating_point_v<T>
     struct LinearFit {
-        double isect = std::numeric_limits<double>::quiet_NaN(); /*!< m: intersection with x=0 */
-        double slope = std::numeric_limits<double>::quiet_NaN(); /*!< k: slope */
-        double rms   = std::numeric_limits<double>::quiet_NaN(); /*!< Root mean squared deviation */
-        double rsq   = std::numeric_limits<double>::quiet_NaN(); /*!< R² or coefficient of determination */
+        T isect = std::numeric_limits<T>::quiet_NaN(); /*!< m: intersection with x=0 */
+        T slope = std::numeric_limits<T>::quiet_NaN(); /*!< k: slope */
+        T rms   = std::numeric_limits<T>::quiet_NaN(); /*!< Root mean squared deviation */
+        T rsq   = std::numeric_limits<T>::quiet_NaN(); /*!< R² or coefficient of determination */
     };
     template<typename ContainerType1, typename ContainerType2, typename = std::enable_if_t<is_iterable_v<ContainerType1> and is_iterable_v<ContainerType2>>>
-    [[nodiscard]] LinearFit linearFit(const ContainerType1 &X, const ContainerType2 &Y, std::optional<size_t> start_point = std::nullopt,
-                                      std::optional<size_t> end_point = std::nullopt) {
+    [[nodiscard]] auto linearFit(const ContainerType1 &X, const ContainerType2 &Y, std::optional<size_t> start_point = std::nullopt,
+                                 std::optional<size_t> end_point = std::nullopt) {
         if(X.size() != Y.size())
             throw std::range_error("linearFit: size mismatch in arrays: X.size() == " + std::to_string(X.size()) +
                                    " | Y.size() == " + std::to_string(Y.size()));
         auto [x_it, x_en] = get_start_end_iterators(X, start_point, end_point);
         auto [y_it, y_en] = get_start_end_iterators(Y, start_point, end_point);
-        auto n            = static_cast<double>(std::distance(x_it, x_en));
-        if(n <= 1) return LinearFit(); // Need at least 2 points
-        double avgX    = std::accumulate(x_it, x_en, 0.0) / n;
-        double avgY    = std::accumulate(y_it, y_en, 0.0) / n;
-        auto   xxsqerr = [&](auto a, auto b) { return (a - avgX) * (b - avgX); };
-        auto   yysqerr = [&](auto a, auto b) { return (a - avgY) * (b - avgY); };
-        auto   xysqerr = [&](auto a, auto b) { return (a - avgX) * (b - avgY); };
-        double sxx     = std::inner_product(x_it, x_en, x_it, 0.0, std::plus<>(), xxsqerr);
-        double syy     = std::inner_product(y_it, y_en, y_it, 0.0, std::plus<>(), yysqerr); // aka total sum of squares TSS
-        double sxy     = std::inner_product(x_it, x_en, y_it, 0.0, std::plus<>(), xysqerr);
-        double slope   = sxy / sxx;
-        double isect   = avgY - slope * avgX;
+        using T           = std::common_type_t<decltype(*x_it), decltype(*y_it)>;
+        static_assert(std::is_floating_point_v<T>);
+        auto n = static_cast<T>(std::distance(x_it, x_en));
+        if(n <= 1) return LinearFit<T>(); // Need at least 2 points
+        auto avgX    = std::accumulate(x_it, x_en, T{0}) / n;
+        auto avgY    = std::accumulate(y_it, y_en, T{0}) / n;
+        auto xxsqerr = [&](auto a, auto b) { return (a - avgX) * (b - avgX); };
+        auto yysqerr = [&](auto a, auto b) { return (a - avgY) * (b - avgY); };
+        auto xysqerr = [&](auto a, auto b) { return (a - avgX) * (b - avgY); };
+        auto sxx     = std::inner_product(x_it, x_en, x_it, T{0}, std::plus<>(), xxsqerr);
+        auto syy     = std::inner_product(y_it, y_en, y_it, T{0}, std::plus<>(), yysqerr); // aka total sum of squares TSS
+        auto sxy     = std::inner_product(x_it, x_en, y_it, T{0}, std::plus<>(), xysqerr);
+        auto slope   = sxy / sxx;
+        auto isect   = avgY - slope * avgX;
 
         auto yfiterr = [&](const auto &x, const auto &y) { return std::pow(y - (isect + slope * x), 2); };
-        auto rss     = std::inner_product(x_it, x_en, y_it, 0.0, std::plus<>(), yfiterr);
+        auto rss     = std::inner_product(x_it, x_en, y_it, T{0}, std::plus<>(), yfiterr);
 
-        double rms = std::sqrt(rss / n);
-        double rsq = 1 - rss / syy;
+        auto rms = std::sqrt(rss / n);
+        auto rsq = 1 - rss / syy;
 
-        auto result  = LinearFit();
+        auto result  = LinearFit<T>();
         result.isect = isect;
         result.slope = slope;
         result.rms   = rms;
@@ -295,7 +298,7 @@ namespace stat {
     }
 
     template<typename ContainerType1, typename ContainerType2>
-    [[nodiscard]] double slope_at(const ContainerType1 &X, const ContainerType2 &Y, size_t at, size_t width = 1) {
+    [[nodiscard]] auto slope_at(const ContainerType1 &X, const ContainerType2 &Y, size_t at, size_t width = 1) {
         auto min_idx = static_cast<size_t>(std::max(safe_cast<long>(at) - safe_cast<long>(width), 0l));
         auto max_idx = static_cast<size_t>(std::min(at + width, Y.size()));
         return linearFit(X, Y, min_idx, max_idx).first;

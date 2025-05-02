@@ -27,7 +27,7 @@ namespace tools{
 
 
 namespace tools::finite::mps {
-    template<typename Scalar> using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
 
     /* clang-format off */
 

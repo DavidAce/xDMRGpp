@@ -71,14 +71,14 @@ namespace tools::finite::opt::internal {
                 auto il = 1;
                 auto iu = nev;
                 solver.eig(matrixA.data(), matrixB.data(), matrixA.dimension(0), 'I', il, iu, 0.0, 1.0);
-                extract_results(tensors, initial_mps, meta, solver, results, true);
+                extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true);
                 break;
             }
             case OptRitz::LR: {
                 auto il = static_cast<int>(matrixA.dimension(0) - (nev - 1));
                 auto iu = static_cast<int>(matrixA.dimension(0));
                 solver.eig(matrixA.data(), matrixB.data(), matrixA.dimension(0), 'I', il, iu, 0.0, 1.0);
-                extract_results(tensors, initial_mps, meta, solver, results, true);
+                extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true);
                 break;
             }
             case OptRitz::SM: {
@@ -93,7 +93,7 @@ namespace tools::finite::opt::internal {
                 } else {
                     indices = get_k_smallest(eigvals.cwiseAbs(), safe_cast<size_t>(nev));
                 }
-                extract_results(tensors, initial_mps, meta, solver, results, true, indices);
+                extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true, indices);
                 break;
             }
 
@@ -129,7 +129,7 @@ namespace tools::finite::opt::internal {
                 } else {
                     indices = get_k_largest(eigvals.cwiseAbs(), safe_cast<size_t>(nev));
                 }
-                extract_results(tensors, initial_mps, meta, solver, results, true, indices);
+                extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true, indices);
                 break;
                 //
                 // eig::solver solver_u, solver_l;
@@ -147,9 +147,9 @@ namespace tools::finite::opt::internal {
                 // auto ev_u      = eigvals_u(eigvals_u.size() - 1);
                 // auto ev_l      = eigvals_l(0);
                 // if(std::abs(ev_l) >= std::abs(ev_u)) {
-                //     extract_results(tensors, initial_mps, meta, solver_l, results, true);
+                //     extract_results<CalcType>(tensors, initial_mps, meta, solver_l, results, true);
                 // } else {
-                //     extract_results(tensors, initial_mps, meta, solver_u, results, true);
+                //     extract_results<CalcType>(tensors, initial_mps, meta, solver_u, results, true);
                 // }
                 // break;
             }

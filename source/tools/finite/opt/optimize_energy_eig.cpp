@@ -49,13 +49,13 @@ namespace tools::finite::opt::internal {
                     std::sort(indices.begin(), indices.end(), eigComp);               // Should sort them according to distance from eigval
                     indices.resize(safe_cast<size_t>(std::min(eigvals.size(), 10l))); // We only need the first few indices, say 4
                     // for(auto idx : indices) { tools::log->info(" -- idx {}: {:.16f}", idx, eigvals(idx)); }
-                    extract_results(tensors, initial_mps, meta, solver, results, false, indices);
+                    extract_results<CalcType>(tensors, initial_mps, meta, solver, results, false, indices);
                 }
                 return;
             }
         }
 
-        extract_results(tensors, initial_mps, meta, solver, results, false);
+        extract_results<CalcType>(tensors, initial_mps, meta, solver, results, false);
     }
     /* clang-format off */
     template void optimize_energy_eig_executor<fp64>(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps, std::vector<opt_mps<fp64>> &results, const OptMeta &meta);

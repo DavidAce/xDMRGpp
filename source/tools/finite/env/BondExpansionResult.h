@@ -6,7 +6,7 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 template<typename T>
 struct BondExpansionResult {
-    using R                                    = typename Eigen::NumTraits<T>::Real;
+    using R                                    = decltype(std::real(std::declval<T>()));
     bool                             ok        = false; /*!< True if the expansion took place (false on queries, e.g., BondExpansionPolicy == NONE) */
     long                             direction = 0;     /*!< 1: expansion left to right, -1: expansion right to left */
     long                             posL      = -1;    /*!< Position left of the expanded bond */

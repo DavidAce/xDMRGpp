@@ -16,7 +16,7 @@ template<typename Scalar> class ModelLocal;
 template<typename Scalar>
 class ModelFinite {
     private:
-    using RealScalar                    = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar                    = decltype(std::real(std::declval<Scalar>()));
     using QuadScalar                    = std::conditional_t<sfinae::is_std_complex_v<Scalar>, cx128, fp128>;
     static constexpr bool debug_nbody   = false;
     static constexpr bool debug_cache   = false;

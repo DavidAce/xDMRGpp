@@ -9,7 +9,7 @@ template<typename Scalar>
 class MpoSite;
 
 namespace tools::finite::ops {
-    template<typename Scalar> using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
     /* clang-format off */
     template<typename Scalar>               extern void                  apply_mpo                        (StateFinite<Scalar>& state, const Eigen::Tensor<Scalar,4> & mpo, const Eigen::Tensor<Scalar,3> &Ledge, const Eigen::Tensor<Scalar,3> & Redge);
     template<typename Scalar>               extern void                  apply_mpos                       (StateFinite<Scalar>& state, const std::vector<Eigen::Tensor<Scalar,4>> & mpos, const Eigen::Tensor<Scalar,1> & Ledge, const Eigen::Tensor<Scalar,1> & Redge, bool adjoint = false);

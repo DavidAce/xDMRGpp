@@ -14,7 +14,7 @@ class EdgesInfinite;
 namespace tools::infinite::measure {
     /* clang-format off */
     template<typename Scalar>
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
 
     template<typename Scalar> extern size_t length                           (const TensorsInfinite<Scalar> & tensors);
     template<typename Scalar> extern size_t length                           (const EdgesInfinite<Scalar> & edges);

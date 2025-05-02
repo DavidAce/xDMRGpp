@@ -7,7 +7,8 @@
 #include <vector>
 
 namespace qm::mpo {
-
+    template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
+    template<typename Scalar> using CplxScalar = std::complex<RealScalar<Scalar>>;
     template<typename Scalar>
     extern std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> pauli_mpo(const Eigen::Matrix2cd &paulimatrix);
 

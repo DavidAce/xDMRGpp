@@ -7,7 +7,6 @@
 #include "tid/enums.h"
 #include <array>
 #include <cstdio>
-#include <Eigen/src/Core/NumTraits.h>
 #include <h5pp/h5pp.h>
 #include <memory>
 #include <unordered_map>
@@ -69,7 +68,7 @@ class h5pp_table_measurements_finite {
     static inline h5pp::hid::h5t h5_type;
     static void                  register_table_type();
     static constexpr auto        nan = std::numeric_limits<double>::quiet_NaN();
-    using RealScalar                 = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar                 = decltype(std::real(std::declval<Scalar>()));
 
     public:
     struct table {
@@ -82,7 +81,7 @@ class h5pp_table_measurements_finite {
         RealScalar                energy_variance        = nan;
         RealScalar                energy_variance_lowest = nan;
         RealScalar                norm                   = nan;
-        RealScalar                truncation_error       = nan;
+        double                    truncation_error       = nan;
         long                      bond_mid               = -1;
         long                      bond_lim               = -1;
         long                      bond_max               = -1;
@@ -101,11 +100,12 @@ class h5pp_table_measurements_finite {
     };
     static h5pp::hid::h5t get_h5t();
 };
-
+template<typename Scalar>
 class h5pp_table_measurements_infinite {
     private:
     static inline h5pp::hid::h5t h5_type;
     static void                  register_table_type();
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
 
     public:
     struct table {
@@ -118,16 +118,16 @@ class h5pp_table_measurements_infinite {
         long             bond_dim                     = 0;
         long             bond_lim                     = 0;
         long             bond_max                     = 0;
-        double           entanglement_entropy         = 0;
-        double           norm                         = 0;
-        double           energy_mpo                   = 0;
-        double           energy_per_site_mpo          = 0;
-        double           energy_per_site_ham          = 0;
-        double           energy_per_site_mom          = 0;
-        double           energy_variance_mpo          = 0;
-        double           energy_variance_per_site_mpo = 0;
-        double           energy_variance_per_site_ham = 0;
-        double           energy_variance_per_site_mom = 0;
+        RealScalar       entanglement_entropy         = 0;
+        RealScalar       norm                         = 0;
+        RealScalar       energy_mpo                   = 0;
+        RealScalar       energy_per_site_mpo          = 0;
+        RealScalar       energy_per_site_ham          = 0;
+        RealScalar       energy_per_site_mom          = 0;
+        RealScalar       energy_variance_mpo          = 0;
+        RealScalar       energy_variance_per_site_mpo = 0;
+        RealScalar       energy_variance_per_site_ham = 0;
+        RealScalar       energy_variance_per_site_mom = 0;
         double           truncation_error             = 0;
         double           wall_time                    = 0;
         h5pp::fstr_t<64> phys_time;

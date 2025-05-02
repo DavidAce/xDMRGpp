@@ -8,7 +8,7 @@
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
 #include "tools/finite/h5.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
@@ -216,7 +216,7 @@ void fdmrg<Scalar>::run_algorithm() {
     if(settings::fdmrg::store_wavefn and tensors.template get_length<long>() <= 16) {
 #pragma message "Save fdmrg wavevector properly"
         Eigen::Tensor<RealScalar, 1> psi = tools::finite::mps::mps2tensor<Scalar>(tensors.get_state()).real();
-        write_to_file(psi, "psi", StorageEvent::FINISHED);
+        this->write_tensor_to_file(psi, "psi", StorageEvent::FINISHED);
     }
 }
 

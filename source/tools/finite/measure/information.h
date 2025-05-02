@@ -10,7 +10,7 @@ enum class Precision;
 
 namespace tools::finite::measure {
     /* clang-format off */
-    template<typename Scalar> using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
     template<typename Scalar> using RealArrayX  = Eigen::Array<RealScalar<Scalar>, Eigen::Dynamic, 1>;
     template<typename Scalar> using RealArrayXX  = Eigen::Array<RealScalar<Scalar>, Eigen::Dynamic, Eigen::Dynamic>;
 

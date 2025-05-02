@@ -304,7 +304,7 @@ std::pair<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> deparallelize_mpo_
     auto dim_ddm              = dim0 * dim1 * dim2;
     auto mpo_rank2            = Eigen::Tensor<Scalar, 2>(mpo.shuffle(tenx::array4{2, 3, 0, 1}).reshape(tenx::array2{dim_ddm, dim3}));
     auto mpo_map              = tenx::MatrixMap(mpo_rank2);
-    using RealScalar          = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar          = decltype(std::real(std::declval<Scalar>()));
     using MatrixType          = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     static constexpr auto nan = std::numeric_limits<RealScalar>::quiet_NaN();
     auto                  tol = static_cast<RealScalar>(std::clamp(static_cast<double>(std::numeric_limits<RealScalar>::epsilon()), 1e-7, 1e-15));
@@ -423,7 +423,7 @@ std::pair<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> deparallelize_mpo_
     auto dim_ddm               = dim1 * dim2 * dim3;
     auto mpo_rank2             = Eigen::Tensor<Scalar, 2>(mpo.shuffle(tenx::array4{0, 2, 3, 1}).reshape(tenx::array2{dim0, dim_ddm}));
     auto mpo_map               = tenx::MatrixMap(mpo_rank2);
-    using RealScalar           = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar           = decltype(std::real(std::declval<Scalar>()));
     using MatrixType           = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     static constexpr auto nan  = std::numeric_limits<RealScalar>::quiet_NaN();
     auto                  tol  = static_cast<RealScalar>(std::clamp(static_cast<double>(std::numeric_limits<RealScalar>::epsilon()), 1e-7, 1e-15));

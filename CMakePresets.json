@@ -32,18 +32,18 @@
         "CMAKE_CXX_EXTENSIONS": "FALSE",
         "CMAKE_POSITION_INDEPENDENT_CODE": "TRUE",
         "THREADS_PREFER_PTHREAD_FLAG": "TRUE",
-        "CMAKE_C_FLAGS_RELEASE_INIT": "-g -fdiagnostics-color=always",
-        "CMAKE_CXX_FLAGS_RELEASE_INIT": "-g -fdiagnostics-color=always",
-        "CMAKE_CUDA_FLAGS_RELEASE_INIT": "-g -fdiagnostics-color=always",
-        "CMAKE_Fortran_FLAGS_RELEASE_INIT": "-g -fdiagnostics-color=always",
-        "CMAKE_C_FLAGS_DEBUG_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CXX_FLAGS_DEBUG_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CUDA_FLAGS_DEBUG_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_Fortran_FLAGS_DEBUG_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_C_FLAGS_RELWITHDEBINFO_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CUDA_FLAGS_RELWITHDEBINFO_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_Fortran_FLAGS_RELWITHDEBINFO_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_C_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG -g -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG -g -fdiagnostics-color=always",
+        "CMAKE_CUDA_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG -g -fdiagnostics-color=always",
+        "CMAKE_Fortran_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG -g -fdiagnostics-color=always",
+        "CMAKE_C_FLAGS_DEBUG_INIT": "-O0 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_DEBUG_INIT": "-O0 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CUDA_FLAGS_DEBUG_INIT": "-O0 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_Fortran_FLAGS_DEBUG_INIT": "-O0 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_C_FLAGS_RELWITHDEBINFO_INIT": "-O3 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT": "-O3 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CUDA_FLAGS_RELWITHDEBINFO_INIT": "-O3-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_Fortran_FLAGS_RELWITHDEBINFO_INIT": "-O3 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
         "CMAKE_EXE_LINKER_FLAGS": "-Wl,--enable-new-dtags",
         "CMAKE_LINKER_TYPE": "MOLD",
@@ -124,10 +124,10 @@
         "COMPILER_ENABLE_PCH": "TRUE",
         "COMPILER_ENABLE_CCACHE": "TRUE",
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "FALSE",
-        "CMAKE_C_FLAGS_RELEASE_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CXX_FLAGS_RELEASE_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CUDA_FLAGS_RELEASE_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_Fortran_FLAGS_RELEASE_INIT": "-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always"
+        "CMAKE_C_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_RELEASE_INIT": "-O3 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CUDA_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_Fortran_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always"
       }
     },
     {
@@ -144,8 +144,14 @@
       "name": "asan",
       "hidden": true,
       "cacheVariables": {
-        "COMPILER_ENABLE_ASAN": "TRUE",
-        "COMPILER_ENABLE_USAN": "TRUE"
+        "COMPILER_ENABLE_ASAN": "TRUE"
+      }
+    },
+    {
+      "name": "usan",
+      "hidden": true,
+      "cacheVariables": {
+        "COMPILER_ENABLE_ASAN": "TRUE"
       }
     },
     {
@@ -225,6 +231,23 @@
       "displayName": "Debug|fsanitize|conan|flexiblas",
       "inherits": [
         "asan",
+        "debug-conan-flexiblas"
+      ]
+    },
+    {
+      "name": "debug-usan-conan-flexiblas",
+      "displayName": "Debug|fsanitize|conan|flexiblas",
+      "inherits": [
+        "usan",
+        "debug-conan-flexiblas"
+      ]
+    },
+    {
+      "name": "debug-asan-usan-conan-flexiblas",
+      "displayName": "Debug|fsanitize|conan|flexiblas",
+      "inherits": [
+        "asan",
+        "usan",
         "debug-conan-flexiblas"
       ]
     },
@@ -462,6 +485,14 @@
     {
       "name": "debug-asan-conan-flexiblas",
       "configurePreset": "debug-asan-conan-flexiblas"
+    },
+    {
+      "name": "debug-usan-conan-flexiblas",
+      "configurePreset": "debug-usan-conan-flexiblas"
+    },
+    {
+      "name": "debug-asan-usan-conan-flexiblas",
+      "configurePreset": "debug-asan-usan-conan-flexiblas"
     },
     {
       "name": "debug-cmake-flexiblas",

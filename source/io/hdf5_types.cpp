@@ -10,6 +10,20 @@
 #include <unordered_map>
 #include <vector>
 
+template class h5pp_table_measurements_finite<fp32>;
+template class h5pp_table_measurements_finite<fp64>;
+template class h5pp_table_measurements_finite<fp128>;
+template class h5pp_table_measurements_finite<cx32>;
+template class h5pp_table_measurements_finite<cx64>;
+template class h5pp_table_measurements_finite<cx128>;
+
+template class h5pp_table_measurements_infinite<fp32>;
+template class h5pp_table_measurements_infinite<fp64>;
+template class h5pp_table_measurements_infinite<fp128>;
+template class h5pp_table_measurements_infinite<cx32>;
+template class h5pp_table_measurements_infinite<cx64>;
+template class h5pp_table_measurements_infinite<cx128>;
+
 h5pp::hid::h5t &h5_enum_storage_event::get_h5t() {
     create();
     return h5_storage_event;
@@ -132,7 +146,7 @@ void h5pp_table_measurements_finite<Scalar>::register_table_type() {
         H5Tinsert(h5_type, "energy_variance",               HOFFSET(table, energy_variance),               H5T_REAL_SCALAR);
         H5Tinsert(h5_type, "energy_variance_lowest",        HOFFSET(table, energy_variance_lowest),        H5T_REAL_SCALAR);
         H5Tinsert(h5_type, "norm",                          HOFFSET(table, norm),                          H5T_REAL_SCALAR);
-        H5Tinsert(h5_type, "truncation_error",              HOFFSET(table, truncation_error),              H5T_REAL_SCALAR);
+        H5Tinsert(h5_type, "truncation_error",              HOFFSET(table, truncation_error),              H5T_NATIVE_DOUBLE);
         H5Tinsert(h5_type, "bond_mid",                      HOFFSET(table, bond_mid),                      H5T_NATIVE_LONG);
         H5Tinsert(h5_type, "bond_lim",                      HOFFSET(table, bond_lim),                      H5T_NATIVE_LONG);
         H5Tinsert(h5_type, "bond_max",                      HOFFSET(table, bond_max),                      H5T_NATIVE_LONG);
@@ -151,14 +165,16 @@ void h5pp_table_measurements_finite<Scalar>::register_table_type() {
     /* clang-format on */
 }
 
-h5pp::hid::h5t h5pp_table_measurements_infinite::get_h5t() {
+template<typename Scalar>
+h5pp::hid::h5t h5pp_table_measurements_infinite<Scalar>::get_h5t() {
     register_table_type();
     return h5_type;
 }
-
-void h5pp_table_measurements_infinite::register_table_type() {
+template<typename Scalar>
+void h5pp_table_measurements_infinite<Scalar>::register_table_type() {
     if(h5_type.valid()) return;
     h5_enum_storage_event::create();
+    auto H5T_REAL_SCALAR = h5pp::type::getH5Type<RealScalar>();
 
     /* clang-format off */
     h5_type = H5Tcreate(H5T_COMPOUND, sizeof(table));
@@ -170,16 +186,16 @@ void h5pp_table_measurements_infinite::register_table_type() {
     H5Tinsert(h5_type, "bond_dim",                     HOFFSET(table, bond_dim),                     H5T_NATIVE_LONG);
     H5Tinsert(h5_type, "bond_lim",                     HOFFSET(table, bond_lim),                     H5T_NATIVE_LONG);
     H5Tinsert(h5_type, "bond_max",                     HOFFSET(table, bond_max),                     H5T_NATIVE_LONG);
-    H5Tinsert(h5_type, "entanglement_entropy",         HOFFSET(table, entanglement_entropy),         H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "norm",                         HOFFSET(table, norm),                         H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "energy_mpo",                   HOFFSET(table, energy_mpo),                   H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "energy_per_site_mpo",          HOFFSET(table, energy_per_site_mpo),          H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "energy_per_site_ham",          HOFFSET(table, energy_per_site_ham),          H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "energy_per_site_mom",          HOFFSET(table, energy_per_site_mom),          H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "energy_variance_mpo",          HOFFSET(table, energy_variance_mpo),          H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "energy_variance_per_site_mpo", HOFFSET(table, energy_variance_per_site_mpo), H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "energy_variance_per_site_ham", HOFFSET(table, energy_variance_per_site_ham), H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "energy_variance_per_site_mom", HOFFSET(table, energy_variance_per_site_mom), H5T_NATIVE_DOUBLE);
+    H5Tinsert(h5_type, "entanglement_entropy",         HOFFSET(table, entanglement_entropy),         H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "norm",                         HOFFSET(table, norm),                         H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "energy_mpo",                   HOFFSET(table, energy_mpo),                   H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "energy_per_site_mpo",          HOFFSET(table, energy_per_site_mpo),          H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "energy_per_site_ham",          HOFFSET(table, energy_per_site_ham),          H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "energy_per_site_mom",          HOFFSET(table, energy_per_site_mom),          H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "energy_variance_mpo",          HOFFSET(table, energy_variance_mpo),          H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "energy_variance_per_site_mpo", HOFFSET(table, energy_variance_per_site_mpo), H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "energy_variance_per_site_ham", HOFFSET(table, energy_variance_per_site_ham), H5T_REAL_SCALAR);
+    H5Tinsert(h5_type, "energy_variance_per_site_mom", HOFFSET(table, energy_variance_per_site_mom), H5T_REAL_SCALAR);
     H5Tinsert(h5_type, "truncation_error",             HOFFSET(table, truncation_error),             H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "wall_time",                    HOFFSET(table, wall_time),                    H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "phys_time",                    HOFFSET(table, phys_time),                    decltype(table::phys_time)::get_h5type());

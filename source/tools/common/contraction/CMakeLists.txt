@@ -2,8 +2,21 @@ add_source_target(xdmrg++-tools-common-contraction
         TARGET_SOURCES
         contract_bnd_mps.cpp
         contract_mps_bnd.cpp
-        contract_env_mps_mpo.cpp
-        contract_mps_mpo_env.cpp
+
+        contract_env_mps_mpo.cx32.cpp
+        contract_env_mps_mpo.cx64.cpp
+        contract_env_mps_mpo.cx128.cpp
+        contract_env_mps_mpo.fp32.cpp
+        contract_env_mps_mpo.fp64.cpp
+        contract_env_mps_mpo.fp128.cpp
+
+        contract_mps_mpo_env.cx32.cpp
+        contract_mps_mpo_env.cx64.cpp
+        contract_mps_mpo_env.cx128.cpp
+        contract_mps_mpo_env.fp32.cpp
+        contract_mps_mpo_env.fp64.cpp
+        contract_mps_mpo_env.fp128.cpp
+
         contract_mps_mps.cpp
         contract_mps_mps_overlap.cpp
         contract_mps_mps_partial.cpp

@@ -4,6 +4,8 @@
 #include "math/svd/config.h"
 #include "measure/MeasurementsStateFinite.h"
 #include "tensors/TensorsFinite.h"
+#include "tools/common/h5/storage_info.h"
+#include "tools/finite/h5.h"
 #include "tools/finite/opt_meta.h"
 #include <general/sfinae.h>
 
@@ -23,7 +25,7 @@ template<typename Scalar>
 class AlgorithmFinite : public AlgorithmBase {
     protected:
     using OptMeta    = tools::finite::opt::OptMeta;
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
 
     private:
     size_t                             dmrg_blocksize        = 1; // Number of sites in a DMRG step. This is updated by the information per scale mass center
@@ -101,11 +103,41 @@ class AlgorithmFinite : public AlgorithmBase {
     void check_convergence_icom(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
     void check_convergence_entg_entropy(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
     void check_convergence_spin_parity_sector(std::string_view target_axis, double threshold = 1e-8);
+    // template<typename T>
+    // void write_to_file(const StateFinite<T> &state, const ModelFinite<T> &model, const EdgesFinite<T> &edges, StorageEvent storage_event,
+    // CopyPolicy copy_policy = CopyPolicy::TRY);
+    // template<typename T>
+    // void write_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy = CopyPolicy::TRY);
+
     template<typename T>
     void write_to_file(const StateFinite<T> &state, const ModelFinite<T> &model, const EdgesFinite<T> &edges, StorageEvent storage_event,
-                       CopyPolicy copy_policy = CopyPolicy::TRY);
+                       CopyPolicy copy_policy = CopyPolicy::TRY) {
+        if(not h5file) return;
+        status.event = storage_event;
+        tools::finite::h5::save::simulation(*h5file, state, model, edges, status, copy_policy);
+        status.event = StorageEvent::NONE;
+    }
+
     template<typename T>
-    void write_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy = CopyPolicy::TRY);
+    void write_tensor_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy = CopyPolicy::TRY) {
+        if(not h5file) return;
+        status.event      = storage_event;
+        auto        sinfo = StorageInfo(status, tensors.state->get_name());
+        std::string prefix;
+        switch(sinfo.storage_event) {
+            case StorageEvent::MODEL: {
+                prefix = fmt::format("{}/model", sinfo.algo_name);
+                break;
+            }
+            default: {
+                prefix = sinfo.get_state_prefix();
+                break;
+            }
+        }
+        auto dims = std::vector<long>{data.dimensions().begin(), data.dimensions().end()};
+        tools::finite::h5::save::data(*h5file, sinfo, data.data(), dims, name, prefix, copy_policy);
+        status.event = StorageEvent::NONE;
+    }
 
     struct log_entry {
         AlgorithmStatus         status;

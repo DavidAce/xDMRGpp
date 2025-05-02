@@ -1,6 +1,7 @@
 #pragma once
 
 #include "expectation_value.h"
+#include "expectation_value/contract.h"
 #include "general/iter.h"
 #include "math/num.h"
 #include "tensors/site/env/EnvEne.h"
@@ -27,14 +28,26 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         bool mpsIsReal = state.is_real();
         bool opsIsReal = std::all_of(ops.begin(), ops.end(), [](const auto &op) -> bool { return tenx::isReal(op.op); });
         if(mpsIsReal and opsIsReal) {
-            using RealScalar = typename Eigen::NumTraits<CalcType>::Real;
+            using RealScalar = decltype(std::real(std::declval<CalcType>()));
             return expectation_value<RealScalar>(state, ops);
         }
     }
-    if constexpr(!sfinae::is_std_complex_v<CalcType>) {
+    if constexpr(!sfinae::is_std_complex_v<CalcType> and sfinae::is_std_complex_v<OpType>) {
+        // For example, if trying to calculate <sigma_y> with a CalcType real.
         bool opsIsReal = std::all_of(ops.begin(), ops.end(), [](const auto &op) -> bool { return tenx::isReal(op.op); });
-        if(!opsIsReal) throw except::runtime_error("expectation_value<{}>: ops are not real", sfinae::type_name<CalcType>());
+        if(!opsIsReal) {
+            using RealScalar = decltype(std::real(std::declval<CalcType>()));
+            using CplxScalar = std::complex<RealScalar>;
+            auto expval      = expectation_value<CplxScalar>(state, ops);
+            if(std::abs(std::imag(expval)) > std::numeric_limits<RealScalar>::epsilon() * 100)
+                tools::log->warn("expectation_value: result has imaginary part: {:.3e}", fp(expval));
+            return std::real(expval);
+        }
     }
+    // if constexpr(!sfinae::is_std_complex_v<CalcType>) {
+    //     bool opsIsReal = std::all_of(ops.begin(), ops.end(), [](const auto &op) -> bool { return tenx::isReal(op.op); });
+    //     if(!opsIsReal) throw except::runtime_error("expectation_value<{}>: ops are not real", sfinae::type_name<CalcType>());
+    // }
 
     if(state.mps_sites.empty()) throw std::runtime_error("expectation_value: state.mps_sites is empty");
     if(ops.empty()) throw std::runtime_error("expectation_value: ops is empty");
@@ -44,20 +57,23 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
 
     auto &threads = tenx::threads::get();
     for(const auto &mps : state.mps_sites) {
-        Eigen::Tensor<CalcType, 3> M   = mps->template get_M_as<CalcType>();
+        Eigen::Tensor<CalcType, 3> M = mps->template get_M_as<CalcType>();
+        Eigen::Tensor<CalcType, 3> temp;
         const auto                 pos = mps->template get_position<long>();
         for(const auto &op : iter::reverse(ops)) {
             // Reverse to apply operators right to left if they are at the same position
             // i.e. ABC|psi> should apply C first and A last (if A and C are on the same site).
             if(op.used or op.pos != pos) continue;
-            auto temp                  = Eigen::Tensor<CalcType, 3>(op.op.dimension(0), M.dimension(1), M.dimension(2));
-            temp.device(*threads->dev) = tenx::asScalarType<CalcType>(op.op).contract(M, tenx::idx({1}, {0}));
-            M                          = std::move(temp);
-            op.used                    = true;
+            contract_op_M_1_0(temp, tenx::asScalarType<CalcType>(op.op), M, threads);
+            // auto temp                  = Eigen::Tensor<CalcType, 3>(op.op.dimension(0), M.dimension(1), M.dimension(2));
+            // temp.device(*threads->dev) = tenx::asScalarType<CalcType>(op.op).contract(M, tenx::idx({1}, {0}));
+            M       = std::move(temp);
+            op.used = true;
         }
-        auto temp                  = Eigen::Tensor<CalcType, 2>(M.dimension(2), M.dimension(2));
-        temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
-        chain                      = std::move(temp);
+        chain = contract_chain_M_Mconj_0_1_01_10(chain, M, threads);
+        // auto temp                  = Eigen::Tensor<CalcType, 2>(M.dimension(2), M.dimension(2));
+        // temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
+        // chain                      = std::move(temp);
     }
 
     Eigen::Tensor<CalcType, 0> expval = chain.trace();
@@ -66,11 +82,11 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
 
 template<typename CalcType, typename Scalar, typename MpoType>
 CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &state, const std::vector<LocalObservableMpo<MpoType>> &mpos) {
-    using RealScalar = typename Eigen::NumTraits<CalcType>::Real;
+    using Real = decltype(std::real(std::declval<CalcType>()));
     if constexpr(sfinae::is_std_complex_v<CalcType>) {
         bool mpsIsReal = state.is_real();
         bool mpoIsReal = std::all_of(mpos.begin(), mpos.end(), [](const auto &mpo) -> bool { return tenx::isReal(mpo.mpo); });
-        if(mpsIsReal and mpoIsReal) { return expectation_value<RealScalar>(state, mpos); }
+        if(mpsIsReal and mpoIsReal) { return expectation_value<Real>(state, mpos); }
     }
 
     if(state.mps_sites.empty()) throw std::runtime_error("expectation_value: state.mps_sites is empty");
@@ -123,16 +139,18 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
 
     // Start applying the mpo or identity on each site starting from Ledge3
     Eigen::Tensor<CalcType, 3> temp;
+    auto                      &threads = tenx::threads::get();
     for(const auto &mps : state.mps_sites) {
         const auto     pos   = mps->template get_position<long>();
         decltype(auto) M     = mps->template get_M_as<CalcType>();
         const auto     ob_it = std::find_if(mpos.begin(), mpos.end(), [&pos](const auto &ob) { return ob.pos == pos and not ob.used; });
         const auto    &mpo   = ob_it != mpos.end() ? ob_it->mpo : mpoI; // Choose the operator or an identity
         if(ob_it != mpos.end()) ob_it->used = true;
-        temp.resize(M.dimension(2), M.dimension(2), mpo.dimension(1));
-        temp = M.contract(Ledge3, tenx::idx({0}, {1}))
-                   .contract(tenx::asScalarType<CalcType>(mpo), tenx::idx({0}, {1}))
-                   .contract(M.conjugate(), tenx::idx({0, 1, 3}, {0, 2, 3}));
+        contract_M_Ledge3_mpo_Mconj_0_1_0_1_013_023(temp, M, Ledge3, tenx::asScalarType<CalcType>(mpo), threads);
+        // temp.resize(M.dimension(2), M.dimension(2), mpo.dimension(1));
+        // temp = M.contract(Ledge3, tenx::idx({0}, {1}))
+        // .contract(tenx::asScalarType<CalcType>(mpo), tenx::idx({0}, {1}))
+        // .contract(M.conjugate(), tenx::idx({0, 1, 3}, {0, 2, 3}));
         Ledge3 = std::move(temp);
     }
 
@@ -140,9 +158,11 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         throw except::runtime_error("expectation_value: Ledge3 and Redge3 dimension mismatch: {} != {}", Ledge3.dimensions(), Redge3.dimensions());
 
     // Finish by contracting Redge3
-    Eigen::Tensor<CalcType, 0> expval = Ledge3.contract(Redge3, tenx::idx({0, 1, 2}, {0, 1, 2}));
+    Eigen::Tensor<CalcType, 0> expval = contract_T3_T3_012_012(Ledge3, Redge3, threads);
+    // Eigen::Tensor<CalcType, 0> expval = Ledge3.contract(Redge3, tenx::idx({0, 1, 2}, {0, 1, 2}));
 
-    if(std::imag(expval.coeff(0)) > RealScalar{1e-14f}) tools::log->warn("expectation_value: result has imaginary part: {:8.2e}", fp(expval(0)));
+    if(std::imag(expval.coeff(0)) > std::numeric_limits<Real>::epsilon() * 100)
+        tools::log->warn("expectation_value: result has imaginary part: {:8.2e}", fp(expval(0)));
     return expval.coeff(0);
 }
 
@@ -162,7 +182,7 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         bool mpsIsReal = state1.is_real() and state2.is_real();
         bool mpoIsReal = std::all_of(mpos.begin(), mpos.end(), [](const auto &mpo) -> bool { return tenx::isReal(mpo); });
         if(mpsIsReal and mpoIsReal) {
-            using RealScalar = typename Eigen::NumTraits<CalcType>::Real;
+            using RealScalar = decltype(std::real(std::declval<CalcType>()));
             return expectation_value<RealScalar>(state1, state2, mpos);
         }
     }
@@ -186,16 +206,18 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         decltype(auto) mps2 = state2.get_mps_site(pos).template get_M_as<CalcType>();
         decltype(auto) mpo  = tenx::asScalarType<CalcType>(mpos[pos]);
         if(pos == 0) {
-            auto dim4 = tenx::array4{mpo.dimension(0) * mps1.dimension(1) * mps2.dimension(1), mps1.dimension(2), mpo.dimension(1), mps2.dimension(2)};
-            auto shf6 = tenx::array6{0, 2, 4, 1, 3, 5};
-            result.resize(dim4);
-            result.device(*threads->dev) = mps1.contract(mpo, tenx::idx({0}, {2})).contract(mps2, tenx::idx({4}, {0})).shuffle(shf6).reshape(dim4);
+            contract_mps1_mpo_mps2_0_2_4_0(result, mps1, mpo, mps2, threads);
+            // auto dim4 = tenx::array4{mpo.dimension(0) * mps1.dimension(1) * mps2.dimension(1), mps1.dimension(2), mpo.dimension(1), mps2.dimension(2)};
+            // auto shf6 = tenx::array6{0, 2, 4, 1, 3, 5};
+            // result.resize(dim4);
+            // result.device(*threads->dev) = mps1.contract(mpo, tenx::idx({0}, {2})).contract(mps2, tenx::idx({4}, {0})).shuffle(shf6).reshape(dim4);
             continue;
         }
-        auto dim4 = tenx::array4{result.dimension(0), mps1.dimension(2), mpo.dimension(1), mps2.dimension(2)};
-        tmp.resize(dim4);
-        tmp.device(*threads->dev) =
-            result.contract(mps1.conjugate(), tenx::idx({1}, {1})).contract(mpo, tenx::idx({1, 3}, {0, 2})).contract(mps2, tenx::idx({1, 4}, {1, 0}));
+        contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(tmp, result, mps1, mpo, mps2, threads);
+        // auto dim4 = tenx::array4{result.dimension(0), mps1.dimension(2), mpo.dimension(1), mps2.dimension(2)};
+        // tmp.resize(dim4);
+        // tmp.device(*threads->dev) =
+        // result.contract(mps1.conjugate(), tenx::idx({1}, {1})).contract(mpo, tenx::idx({1, 3}, {0, 2})).contract(mps2, tenx::idx({1, 4}, {1, 0}));
         result = std::move(tmp);
     }
     // In the end we should have a tensor of size 1 (if the state and mpo edges have dim 1).
@@ -223,7 +245,7 @@ Eigen::Tensor<CalcType, 1> tools::finite::measure::expectation_values(const Stat
     expvals.setZero();
     for(long pos = 0; pos < len; pos++) {
         LocalObservableOp ob1 = {op, pos};
-        expvals(pos)                = expectation_value<CalcType>(state, std::vector{ob1});
+        expvals(pos)          = expectation_value<CalcType>(state, std::vector{ob1});
     }
     return expvals;
 }
@@ -290,18 +312,25 @@ CalcType tools::finite::measure::expectation_value(const std::vector<std::refere
     if(mpos.size() == 1) {
         if constexpr(std::is_same_v<std::remove_cvref_t<EnvType>, EnvEne<Scalar>>)
             return tools::common::contraction::expectation_value(
-                mpsBra.front().get().template get_M_as<CalcType>(), mpsKet.front().get().template get_M_as<CalcType>(),
-                mpos.front().get().template MPO_as<CalcType>(), envs.L.template get_block_as<CalcType>(), envs.R.template get_block_as<CalcType>());
+                        mpsBra.front().get().template get_M_as<CalcType>(),  //
+                        mpsKet.front().get().template get_M_as<CalcType>(),  //
+                        mpos.front().get().template MPO_as<CalcType>(),      //
+                        envs.L.template get_block_as<CalcType>(),            //
+                        envs.R.template get_block_as<CalcType>());
         if constexpr(std::is_same_v<std::remove_cvref_t<EnvType>, EnvVar<Scalar>>)
             return tools::common::contraction::expectation_value(
-                mpsBra.front().get().template get_M_as<CalcType>(), mpsKet.front().get().template get_M_as<CalcType>(),
-                mpos.front().get().template MPO2_as<CalcType>(), envs.L.template get_block_as<CalcType>(), envs.R.template get_block_as<CalcType>());
+                        mpsBra.front().get().template get_M_as<CalcType>(),  //
+                        mpsKet.front().get().template get_M_as<CalcType>(),  //
+                        mpos.front().get().template MPO2_as<CalcType>(),     //
+                        envs.L.template get_block_as<CalcType>(),            //
+                        envs.R.template get_block_as<CalcType>());
     }
 
     Eigen::Tensor<CalcType, 3> resL = envs.L.template get_block_as<CalcType>().shuffle(tenx::array3{0, 2, 1});
 
     // auto                     mporef  = std::optional<std::reference_wrapper<const Eigen::Tensor<Scalar, 4>>>(std::nullopt);
-    auto &threads = tenx::threads::get();
+    auto                      &threads = tenx::threads::get();
+    Eigen::Tensor<CalcType, 3> tmp;
     for(size_t pos = 0; pos < mpos.size(); ++pos) {
         Eigen::Tensor<CalcType, 4> mpo;
         if constexpr(std::is_same_v<std::remove_cvref_t<EnvType>, EnvEne<Scalar>>)
@@ -313,20 +342,23 @@ CalcType tools::finite::measure::expectation_value(const std::vector<std::refere
 
         decltype(auto) bra = mpsBra[pos].get().template get_M_as<CalcType>();
         decltype(auto) ket = mpsKet[pos].get().template get_M_as<CalcType>();
+        tools::log->info("resL: {} | bra {}", resL.dimensions(), bra.dimensions());
         assert(resL.dimension(0) == bra.dimension(1));
         assert(resL.dimension(1) == mpo.dimension(0));
         assert(resL.dimension(2) == ket.dimension(1));
         assert(mpo.dimension(2) == ket.dimension(0));
         assert(mpo.dimension(3) == bra.dimension(0));
 
-        auto                       dim3 = tenx::array3{ket.dimension(2), mpo.dimension(1), bra.dimension(2)};
-        Eigen::Tensor<CalcType, 3> tmp;
-        tmp.resize(dim3);
-        tmp.device(*threads->dev) =
-            resL.contract(ket, tenx::idx({0}, {1})).contract(mpo, tenx::idx({0, 2}, {0, 2})).contract(bra.conjugate(), tenx::idx({0, 3}, {1, 0}));
+        contract_resL_ket_mpo_braconj_0_1_02_02_03_10(tmp, resL, ket, mpo, bra, threads);
+        // auto dim3 = tenx::array3{ket.dimension(2), mpo.dimension(1), bra.dimension(2)};
+        // tmp.resize(dim3);
+        // tmp.device(*threads->dev) =
+            // resL.contract(ket, tenx::idx({0}, {1})).contract(mpo, tenx::idx({0, 2}, {0, 2})).contract(bra.conjugate(), tenx::idx({0, 3}, {1, 0}));
         resL = std::move(tmp);
     }
-    Eigen::Tensor<CalcType, 0> res = resL.contract(envs.R.template get_block_as<CalcType>(), tenx::idx({0, 1, 2}, {0, 2, 1}));
+    Eigen::Tensor<CalcType, 0> res = contract_resL_envR_012_021(resL, envs.R.template get_block_as<CalcType>(), threads);
+    // Eigen::Tensor<CalcType, 0> res =
+        // resL.contract(envs.R.template get_block_as<CalcType>(), tenx::idx({0, 1, 2}, {0, 2, 1}));
     return res.coeff(0);
 }
 

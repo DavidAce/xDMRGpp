@@ -10,8 +10,9 @@ template<typename Scalar>
 class MpsSite {
     public:
     using value_type = Scalar;
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
-    template <class U> friend class MpsSite;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
+    template<class U> friend class MpsSite;
+
     private:
     std::optional<Eigen::Tensor<Scalar, 3>>                M                   = std::nullopt; /*!< \f$M\f$ A or B tensor (note: not a Gamma tensor!) */
     std::optional<Eigen::Tensor<Scalar, 1>>                L                   = std::nullopt; /*!< \f$\Lambda\f$*/
@@ -63,7 +64,6 @@ class MpsSite {
         if(other.M.has_value()) M = tenx::asScalarType<Scalar>(other.M.value());
         if(other.L.has_value()) L = tenx::asScalarType<Scalar>(other.L.value());
         if(other.LC.has_value()) LC = tenx::asScalarType<Scalar>(other.LC.value());
-        if(other.MC.has_value()) MC = tenx::asScalarType<Scalar>(other.MC.value());
         position              = other.position;
         truncation_error      = other.truncation_error;
         truncation_error_LC   = other.truncation_error_LC;
@@ -73,17 +73,21 @@ class MpsSite {
         has_nan_cached        = other.has_nan_cached;
         is_norm_cached        = other.is_norm_cached;
         unique_id             = std::nullopt;
+        MC                    = std::nullopt;
+        U_stash               = std::nullopt;
+        S_stash               = std::nullopt;
+        C_stash               = std::nullopt;
+        V_stash               = std::nullopt;
     }
 
     template<typename T>
-    MpsSite<Scalar>& operator=(const MpsSite<T> &other) noexcept {
+    MpsSite<Scalar> &operator=(const MpsSite<T> &other) noexcept {
         if constexpr(std::is_same_v<Scalar, T>) {
             if(this == &other) return *this;
         }
         if(other.M.has_value()) M = tenx::asScalarType<Scalar>(other.M.value());
         if(other.L.has_value()) L = tenx::asScalarType<Scalar>(other.L.value());
         if(other.LC.has_value()) LC = tenx::asScalarType<Scalar>(other.LC.value());
-        if(other.MC.has_value()) MC = tenx::asScalarType<Scalar>(other.MC.value());
         position              = other.position;
         truncation_error      = other.truncation_error;
         truncation_error_LC   = other.truncation_error_LC;
@@ -93,17 +97,20 @@ class MpsSite {
         has_nan_cached        = other.has_nan_cached;
         is_norm_cached        = other.is_norm_cached;
         unique_id             = std::nullopt;
+        MC                    = std::nullopt;
+        U_stash               = std::nullopt;
+        S_stash               = std::nullopt;
+        C_stash               = std::nullopt;
+        V_stash               = std::nullopt;
         return *this;
     }
 
-
-
     [[nodiscard]] bool                            is_real() const;
     [[nodiscard]] bool                            has_nan() const;
-    [[nodiscard]] bool                            is_normalized(RealScalar prec = RealScalar{1e-10f}) const;
+    [[nodiscard]] bool                            is_normalized(RealScalar prec = std::numeric_limits<RealScalar>::epsilon() * 100) const;
     void                                          assert_validity() const;
     void                                          assert_dimensions() const;
-    void                                          assert_normalized(RealScalar prec = RealScalar{1e-10f}) const;
+    void                                          assert_normalized(RealScalar prec = std::numeric_limits<RealScalar>::epsilon() * 100) const;
     [[nodiscard]] bool                            isCenter() const;
     [[nodiscard]] bool                            has_L() const;
     [[nodiscard]] bool                            has_M() const;

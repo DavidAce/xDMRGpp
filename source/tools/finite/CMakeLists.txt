@@ -1,6 +1,11 @@
 add_source_target(xdmrg++-tools-finite-ops
         TARGET_SOURCES
-            ops.cpp
+            ops/fp32.cpp
+            ops/fp64.cpp
+            ops/fp128.cpp
+            ops/cx32.cpp
+            ops/cx64.cpp
+            ops/cx128.cpp
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

@@ -34,7 +34,7 @@ namespace tools::finite::opt::internal {
             default: break;
         }
         solver.eig(matrix.data(), matrix.dimension(0), 'I', il, iu, 0.0, 1.0);
-        extract_results(tensors, initial_mps, meta, solver, results, true);
+        extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true);
 
         // if(solver.result.meta.eigvals_found and solver.result.meta.eigvecsR_found) {
         //     // tools::log->info("optimize_variance_eig_executor: vl {:.3e} | vu {:.3e}", vl, vu);

@@ -1,6 +1,7 @@
 #pragma once
 #include "general/sfinae.h"
 #include <string>
+
 template<typename Scalar>
 class StateFinite;
 template<typename Scalar>
@@ -15,11 +16,13 @@ enum class StorageEvent;
 enum class StoragePolicy;
 enum class CopyPolicy;
 enum class AlgorithmType;
+struct StorageInfo;
 namespace h5pp {
     class File;
     namespace hid {
         class h5t;
     }
+    struct DimsType;
 }
 namespace tools::common::h5 {
     namespace save {
@@ -28,11 +31,9 @@ namespace tools::common::h5 {
     struct MpsInfo;
 }
 
-struct StorageInfo;
-
 namespace tools::finite::h5 {
     template<typename Scalar>
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     /* clang-format off */
     namespace save {
 //        void bootstrap_save_log(std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> &save_log, const h5pp::File &h5file, const std::vector<std::string_view> &links);
@@ -51,10 +52,12 @@ namespace tools::finite::h5 {
         template<typename T>
         void data_as_table_vla(h5pp::File &h5file, const  StorageInfo & sinfo, const std::vector<T> & data, const h5pp::hid::h5t & h5elem_t, std::string_view table_name, std::string_view table_title, std::string_view fieldname);
         extern int decide_layout(std::string_view prefix_path);
-        template<typename T>
-        extern void data      (h5pp::File & h5file, const StorageInfo & sinfo,  const T &data, std::string_view data_name, CopyPolicy copy_policy);
-        template<typename T>
-        extern void data      (h5pp::File & h5file, const StorageInfo & sinfo, const T &data, std::string_view data_name, std::string_view prefix);
+        // template<typename T>
+        // extern void data      (h5pp::File & h5file, const StorageInfo & sinfo,  const T &data, std::string_view data_name, CopyPolicy copy_policy);
+        template<typename T >
+        extern void data      (h5pp::File & h5file, const StorageInfo & sinfo,  const T *data, const std::vector<long> & dims, std::string_view data_name, std::string_view prefix, CopyPolicy copy_policy);
+        // template<typename T>
+        // extern void data      (h5pp::File & h5file, const StorageInfo & sinfo, const T &data, std::string_view data_name, std::string_view prefix);
         template<typename Scalar> extern void bonds     (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar> extern void state     (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar> extern void model     (h5pp::File & h5file, const StorageInfo & sinfo, const ModelFinite<Scalar> & model);

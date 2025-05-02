@@ -9,7 +9,6 @@
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/svd.h"
-#include "qm/time.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/mpo/MpoSite.h"
@@ -19,14 +18,12 @@
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
 #include "tools/finite/h5.h"
-#include "tools/finite/measure.h"
-#include "tools/finite/mpo.h"
+#include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
-#include "tools/finite/print.h"
 #include <h5pp/details/h5ppFile.h>
 
 template class xdmrg<fp32>;
@@ -224,8 +221,11 @@ void xdmrg<Scalar>::run_preprocessing() {
     initialize_model(); // First use of random!
 
     initialize_state(ResetReason::INIT, settings::strategy::initial_state); // Second use of random!
+    tensors.get_state().assert_validity();
     find_energy_range();
+    tensors.get_state().assert_validity();
     init_energy_target();
+    tensors.get_state().assert_validity();
     set_parity_shift_mpo();
     set_parity_shift_mpo_squared();
     set_energy_shift_mpo();

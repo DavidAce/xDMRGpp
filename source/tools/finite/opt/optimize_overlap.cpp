@@ -5,7 +5,7 @@
 #include "math/num.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"

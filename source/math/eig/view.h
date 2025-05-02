@@ -38,7 +38,7 @@ namespace eig::view {
 
         if(side == Side::LR) throw except::runtime_error("Cannot get both L and R eigenvectors. Choose one");
 
-        if constexpr(std::is_same_v<Scalar, fp64>)
+        if constexpr(sfinae::is_any_v<Scalar, fp32, fp64, fp128>)
             if(not result.eigvecs_are_real()) throw except::runtime_error("Can't view real eigenvectors: solution has complex eigenvectors");
         auto &eigvecs = result.get_eigvecs<Scalar>(side);
         if(eigvecs.empty()) throw except::runtime_error("The requested eigenvectors are empty. Did you request the correct type?");

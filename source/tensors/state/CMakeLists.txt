@@ -1,12 +1,52 @@
 add_source_target(xdmrg++-tensors-state-finite
         TARGET_SOURCES
         StateFinite.cpp
-        StateFinite.fp32.cpp
-        StateFinite.fp64.cpp
-        StateFinite.fp128.cpp
-        StateFinite.cx32.cpp
-        StateFinite.cx64.cpp
-        StateFinite.cx128.cpp
+        StateFinite/contract.cx32.cpp
+        StateFinite/contract.cx64.cpp
+        StateFinite/contract.cx128.cpp
+        StateFinite/contract.fp32.cpp
+        StateFinite/contract.fp64.cpp
+        StateFinite/contract.fp128.cpp
+
+        StateFinite/cx32.cx32.cpp
+        StateFinite/cx32.cx64.cpp
+        StateFinite/cx32.cx128.cpp
+        StateFinite/cx32.fp32.cpp
+        StateFinite/cx32.fp64.cpp
+        StateFinite/cx32.fp128.cpp
+        StateFinite/cx64.cx32.cpp
+        StateFinite/cx64.cx64.cpp
+        StateFinite/cx64.cx128.cpp
+        StateFinite/cx64.fp32.cpp
+        StateFinite/cx64.fp64.cpp
+        StateFinite/cx64.fp128.cpp
+        StateFinite/cx128.cx32.cpp
+        StateFinite/cx128.cx64.cpp
+        StateFinite/cx128.cx128.cpp
+        StateFinite/cx128.fp32.cpp
+        StateFinite/cx128.fp64.cpp
+        StateFinite/cx128.fp128.cpp
+        StateFinite/fp32.cx32.cpp
+        StateFinite/fp32.cx64.cpp
+        StateFinite/fp32.cx128.cpp
+        StateFinite/fp32.fp32.cpp
+        StateFinite/fp32.fp64.cpp
+        StateFinite/fp32.fp128.cpp
+        StateFinite/fp64.cx32.cpp
+        StateFinite/fp64.cx64.cpp
+        StateFinite/fp64.cx128.cpp
+        StateFinite/fp64.fp32.cpp
+        StateFinite/fp64.fp64.cpp
+        StateFinite/fp64.fp128.cpp
+        StateFinite/fp128.cx32.cpp
+        StateFinite/fp128.cx64.cpp
+        StateFinite/fp128.cx128.cpp
+        StateFinite/fp128.fp32.cpp
+        StateFinite/fp128.fp64.cpp
+        StateFinite/fp128.fp128.cpp
+
+
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

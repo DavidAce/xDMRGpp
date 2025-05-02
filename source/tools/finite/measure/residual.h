@@ -21,10 +21,9 @@ template<typename T>
 struct env_pair;
 
 namespace tools::finite::measure {
-    // template<typename T>
-    // using RealScalar = decltype(std::real(std::declval<T>()));
-    template<typename Scalar>
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    template<typename T>  using RealScalar = decltype(std::real(std::declval<T>()));
+    // template<typename Scalar>
+    // using RealScalar = decltype(std::real(std::declval<Scalar>()));
     /* clang-format off */
     template<typename Scalar>
     [[nodiscard]] extern RealScalar<Scalar> residual_norm       (const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo, const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR);

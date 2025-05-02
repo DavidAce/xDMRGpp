@@ -19,8 +19,10 @@
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
 #include "tools/finite/measure/dimensions.h"
+#include "tools/finite/measure/hamiltonian.h"
+#include "tools/finite/measure/norm.h"
+#include "tools/finite/measure/residual.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/opt_meta.h"
 #include <Eigen/Eigenvalues>
@@ -81,7 +83,7 @@ std::pair<Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>, std::vector<lon
 
     // Orthonormalize with Modified Gram Schmidt
     using MatrixType  = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-    using Real        = typename Eigen::NumTraits<Scalar>::Real;
+    using Real        = decltype(std::real(std::declval<Scalar>()));
     auto nonOrthoCols = std::vector<long>();
     auto validCols    = std::vector<long>();
     validCols.reserve(Q.cols());
@@ -141,7 +143,7 @@ std::pair<Eigen::Tensor<Scalar, 2>, std::vector<long>> modified_gram_schmidt(con
 
 template<typename Scalar>
 struct MGSResult {
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
@@ -336,7 +338,13 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>>
     assert(P1.size() == 0 or P1.dimension(0) == M.dimension(0));
     assert(P2.size() == 0 or P2.dimension(1) == M.dimension(1));
     assert(P2.size() == 0 or P2.dimension(0) == M.dimension(0));
-    using R = typename Eigen::NumTraits<T>::Real;
+
+    if(M.dimension(0) * M.dimension(1) <= M.dimension(2)) {
+        // We can't add more columns beyond the ones that are already fixed
+        return {M, N};
+    }
+
+    using R = decltype(std::real(std::declval<T>()));
     // using VectorT = Eigen::Matrix<T, Eigen::Dynamic, 1>;
     using VectorR = Eigen::Matrix<R, Eigen::Dynamic, 1>;
     auto offM     = Eigen::DSizes<long, 3>{0, 0, 0};
@@ -354,8 +362,9 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>>
     auto dim2           = M_P.dimension(2);
     long nFixedLeftCols = M.dimension(2);
 
+    // We can add more columns beyond the ones that are already fixed
     VectorR norms_before = tenx::MatrixMap(M_P, dim0 * dim1, dim2).colwise().norm();
-    auto    mgsr         = modified_gram_schmidt_colpiv(tenx::MatrixMap(M_P, dim0 * dim1, dim2), nFixedLeftCols);
+    auto    mgsr         = modified_gram_schmidt_colpiv(tenx::MatrixCast(M_P, dim0 * dim1, dim2), nFixedLeftCols);
     auto    max_keep     = std::min(mgsr.permutation.size(), dim0 * dim1);
 
     // Get the values of Rdiag corresponding to M and P separately
@@ -430,7 +439,7 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
 
     MatVecMPOS<T> H1 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
     MatVecMPOS<T> H2 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
-    using R          = typename Eigen::NumTraits<T>::Real;
+    using R          = decltype(std::real(std::declval<T>()));
     using MatrixT    = typename MatVecMPOS<T>::MatrixType;
     // using MatrixR     = Eigen::Matrix<R, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorR     = Eigen::Matrix<R, Eigen::Dynamic, 1>;
@@ -721,12 +730,12 @@ void tools::finite::env::internal::set_mixing_factors_to_rnorm(const std::vector
     assert(opt_meta.bondexp_minalpha <= opt_meta.bondexp_maxalpha);
     assert(opt_meta.bondexp_minalpha >= 0);
     assert(opt_meta.bondexp_maxalpha > 0);
-    // using R = typename Eigen::NumTraits<Scalar>::Real;
+    // using R = decltype(std::real(std::declval<Scalar>()));
     // using MatrixT      = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     // using MatrixR      = Eigen::Matrix<R, Eigen::Dynamic, Eigen::Dynamic>;
     // using VectorR      = Eigen::Matrix<R, Eigen::Dynamic, 1>;
     auto multisite_mps = state.template get_multisite_mps<Scalar>(sites);
-    using R            = typename Eigen::NumTraits<T>::Real;
+    using R            = decltype(std::real(std::declval<T>()));
     auto V             = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>(multisite_mps.size(), 3);
     V.setZero();
     V.col(0)      = tenx::asScalarType<T>(tenx::VectorCast(multisite_mps));
@@ -772,7 +781,7 @@ void tools::finite::env::internal::set_mixing_factors_to_stdv_H(const std::vecto
                                                                 const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, const OptMeta &opt_meta,
                                                                 BondExpansionResult<Scalar> &res) {
     auto multisite_mps = state.template get_multisite_mps<Scalar>(sites);
-    using R            = typename Eigen::NumTraits<T>::Real;
+    using R            = decltype(std::real(std::declval<T>()));
     assert(opt_meta.bondexp_minalpha <= opt_meta.bondexp_maxalpha);
     assert(opt_meta.bondexp_minalpha >= 0);
     assert(opt_meta.bondexp_maxalpha > 0);
@@ -804,7 +813,7 @@ template<typename Scalar>
 BondExpansionResult<Scalar> tools::finite::env::get_mixing_factors_postopt_rnorm(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
                                                                                  const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                                                                  const OptMeta &opt_meta) {
-    using R = typename Eigen::NumTraits<Scalar>::Real;
+    using R = decltype(std::real(std::declval<Scalar>()));
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
     auto res           = BondExpansionResult<Scalar>();
@@ -838,14 +847,13 @@ BondExpansionResult<Scalar> tools::finite::env::get_mixing_factors_postopt_rnorm
     auto minbond        = *std::min_element(bonds.begin(), bonds.end());
     auto sites_oneortwo = minbond < 4 ? sites : std::vector{pos}; // We need the bond dimension to be larger than the local 1site dimension
     switch(opt_meta.optType) {
-        case OptType::FP64: {
-            internal::set_mixing_factors_to_rnorm<fp64>(sites_oneortwo, state, model, edges, opt_meta, res);
-            break;
-        }
-        case OptType::CX64: {
-            internal::set_mixing_factors_to_rnorm<cx64>(sites_oneortwo, state, model, edges, opt_meta, res);
-            break;
-        }
+        case OptType::FP32: internal::set_mixing_factors_to_rnorm<fp32>(sites_oneortwo, state, model, edges, opt_meta, res); break;
+        case OptType::CX32: internal::set_mixing_factors_to_rnorm<cx32>(sites_oneortwo, state, model, edges, opt_meta, res); break;
+        case OptType::FP64: internal::set_mixing_factors_to_rnorm<fp64>(sites_oneortwo, state, model, edges, opt_meta, res); break;
+        case OptType::CX64: internal::set_mixing_factors_to_rnorm<cx64>(sites_oneortwo, state, model, edges, opt_meta, res); break;
+        case OptType::FP128: internal::set_mixing_factors_to_rnorm<fp128>(sites_oneortwo, state, model, edges, opt_meta, res); break;
+        case OptType::CX128: internal::set_mixing_factors_to_rnorm<cx128>(sites_oneortwo, state, model, edges, opt_meta, res); break;
+
         default: throw except::runtime_error("get_mixing_factors_postopt_rnorm: not implemented for type {}", enum2sv(opt_meta.optType));
     }
     return res;
@@ -859,7 +867,7 @@ template<typename Scalar>
 BondExpansionResult<Scalar> tools::finite::env::get_mixing_factors_preopt_krylov(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
                                                                                  const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                                                                  const OptMeta &opt_meta) {
-    using R = typename Eigen::NumTraits<Scalar>::Real;
+    using R = decltype(std::real(std::declval<Scalar>()));
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
     auto res           = BondExpansionResult<Scalar>();
@@ -945,7 +953,7 @@ void merge_expansion_terms_r2l(const StateFinite<Scalar> &state, MpsSite<Scalar>
     //
 
     tools::log->trace("merge_expansion_term_PR: ({}{},{}{}) {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), svd_cfg.to_string());
-    using Real = typename Eigen::NumTraits<Scalar>::Real;
+    using Real = decltype(std::real(std::declval<Scalar>()));
     svd::solver svd;
     auto        posL = mpsL.get_position();
     auto        labL = mpsL.get_label();
@@ -1041,7 +1049,7 @@ void merge_expansion_terms_l2r(const StateFinite<Scalar> &state, MpsSite<Scalar>
 
     tools::log->trace("merge_expansion_term_PL: ({}{},{}{}) {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), svd_cfg.to_string());
     svd::solver svd;
-    using Real     = typename Eigen::NumTraits<Scalar>::Real;
+    using Real     = decltype(std::real(std::declval<Scalar>()));
     auto posR      = mpsR.get_position();
     auto labL      = mpsL.get_label();
     auto labR      = mpsR.get_label();

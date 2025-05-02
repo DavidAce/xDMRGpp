@@ -10,7 +10,7 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/spin.h"
 #include <bitset>
 #include <Eigen/QR>
 #include <fmt/ranges.h>
@@ -22,7 +22,7 @@ Eigen::Tensor<Scalar, 2> get_random_unitary_matrix(long rows, long cols) {
     using mat_t   = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using vec_t   = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     auto gaussian = []() -> Scalar {
-        using Real = typename Eigen::NumTraits<Scalar>::Real;
+        using Real = decltype(std::real(std::declval<Scalar>()));
         if constexpr(sfinae::is_std_complex_v<Scalar>)
             return Scalar(rnd::normal(Real(0.), Real(1.)), rnd::normal(Real(0.), Real(1.))) / std::sqrt<Real>(2.0);
         else
@@ -220,13 +220,13 @@ void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(St
             if constexpr(sfinae::is_std_complex_v<Scalar>) {
                 VectorType Gtmp = VectorType(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform_complex_in_circle<RealScalar<Scalar>>(1); });
                 G               = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).template cast<Scalar>();
-            }else {
+            } else {
                 tools::log->warn("set_random_entangled_state_with_random_spinors: Detected StateInitType::CPLX, but the state has real scalar type [{}]. \n"
-                                 "Reverting the distribution uniform_complex_in_circle(1) -> uniform(-1,1)", sfinae::type_name<Scalar>());
-                VectorType Gtmp = VectorType(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform<RealScalar<Scalar>>(-1,1); });
+                                 "Reverting the distribution uniform_complex_in_circle(1) -> uniform(-1,1)",
+                                 sfinae::type_name<Scalar>());
+                VectorType Gtmp = VectorType(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform<RealScalar<Scalar>>(-1, 1); });
                 G               = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).template cast<Scalar>();
             }
-
         }
 
         mps.set_mps(G, L, 0, label);

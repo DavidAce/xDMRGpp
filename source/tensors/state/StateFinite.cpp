@@ -7,15 +7,17 @@
 #include "general/iter.h"
 #include "general/sfinae.h"
 #include "math/cast.h"
+#include "math/linalg/tensor.h"
 #include "math/num.h"
 #include "math/stat.h"
 #include "StateFinite.h"
 #include "StateFinite.impl.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/dimensions.h"
+#include "tools/finite/measure/norm.h"
+#include "tools/finite/measure/truncation.h"
 #include "tools/finite/multisite.h"
 #include <fmt/ranges.h>
 
@@ -348,7 +350,11 @@ void StateFinite<Scalar>::assert_validity() const {
     for(const auto &mps : mps_sites) mps->assert_validity();
     if(settings::model::model_type == ModelType::ising_sdual or settings::model::model_type == ModelType::ising_majorana) {
         for(const auto &mps : mps_sites)
-            if(not mps->is_real()) throw except::runtime_error("state has imaginary part at mps position {}", mps->get_position());
+            if(not mps->is_real()) {
+                auto M = mps->get_M_bare();
+                for(long idx = 0; idx < M.size(); ++idx) tools::log->warn("elem {}: {:.8e}", mps->get_position(), fp(M.data()[idx]));
+                throw except::runtime_error("state has imaginary part at mps position {}", mps->get_position());
+            }
     }
 }
 
@@ -778,7 +784,7 @@ void StateFinite<Scalar>::tag_site_normalized(size_t pos, bool tag) const {
 }
 
 template<typename Scalar>
-bool StateFinite<Scalar>::is_normalized_on_all_sites() const {
+bool StateFinite<Scalar>::is_normalized_on_all_sites(RealScalar prec) const {
     if(tag_normalized_sites.size() != get_length()) throw except::runtime_error("Cannot check normalization status on all sites, size mismatch in site list");
     // If all tags are false then we should definitely normalize:
     auto normalized_none = std::none_of(tag_normalized_sites.begin(), tag_normalized_sites.end(), [](bool v) { return v; });
@@ -787,6 +793,7 @@ bool StateFinite<Scalar>::is_normalized_on_all_sites() const {
         return false;
     }
 
+    prec = std::max(prec, std::numeric_limits<RealScalar>::epsilon() * 100);
     if constexpr(settings::debug) {
         auto normalized_some = std::any_of(tag_normalized_sites.begin(), tag_normalized_sites.end(), [](bool v) { return v; });
         if(normalized_some) {
@@ -794,7 +801,7 @@ bool StateFinite<Scalar>::is_normalized_on_all_sites() const {
             for(const auto &mps : mps_sites) {
                 auto pos = mps->template get_position<size_t>();
                 if(not tag_normalized_sites[pos]) {
-                    if(mps->is_normalized(static_cast<RealScalar>(settings::precision::max_norm_error))) tag_normalized_sites[pos] = true;
+                    if(mps->is_normalized(prec)) tag_normalized_sites[pos] = true;
                 }
             }
         }
@@ -805,21 +812,22 @@ bool StateFinite<Scalar>::is_normalized_on_all_sites() const {
     auto normalized_site = true;
     auto msg             = fmt::format("tags {}", normalized_tags);
     if(normalized_tags) {
-        // We don't need this check if the tags already told us the state isn't normalized
+        // We don't need this check fully if the tags already told us the state is normalized
         auto norm       = tools::finite::measure::norm(*this, false);
-        normalized_fast = static_cast<double>(std::abs(norm - RealScalar{1})) <= settings::precision::max_norm_error;
-        msg += fmt::format(" | fast {} {:.3e}", normalized_fast, fp(norm));
+        auto norm_error = std::abs(norm - RealScalar{1});
+        normalized_fast = num::leq(norm_error, prec);
+        msg += fmt::format(" | fast {} norm error: {:.3e}", normalized_fast, fp(norm_error));
     }
     if constexpr(settings::debug) {
         if(normalized_tags and normalized_fast) {
             auto norm       = tools::finite::measure::norm(*this, true);
-            normalized_full = static_cast<double>(std::abs(norm - RealScalar{1})) <= settings::precision::max_norm_error;
+            normalized_full = num::leq(std::abs(norm - RealScalar{1}), prec);
             msg += fmt::format(" | full {} {:.3e}", normalized_full, fp(norm));
         }
         if(normalized_tags and normalized_fast and normalized_full) {
             std::vector<long> site_list;
             for(const auto &mps : mps_sites) {
-                if(not mps->is_normalized(settings::precision::max_norm_error)) { site_list.emplace_back(mps->template get_position<long>()); }
+                if(not mps->is_normalized(prec)) { site_list.emplace_back(mps->template get_position<long>()); }
             }
             if(not site_list.empty()) {
                 normalized_site = false;

@@ -7,7 +7,7 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 
 namespace tools::finite::opt {
-    template<typename Scalar> using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
     template<typename Scalar> using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     template<typename Scalar> using VectorReal = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
     template<typename Scalar> using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
@@ -140,8 +140,8 @@ namespace tools::finite::opt {
         [[nodiscard]] auto        get_mv() const { return num_mv.value_or(0); }
         [[nodiscard]] auto        get_pc() const { return num_pc.value_or(0); }
         [[nodiscard]] auto        get_time() const { return time.value_or(0.0); }
-        [[nodiscard]] auto        get_time_mv() const { return time_mv.value_or(0.0); }
-        [[nodiscard]] auto        get_time_pc() const { return time_pc.value_or(0.0); }
+        [[nodiscard]] auto        get_time_mv() const { return time_mv.value_or(1.0); }
+        [[nodiscard]] auto        get_time_pc() const { return time_pc.value_or(1.0); }
         [[nodiscard]] auto        get_delta_f() const { return get_or_nan(delta_f); }
         [[nodiscard]] auto        get_grad_tol() const { return get_or_nan(grad_tol); }
         [[nodiscard]] auto        get_grad_max() const { return get_or_nan(grad_max); }

@@ -140,7 +140,9 @@ namespace eig {
         meta = Meta();
     }
 
-    bool solution::eigvecs_are_real() const { return meta.form == Form::SYMM and (meta.type == Type::FP32 or meta.type == Type::FP64); }
+    bool solution::eigvecs_are_real() const {
+        return meta.form == Form::SYMM and (meta.type == Type::FP32 or meta.type == Type::FP64 or meta.type == Type::FP128);
+    }
 
     bool solution::eigvals_are_real() const { return meta.form == Form::SYMM; }
 

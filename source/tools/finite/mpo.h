@@ -15,7 +15,7 @@ namespace svd {
 }
 namespace tools::finite::mpo {
     template<typename Scalar>
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     /* clang-format off */
     template <typename Scalar> extern std::pair<Eigen::Tensor<Scalar, 4>,Eigen::Tensor<Scalar, 4>>
                                           swap_mpo    (const Eigen::Tensor<Scalar, 4> & mpoL, const Eigen::Tensor<Scalar, 4> & mpoR);

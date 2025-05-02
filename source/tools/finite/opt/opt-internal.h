@@ -8,7 +8,7 @@
 
 /* clang-format off */
 namespace tools::finite::opt::internal{
-    // template<typename Scalar> using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    // template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
     template<typename Scalar, auto rank> using TensorType = Eigen::Tensor<Scalar, rank>;
     template<typename Scalar, auto rank> using TensorReal = Eigen::Tensor<RealScalar<Scalar>, rank>;
     // template<typename Scalar> using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
@@ -26,8 +26,8 @@ namespace tools::finite::opt::internal{
     template<typename Scalar> [[nodiscard]] extern opt_mps<Scalar> optimize_generalized_shift_invert_eig    (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const AlgorithmStatus & status, OptMeta & meta, reports::eigs_log<Scalar> & elog);
     template<typename Scalar> [[nodiscard]] extern opt_mps<Scalar> optimize_generalized_shift_invert        (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const AlgorithmStatus & status, OptMeta & meta, reports::eigs_log<Scalar> & elog);
     template<typename Scalar> [[nodiscard]] extern opt_mps<Scalar> optimize_lanczos_h1h2                    (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial, const AlgorithmStatus & status, OptMeta & meta, reports::eigs_log<Scalar> & elog);
-    template<typename Scalar>               extern void            extract_results                          (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta & meta, const eig::solver &solver, std::vector<opt_mps<Scalar>> &results, bool converged_only = true, std::optional<std::vector<long>> indices = std::nullopt);
-    template<typename Scalar>               extern void            extract_results_subspace                 (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta &meta, const eig::solver &solver, const std::vector<opt_mps<Scalar>> & subspace_mps, std::vector<opt_mps<Scalar>> &results );
+    template<typename CalcType, typename Scalar> extern void       extract_results                          (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta & meta, const eig::solver &solver, std::vector<opt_mps<Scalar>> &results, bool converged_only = true, std::optional<std::vector<long>> indices = std::nullopt);
+    template<typename CalcType, typename Scalar> extern void       extract_results_subspace                 (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta &meta, const eig::solver &solver, const std::vector<opt_mps<Scalar>> & subspace_mps, std::vector<opt_mps<Scalar>> &results );
 
 
 

@@ -14,7 +14,6 @@
 #include "math/svd.h"
 #include "math/tenx.h"
 #include "tools/common/log.h"
-#include <Eigen/Core>
 #include <fmt/ranges.h>
 #include <set>
 #include <unsupported/Eigen/MatrixFunctions>

@@ -1,18 +1,14 @@
 #include "config/settings.h"
 #include "debug/exceptions.h"
-#include "general/iter.h"
 #include "math/eig.h"
 #include "math/eig/matvec/matvec_mpo.h"
 #include "math/eig/matvec/matvec_mpos.h"
-#include "math/linalg/matrix.h"
 #include "math/tenx.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
@@ -109,7 +105,7 @@ namespace tools::finite::opt {
         solver.eigs(hamiltonian);
 
         std::vector<opt_mps<Scalar>> results;
-        internal::extract_results(tensors, initial_mps, meta, solver, results, false);
+        internal::extract_results<CalcType>(tensors, initial_mps, meta, solver, results, false);
         return results;
     }
     template std::vector<opt_mps<fp64>> optimize_energy_eigs_executor<fp64>(const TensorsFinite<fp64> &tensors, const opt_mps<fp64> &initial_mps,

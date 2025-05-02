@@ -2,11 +2,10 @@
 #include <array>
 #include <optional>
 #include <vector>
-#include <Eigen/src/Core/NumTraits.h>
 
 template<typename Scalar>
 struct MeasurementsTensorsInfinite {
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     std::optional<size_t> length                       = std::nullopt;
     std::optional<RealScalar> energy_mpo                   = std::nullopt;
     std::optional<RealScalar> energy_per_site_mpo          = std::nullopt;

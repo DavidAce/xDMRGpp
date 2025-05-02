@@ -8,8 +8,8 @@
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
 namespace settings {
-    inline constexpr bool debug_moves   = false;
-    inline constexpr bool verbose_moves = false;
+    inline constexpr bool debug_moves   = true;
+    inline constexpr bool verbose_moves = true;
 }
 
 template<typename Scalar>
@@ -46,15 +46,15 @@ size_t tools::finite::mps::move_center_point_single_site(StateFinite<Scalar> &st
             auto  trnc    = mpsC.get_truncation_error(); // Truncation error of the old B/new AC, i.e. bond to the right of posC,
             // Construct a single-site tensor. This is equivalent to state.get_multisite_mps(...) but avoid normalization checks.
             auto onesite_tensor = tools::common::contraction::contract_bnd_mps(LC, mpsC.get_M());
-            tools::finite::mps::merge_multisite_mps(state, onesite_tensor, {posC_ul}, posC, MergeEvent::MOVE, svd_cfg, LogPolicy::SILENT);
+            tools::finite::mps::merge_multisite_mps(state, onesite_tensor, {posC_ul}, posC, MergeEvent::MOVE, svd_cfg, LogPolicy::VERBOSE);
             mpsC.set_truncation_error_LC(std::max(trnc, mpsC.get_truncation_error_LC()));
         } else if(state.get_direction() == -1) {
-            auto           pos_ul = safe_cast<size_t>(pos);     // Cast to unsigned
-            auto          &mps    = state.get_mps_site(pos);    // This AC becomes the new B
-            auto           trnc   = mps.get_truncation_error(); // Truncation error of old AC/new B, i.e. bond to the left of pos,
-            decltype(auto) onesite_tensor =
-                mps.template get_M_as<Scalar>(); // No need to contract anything this time. Note that we must take a copy! Not a reference (LC is unset later)
-            tools::finite::mps::merge_multisite_mps(state, onesite_tensor, {pos_ul}, posC, MergeEvent::MOVE, svd_cfg, LogPolicy::SILENT);
+            auto  pos_ul = safe_cast<size_t>(pos);     // Cast to unsigned
+            auto &mps    = state.get_mps_site(pos);    // This AC becomes the new B
+            auto  trnc   = mps.get_truncation_error(); // Truncation error of old AC/new B, i.e. bond to the left of pos,
+            // No need to contract anything this time. Note that we must take a copy! Not a reference (since M, LC are unset in merge)
+            const auto onesite_tensor = mps.get_M();
+            tools::finite::mps::merge_multisite_mps(state, onesite_tensor, {pos_ul}, posC, MergeEvent::MOVE, svd_cfg, LogPolicy::VERBOSE);
             if(posC >= 0) {
                 auto &mpsC = state.get_mps_site(posC); // This old A is now an AC
                 mpsC.set_truncation_error_LC(std::max(trnc, mpsC.get_truncation_error_LC()));
@@ -88,8 +88,9 @@ size_t tools::finite::mps::move_center_point(StateFinite<Scalar> &state, std::op
         auto  posR_ul = safe_cast<size_t>(posR);
         auto &mps     = state.get_mps_site();
         auto &mpsL    = state.get_mps_site(posL); // Becomes the new center position
-        auto &mpsR    = state.get_mps_site(posR); // The site to the right of the new center position
-        // Store the special LC bond in a temporary. It needs to be put back afterwards
+        auto &mpsR    = state.get_mps_site(posR); // The site to the right of the new center position.
+
+        // Store the special LC bond in a temporary. It needs to be put back afterward
         // Do the same with its truncation error
         Eigen::Tensor<Scalar, 1> LC                  = mps.template get_LC_as<Scalar>();
         double                   truncation_error_LC = mps.get_truncation_error_LC();

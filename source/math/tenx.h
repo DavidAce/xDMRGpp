@@ -14,22 +14,32 @@
 #include "tenx/threads.h"
 #include <array>
 #include <complex>
+#include <Eigen/Core>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 
-// Start by adding missing arithmetic operators
-// template<typename LHS, typename Derived>
-// auto operator*(LHS lhs, const Eigen::TensorBase<Derived> &t) {
-//     return t * lhs;
-// }
-// template<typename LHS, typename Derived>
-// auto operator-(LHS lhs, const Eigen::TensorBase<Derived> &t) {
-//     return t - lhs;
-// }
-// template<typename LHS, typename Derived>
-// auto operator+(LHS lhs, const Eigen::TensorBase<Derived> &t) {
-//     return t + lhs;
-// }
+namespace Eigen {
+#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
+    template<>
+    struct NumTraits<fp128> : NumTraits<double> // permits to get the epsilon, dummy_precision, lowest, highest functions
+    {
+        typedef fp128 Real;
+        typedef fp128 NonInteger;
+        typedef fp128 Nested;
+
+        enum { IsComplex = 0, IsInteger = 0, IsSigned = 1, RequireInitialization = 1, ReadCost = 1, AddCost = 3, MulCost = 3 };
+    };
+
+    template<>
+    struct NumTraits<cx128> : NumTraits<cx64> // permits to get the epsilon, dummy_precision, lowest, highest functions
+    {
+        typedef fp128 Real;
+        typedef fp128 NonInteger;
+        typedef fp128 Nested;
+        enum { IsComplex = 1, IsInteger = 0, IsSigned = 1, RequireInitialization = 1, ReadCost = 1, AddCost = 6, MulCost = 6 };
+    };
+#endif
+}
 
 /*! \brief **tenx**: "Tensor Extra". Provides extra functionality to Eigen::Tensor.*/
 
@@ -41,6 +51,7 @@
  */
 
 /*clang-format off */
+
 namespace tenx {
     template<typename Scalar>
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
@@ -52,7 +63,7 @@ namespace tenx {
     using array = std::array<Eigen::Index, rank>;
 
     template<typename Scalar>
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     template<typename Derived>
     using epsilon_t = RealScalar<typename Derived::Scalar>;
     template<typename Derived>
@@ -578,7 +589,7 @@ namespace tenx {
     template<typename Derived, typename... Args>
     bool isReal(const Eigen::EigenBase<Derived> &obj, Args &&...args) {
         using Scalar     = typename Derived::Scalar;
-        using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+        using RealScalar = decltype(std::real(std::declval<Scalar>()));
         if constexpr(sfinae::is_std_complex_v<Scalar> and std::is_arithmetic_v<RealScalar>) {
             return obj.derived().imag().isZero(std::forward<Args>(args)...);
         } else {
@@ -590,7 +601,7 @@ namespace tenx {
     bool isReal(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, Args &&...args) {
         auto tensor      = tenx::asEval(expr);
         using Scalar     = typename decltype(tensor)::Scalar;
-        using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+        using RealScalar = decltype(std::real(std::declval<Scalar>()));
         if constexpr(sfinae::is_std_complex_v<Scalar> and std::is_arithmetic_v<RealScalar>) {
             auto vector = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(tensor.data(), tensor.size());
             return vector.imag().isZero(std::forward<Args>(args)...);

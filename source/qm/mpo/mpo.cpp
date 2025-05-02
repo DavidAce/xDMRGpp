@@ -80,7 +80,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
         if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so the pauli matrix must be real");
     }
-    using RealScalar                  = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar                  = decltype(std::real(std::declval<Scalar>()));
     long                     spin_dim = paulimatrix.rows();
     auto                     I        = Eigen::Matrix2cd::Identity(spin_dim, spin_dim).eval();
     std::array<long, 4>      extent4  = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
@@ -199,7 +199,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
         if(!tenx::isReal(paulimatrix1)) throw except::logic_error("Scalar is real, so the paulimatrix1 must be real");
         if(!tenx::isReal(paulimatrix2)) throw except::logic_error("Scalar is real, so the paulimatrix2 must be real");
     }
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     if(paulimatrix1.rows() != paulimatrix2.rows()) throw except::logic_error("Pauli matrices must be of equal size");
     long                     spin_dim = paulimatrix1.rows();
     auto                     I        = Eigen::Matrix2cd::Identity(spin_dim, spin_dim).eval();
@@ -286,7 +286,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
         for(auto &paulimatrix : paulimatrices)
             if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so all pauli matrices must be real");
     }
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     if(paulimatrices.empty()) throw except::runtime_error("List of pauli matrices is empty");
     long                     num_paulis = safe_cast<long>(paulimatrices.size());
     long                     spin_dim   = 2;
@@ -387,7 +387,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
         for(auto &paulimatrix : paulimatrices)
             if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so all pauli matrices must be real");
     }
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     if(paulimatrices.empty()) throw except::runtime_error("List of pauli matrices is empty");
     long                spin_dim = 2;
     std::array<long, 4> extent4  = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
@@ -483,7 +483,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
         for(auto &paulimatrix : paulimatrices)
             if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so all pauli matrices must be real");
     }
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     if(paulimatrices.empty()) throw except::runtime_error("List of pauli matrices is empty");
     if(paulimatrices.size() != uniform_dist_widths.size()) throw except::runtime_error("List size mismatch: paulimatrices and uniform_dist_widths");
     long                num_paulis = safe_cast<long>(paulimatrices.size());

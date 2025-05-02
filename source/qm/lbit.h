@@ -22,7 +22,7 @@ namespace h5pp {
 
 namespace qm::lbit {
     template<typename Scalar>
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     /*! The values that we need to recreate a unitary gate exactly */
     struct UnitaryGateParameters {
         size_t                layer; /*!< Layer number of this gate */

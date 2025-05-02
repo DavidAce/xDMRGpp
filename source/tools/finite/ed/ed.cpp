@@ -9,7 +9,12 @@
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
 #include "tools/common/split.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/dimensions.h"
+#include "tools/finite/measure/entanglement_entropy.h"
+#include "tools/finite/measure/hamiltonian.h"
+#include "tools/finite/measure/number_entropy.h"
+#include "tools/finite/measure/opdm.h"
+#include "tools/finite/measure/spin.h"
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
@@ -49,7 +54,7 @@ namespace tools::finite::ed {
         std::vector<tools::finite::opt::opt_mps<Scalar>> results;
         auto                                             t_ext = tid::tic_scope("extract");
 
-        tools::finite::opt::internal::extract_results(tensors_ed, target_mps, meta, solver, results, true);
+        tools::finite::opt::internal::extract_results<Scalar>(tensors_ed, target_mps, meta, solver, results, true);
         t_ext.toc();
         for(const auto &[num, mps] : iter::enumerate(results)) { elog.eigs_add_entry(mps); }
         elog.print_eigs_report();
@@ -78,8 +83,8 @@ namespace tools::finite::ed {
         }
         tools::log->info("Spin components (global X,Y,Z)     = {::8.2e}", tools::finite::measure::spin_components(state_ed));
 
-        auto expectation_values_xyz = tools::finite::measure::expectation_values_xyz(state_ed);
-        auto structure_factor_xyz   = tools::finite::measure::structure_factor_xyz(state_ed);
+        auto expectation_values_xyz = tools::finite::measure::spin_expectation_values_xyz(state_ed);
+        auto structure_factor_xyz   = tools::finite::measure::spin_structure_factor_xyz(state_ed);
         auto opdm_spectrum          = tools::finite::measure::opdm_spectrum(state_ed);
 
         tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", tenx::span(expectation_values_xyz[0]));

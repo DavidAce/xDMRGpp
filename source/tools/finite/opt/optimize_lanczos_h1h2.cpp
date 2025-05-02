@@ -86,7 +86,7 @@ namespace tools::finite::opt {
         auto t_gramSchmidt = tid::tic_scope("gramschmidt");
 
         // Orthonormalize with Modified Gram Schmidt
-        using RealScalar            = typename Eigen::NumTraits<Scalar>::Real;
+        using RealScalar            = decltype(std::real(std::declval<Scalar>()));
         using MatrixType            = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
         auto           nonOrthoCols = std::vector<long>();
         auto           validCols    = std::vector<long>();
@@ -160,7 +160,7 @@ namespace tools::finite::opt {
         using VectorCR = VectorReal<CalcType>;
         using MatrixCT = MatrixType<CalcType>;
 
-        // using RealScalar  = typename Eigen::NumTraits<CalcType>::Real;
+        // using RealScalar  = decltype(std::real(std::declval<CalcType>()));
         // using CplxScalar  = std::complex<RealScalar>;
         // using MatrixType  = Eigen::Matrix<CalcType, Eigen::Dynamic, Eigen::Dynamic>;
         // using MatrixCplx  = Eigen::Matrix<CplxScalar, Eigen::Dynamic, Eigen::Dynamic>;

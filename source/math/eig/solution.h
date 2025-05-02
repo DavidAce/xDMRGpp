@@ -157,6 +157,14 @@ namespace eig {
         template<typename Scalar>
         std::vector<Scalar> &get_eigvals() const;
 
+        template<typename Scalar, Form form>
+        auto &get_eigvals() const {
+            using Real = decltype(std::real(std::declval<Scalar>()));
+            using Cplx = std::complex<Real>;
+            if constexpr(form == Form::SYMM) { return get_eigvals<Real>(); }
+            if constexpr(form == Form::NSYM) { return get_eigvals<Cplx>(); }
+        }
+
         template<Form form, Type type>
         auto &get_eigvals() const {
             if constexpr(form == Form::SYMM) {

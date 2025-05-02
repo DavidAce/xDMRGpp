@@ -634,26 +634,31 @@ void eig::solver::eigs(MatrixProductType &matrix, int nev, int ncv, Ritz ritz, F
                        Vecs compute_eigvecs, Dephase remove_phase, typename MatrixProductType::Scalar *residual) {
     auto t_eig   = tid::tic_scope("eig");
     using Scalar = typename MatrixProductType::Scalar;
-    Type type = eig::ScalarToType<Scalar>();
+    Type type    = eig::ScalarToType<Scalar>();
     eigs_init(matrix.rows(), nev, ncv, ritz, form, type, side, sigma, shift_invert, matrix.storage, compute_eigvecs, remove_phase, residual);
     switch(config.lib.value()) {
         case Lib::ARPACK: {
-            if constexpr (!sfinae::is_quadruple_prec_v<Scalar>) {
+            if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
                 solver_arpack<MatrixProductType> solver(matrix, config, result);
                 solver.eigs();
                 break;
             } else {
-                eig::log->warn("Quadruple precision not supported for ARPACK. Trying with Spectra ...");
+                eig::log->warn("Type {} has not been implemented for ARPACK. Trying with with another solver ...", sfinae::type_name<Scalar>());
+                [[fallthrough]];
+            }
+        }
+        case Lib::PRIMME: {
+            if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
+                eigs_primme(matrix);
+                break;
+            } else {
+                eig::log->warn("Type {} has not been implemented for PRIMME. Trying with with another solver ...", sfinae::type_name<Scalar>());
                 [[fallthrough]];
             }
         }
         case Lib::SPECTRA: {
             solver_spectra<MatrixProductType> solver(matrix, config, result);
             solver.eigs();
-            break;
-        }
-        case Lib::PRIMME: {
-            eigs_primme(matrix);
             break;
         }
     }
@@ -703,13 +708,24 @@ void eig::solver::eigs(MatrixProductType &matrix) {
     set_default_config(matrix);
     switch(config.lib.value()) {
         case Lib::ARPACK: {
-            config.tag = fmt::format("{}{}arpack", config.tag, config.tag.empty() ? "" : " ");
-            if constexpr (!sfinae::is_quadruple_prec_v<Scalar>) {
+            if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
+                config.tag = fmt::format("{}{}arpack", config.tag, config.tag.empty() ? "" : " ");
                 solver_arpack<MatrixProductType> solver(matrix, config, result);
                 solver.eigs();
                 break;
             } else {
-                eig::log->warn("Quadruple precision not supported for ARPACK. Trying with Spectra ...");
+                eig::log->warn("Type {} has not been implemented for ARPACK. Trying with with another solver ...", sfinae::type_name<Scalar>());
+                [[fallthrough]];
+            }
+        }
+        case Lib::PRIMME: {
+            if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
+                config.tag = fmt::format("{}{}primme", config.tag, config.tag.empty() ? "" : " ");
+                eig::log->warn("Running with PRIMME ...");
+                eigs_primme(matrix);
+                break;
+            } else {
+                eig::log->warn("Type {} has not been implemented for PRIMME. Trying with with another solver ...", sfinae::type_name<Scalar>());
                 [[fallthrough]];
             }
         }
@@ -717,11 +733,6 @@ void eig::solver::eigs(MatrixProductType &matrix) {
             config.tag = fmt::format("{}{}spectra", config.tag, config.tag.empty() ? "" : " ");
             solver_spectra<MatrixProductType> solver(matrix, config, result);
             solver.eigs();
-            break;
-        }
-        case Lib::PRIMME: {
-            config.tag = fmt::format("{}{}primme", config.tag, config.tag.empty() ? "" : " ");
-            eigs_primme(matrix);
             break;
         }
     }

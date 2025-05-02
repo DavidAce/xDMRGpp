@@ -10,7 +10,8 @@
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/hamiltonian.h"
+#include "tools/finite/measure/residual.h"
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
@@ -333,6 +334,13 @@ namespace tools::finite::opt::internal {
         }
         return comparator::eigval(lhs, rhs);
     }
+
+    template class EigIdxComparator<fp32>;
+    template class EigIdxComparator<fp64>;
+    template class EigIdxComparator<fp128>;
+    template class EigIdxComparator<cx32>;
+    template class EigIdxComparator<cx64>;
+    template class EigIdxComparator<cx128>;
     template<typename Scalar>
     EigIdxComparator<Scalar>::EigIdxComparator(OptRitz ritz_, Scalar shift_, Scalar *data_, long size_) : ritz(ritz_), shift(shift_), eigvals(data_, size_) {}
     template<typename Scalar>
@@ -341,8 +349,8 @@ namespace tools::finite::opt::internal {
         auto rhs = eigvals[ridx];
         switch(ritz) {
             case OptRitz::NONE: throw std::logic_error("EigvalComparator: Invalid OptRitz::NONE");
-            case OptRitz::SR: return lhs < rhs;
-            case OptRitz::LR: return rhs < lhs;
+            case OptRitz::SR: return std::real(lhs) < std::real(rhs);
+            case OptRitz::LR: return std::real(rhs) < std::real(lhs);
             case OptRitz::SM: return std::abs(lhs) < std::abs(rhs);
             case OptRitz::LM: return std::abs(lhs) > std::abs(rhs);
             case OptRitz::IS:

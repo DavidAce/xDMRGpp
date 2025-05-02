@@ -3,9 +3,9 @@
 #include "general/sfinae.h"
 #include "h5tb/h5tb.h"
 #include "math/float.h"
+#include "math/tenx.h"
 #include <any>
 #include <map>
-#include <math/tenx.h>
 #include <memory>
 #include <optional>
 #include <unsupported/Eigen/CXX11/Tensor>
@@ -16,7 +16,7 @@ namespace h5pp {
 template<typename Scalar>
 class MpoSite {
     public:
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     using QuadScalar = std::conditional_t<sfinae::is_std_complex_v<Scalar>, cx128, fp128>;
     using TableMap   = std::map<std::string, std::any>;
     const ModelType model_type;
@@ -141,7 +141,7 @@ class MpoSite {
     }
 
     template<typename T>
-    [[nodiscard]] decltype(auto) MPO_energy_shifted_view_as(Scalar energy_shift_per_site) const {
+    [[nodiscard]] Eigen::Tensor<T, 4> MPO_energy_shifted_view_as(Scalar energy_shift_per_site) const {
         if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(MPO_energy_shifted_view_q(energy_shift_per_site));
         } else {
@@ -150,7 +150,8 @@ class MpoSite {
     }
 
     template<typename T>
-    [[nodiscard]] decltype(auto) MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip = std::nullopt) const {
+    [[nodiscard]] Eigen::Tensor<T, 4> MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody,
+                                                        std::optional<std::vector<size_t>> skip = std::nullopt) const {
         if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(MPO_nbody_view_q(nbody, skip));
         } else {
@@ -164,12 +165,13 @@ class MpoSite {
     }
 
     template<typename T>
-    [[nodiscard]] decltype(auto) MPO2_nbody_view_as(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip = std::nullopt) const {
+    [[nodiscard]] Eigen::Tensor<T, 4> MPO2_nbody_view_as(std::optional<std::vector<size_t>> nbody,
+                                                         std::optional<std::vector<size_t>> skip = std::nullopt) const {
         return tenx::asScalarType<T>(MPO2_nbody_view(nbody, skip));
     }
 
     template<typename T>
-    [[nodiscard]] decltype(auto) get_MPO_edge_left() const {
+    [[nodiscard]] Eigen::Tensor<T, 1> get_MPO_edge_left() const {
         if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(get_MPO_edge_left(mpo_internal_q));
         } else {
@@ -178,7 +180,7 @@ class MpoSite {
     }
 
     template<typename T>
-    [[nodiscard]] decltype(auto) get_MPO_edge_right() const {
+    [[nodiscard]] Eigen::Tensor<T, 1> get_MPO_edge_right() const {
         if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(get_MPO_edge_right(mpo_internal_q));
         } else {

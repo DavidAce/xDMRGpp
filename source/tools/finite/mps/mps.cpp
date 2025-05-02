@@ -14,10 +14,10 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
 #include "tools/common/split.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/dimensions.h"
+#include "tools/finite/measure/norm.h"
 #include "tools/finite/ops.h"
 #include <fmt/ranges.h>
 namespace settings {
@@ -141,7 +141,9 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
 
         // We have to allow non-normalized multisite mps! Otherwise, we won't be able to make them normalized
         auto norm = tenx::VectorCast(multisite_mps).norm();
-        if(std::abs(norm - 1) > static_cast<RealScalar<Scalar>>(1e-8))
+        auto eps  = std::numeric_limits<RealScalar<Scalar>>::epsilon() * 100;
+        auto tol  = std::max(static_cast<RealScalar<Scalar>>(settings::precision::max_norm_error), eps);
+        if(num::gt(std::abs(norm - Scalar{1}), tol))
             tools::log->debug("merge_multisite_mps: Multisite mps for positions {} has norm far from unity: {:.16f}", sites, fp(norm));
     }
 
@@ -238,7 +240,6 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
 
         // inject lc_move if there is any waiting
         if(lc_move and pos == lc_move->pos_dst) { mps_src.set_L(lc_move->data, lc_move->error); }
-
         mps_tgt.fuse_mps(mps_src);
         state.tag_site_normalized(pos, true); // Fused site is normalized
 
@@ -315,17 +316,20 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
     }
     // Now we can move around the chain until we return to the original status
     while(steps++ < 2 or not state.position_is_at(pos, dir, cnt)) move_center_point_single_site(state, svd_cfg);
+    state.assert_validity();
     state.clear_measurements();
     state.clear_cache();
-    if(not state.is_normalized_on_all_sites()) {
+    auto prec = std::max(static_cast<RealScalar<Scalar>>(settings::precision::max_norm_error), 100 * std::numeric_limits<RealScalar<Scalar>>::epsilon());
+    if(not state.is_normalized_on_all_sites(prec)) {
         for(const auto &mps : state.mps_sites) {
             bool normalized_tag = state.get_normalization_tags()[mps->template get_position<size_t>()];
             tools::log->warn("{} | is_normalized {:<7} | L norm {:.16f} | norm tag {}", mps->get_tag(), mps->is_normalized(),
                              fp(tenx::VectorMap(mps->get_L()).norm()), normalized_tag);
             if(mps->isCenter()) tools::log->warn("LC({}) | norm {:.16f}", mps->get_position(), fp(tenx::VectorMap(mps->get_LC()).norm()));
         }
-        throw except::runtime_error("normalize_state: normalization failed. state norm {:.16f} | max allowed norm error {:.2e} | norm tags {}",
-                                    fp(tools::finite::measure::norm(state)), settings::precision::max_norm_error, state.get_normalization_tags());
+        auto norm_error = std::abs(tools::finite::measure::norm(state) - RealScalar<Scalar>{1});
+        throw except::runtime_error("normalize_state: normalization failed. state norm error {:.3e} | max allowed norm error {:.3e} | norm tags {}",
+                                    fp(norm_error), fp(prec), state.get_normalization_tags());
     }
 
     if(svd_cfg and svd_cfg->rank_max and state.get_largest_bond() > svd_cfg->rank_max.value())

@@ -223,39 +223,45 @@ namespace tools::finite::opt {
     template<typename MatVecType, typename Scalar>
     void eigs_folded_spectrum_executor(eig::solver &solver, MatVecType &hamiltonian_squared, const TensorsFinite<Scalar> &tensors,
                                        const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results, const OptMeta &meta) {
-        using CalcType = typename MatVecType::Scalar;
-        if(std::is_same_v<CalcType, cx64> and meta.optType == OptType::FP64)
-            throw except::logic_error("eigs_folded_spectrum_executor error: Mixed Scalar:cx64 with OptType::FP64");
-        if(std::is_same_v<CalcType, fp64> and meta.optType == OptType::CX64)
-            throw except::logic_error("eigs_folded_spectrum_executor error: Mixed Scalar:real with OptType::CX64");
-
+        using CalcType                        = typename MatVecType::Scalar;
         solver.config.primme_effective_ham_sq = &hamiltonian_squared;
         hamiltonian_squared.reset();
 
         tools::log->trace("eigs_folded_spectrum_executor: Defining the Hamiltonian-squared matrix-vector product");
-
-        if(solver.config.lib == eig::Lib::ARPACK) {
-            if(tensors.model->has_compressed_mpo_squared()) throw std::runtime_error("optimize_folded_spectrum_eigs with ARPACK requires non-compressed MPO²");
-            if(not solver.config.ritz) solver.config.ritz = eig::Ritz::LM;
-            if(not solver.config.sigma)
-                solver.config.sigma = folded_spectrum::get_largest_eigenvalue_hamiltonian_squared<CalcType>(tensors) + 1.0; // Add one to shift enough
-        } else if(solver.config.lib == eig::Lib::PRIMME) {
-            if(not solver.config.ritz) solver.config.ritz = eig::Ritz::SM;
-            if(solver.config.sigma and solver.config.sigma.value() != 0.0 and tensors.model->has_compressed_mpo_squared())
-                throw except::logic_error("optimize_folded_spectrum_eigs with PRIMME with sigma requires non-compressed MPO²");
+        if(!solver.config.lib.has_value()) throw except::runtime_error("lib has not been set");
+        switch(solver.config.lib.value()) {
+            case eig::Lib::ARPACK: {
+                if(tensors.model->has_compressed_mpo_squared())
+                    throw std::runtime_error("optimize_folded_spectrum_eigs with ARPACK requires non-compressed MPO²");
+                if(not solver.config.ritz) solver.config.ritz = eig::Ritz::SM;
+                if(not solver.config.sigma)
+                    solver.config.sigma =
+                        folded_spectrum::get_largest_eigenvalue_hamiltonian_squared<CalcType>(tensors) + RealScalar<CalcType>(1); // Add one to shift enough
+                break;
+            }
+            case eig::Lib::PRIMME: {
+                if(not solver.config.ritz) solver.config.ritz = eig::Ritz::SM;
+                if(solver.config.sigma and solver.config.sigma.value() != 0.0 and tensors.model->has_compressed_mpo_squared())
+                    throw except::logic_error("optimize_folded_spectrum_eigs with PRIMME with sigma requires non-compressed MPO²");
+                break;
+            }
+            case eig::Lib::SPECTRA: {
+                if(not solver.config.ritz) solver.config.ritz = eig::Ritz::SM;
+                break;
+            }
         }
 
-        tools::log->debug(
-            "eigs_folded_spectrum_executor: Solving [H²x=λx] {} {} | ritz {} | shifts {} | maxIter {} | tol {:.2e} | init on | size {} | mps {} | jcb {}",
-            eig::LibToString(solver.config.lib), eig::RitzToString(solver.config.ritz), solver.config.sigma, solver.config.primme_targetShifts,
-            solver.config.maxIter.value(), solver.config.tol.value(), hamiltonian_squared.rows(), hamiltonian_squared.get_shape_mps(),
-            solver.config.jcbMaxBlockSize);
+        tools::log->debug("eigs_folded_spectrum_executor: Solving [H²x=λx] {} {} | sigma {} | shifts {} | maxIter {} | tol {:.2e} | nev {} ncv {} | size {} | "
+                          "mps {} | jcb {}",
+                          eig::LibToString(solver.config.lib), eig::RitzToString(solver.config.ritz), solver.config.sigma, solver.config.primme_targetShifts,
+                          solver.config.maxIter.value(), solver.config.tol.value(), solver.config.maxNev.value(), solver.config.maxNcv.value(),
+                          hamiltonian_squared.rows(), hamiltonian_squared.get_shape_mps(), solver.config.jcbMaxBlockSize);
 
         auto init = folded_spectrum::get_initial_guess_mps<CalcType>(initial_mps, results,
                                                                      solver.config.maxNev.value()); // Init holds the data in memory for this scope
         for(auto &i : init) solver.config.initial_guess.push_back({i.mps.data(), i.idx});
         solver.eigs(hamiltonian_squared);
-        internal::extract_results(tensors, initial_mps, meta, solver, results, false);
+        internal::extract_results<CalcType>(tensors, initial_mps, meta, solver, results, false);
     }
 
     template<typename CalcType, typename Scalar>
@@ -289,6 +295,9 @@ namespace tools::finite::opt {
             }
             default: throw except::logic_error("undhandled ritz: {}", enum2sv(meta.optRitz));
         }
+        cfg.lib  = eig::Lib::SPECTRA;
+        cfg.ritz = eig::stringToRitz(enum2sv(meta.optRitz));
+
         cfg.primme_preconditioner = folded_spectrum::preconditioner_jacobi<CalcType>;
         cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
 
@@ -332,19 +341,6 @@ namespace tools::finite::opt {
     template<typename Scalar>
     opt_mps<Scalar> internal::optimize_folded_spectrum(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
                                                        [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<Scalar> &elog) {
-        if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
-            throw except::runtime_error("optimize_folded_spectrum(): not implemented for type {}", enum2sv(meta.optType));
-        }
-#pragma message "remove this test"
-        if(status.energy_variance_lowest < status.energy_variance_prec_limit) {
-            auto meta2          = meta;
-            meta2.optSolver     = OptSolver::H1H2;
-            meta2.optType       = OptType::FP128;
-            meta2.eigs_iter_max = 100;
-            meta2.eigs_ncv      = 3;
-            return optimize_lanczos_h1h2(tensors, initial_mps, status, meta2, elog);
-        }
-
         if(meta.optSolver == OptSolver::EIG) return optimize_folded_spectrum_eig(tensors, initial_mps, status, meta, elog);
 
         using namespace internal;
@@ -356,13 +352,20 @@ namespace tools::finite::opt {
         std::vector<opt_mps<Scalar>> results;
         if constexpr(sfinae::is_std_complex_v<Scalar>) {
             switch(meta.optType) {
+                case OptType::FP32: eigs_manager_folded_spectrum<fp32>(tensors, initial_mps, results, meta); break;
+                case OptType::CX32: eigs_manager_folded_spectrum<cx32>(tensors, initial_mps, results, meta); break;
                 case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
                 case OptType::CX64: eigs_manager_folded_spectrum<cx64>(tensors, initial_mps, results, meta); break;
+                case OptType::FP128: eigs_manager_folded_spectrum<fp128>(tensors, initial_mps, results, meta); break;
+                case OptType::CX128: eigs_manager_folded_spectrum<cx128>(tensors, initial_mps, results, meta); break;
                 default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
             }
         } else {
             switch(meta.optType) {
+                case OptType::FP32: eigs_manager_folded_spectrum<fp32>(tensors, initial_mps, results, meta); break;
                 case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
+                case OptType::FP128: eigs_manager_folded_spectrum<fp128>(tensors, initial_mps, results, meta); break;
+                case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
                 case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
                 default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
             }

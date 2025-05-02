@@ -19,7 +19,14 @@
 #include "tools/finite/env.h"
 #include "tools/finite/env/BondExpansionResult.h"
 #include "tools/finite/h5.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/dimensions.h"
+#include "tools/finite/measure/entanglement_entropy.h"
+#include "tools/finite/measure/hamiltonian.h"
+#include "tools/finite/measure/information.h"
+#include "tools/finite/measure/norm.h"
+#include "tools/finite/measure/number_entropy.h"
+#include "tools/finite/measure/opdm.h"
+#include "tools/finite/measure/spin.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
 #include "tools/finite/ops.h"
@@ -239,12 +246,26 @@ int AlgorithmFinite<Scalar>::get_eigs_iter_max() const {
 }
 
 template<typename Scalar>
-AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta() {
+typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta() {
     tools::log->trace("get_opt_meta: configuring optimization step");
     OptMeta m1;
 
     // The first decision is easy. Real or complex optimization
-    if(tensors.is_real()) m1.optType = OptType::FP64;
+    // if(std::is_same_v<Scalar, fp32>) m1.optType = OptType::FP32;
+    // if(std::is_same_v<Scalar, fp64>) m1.optType = OptType::FP64;
+    // if(std::is_same_v<Scalar, fp128>) m1.optType = OptType::FP128;
+    // if(std::is_same_v<Scalar, cx32>) m1.optType = tensors.is_real() ? OptType::FP32 : OptType::CX32;
+    // if(std::is_same_v<Scalar, cx64>) m1.optType = tensors.is_real() ? OptType::FP64 : OptType::CX64;
+    // if(std::is_same_v<Scalar, cx128>) m1.optType = tensors.is_real() ? OptType::FP128 : OptType::CX128;
+    switch(settings::precision::optScalar) {
+        case ScalarType::FP32: m1.optType = OptType::FP32; break;
+        case ScalarType::FP64: m1.optType = OptType::FP64; break;
+        case ScalarType::FP128: m1.optType = OptType::FP128; break;
+        case ScalarType::CX32: m1.optType = OptType::CX32; break;
+        case ScalarType::CX64: m1.optType = OptType::CX64; break;
+        case ScalarType::CX128: m1.optType = OptType::CX128; break;
+    }
+
 
     // Set the target eigenvalue
     m1.optRitz = status.opt_ritz;
@@ -974,7 +995,9 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
     tensors.activate_sites(settings::precision::eigs_max_size_shift_invert, 2); // Activate a pair of sites so that asserts and measurements work
     tensors.rebuild_edges();
     tensors.initialize_state(reason, state_init, state_type.value(), axis.value(), use_eigenspinors.value(), bond_lim.value(), pattern.value());
+    tensors.get_state().assert_validity();
     tensors.normalize_state(svd::config(bond_lim, trnc_lim), NormPolicy::ALWAYS);
+    tensors.get_state().assert_validity();
     if(has_flag(settings::strategy::projection_policy, ProjectionPolicy::INIT) and qm::spin::half::is_valid_axis(axis.value())) {
         tools::log->info("Projecting state | target sector {} | norm {:.16f} | spin components: {::+.16f}", axis.value(),
                          fp(tools::finite::measure::norm(tensors.get_state())), fv(tools::finite::measure::spin_components(tensors.get_state())));
@@ -1605,28 +1628,19 @@ void AlgorithmFinite<Scalar>::write_to_file(StorageEvent storage_event, CopyPoli
     status.event = StorageEvent::NONE;
 }
 
-template<typename Scalar>
-template<typename T>
-void AlgorithmFinite<Scalar>::write_to_file(const StateFinite<T> &state, const ModelFinite<T> &model, const EdgesFinite<T> &edges, StorageEvent storage_event,
-                                            CopyPolicy copy_policy) {
-    if(not h5file) return;
-    status.event = storage_event;
-    tools::finite::h5::save::simulation(*h5file, state, model, edges, status, copy_policy);
-    status.event = StorageEvent::NONE;
-}
 // template void AlgorithmFinite<Scalar>::write_to_file(const StateFinite<cx64> &state, const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges,
 //                                              StorageEvent storage_event, CopyPolicy copy_policy);
 // template void AlgorithmFinite<Scalar>::write_to_file(const StateFinite<cx128> &state, const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges,
 //                                              StorageEvent storage_event, CopyPolicy copy_policy);
-template<typename Scalar>
-template<typename T>
-void AlgorithmFinite<Scalar>::write_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy) {
-    if(not h5file) return;
-    status.event = storage_event;
-    auto sinfo   = StorageInfo(status, tensors.state->get_name());
-    tools::finite::h5::save::data(*h5file, sinfo, data, name, copy_policy);
-    status.event = StorageEvent::NONE;
-}
+// template<typename Scalar>
+// template<typename T>
+// void AlgorithmFinite<Scalar>::write_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy) {
+//     if(not h5file) return;
+//     status.event = storage_event;
+//     auto sinfo   = StorageInfo(status, tensors.state->get_name());
+//     tools::finite::h5::save::data(*h5file, sinfo, data.data(), data.dimensions(), name, copy_policy);
+//     status.event = StorageEvent::NONE;
+// }
 
 // template void AlgorithmFinite<Scalar>::write_to_file(const Eigen::Tensor<fp64, 3> &data, std::string_view name, StorageEvent storage_event, CopyPolicy
 // copy_policy); template void AlgorithmFinite<Scalar>::write_to_file(const Eigen::Tensor<cx64, 2> &data, std::string_view name, StorageEvent storage_event,
@@ -1763,8 +1777,8 @@ void AlgorithmFinite<Scalar>::print_status_full() {
     tools::log->info("Spin components (global X,Y,Z)     = {::.16f}", fv(tools::finite::measure::spin_components(tensors.get_state())));
 
     if(status.algo_type == AlgorithmType::xDMRG) {
-        auto expectation_values_xyz = tools::finite::measure::expectation_values_xyz(tensors.get_state());
-        auto structure_factor_xyz   = tools::finite::measure::structure_factor_xyz(tensors.get_state());
+        auto expectation_values_xyz = tools::finite::measure::spin_expectation_values_xyz(tensors.get_state());
+        auto structure_factor_xyz   = tools::finite::measure::spin_structure_factor_xyz(tensors.get_state());
         auto opdm_spectrum          = tools::finite::measure::opdm_spectrum(tensors.get_state());
         tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", fv(expectation_values_xyz[0]));
         tools::log->info("Expectation values ⟨σy⟩            = {::+9.6f}", fv(expectation_values_xyz[1]));

@@ -2,7 +2,7 @@
 
 #include <cassert>
 #include <complex>
-#include <Eigen/Core>
+#include <cstring>
 #include <stdexcept>
 #include <stdfloat>
 #include <string>
@@ -67,28 +67,7 @@ bool cmp_t(Lhs lhs, Rhs rhs) {
 // #endif
 // }
 
-namespace Eigen {
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
-    template<>
-    struct NumTraits<fp128> : NumTraits<double> // permits to get the epsilon, dummy_precision, lowest, highest functions
-    {
-        typedef fp128 Real;
-        typedef fp128 NonInteger;
-        typedef fp128 Nested;
 
-        enum { IsComplex = 0, IsInteger = 0, IsSigned = 1, RequireInitialization = 1, ReadCost = 1, AddCost = 3, MulCost = 3 };
-    };
-
-    template<>
-    struct NumTraits<cx128> : NumTraits<cx64> // permits to get the epsilon, dummy_precision, lowest, highest functions
-    {
-        typedef fp128 Real;
-        typedef fp128 NonInteger;
-        typedef fp128 Nested;
-        enum { IsComplex = 1, IsInteger = 0, IsSigned = 1, RequireInitialization = 1, ReadCost = 1, AddCost = 6, MulCost = 6 };
-    };
-#endif
-}
 #if defined(DMRG_USE_QUADMATH)
 
 inline const fp128 &conj(const fp128 &x) { return x; }
@@ -128,7 +107,7 @@ inline fp128 ceil(const fp128 &x) { return ceilq(x); }
 // inline fp128 abs2(const cx128 &x) { return abs_t(conj(x) * x); }
 // template<typename T>
 // f128_base<T> operator*(const T &v) const {
-    // return val * v;
+// return val * v;
 // }
 
 #endif
@@ -233,7 +212,7 @@ struct f128_t : f128_base<fp128> {
         else if(pres == 'h')
             chfmt = std::chars_format::hex;
 
-        constexpr auto bufsize      = std::numeric_limits<std::float128_t>::max_digits10 + 10;
+        constexpr auto bufsize      = std::numeric_limits<fp128>::max_digits10 + 10;
         char           buf[bufsize] = {0};
 
         auto result = std::to_chars(buf, buf + bufsize, val, chfmt, prec);
@@ -273,8 +252,6 @@ struct c128_t : std::complex<f128_t> {
         this->imag() = std::imag(v);
     }
 };
-
-
 
 #else
 // Dummy wrapper around the long double type

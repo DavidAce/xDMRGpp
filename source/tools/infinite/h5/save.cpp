@@ -46,8 +46,12 @@ namespace tools::infinite::h5::save {
         h5file.writeDataset(state.LC(), bonds_prefix + "/L_C");
         tools::common::h5::save::set_save_attrs(h5file, bonds_prefix, sinfo);
     }
-    template void bonds<cx64>(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx64> &state);
-    template void bonds<cx128>(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx128> &state);
+    template void bonds(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<fp32> &state);
+    template void bonds(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<fp64> &state);
+    template void bonds(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<fp128> &state);
+    template void bonds(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx32> &state);
+    template void bonds(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx64> &state);
+    template void bonds(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx128> &state);
 
     template<typename Scalar>
     void state(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<Scalar> &state) {
@@ -61,8 +65,12 @@ namespace tools::infinite::h5::save {
         h5file.writeDataset(state.B(), mps_prefix + "/M_B");
         tools::common::h5::save::set_save_attrs(h5file, mps_prefix, sinfo);
     }
-    template void state<cx64>(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx64> &state);
-    template void state<cx128>(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx128> &state);
+    template void state(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<fp32> &state);
+    template void state(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<fp64> &state);
+    template void state(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<fp128> &state);
+    template void state(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx32> &state);
+    template void state(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx64> &state);
+    template void state(h5pp::File &h5file, const StorageInfo &sinfo, const StateInfinite<cx128> &state);
 
     template<typename Scalar>
     void edges(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<Scalar> &edges) {
@@ -74,8 +82,12 @@ namespace tools::infinite::h5::save {
         h5file.writeDataset(var.L, fmt::format("{}/varL", sinfo.get_mps_prefix()));
         h5file.writeDataset(var.R, fmt::format("{}/varR", sinfo.get_mps_prefix()));
     }
-    template void edges<cx64>(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<cx64> &edges);
-    template void edges<cx128>(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<cx128> &edges);
+    template void edges(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<fp32> &state);
+    template void edges(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<fp64> &state);
+    template void edges(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<fp128> &state);
+    template void edges(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<cx32> &state);
+    template void edges(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<cx64> &state);
+    template void edges(h5pp::File &h5file, const StorageInfo &sinfo, const EdgesInfinite<cx128> &state);
 
     template<typename Scalar>
     /*! Write down the Hamiltonian model type and site info as attributes */
@@ -90,8 +102,12 @@ namespace tools::infinite::h5::save {
         h5file.writeAttribute(enum2sv(settings::model::model_type), "model_type", table_path);
         h5file.writeAttribute(settings::model::model_size, "model_size", table_path);
     }
-    template void model<cx64>(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx64> &model);
-    template void model<cx128>(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx128> &model);
+    template void model(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<fp32> &state);
+    template void model(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<fp64> &state);
+    template void model(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<fp128> &state);
+    template void model(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx32> &state);
+    template void model(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx64> &state);
+    template void model(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx128> &state);
 
     template<typename Scalar>
     void mpo(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<Scalar> &model) {
@@ -110,8 +126,12 @@ namespace tools::infinite::h5::save {
         h5file.writeAttribute(2, "model_size", model_prefix);
         h5file.writeAttribute(enum2sv(settings::model::model_type), "model_type", model_prefix);
     }
-    template void mpo<cx64>(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx64> &model);
-    template void mpo<cx128>(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx128> &model);
+    template void mpo(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<fp32> &state);
+    template void mpo(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<fp64> &state);
+    template void mpo(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<fp128> &state);
+    template void mpo(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx32> &state);
+    template void mpo(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx64> &state);
+    template void mpo(h5pp::File &h5file, const StorageInfo &sinfo, const ModelInfinite<cx128> &state);
 
     template<typename Scalar>
     void measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<Scalar> &tensors, const AlgorithmStatus &status) {
@@ -122,10 +142,10 @@ namespace tools::infinite::h5::save {
         if(save_log[table_path] == save_point) return;
 
         log->trace("Appending to table: {}", table_path);
-        if(not h5file.linkExists(table_path)) h5file.createTable(h5pp_table_measurements_infinite::get_h5t(), table_path, "measurements");
+        if(not h5file.linkExists(table_path)) h5file.createTable(h5pp_table_measurements_infinite<Scalar>::get_h5t(), table_path, "measurements");
 
-        h5pp_table_measurements_infinite::table measurement_entry{};
-        const auto                             &state = *tensors.state;
+        typename h5pp_table_measurements_infinite<Scalar>::table measurement_entry{};
+        const auto                                     &state = *tensors.state;
 
         measurement_entry.step                 = safe_cast<uint64_t>(sinfo.step);
         measurement_entry.iter                 = safe_cast<uint64_t>(sinfo.iter);
@@ -155,4 +175,10 @@ namespace tools::infinite::h5::save {
         h5file.appendTableRecords(measurement_entry, table_path);
         save_log[table_path] = save_point;
     }
+    template void measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<fp32> &tensors, const AlgorithmStatus &status);
+    template void measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<fp64> &tensors, const AlgorithmStatus &status);
+    template void measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<fp128> &tensors, const AlgorithmStatus &status);
+    template void measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<cx32> &tensors, const AlgorithmStatus &status);
+    template void measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<cx64> &tensors, const AlgorithmStatus &status);
+    template void measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<cx128> &tensors, const AlgorithmStatus &status);
 }

@@ -17,7 +17,9 @@
 #include "tools/common/log.h"
 #include "tools/finite/env.h"
 #include "tools/finite/env/BondExpansionResult.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/hamiltonian.h"
+#include "tools/finite/measure/norm.h"
+#include "tools/finite/measure/spin.h"
 #include "tools/finite/mpo.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
@@ -128,7 +130,7 @@ void TensorsFinite<Scalar>::initialize_state(ResetReason reason, StateInit state
                       fv(tools::finite::measure::spin_components(get_state())));
 
     tools::finite::mps::initialize_state(get_state(), state_init, state_type, axis, use_eigenspinors, bond_lim, pattern);
-
+    state->assert_validity();
     tools::log->debug("Initializing state - After : norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm(get_state())),
                       fv(tools::finite::measure::spin_components(get_state())));
 }
@@ -193,7 +195,7 @@ void TensorsFinite<Scalar>::project_to_nearest_axis(std::string_view axis, std::
 
 template<typename Scalar>
 struct DebugStatus {
-    using RealScalar                                        = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar                                        = decltype(std::real(std::declval<Scalar>()));
     RealScalar                                          ene = std::numeric_limits<RealScalar>::quiet_NaN();
     RealScalar                                          red = std::numeric_limits<RealScalar>::quiet_NaN();
     RealScalar                                          var = std::numeric_limits<RealScalar>::quiet_NaN();

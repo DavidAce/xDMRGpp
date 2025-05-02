@@ -37,7 +37,8 @@ namespace Internal {
 /// \param a Matrix whose columns should be orthonormalized inplace. The matrix can be over a real
 /// or complex field.
 template <typename MatrixType> void modifiedGramSchmidt(MatrixType &a) {
-  using RealType = typename Eigen::NumTraits<typename MatrixType::Scalar>::Real;
+  using Scalar = typename MatrixType::Scalar;
+  using RealType = decltype(std::real(std::declval<Scalar>()));
 
   RealType largestNormSeen{0};
   // 100 is just an educated guess...

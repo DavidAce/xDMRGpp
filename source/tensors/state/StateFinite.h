@@ -39,7 +39,6 @@ class StateFinite {
         std::deque<std::pair<std::string, Eigen::Tensor<T, 3>>> mps           = {};
         std::deque<std::pair<std::string, Eigen::Tensor<T, 4>>> trf           = {};
         std::unordered_map<std::string, Eigen::Tensor<T, 4>>    temporary_rho = {};
-
     };
     template<typename T>
     struct TrfCacheEntry {
@@ -53,7 +52,6 @@ class StateFinite {
         trfref      trf;
     };
 
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
     enum class FindStaleKeys { OFF, ON };
     static constexpr bool debug_state           = false;
     static constexpr bool debug_cache           = false;
@@ -115,17 +113,19 @@ class StateFinite {
     double get_transfer_matrix_cost(const std::vector<size_t> &sites, std::string_view side, const std::optional<TrfCacheEntry<T>> &trf_cache) const;
 
     public:
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
+
     std::vector<std::unique_ptr<MpsSite<Scalar>>> mps_sites;
     std::vector<size_t>                           active_sites;
     mutable MeasurementsStateFinite<Scalar>       measurements;
     size_t popcount = -1ul; /*!< Number of 1's or particles in the product state pattern. Used in the fLBIT algorithm, which conserves the particle number. */
 
     StateFinite();
-    ~StateFinite() noexcept;                              // Read comment on implementation
-    StateFinite(StateFinite &&other) noexcept;            // default move ctor
-    StateFinite &operator=(StateFinite &&other) noexcept; // default move assign
-    StateFinite(const StateFinite &other) noexcept;                // copy ctor
-    StateFinite &operator=(const StateFinite &other) noexcept;     // copy assign
+    ~StateFinite() noexcept;                                   // Read comment on implementation
+    StateFinite(StateFinite &&other) noexcept;                 // default move ctor
+    StateFinite &operator=(StateFinite &&other) noexcept;      // default move assign
+    StateFinite(const StateFinite &other) noexcept;            // copy ctor
+    StateFinite &operator=(const StateFinite &other) noexcept; // copy assign
 
     template<typename T>
     StateFinite(const StateFinite<T> &other) noexcept;
@@ -272,7 +272,7 @@ class StateFinite {
     void                     tag_all_sites_normalized(bool tag) const;
     void                     tag_site_normalized(size_t pos, bool tag) const;
     const std::vector<bool> &get_normalization_tags() const;
-    bool                     is_normalized_on_all_sites() const;
+    bool                     is_normalized_on_all_sites(RealScalar prec = std::numeric_limits<RealScalar>::epsilon() * 100) const;
     bool                     is_normalized_on_any_sites() const;
     bool                     is_normalized_on_active_sites() const;
     bool                     is_normalized_on_non_active_sites() const;

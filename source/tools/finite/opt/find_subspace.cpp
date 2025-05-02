@@ -18,7 +18,7 @@
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
+#include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
@@ -186,9 +186,15 @@ std::vector<opt_mps<Scalar>> subspace::find_subspace(const TensorsFinite<Scalar>
 template std::vector<opt_mps<fp32>> subspace::find_subspace<fp32>(const TensorsFinite<fp32> &tensors, const OptMeta &meta, reports::subs_log<fp32> &subs_log);
 template std::vector<opt_mps<fp64>> subspace::find_subspace<fp64>(const TensorsFinite<fp64> &tensors, const OptMeta &meta, reports::subs_log<fp64> &subs_log);
 template std::vector<opt_mps<fp128>> subspace::find_subspace<fp128>(const TensorsFinite<fp128> &tensors, const OptMeta &meta, reports::subs_log<fp128> &subs_log);
+
 template std::vector<opt_mps<cx32>> subspace::find_subspace<fp32>(const TensorsFinite<cx32> &tensors, const OptMeta &meta, reports::subs_log<cx32> &subs_log);
 template std::vector<opt_mps<cx64>> subspace::find_subspace<fp64>(const TensorsFinite<cx64> &tensors, const OptMeta &meta, reports::subs_log<cx64> &subs_log);
 template std::vector<opt_mps<cx128>> subspace::find_subspace<fp128>(const TensorsFinite<cx128> &tensors, const OptMeta &meta, reports::subs_log<cx128> &subs_log);
+
+template std::vector<opt_mps<fp32>> subspace::find_subspace<cx32>(const TensorsFinite<fp32> &tensors, const OptMeta &meta, reports::subs_log<fp32> &subs_log);
+template std::vector<opt_mps<fp64>> subspace::find_subspace<cx64>(const TensorsFinite<fp64> &tensors, const OptMeta &meta, reports::subs_log<fp64> &subs_log);
+template std::vector<opt_mps<fp128>> subspace::find_subspace<cx128>(const TensorsFinite<fp128> &tensors, const OptMeta &meta, reports::subs_log<fp128> &subs_log);
+
 template std::vector<opt_mps<cx32>> subspace::find_subspace<cx32>(const TensorsFinite<cx32> &tensors, const OptMeta &meta, reports::subs_log<cx32> &subs_log);
 template std::vector<opt_mps<cx64>> subspace::find_subspace<cx64>(const TensorsFinite<cx64> &tensors, const OptMeta &meta, reports::subs_log<cx64> &subs_log);
 template std::vector<opt_mps<cx128>> subspace::find_subspace<cx128>(const TensorsFinite<cx128> &tensors, const OptMeta &meta, reports::subs_log<cx128> &subs_log);
@@ -612,7 +618,7 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite<Scalar> &m
     if constexpr(sfinae::is_std_complex_v<T>) {
         bool eigvecs_are_real = std::all_of(eigvecs.begin(), eigvecs.end(), [](const opt_mps<Scalar> &eigvec) { return tenx::isReal(eigvec.get_tensor()); });
         if(eigvecs_are_real and model.is_real() and edges.is_real()) {
-            using Real = typename Eigen::NumTraits<T>::Real;
+            using Real = decltype(std::real(std::declval<T>()));
             return get_hamiltonian_in_subspace<Real>(model, edges, eigvecs).template cast<T>();
         }
     }
@@ -656,18 +662,20 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite<Scalar> &m
 /* clang-format off */
 template MatrixType<fp32> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const std::vector<opt_mps<fp32>> &eigvecs);
 template MatrixType<fp32> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const std::vector<opt_mps<cx32>> &eigvecs);
+template MatrixType<cx32> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const std::vector<opt_mps<fp32>> &eigvecs);
 template MatrixType<cx32> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const std::vector<opt_mps<cx32>> &eigvecs);
-
 
 template MatrixType<fp64> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const std::vector<opt_mps<fp64>> &eigvecs);
 template MatrixType<fp64> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const std::vector<opt_mps<cx64>> &eigvecs);
+template MatrixType<cx64> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const std::vector<opt_mps<fp64>> &eigvecs);
 template MatrixType<cx64> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const std::vector<opt_mps<cx64>> &eigvecs);
 
 template MatrixType<fp128> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const std::vector<opt_mps<fp128>> &eigvecs);
 template MatrixType<fp128> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const std::vector<opt_mps<cx128>> &eigvecs);
+template MatrixType<cx128> subspace::get_hamiltonian_in_subspace(const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const std::vector<opt_mps<fp128>> &eigvecs);
 template MatrixType<cx128> subspace::get_hamiltonian_in_subspace(const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const std::vector<opt_mps<cx128>> &eigvecs);
-
 /* clang-format on */
+
 
 template<typename T, typename Scalar>
 MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
@@ -675,7 +683,7 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<Sc
     if constexpr(sfinae::is_std_complex_v<T>) {
         bool eigvecs_are_real = std::all_of(eigvecs.begin(), eigvecs.end(), [](const opt_mps<Scalar> &eigvec) { return tenx::isReal(eigvec.get_tensor()); });
         if(eigvecs_are_real and model.is_real() and edges.is_real()) {
-            using Real = typename Eigen::NumTraits<T>::Real;
+            using Real = decltype(std::real(std::declval<T>()));
             return get_hamiltonian_squared_in_subspace<Real>(model, edges, eigvecs).template cast<T>();
         }
     }
@@ -720,14 +728,16 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<Sc
 /* clang-format off */
 template MatrixType<fp32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const std::vector<opt_mps<fp32>> &eigvecs);
 template MatrixType<fp32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const std::vector<opt_mps<cx32>> &eigvecs);
+template MatrixType<cx32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp32> &model, const EdgesFinite<fp32> &edges, const std::vector<opt_mps<fp32>> &eigvecs);
 template MatrixType<cx32> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx32> &model, const EdgesFinite<cx32> &edges, const std::vector<opt_mps<cx32>> &eigvecs);
-
 
 template MatrixType<fp64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const std::vector<opt_mps<fp64>> &eigvecs);
 template MatrixType<fp64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const std::vector<opt_mps<cx64>> &eigvecs);
+template MatrixType<cx64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp64> &model, const EdgesFinite<fp64> &edges, const std::vector<opt_mps<fp64>> &eigvecs);
 template MatrixType<cx64> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx64> &model, const EdgesFinite<cx64> &edges, const std::vector<opt_mps<cx64>> &eigvecs);
 
 template MatrixType<fp128> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const std::vector<opt_mps<fp128>> &eigvecs);
 template MatrixType<fp128> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const std::vector<opt_mps<cx128>> &eigvecs);
+template MatrixType<cx128> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<fp128> &model, const EdgesFinite<fp128> &edges, const std::vector<opt_mps<fp128>> &eigvecs);
 template MatrixType<cx128> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<cx128> &model, const EdgesFinite<cx128> &edges, const std::vector<opt_mps<cx128>> &eigvecs);
 /* clang-format on */

@@ -6,6 +6,9 @@
 #include "math/tenx/eval.h"
 #include "math/tenx/threads.h"
 #include <complex>
+#include "contraction/InvMatVecCfg.h"
+
+template<typename Scalar> struct InvMatVecCfg;
 
 namespace tools::common::contraction {
     template<typename T>
@@ -63,12 +66,14 @@ namespace tools::common::contraction {
                                const Scalar * const envL_ptr, std::array<long,3> envL_dims,
                                const Scalar * const envR_ptr, std::array<long,3> envR_dims);
 
+
     template<typename Scalar>
     void matrix_inverse_vector_product(      Scalar * res_ptr,
                                        const Scalar * const mps_ptr, std::array<long,3> mps_dims,
                                        const Scalar * const mpo_ptr, std::array<long,4> mpo_dims,
                                        const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                                       const Scalar * const envR_ptr, std::array<long,3> envR_dims);
+                                       const Scalar * const envR_ptr, std::array<long,3> envR_dims,
+                                       InvMatVecCfg<Scalar> cfg = InvMatVecCfg<Scalar>());
 
     template<typename mps_type, typename mpo_type, typename env_type>
     auto expectation_value(const TensorRead<mps_type> & mps,
@@ -178,7 +183,8 @@ namespace tools::common::contraction {
         const TensorRead<mps_type> & mps,
         const TensorRead<mpo_type> & mpo,
         const TensorRead<env_type> & envL,
-        const TensorRead<env_type> & envR){
+        const TensorRead<env_type> & envR,
+        InvMatVecCfg<typename res_type::Scalar> cfg = InvMatVecCfg<typename res_type::Scalar>()){
         static_assert(res_type::NumIndices == 3 and "Wrong res tensor rank != 3 passed to calculation of matrix_vector_product");
         static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of matrix_vector_product");
         static_assert(mpo_type::NumIndices == 4 and "Wrong mpo tensor rank != 4 passed to calculation of matrix_vector_product");
@@ -193,7 +199,8 @@ namespace tools::common::contraction {
             mps_eval.data(), mps_eval.dimensions(),
             mpo_eval.data(), mpo_eval.dimensions(),
             envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions());
+            envR_eval.data(), envR_eval.dimensions(),
+            cfg);
     }
 
     /* clang-format on */
@@ -249,7 +256,6 @@ namespace tools::common::contraction {
         contract_bnd_mps(res_ref.data(), res_ref.dimensions(), bnd_eval.data(), bnd_eval.dimensions(), mps_eval.data(), mps_eval.dimensions());
     }
 
-
     template<typename mps_type, typename bnd_type>
     [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_mps_bnd(const TensorRead<mps_type> &mps, const TensorRead<bnd_type> &bnd) {
         Eigen::Tensor<typename mps_type::Scalar, 3> res;
@@ -277,7 +283,6 @@ namespace tools::common::contraction {
         res_ref.resize(res_dims);
         contract_mps_mps(res_ref.data(), res_ref.dimensions(), mpsL_eval.data(), mpsL_eval.dimensions(), mpsR_eval.data(), mpsR_eval.dimensions());
     }
-
 
     template<typename mps_type>
     [[nodiscard]] Eigen::Tensor<typename mps_type::Scalar, 3> contract_mps_mps(const TensorRead<mps_type> &mpsL, const TensorRead<mps_type> &mpsR) {

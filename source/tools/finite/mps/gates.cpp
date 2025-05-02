@@ -207,7 +207,7 @@ template<typename Scalar>
 void tools::finite::mps::apply_gates(StateFinite<Scalar> &state, const std::vector<Eigen::Tensor<Scalar, 2>> &nsite_tensors, size_t gate_size, CircuitOp cop,
                                      bool moveback, GateMove gm, std::optional<svd::config> svd_cfg) {
     // Pack the two-site operators into a vector of qm::Gates
-    // using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    // using RealScalar = decltype(std::real(std::declval<Scalar>()));
     // using CplxScalar = std::complex<RealScalar>;
     std::vector<qm::Gate> gates;
     gates.reserve(nsite_tensors.size());

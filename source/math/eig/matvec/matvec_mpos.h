@@ -4,10 +4,10 @@
 #include <array>
 #include <complex>
 #include <Eigen/Cholesky>
-#include <Eigen/IterativeLinearSolvers>
+// #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/LU>
 #include <Eigen/Sparse>
-#include <Eigen/SparseCholesky>
+// #include <Eigen/SparseCholesky>
 #include <memory>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
@@ -17,7 +17,7 @@ namespace tid {
 }
 template<typename Scalar> class MpoSite;
 template<typename Scalar> struct env_pair;
-
+template<typename Scalar> struct InvMatVecCfg;
 struct primme_params;
 
 template<typename Scalar_>
@@ -26,7 +26,7 @@ class MatVecMPOS {
 
     public:
     using Scalar     = Scalar_;
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     using CplxScalar = std::complex<RealScalar>;
     using T32        = std::conditional_t<std::is_same_v<Scalar, fp64>, float, std::complex<float>>;
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
@@ -48,17 +48,21 @@ class MatVecMPOS {
 
     std::vector<Eigen::Tensor<Scalar, 4>> mpos_A, mpos_B, mpos_A_shf, mpos_B_shf;
     Eigen::Tensor<Scalar, 3>              envL_A, envR_A, envL_B, envR_B;
-    std::array<long, 3>                   shape_mps;
-    long                                  size_mps;
-    std::vector<long>                     spindims;
-    eig::Form                             form            = eig::Form::SYMM;
-    eig::Side                             side            = eig::Side::R;
-    std::optional<Scalar>                 jcbShift        = std::nullopt;
-    long                                  jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
-    VectorType                            jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
-    VectorType                            invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
-    std::vector<std::pair<long, SparseType>> sInvJcbBlocks;     // inverted blocks for the block Jacobi preconditioner stored as sparse matrices
-    std::vector<std::pair<long, MatrixType>> dInvJcbBlocks;     // inverted blocks for the block Jacobi preconditioner stored as dense matrices
+    void                                  init_mpos_A();
+    void                                  init_mpos_B();
+
+    std::array<long, 3>   shape_mps;
+    long                  size_mps;
+    std::vector<long>     spindims;
+    eig::Form             form            = eig::Form::SYMM;
+    eig::Side             side            = eig::Side::R;
+    std::optional<Scalar> jcbShift        = std::nullopt;
+    long                  jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
+    VectorType            jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
+    VectorType            invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
+    mutable VectorType    invJcbDiagB; // Userd with spectra
+    std::vector<std::pair<long, SparseType>> sInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as sparse matrices
+    std::vector<std::pair<long, MatrixType>> dInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as dense matrices
     // std::vector<std::pair<long, MatrixType>> dJcbBlocksA;   // the blocks for the Jacobi preconditioner stored as dense matrices
     // std::vector<std::pair<long, MatrixType>> dJcbBlocksB;   // the blocks for the Jacobi preconditioner stored as dense matrices
 
@@ -71,21 +75,48 @@ class MatVecMPOS {
     using LDLTType = Eigen::LDLT<MatrixType, Eigen::Lower>;
     std::vector<std::tuple<long, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
 
-    using BICGType = Eigen::BiCGSTAB<SparseRowM, Eigen::IncompleteLUT<Scalar>>;
-    std::vector<std::tuple<long, std::unique_ptr<SparseRowM>, std::unique_ptr<BICGType>>> bicgstabJcbBlocks; // Solvers for the block Jacobi preconditioner
+    // using BICGType = Eigen::BiCGSTAB<SparseRowM, Eigen::IncompleteLUT<Scalar>>;
+    // std::vector<std::tuple<long, std::unique_ptr<SparseRowM>, std::unique_ptr<BICGType>>> bicgstabJcbBlocks; // Solvers for the block Jacobi preconditioner
 
     // using CGType = Eigen::ConjugateGradient<SparseType, Eigen::Lower | Eigen::Upper, Eigen::SimplicialLLT<SparseType>>;
-    using CGType = Eigen::ConjugateGradient<SparseType, Eigen::Lower | Eigen::Upper, Eigen::IncompleteCholesky<Scalar, Eigen::Lower | Eigen::Upper>>;
-    std::vector<std::tuple<long, std::unique_ptr<SparseType>, std::unique_ptr<CGType>>> cgJcbBlocks; // Solvers for the block Jacobi preconditioner
+    // using CGType = Eigen::ConjugateGradient<SparseType, Eigen::Lower | Eigen::Upper, Eigen::IncompleteCholesky<Scalar, Eigen::Lower | Eigen::Upper>>;
+    // std::vector<std::tuple<long, std::unique_ptr<SparseType>, std::unique_ptr<CGType>>> cgJcbBlocks; // Solvers for the block Jacobi preconditioner
 
     Eigen::LLT<MatrixType>          llt;  // Stores the llt matrix factorization on shift-invert
     Eigen::PartialPivLU<MatrixType> lu;   // Stores the lu matrix factorization on shift-invert
     Eigen::LDLT<MatrixType>         ldlt; // Stores the ldlt matrix factorization on shift-invert
 
-    SparseType        sparseMatrix;
-    VectorType        solverGuess;
-    std::vector<long> get_k_smallest(const VectorType &vec, size_t k) const;
-    std::vector<long> get_k_largest(const VectorType &vec, size_t k) const;
+    SparseType                      sparseMatrix;
+    VectorType                      solverGuess;
+    [[nodiscard]] std::vector<long> get_k_smallest(const VectorType &vec, size_t k) const;
+    [[nodiscard]] std::vector<long> get_k_largest(const VectorType &vec, size_t k) const;
+
+    [[nodiscard]] std::vector<long> get_offset(long x, long rank, long size) const;
+
+    // template<size_t rank>
+    // constexpr std::array<long, rank> get_offset(long flatindex, const std::array<long, rank> &dimensions);
+
+    [[nodiscard]] std::vector<long> get_offset(long flatindex, size_t rank, const std::vector<long> &dimensions) const;
+    template<size_t rank>
+    [[nodiscard]] constexpr std::array<long, rank> get_offset(long flatindex, const std::array<long, rank> &dimensions) const;
+
+    // template<typename TI>
+    // TI HammingDist(TI x, TI y);
+
+    [[nodiscard]] long round_dn(long num, long multiple) const;
+    [[nodiscard]] long round_up(long num, long multiple) const;
+
+    template<auto rank>
+    [[nodiscard]] constexpr long ravel_multi_index(const std::array<long, rank> &multi_index, const std::array<long, rank> &dimensions,
+                                                   char order = 'F') const noexcept;
+
+    template<auto rank>
+    [[nodiscard]] constexpr std::array<long, rank> get_extent(long N, const std::array<long, rank> &dimensions,
+                                                              const std::array<long, rank> &offsets = {0}) const;
+
+    template<auto rank>
+    [[nodiscard]] constexpr std::array<long, rank> get_extent(const std::array<long, rank> &I0, const std::array<long, rank> &IN,
+                                                              const std::array<long, rank> &dimensions) const;
 
     Scalar     get_matrix_element(long I, long J, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
                                   const Eigen::Tensor<Scalar, 3> &ENVR) const;
@@ -140,6 +171,9 @@ class MatVecMPOS {
     void MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
     void MultBx(Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
+    void MultBx(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long maxiters = 200,
+                   RealScalar tolerance = 2e-3f) const;             //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void perform_op(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
 
     Eigen::Tensor<Scalar, 3> operator*(const Eigen::Tensor<Scalar, 3> &x) const;

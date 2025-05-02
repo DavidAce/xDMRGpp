@@ -24,7 +24,7 @@ template<typename T>
 Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> linalg::matrix::modified_gram_schmidt(const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &Vconst) {
     // Orthonormalize with Modified Gram Schmidt
     using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-    using Real       = typename Eigen::NumTraits<T>::Real;
+    using Real       = decltype(std::real(std::declval<T>()));
     MatrixType V     = Vconst;
     MatrixType Q     = MatrixType::Zero(V.rows(), V.cols());
     MatrixType R     = MatrixType::Zero(V.cols(), V.cols());

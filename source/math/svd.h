@@ -16,7 +16,7 @@ namespace svd {
     template<typename Scalar>
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     template<typename T>
-    using RealScalar = typename Eigen::NumTraits<T>::Real;
+    using RealScalar = decltype(std::real(std::declval<T>()));
 
     namespace internal {
         // LAPACK uses internal workspace arrays which can be reused for the duration of the program.
@@ -25,7 +25,7 @@ namespace svd {
 
         template<typename Scalar>
         struct DumpSVD {
-            using Real       = typename Eigen::NumTraits<Scalar>::Real;
+            using Real       = decltype(std::real(std::declval<Scalar>()));
             using Cplx       = std::complex<Real>;
             using VectorReal = Eigen::Matrix<Real, Eigen::Dynamic, 1>;
             using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;

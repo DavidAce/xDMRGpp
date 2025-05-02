@@ -3,23 +3,18 @@
 #include "../opt_mps.h"
 #include "algorithms/AlgorithmStatus.h"
 #include "config/settings.h"
-#include "general/iter.h"
 #include "general/sfinae.h"
 #include "math/eig.h"
-#include "math/eig/matvec/matvec_mpo.h"
 #include "math/eig/matvec/matvec_mpos.h"
-#include "math/eig/matvec/matvec_zero.h"
+#include "math/num.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/state/StateFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
-#include <math/num.h>
 #include <primme/primme.h>
 
 namespace tools::finite::opt {
@@ -112,10 +107,10 @@ namespace tools::finite::opt {
             solver.config.primme_maxBlockSize, solver.config.primme_targetShifts, solver.config.maxIter.value(), solver.config.tol.value(),
             hamiltonian_squared.get_shape_mps(), hamiltonian_squared.rows(), solver.config.jcbMaxBlockSize);
 
-        auto init = gsi::get_initial_guess_mps<Scalar>(initial_mps, results, solver.config.maxNev.value()); // Init holds the data in memory for this scope
+        auto init = gsi::get_initial_guess_mps<CalcType>(initial_mps, results, solver.config.maxNev.value()); // Init holds the data in memory for this scope
         for(auto &i : init) solver.config.initial_guess.push_back({i.mps.data(), i.idx});
         solver.eigs(hamiltonian_squared);
-        internal::extract_results(tensors, initial_mps, meta, solver, results, false);
+        internal::extract_results<CalcType>(tensors, initial_mps, meta, solver, results, false);
     }
 
     template<typename CalcType, typename Scalar>
@@ -149,6 +144,10 @@ namespace tools::finite::opt {
             default: throw except::logic_error("undhandled ritz: {}", enum2sv(meta.optRitz));
         }
 
+        cfg.lib  = eig::Lib::SPECTRA;
+        cfg.ritz = eig::stringToRitz(enum2sv(meta.optRitz));
+        // cfg.tol = 1e-10;
+
         cfg.primme_massMatrixMatvec = gsi::massMatrixMatvec<CalcType>;
         cfg.primme_projection       = meta.primme_projection.value_or("primme_proj_RR");
         // cfg.primme_projection       = meta.primme_projection.value_or("primme_proj_default");
@@ -173,9 +172,6 @@ namespace tools::finite::opt {
                                                                 [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta,
                                                                 reports::eigs_log<Scalar> &elog) {
         if(meta.optSolver == OptSolver::EIG) return optimize_generalized_shift_invert_eig(tensors, initial_mps, status, meta, elog);
-        if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
-            throw except::runtime_error("optimize_generalized_shift_invert(): not implemented for type {}", enum2sv(meta.optType));
-         }
 
         // auto meta2          = meta;
         // meta2.optSolver     = OptSolver::H1H2;
@@ -193,14 +189,22 @@ namespace tools::finite::opt {
         std::vector<opt_mps<Scalar>> results;
         if constexpr(sfinae::is_std_complex_v<Scalar>) {
             switch(meta.optType) {
+                case OptType::FP32: eigs_manager_generalized_shift_invert<fp32>(tensors, initial_mps, results, meta); break;
                 case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta); break;
+                case OptType::FP128: eigs_manager_generalized_shift_invert<fp128>(tensors, initial_mps, results, meta); break;
+                case OptType::CX32: eigs_manager_generalized_shift_invert<cx32>(tensors, initial_mps, results, meta); break;
                 case OptType::CX64: eigs_manager_generalized_shift_invert<cx64>(tensors, initial_mps, results, meta); break;
+                case OptType::CX128: eigs_manager_generalized_shift_invert<cx128>(tensors, initial_mps, results, meta); break;
                 default: throw except::runtime_error("optimize_generalized_shift_invert(): not implemented for type {}", enum2sv(meta.optType));
             }
         } else {
             switch(meta.optType) {
+                case OptType::FP32: eigs_manager_generalized_shift_invert<fp32>(tensors, initial_mps, results, meta); break;
                 case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta); break;
+                case OptType::FP128: eigs_manager_generalized_shift_invert<fp128>(tensors, initial_mps, results, meta); break;
+                case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
                 case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
+                case OptType::CX128: throw except::logic_error("Cannot run OptType::CX128 with Scalar type {}", sfinae::type_name<Scalar>());
                 default: throw except::runtime_error("optimize_generalized_shift_invert(): not implemented for type {}", enum2sv(meta.optType));
             }
         }

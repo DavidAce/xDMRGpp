@@ -18,7 +18,7 @@ template<typename T, bool sparseLU = false>
 class MatVecSparse {
     public:
     using Scalar                                   = T;
-    using Real                                     = typename Eigen::NumTraits<Scalar>::Real;
+    using Real                                     = decltype(std::real(std::declval<Scalar>()));
     using Cplx                                     = std::complex<Real>;
     using MatrixType                               = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorType                               = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
@@ -61,8 +61,9 @@ class MatVecSparse {
     void              perform_op(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
 
     // Various utility functions
-    mutable long                             num_mv = 0;
-    mutable long                             num_op = 0;
+    mutable long num_mv = 0;
+    mutable long num_op = 0;
+    mutable long num_pc = 0;
     void                                     print() const;
     void                                     set_shift(Cplx sigma_);
     void                                     set_mode(const eig::Form form_);

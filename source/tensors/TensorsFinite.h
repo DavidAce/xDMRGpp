@@ -12,7 +12,7 @@
 #include <memory>
 #include <tensors/edges/EdgesFinite.h>
 #include <tensors/model/ModelFinite.h>
-#include <tensors/state/StateFinite.h>
+// #include <tensors/state/StateFinite.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 
 class TensorsLocal;
@@ -31,7 +31,7 @@ namespace tools::finite::opt {
 template<typename Scalar>
 class TensorsFinite {
     using OptMeta    = tools::finite::opt::OptMeta;
-    using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
 
     private:
     template<typename T>

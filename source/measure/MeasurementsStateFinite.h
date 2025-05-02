@@ -7,7 +7,7 @@
 
 template<typename Scalar>
 struct MeasurementsStateFinite {
-    using RealScalar                                                             = typename Eigen::NumTraits<Scalar>::Real;
+    using RealScalar                                                             = decltype(std::real(std::declval<Scalar>()));
     using RealArrayX                                                             = Eigen::Array<RealScalar, Eigen::Dynamic, 1>;
     using RealArrayXX                                                            = Eigen::Array<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
     std::optional<size_t>                       length                           = std::nullopt;
@@ -43,6 +43,6 @@ struct MeasurementsStateFinite {
     std::optional<RealArrayXX>                  subsystem_entanglement_entropies = std::nullopt;
     std::optional<RealArrayXX>                  information_lattice              = std::nullopt;
     std::optional<RealArrayX>                   information_per_scale            = std::nullopt;
-    std::optional<double>                       information_center_of_mass       = std::nullopt;
+    std::optional<RealScalar>                   information_center_of_mass       = std::nullopt;
     std::optional<double>                       see_time = std::nullopt; /*! The time it took to calculate the last subsystem_entanglement_entropies */
 };
