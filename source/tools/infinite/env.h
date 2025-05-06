@@ -8,7 +8,7 @@ class EdgesInfinite;
 
 namespace tools::infinite::env {
     template<typename Scalar>
-    extern void reset_edges(const StateInfinite<Scalar> &state, const ModelInfinite<Scalar> &model, EdgesInfinite<Scalar> &edges);
+    void reset_edges(const StateInfinite<Scalar> &state, const ModelInfinite<Scalar> &model, EdgesInfinite<Scalar> &edges);
     template<typename Scalar>
-    extern void enlarge_edges(const StateInfinite<Scalar> &state, const ModelInfinite<Scalar> &model, EdgesInfinite<Scalar> &edges);
+    void enlarge_edges(const StateInfinite<Scalar> &state, const ModelInfinite<Scalar> &model, EdgesInfinite<Scalar> &edges);
 }

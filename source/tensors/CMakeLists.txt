@@ -5,7 +5,14 @@ add_subdirectory(state)
 
 add_source_target(xdmrg++-tensors-finite
                   TARGET_SOURCES
-                  TensorsFinite.cpp
+                  TensorsFinite/cx32.cpp
+                  TensorsFinite/cx64.cpp
+                  TensorsFinite/cx128.cpp
+                  TensorsFinite/fp32.cpp
+                  TensorsFinite/fp64.cpp
+                  TensorsFinite/fp128.cpp
+
+
                   OBJECT_LINK_LIBRARIES
                   xdmrg++-deps xdmrg++-flags
                   INTERFACE_LINK_LIBRARIES
@@ -28,7 +35,13 @@ add_source_target(xdmrg++-tensors-finite
                   )
 add_source_target(xdmrg++-tensors-infinite
         TARGET_SOURCES
-        TensorsInfinite.cpp
+        TensorsInfinite/cx32.cpp
+        TensorsInfinite/cx64.cpp
+        TensorsInfinite/cx128.cpp
+        TensorsInfinite/fp32.cpp
+        TensorsInfinite/fp64.cpp
+        TensorsInfinite/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

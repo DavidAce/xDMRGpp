@@ -216,6 +216,9 @@ namespace tenx::sfinae {
     concept is_double_prec_v = type_is<T, fp64> or type_is<T, cx64>;
 
     template<typename T>
+    concept is_long_double_prec_v = type_is<T, long double> or type_is<T, std::complex<long double>>;
+
+    template<typename T>
     concept is_quadruple_prec_v = type_is<T, fp128> or type_is<T, cx128>;
 
 }

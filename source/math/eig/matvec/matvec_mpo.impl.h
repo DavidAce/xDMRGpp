@@ -19,12 +19,6 @@ namespace eig {
 }
 
 // Explicit instantiations
-template class MatVecMPO<fp32>;
-template class MatVecMPO<fp64>;
-template class MatVecMPO<fp128>;
-template class MatVecMPO<cx32>;
-template class MatVecMPO<cx64>;
-template class MatVecMPO<cx128>;
 template<typename T> void MatVecMPO<T>::init_timers() {
     t_factorOP = std::make_unique<tid::ur>("Time FactorOp");
     t_genMat   = std::make_unique<tid::ur>("Time genMat");

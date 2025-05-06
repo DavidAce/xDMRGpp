@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "math/float.h"
+#include "unsupported/Eigen/KroneckerProduct"
 #include <Eigen/Core>
 
 namespace linalg::matrix {
@@ -17,8 +18,12 @@ namespace linalg::matrix {
                                               multiply<DA::ColsAtCompileTime, DB::ColsAtCompileTime>(), Eigen::ColMajor>;
 
     template<typename DerivedA, typename DerivedB>
-    extern KroneckerResultType<DerivedA, DerivedB> kronecker(const Eigen::PlainObjectBase<DerivedA> &A, const Eigen::PlainObjectBase<DerivedB> &B,
-                                                             bool mirror = false);
+    KroneckerResultType<DerivedA, DerivedB> kronecker(const Eigen::PlainObjectBase<DerivedA> &A, const Eigen::PlainObjectBase<DerivedB> &B, bool mirror) {
+        if(mirror)
+            return Eigen::kroneckerProduct(B.derived(), A.derived());
+        else
+            return Eigen::kroneckerProduct(A.derived(), B.derived());
+    }
 
     template<typename DerivedA, typename DerivedB>
     auto kronecker(const Eigen::EigenBase<DerivedA> &A, const Eigen::EigenBase<DerivedB> &B, bool mirror = false) {
@@ -58,11 +63,11 @@ namespace linalg::matrix {
                         s += '(';
                         auto roffset = s.size();
                         s.resize(roffset + static_cast<size_t>(rextent));
-                        quadmath_snprintf(s.data() + roffset, static_cast<size_t>(rextent+1), fmt.data(), m.derived()(i, j).real());
+                        quadmath_snprintf(s.data() + roffset, static_cast<size_t>(rextent + 1), fmt.data(), m.derived()(i, j).real());
                         s += ',';
                         auto ioffset = s.size();
                         s.resize(ioffset + static_cast<size_t>(iextent));
-                        quadmath_snprintf(s.data() + ioffset, static_cast<size_t>(iextent+1), fmt.data(), m.derived()(i, j).imag());
+                        quadmath_snprintf(s.data() + ioffset, static_cast<size_t>(iextent + 1), fmt.data(), m.derived()(i, j).imag());
                         s += ')';
                         if(j + 1 != m.derived().cols()) s += f.coeffSeparator;
                     }
@@ -92,7 +97,7 @@ namespace linalg::matrix {
                     if(extent < 0) throw std::runtime_error("quadmath_snprintf returned < 0");
                     auto offset = s.size();
                     s.resize(s.size() + static_cast<size_t>(extent));
-                    quadmath_snprintf(s.data() + offset, static_cast<size_t>(extent+1), fmt.data(), m.derived()(i, j));
+                    quadmath_snprintf(s.data() + offset, static_cast<size_t>(extent + 1), fmt.data(), m.derived()(i, j));
                     if(j + 1 != m.derived().cols()) s += f.coeffSeparator;
                 }
                 s += f.rowSuffix;
@@ -114,5 +119,27 @@ namespace linalg::matrix {
     }
 
     template<typename T>
-    extern Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> modified_gram_schmidt(const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &V);
+    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> modified_gram_schmidt(const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &Vconst) {
+        // Orthonormalize with Modified Gram Schmidt
+        using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+        using Real       = decltype(std::real(std::declval<T>()));
+        MatrixType V     = Vconst;
+        MatrixType Q     = MatrixType::Zero(V.rows(), V.cols());
+        MatrixType R     = MatrixType::Zero(V.cols(), V.cols());
+        for(long i = 0; i < V.cols(); ++i) {
+            Q.col(i) = V.col(i);
+            R(i, i)  = Q.col(i).norm();
+            if(std::abs(R(i, i)) < std::numeric_limits<Real>::epsilon()) {
+                // tools::log->error("Q.col({}) is a zero vector:\n Q: \n{}\n", i, linalg::matrix::to_string(Q.real(), 8));
+                continue;
+            }
+            Q.col(i) /= R(i, i);
+            for(long j = i + 1; j < V.cols(); ++j) {
+                R(i, j) = Q.col(i).dot(V.col(j));
+                V.col(j) -= Q.col(i) * R(i, j);
+            }
+        }
+        return Q;
+    }
+
 }

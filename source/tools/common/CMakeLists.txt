@@ -15,12 +15,44 @@ add_source_target(xdmrg++-tools-common-prof
         )
 add_source_target(xdmrg++-tools-common-split
         TARGET_SOURCES
-        split/split.fp32.cpp
-        split/split.fp64.cpp
-        split/split.fp128.cpp
-        split/split.cx32.cpp
-        split/split.cx64.cpp
-        split/split.cx128.cpp
+        split/cx32/cx32.cpp
+        split/cx32/cx64.cpp
+        split/cx32/cx128.cpp
+        split/cx32/fp32.cpp
+        split/cx32/fp64.cpp
+        split/cx32/fp128.cpp
+        split/cx64/cx32.cpp
+        split/cx64/cx64.cpp
+        split/cx64/cx128.cpp
+        split/cx64/fp32.cpp
+        split/cx64/fp64.cpp
+        split/cx64/fp128.cpp
+        split/cx128/cx32.cpp
+        split/cx128/cx64.cpp
+        split/cx128/cx128.cpp
+        split/cx128/fp32.cpp
+        split/cx128/fp64.cpp
+        split/cx128/fp128.cpp
+        split/fp32/cx32.cpp
+        split/fp32/cx64.cpp
+        split/fp32/cx128.cpp
+        split/fp32/fp32.cpp
+        split/fp32/fp64.cpp
+        split/fp32/fp128.cpp
+        split/fp64/cx32.cpp
+        split/fp64/cx64.cpp
+        split/fp64/cx128.cpp
+        split/fp64/fp32.cpp
+        split/fp64/fp64.cpp
+        split/fp64/fp128.cpp
+        split/fp128/cx32.cpp
+        split/fp128/cx64.cpp
+        split/fp128/cx128.cpp
+        split/fp128/fp32.cpp
+        split/fp128/fp64.cpp
+        split/fp128/fp128.cpp
+
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -33,7 +65,13 @@ add_source_target(xdmrg++-tools-common-split
         )
 add_source_target(xdmrg++-tools-common-views
         TARGET_SOURCES
-        views.cpp
+        views/cx32.cpp
+        views/cx64.cpp
+        views/cx128.cpp
+        views/fp32.cpp
+        views/fp64.cpp
+        views/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

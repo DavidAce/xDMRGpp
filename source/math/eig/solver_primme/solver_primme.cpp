@@ -323,7 +323,6 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     using Scalar  = typename MatrixProductType::Scalar;
     auto t_primme = tid::tic_scope("primme", tid::level::higher);
     auto t_prep   = tid::tic_scope("prep");
-    eig::log->warn("Setting up PRIMME ...");
     using Real = decltype(std::real(std::declval<Scalar>()));
     if constexpr(MatrixProductType::can_shift) {
         if(config.sigma) {
@@ -475,7 +474,6 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     static_assert(eig::sfinae::is_any_v<Scalar, fp32, fp64, cx32,cx64>);
     using Real = decltype(std::real(std::declval<Scalar>()));
     auto res = std::vector<Real>(static_cast<size_t>(primme.numEvals));
-    eig::log->warn("Running some PRIMME ... {}", sfinae::type_name<Scalar>());
 
     if constexpr(std::is_same_v<Scalar, fp32>) {
         try {

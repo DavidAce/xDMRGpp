@@ -170,7 +170,7 @@ class TensorsFinite {
 };
 
 template<typename T>
-extern Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &envL, const Eigen::Tensor<T, 3> &envR);
+Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &envL, const Eigen::Tensor<T, 3> &envR);
 
 template<typename Scalar>
 template<typename T>

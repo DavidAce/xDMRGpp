@@ -10,8 +10,8 @@ template<typename Scalar>
 class TensorsFinite;
 namespace tools::finite::print {
     template<typename Scalar>
-    extern void dimensions(const TensorsFinite<Scalar> &tensors);
+    void dimensions(const TensorsFinite<Scalar> &tensors);
     template<typename Scalar>
-    extern void model(const ModelFinite<Scalar> &model);
+    void model(const ModelFinite<Scalar> &model);
 
 }

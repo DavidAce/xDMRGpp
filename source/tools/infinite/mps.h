@@ -11,7 +11,7 @@ template<typename Scalar>
 class StateInfinite;
 namespace tools::infinite::mps {
     template<typename Scalar>
-    extern void merge_twosite_tensor(StateInfinite<Scalar> &state, const Eigen::Tensor<Scalar, 3> &twosite_tensor, MergeEvent mevent,
+    void merge_twosite_tensor(StateInfinite<Scalar> &state, const Eigen::Tensor<Scalar, 3> &twosite_tensor, MergeEvent mevent,
                                      std::optional<svd::config> svd_cfg = std::nullopt);
 
     template<typename Scalar>

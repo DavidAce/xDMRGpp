@@ -1,3 +1,4 @@
+#pragma once
 #include "../contraction.h"
 #include "math/tenx.h"
 

@@ -1,12 +1,15 @@
 #include "../spin.impl.h"
 
 using Scalar = cx128;
-
+using Real = fp128;
+using Cplx = cx128;
 /* clang-format off */
 
 template std::array<RealScalar<Scalar>, 3>  tools::finite::measure::spin_components(const StateFinite<Scalar> &state);
 
-template RealScalar<Scalar>  tools::finite::measure::spin_component(const StateFinite<Scalar> &state, const Eigen::Matrix2cd &paulimatrix);
+template RealScalar<Scalar>  tools::finite::measure::spin_component<Real>(const StateFinite<Scalar> &state, const Eigen::Matrix2cd &paulimatrix);
+
+template RealScalar<Scalar>  tools::finite::measure::spin_component<Cplx>(const StateFinite<Scalar> &state, const Eigen::Matrix2cd &paulimatrix);
 
 template RealScalar<Scalar>  tools::finite::measure::spin_component(const StateFinite<Scalar> &state, std::string_view axis);
 

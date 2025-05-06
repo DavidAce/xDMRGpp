@@ -31,43 +31,43 @@ namespace tools::finite::measure {
 
     /* clang-format off */
     template<typename CalcType, typename Scalar,typename OpType>
-    [[nodiscard]] extern CalcType                   expectation_value      (const StateFinite<Scalar> & state, const std::vector<LocalObservableOp<OpType>> & ops);
+    [[nodiscard]] CalcType                   expectation_value      (const StateFinite<Scalar> & state, const std::vector<LocalObservableOp<OpType>> & ops);
     template<typename CalcType, typename Scalar, typename MpoType>
-    [[nodiscard]] extern CalcType                   expectation_value      (const StateFinite<Scalar> & state, const std::vector<LocalObservableMpo<MpoType>> & mpos);
+    [[nodiscard]] CalcType                   expectation_value      (const StateFinite<Scalar> & state, const std::vector<LocalObservableMpo<MpoType>> & mpos);
     template<typename CalcType, typename Scalar, typename MpoType>
-    [[nodiscard]] extern CalcType                   expectation_value      (const StateFinite<Scalar> & state1, const StateFinite<Scalar> & state2, const std::vector<Eigen::Tensor<MpoType,4>> & mpos);
+    [[nodiscard]] CalcType                   expectation_value      (const StateFinite<Scalar> & state1, const StateFinite<Scalar> & state2, const std::vector<Eigen::Tensor<MpoType,4>> & mpos);
 
     template<typename CalcType, typename Scalar, typename MpoType>
-    [[nodiscard]] extern CalcType                        expectation_value    (const StateFinite<Scalar> & state1, const StateFinite<Scalar> & state2,
+    [[nodiscard]] CalcType                        expectation_value    (const StateFinite<Scalar> & state1, const StateFinite<Scalar> & state2,
                                                                                const std::vector<Eigen::Tensor<MpoType,4>> & mpos,
                                                                                const Eigen::Tensor<MpoType,1> & ledge,
                                                                                const Eigen::Tensor<MpoType,1> & redge);
     template<typename CalcType, typename Scalar, typename EnvType>
-    [[nodiscard]] extern CalcType                        expectation_value    (const Eigen::Tensor<Scalar, 3> &mpsBra,
+    [[nodiscard]] CalcType                        expectation_value    (const Eigen::Tensor<Scalar, 3> &mpsBra,
                                                                                const Eigen::Tensor<Scalar, 3> &mpsKet,
                                                                                const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos,
                                                                                const env_pair<EnvType> &envs);
 
     template<typename CalcType, typename Scalar, typename EnvType>
-    [[nodiscard]] extern CalcType                 expectation_value      (const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> & mpsBra,
+    [[nodiscard]] CalcType                 expectation_value      (const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> & mpsBra,
                                                                           const std::vector<std::reference_wrapper<const MpsSite<Scalar>>> & mpsKet,
                                                                           const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> & mpos,
                                                                           const env_pair<EnvType> & envs);
 
     template<typename CalcType, typename Scalar, typename EnvType>
-    [[nodiscard]] extern CalcType                     expectation_value    (const Eigen::Tensor<Scalar, 3> &mpsBra,
+    [[nodiscard]] CalcType                     expectation_value    (const Eigen::Tensor<Scalar, 3> &mpsBra,
                                                                           const Eigen::Tensor<Scalar, 3> &mpsKet,
                                                                           const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos,
                                                                           const env_pair<EnvType> &envs,
                                                                           std::optional<svd::config> svd_cfg);
     template<typename CalcType, typename Scalar, typename EnvType>
-    [[nodiscard]] extern CalcType                   expectation_value    (const Eigen::Tensor<Scalar, 3> &multisite_mps,
+    [[nodiscard]] CalcType                   expectation_value    (const Eigen::Tensor<Scalar, 3> &multisite_mps,
                                                                           const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpos,
                                                                           const env_pair<EnvType> &envs,
                                                                           std::optional<svd::config> svd_cfg);
 
-    template<typename CalcType, typename Scalar> [[nodiscard]] extern Eigen::Tensor<CalcType, 1>   expectation_values     (const StateFinite<Scalar> & state, const Eigen::Tensor<cx64,2> &op);
-    template<typename CalcType, typename Scalar> [[nodiscard]] extern Eigen::Tensor<CalcType, 1>   expectation_values     (const StateFinite<Scalar> & state, const Eigen::Tensor<cx64,4> &mpo);
-    template<typename CalcType, typename Scalar> [[nodiscard]] extern Eigen::Tensor<CalcType, 1>   expectation_values     (const StateFinite<Scalar> & state, const Eigen::Matrix2cd &op);
+    template<typename CalcType, typename Scalar> [[nodiscard]] Eigen::Tensor<CalcType, 1>   expectation_values     (const StateFinite<Scalar> & state, const Eigen::Tensor<cx64,2> &op);
+    template<typename CalcType, typename Scalar> [[nodiscard]] Eigen::Tensor<CalcType, 1>   expectation_values     (const StateFinite<Scalar> & state, const Eigen::Tensor<cx64,4> &mpo);
+    template<typename CalcType, typename Scalar> [[nodiscard]] Eigen::Tensor<CalcType, 1>   expectation_values     (const StateFinite<Scalar> & state, const Eigen::Matrix2cd &op);
     /* clang-format on */
 }

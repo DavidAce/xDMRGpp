@@ -1,6 +1,15 @@
 add_source_target(xdmrg++-tools-finite-env
         TARGET_SOURCES
-        env.cpp
+        cx32.cpp
+        cx64.cpp
+        cx128.cpp
+        fp32.cpp
+        fp64.cpp
+        fp128.cpp
+        fp32.cx32.cpp
+        fp64.cx64.cpp
+        fp128.cx128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

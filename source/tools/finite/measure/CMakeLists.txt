@@ -132,7 +132,6 @@ add_source_target(xdmrg++-tools-finite-measure
         xdmrg++-tensors-finite
         xdmrg++-math-eig
         xdmrg++-math-tenx
-        xdmrg++-math-linalg
         xdmrg++-tools-finite-mps
         xdmrg++-tools-common-log
         xdmrg++-tools-common-contraction

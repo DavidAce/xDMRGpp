@@ -140,19 +140,15 @@ namespace rnd {
             std::uniform_real_distribution<out_t> distribution(a, b);
             return distribution(internal::rng64);
         }
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
         else if constexpr(std::is_same_v<out_t, fp128>) {
             __extension__ typedef __uint128_t __uint128;
             auto                              rndval = static_cast<fp128>(internal::rng128()) / static_cast<fp128>(std::numeric_limits<__uint128>::max());
             return (rndval * (b - a)) + a;
         }
-#endif
     }
     template float  uniform(float mean, float std);
     template double uniform(double mean, double std);
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
     template fp128 uniform(fp128 mean, fp128 std);
-#endif
 
     template<typename out_t>
     out_t normal_box_muller(out_t mu, out_t sigma) { // Box-Muller from Wiki
@@ -170,17 +166,13 @@ namespace rnd {
             std::normal_distribution<out_t> distribution(mean, std);
             return distribution(internal::rng64);
         }
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
         else if constexpr(std::is_same_v<out_t, fp128>) {
             return normal_box_muller(mean, std);
         }
-#endif
     }
     template fp32 normal(fp32 mean, fp32 std);
     template fp64 normal(fp64 mean, fp64 std);
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
     template fp128 normal(fp128 mean, fp128 std);
-#endif
 
     template<typename out_t>
     out_t log_normal(out_t mean, out_t std) {
@@ -190,18 +182,14 @@ namespace rnd {
             std::lognormal_distribution<out_t> distribution(mean, std);
             return distribution(internal::rng64);
         }
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
         else if constexpr(std::is_same_v<out_t, fp128>) {
             auto n = std * normal_box_muller<out_t>(0, 1) + mean;
             return std::exp(n);
         }
-#endif
     }
     template float  log_normal(float mean, float std);
     template double log_normal(double mean, double std);
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
     template fp128 log_normal(fp128 mean, fp128 std);
-#endif
     std::vector<int> random_with_replacement(const std::vector<int> &in) {
         std::vector<int> boot;
         boot.reserve(in.size());
@@ -236,9 +224,7 @@ namespace rnd {
     template void shuffle(std::vector<long> &list);
     template void shuffle(std::vector<size_t> &list);
     template void shuffle(std::vector<double> &list);
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
     template void shuffle(std::vector<fp128> &list);
-#endif
     template void shuffle(std::string &list);
 
     template<typename out_t, typename Distribution>
@@ -260,9 +246,7 @@ namespace rnd {
     }
     template float  random<float>(dist d, float mean, float width);
     template double random<double>(dist d, double mean, double width);
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
     template fp128 random<fp128>(dist d, fp128 mean, fp128 width);
-#endif
     template<typename out_t>
     out_t random(std::string_view distribution, out_t mean, out_t width) {
         return random<out_t>(sv2enum(distribution), mean, width);
@@ -281,13 +265,11 @@ namespace rnd {
                 default: throw std::runtime_error("Invalid distribution");
             }
         }
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
         else if(std::is_same_v<out_t, fp128>) {
             std::vector<fp128> rndvec(num);
             for(auto &r : rndvec) r = random<out_t>(d, mean, width);
             return rndvec;
         }
-#endif
         else
             throw std::runtime_error("rnd::random: unrecognized type");
     }

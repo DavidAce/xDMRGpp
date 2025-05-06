@@ -22,7 +22,14 @@ add_source_target(xdmrg++-algorithms-base
 
 add_source_target(xdmrg++-algorithms-finite
         TARGET_SOURCES
-        AlgorithmFinite.cpp
+
+        AlgorithmFinite/cx32.cpp
+        AlgorithmFinite/cx64.cpp
+        AlgorithmFinite/cx128.cpp
+        AlgorithmFinite/fp32.cpp
+        AlgorithmFinite/fp64.cpp
+        AlgorithmFinite/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -46,7 +53,13 @@ add_source_target(xdmrg++-algorithms-finite
 
 add_source_target(xdmrg++-algorithms-infinite
         TARGET_SOURCES
-        AlgorithmInfinite.cpp
+        AlgorithmInfinite/cx32.cpp
+        AlgorithmInfinite/cx64.cpp
+        AlgorithmInfinite/cx128.cpp
+        AlgorithmInfinite/fp32.cpp
+        AlgorithmInfinite/fp64.cpp
+        AlgorithmInfinite/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -65,7 +78,13 @@ add_source_target(xdmrg++-algorithms-infinite
         )
 add_source_target(xdmrg++-algorithms-fdmrg
         TARGET_SOURCES
-        fdmrg.cpp
+        fdmrg/cx32.cpp
+        fdmrg/cx64.cpp
+        fdmrg/cx128.cpp
+        fdmrg/fp32.cpp
+        fdmrg/fp64.cpp
+        fdmrg/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -77,8 +96,19 @@ add_source_target(xdmrg++-algorithms-fdmrg
         )
 add_source_target(xdmrg++-algorithms-flbit
         TARGET_SOURCES
-        flbit.cpp
-        flbit_impl.cpp
+        flbit/cx32.cpp
+        flbit/cx64.cpp
+        flbit/cx128.cpp
+        flbit/fp32.cpp
+        flbit/fp64.cpp
+        flbit/fp128.cpp
+        flbit/tmpl.cx32.cpp
+        flbit/tmpl.cx64.cpp
+        flbit/tmpl.cx128.cpp
+        flbit/tmpl.fp32.cpp
+        flbit/tmpl.fp64.cpp
+        flbit/tmpl.fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -95,7 +125,13 @@ add_source_target(xdmrg++-algorithms-flbit
 
 add_source_target(xdmrg++-algorithms-xdmrg
         TARGET_SOURCES
-        xdmrg.cpp
+        xdmrg/cx32.cpp
+        xdmrg/cx64.cpp
+        xdmrg/cx128.cpp
+        xdmrg/fp32.cpp
+        xdmrg/fp64.cpp
+        xdmrg/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -108,7 +144,13 @@ add_source_target(xdmrg++-algorithms-xdmrg
 
 add_source_target(xdmrg++-algorithms-idmrg
         TARGET_SOURCES
-        idmrg.cpp
+        idmrg/cx32.cpp
+        idmrg/cx64.cpp
+        idmrg/cx128.cpp
+        idmrg/fp32.cpp
+        idmrg/fp64.cpp
+        idmrg/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -119,7 +161,13 @@ add_source_target(xdmrg++-algorithms-idmrg
 
 add_source_target(xdmrg++-algorithms-itebd
         TARGET_SOURCES
-        itebd.cpp
+        itebd/cx32.cpp
+        itebd/cx64.cpp
+        itebd/cx128.cpp
+        itebd/fp32.cpp
+        itebd/fp64.cpp
+        itebd/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

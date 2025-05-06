@@ -1,5 +1,4 @@
 #pragma once
-#include "spin.h"
 #include "config/debug.h"
 #include "correlation.h"
 #include "debug/exceptions.h"
@@ -8,6 +7,7 @@
 #include "math/tenx.h"
 #include "qm/mpo.h"
 #include "qm/spin.h"
+#include "spin.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
@@ -19,41 +19,51 @@ using tools::finite::measure::RealScalar;
 template<typename Scalar>
 std::array<RealScalar<Scalar>, 3> tools::finite::measure::spin_components(const StateFinite<Scalar> &state) {
     if(state.measurements.spin_components) return state.measurements.spin_components.value();
-    RealScalar<Scalar> spin_x          = measure::spin_component(state, qm::spin::half::sx);
-    RealScalar<Scalar> spin_y          = measure::spin_component(state, qm::spin::half::sy);
-    RealScalar<Scalar> spin_z          = measure::spin_component(state, qm::spin::half::sz);
+    using Cplx = std::complex<RealScalar<Scalar>>;
+    RealScalar<Scalar> spin_x          = measure::spin_component<Scalar>(state, qm::spin::half::sx);
+    RealScalar<Scalar> spin_y          = measure::spin_component<Cplx>(state, qm::spin::half::sy);
+    RealScalar<Scalar> spin_z          = measure::spin_component<Scalar>(state, qm::spin::half::sz);
     state.measurements.spin_components = {spin_x, spin_y, spin_z};
     return state.measurements.spin_components.value();
 }
 
-template<typename Scalar>
+template<typename CalcType, typename Scalar>
 RealScalar<Scalar> tools::finite::measure::spin_component(const StateFinite<Scalar> &state, const Eigen::Matrix2cd &paulimatrix) {
+    using Cplx = std::complex<RealScalar<CalcType>>;
+
+    if constexpr(!sfinae::is_std_complex_v<CalcType>) {
+        if(!tenx::isReal(paulimatrix)) {
+            // Measurement of pauli y on a real state.
+            return tools::finite::measure::spin_component<Cplx>(state, paulimatrix);
+        }
+    }
     auto t_spn       = tid::tic_scope("spin", tid::level::highest);
-    auto [mpo, L, R] = qm::mpo::pauli_mpo<Scalar>(paulimatrix);
-    Eigen::Tensor<Scalar, 3> temp;
+    auto [mpo, L, R] = qm::mpo::pauli_mpo<CalcType>(paulimatrix);
+    Eigen::Tensor<CalcType, 3> temp;
     for(const auto &mps : state.mps_sites) {
-        tools::common::contraction::contract_env_mps_mpo(temp, L, mps->get_M(), mpo);
+        tools::common::contraction::contract_env_mps_mpo(temp, L, mps->template get_M_as<CalcType>(), mpo);
         L = temp;
     }
 
     if(L.dimensions() != R.dimensions()) throw except::runtime_error("spin_component(): L and R dimension mismatch");
-    Eigen::Tensor<Scalar, 0> spin_tmp = L.contract(R, tenx::idx({0, 1, 2}, {0, 1, 2}));
-    RealScalar<Scalar>       spin     = std::real(spin_tmp(0));
-    return spin;
+    Eigen::Tensor<CalcType, 0> spin_tmp = L.contract(R, tenx::idx({0, 1, 2}, {0, 1, 2}));
+    RealScalar<CalcType>       spin     = std::real(spin_tmp(0));
+    return static_cast<RealScalar<Scalar>>(spin);
 }
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::spin_component(const StateFinite<Scalar> &state, std::string_view axis) {
-    if(axis.find('x') != std::string_view::npos) return measure::spin_component(state, qm::spin::half::sx);
-    if(axis.find('y') != std::string_view::npos) return measure::spin_component(state, qm::spin::half::sy);
-    if(axis.find('z') != std::string_view::npos) return measure::spin_component(state, qm::spin::half::sz);
+    using Cplx = std::complex<RealScalar<Scalar>>;
+    if(axis.find('x') != std::string_view::npos) return measure::spin_component<Scalar>(state, qm::spin::half::sx);
+    if(axis.find('y') != std::string_view::npos) return measure::spin_component<Cplx>(state, qm::spin::half::sy);
+    if(axis.find('z') != std::string_view::npos) return measure::spin_component<Scalar>(state, qm::spin::half::sz);
     throw except::logic_error("unexpected axis [{}]", axis);
 }
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::spin_alignment(const StateFinite<Scalar> &state, std::string_view axis) {
     if(not qm::spin::half::is_valid_axis(axis)) throw except::logic_error("unexpected axis [{}]", axis);
-    auto spin_component_along_axis = tools::finite::measure::spin_component(state, qm::spin::half::get_pauli(axis));
+    auto spin_component_along_axis = tools::finite::measure::spin_component<Scalar>(state, qm::spin::half::get_pauli(axis));
     auto sign                      = qm::spin::half::get_sign(axis);
     return sign * spin_component_along_axis;
 }
@@ -61,7 +71,7 @@ RealScalar<Scalar> tools::finite::measure::spin_alignment(const StateFinite<Scal
 template<typename Scalar>
 int tools::finite::measure::spin_sign(const StateFinite<Scalar> &state, std::string_view axis) {
     // The sign on the axis string is ignored here
-    auto spin_component_along_axis = tools::finite::measure::spin_component(state, qm::spin::half::get_pauli(axis));
+    auto spin_component_along_axis = tools::finite::measure::spin_component<Scalar>(state, qm::spin::half::get_pauli(axis));
     return num::sign(spin_component_along_axis);
 }
 

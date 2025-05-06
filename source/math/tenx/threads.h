@@ -23,7 +23,7 @@ namespace tenx {
 
         template<typename T>
         requires std::is_integral_v<T>
-        extern void                 setNumThreads(T num) noexcept;
+        void                 setNumThreads(T num) noexcept;
         extern int                  getNumThreads() noexcept;
 //        internal::ThreadPoolWrapper &get() noexcept;
         const std::unique_ptr<internal::ThreadPoolWrapper> &get() noexcept;

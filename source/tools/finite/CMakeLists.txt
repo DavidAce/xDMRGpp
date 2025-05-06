@@ -24,7 +24,12 @@ add_source_target(xdmrg++-tools-finite-ops
 
 add_source_target(xdmrg++-tools-finite-print
         TARGET_SOURCES
-            print.cpp
+            print/fp32.cpp
+            print/fp64.cpp
+            print/fp128.cpp
+            print/cx32.cpp
+            print/cx64.cpp
+            print/cx128.cpp
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -42,8 +47,7 @@ add_subdirectory(mps)
 add_subdirectory(opt)
 add_subdirectory(mpo)
 
-add_library(xdmrg++-tools-finite INTERFACE
-mps/add.cpp)
+add_library(xdmrg++-tools-finite INTERFACE)
 target_link_libraries(xdmrg++-tools-finite INTERFACE
         xdmrg++-tools-finite-h5
         xdmrg++-tools-finite-ed

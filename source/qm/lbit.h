@@ -133,13 +133,13 @@ namespace qm::lbit {
     extern std::vector<Eigen::Tensor<cx64, 4>>  get_unitary_mpo_layer(const std::vector<qm::Gate> & ulayer, std::optional<svd::config> cfg = std::nullopt);
     extern std::vector<Eigen::Tensor<cx64, 4>>  get_unitary_mpo_layer(const UnitaryGateProperties & u);
     template<typename Scalar>
-    extern std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn, const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_up, bool adj_dn = false);
+    std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn, const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_up, bool adj_dn = false);
     template<typename Scalar>
-    extern std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn,
+    std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn,
                                                                            const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_md,
                                                                            const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_up);
     template<typename Scalar>
-    extern std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> & mpos);
+    std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> & mpos);
     extern std::vector<Eigen::Tensor<cx64, 2>>  get_time_evolution_operators_2site(size_t sites, cx128 delta_t, const std::vector<Eigen::Tensor<cx64, 2>> &twosite_hams);
     extern std::vector<Eigen::Tensor<cx64, 2>>  get_time_evolution_operators_3site(size_t sites, cx128 delta_t, const std::vector<Eigen::Tensor<cx64, 2>> &hams_3site);
     extern std::vector<Eigen::Tensor<cx64, 4>>  get_time_evolution_mpos(cx128 delta_t, const std::vector<Eigen::Tensor<cx64, 4>> &mpos);

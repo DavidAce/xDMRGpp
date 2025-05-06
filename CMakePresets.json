@@ -189,6 +189,14 @@
       }
     },
     {
+      "name": "noquad",
+      "hidden": true,
+      "cacheVariables": {
+        "DMRG_USE_QUADMATH": "FALSE",
+        "DMRG_USE_FLOAT128": "FALSE"
+      }
+    },
+    {
       "name": "find",
       "hidden": true,
       "cacheVariables": {

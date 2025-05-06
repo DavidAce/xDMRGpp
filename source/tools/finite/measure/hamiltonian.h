@@ -42,33 +42,33 @@ namespace tools::finite::measure {
     template<typename Scalar> [[nodiscard]] Scalar expval_hamiltonian_squared               (const std::vector<size_t> & sites, const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges);
 
 
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_minus_energy_shift               (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy                                  (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_variance                         (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_normalized                       (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, RealScalar<Scalar> energy_min, RealScalar<Scalar> energy_max, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_minus_energy_shift               (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy                                  (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_variance                         (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_normalized                       (const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, RealScalar<Scalar> energy_min, RealScalar<Scalar> energy_max, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
 
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_shift                    (const TensorsFinite<Scalar> & tensors);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_minus_energy_shift       (const TensorsFinite<Scalar> & tensors);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy                          (const TensorsFinite<Scalar> & tensors);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_variance                 (const TensorsFinite<Scalar> & tensors);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_normalized               (const TensorsFinite<Scalar> & tensors, RealScalar<Scalar> energy_minimum, RealScalar<Scalar> energy_maximum);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_shift                    (const TensorsFinite<Scalar> & tensors);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_minus_energy_shift       (const TensorsFinite<Scalar> & tensors);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy                          (const TensorsFinite<Scalar> & tensors);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_variance                 (const TensorsFinite<Scalar> & tensors);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_normalized               (const TensorsFinite<Scalar> & tensors, RealScalar<Scalar> energy_minimum, RealScalar<Scalar> energy_maximum);
 
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_minus_energy_shift       (const StateFinite<Scalar> & state, const TensorsFinite<Scalar> & tensors, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy                          (const StateFinite<Scalar> & state, const TensorsFinite<Scalar> & tensors, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_variance                 (const StateFinite<Scalar> & state, const TensorsFinite<Scalar> & tensors, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_normalized               (const StateFinite<Scalar> & state, const TensorsFinite<Scalar> & tensors, RealScalar<Scalar> energy_minimum, RealScalar<Scalar> energy_maximum, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-
-
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_minus_energy_shift      (const Eigen::Tensor<Scalar,3> & multisite_mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy                         (const Eigen::Tensor<Scalar,3> & multisite_mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_variance                (const Eigen::Tensor<Scalar,3> & multisite_mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_normalized              (const Eigen::Tensor<Scalar,3> & multisite_mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, RealScalar<Scalar> energy_min, RealScalar<Scalar> energy_max, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_minus_energy_shift       (const StateFinite<Scalar> & state, const TensorsFinite<Scalar> & tensors, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy                          (const StateFinite<Scalar> & state, const TensorsFinite<Scalar> & tensors, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_variance                 (const StateFinite<Scalar> & state, const TensorsFinite<Scalar> & tensors, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_normalized               (const StateFinite<Scalar> & state, const TensorsFinite<Scalar> & tensors, RealScalar<Scalar> energy_minimum, RealScalar<Scalar> energy_maximum, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
 
 
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_minus_energy_shift   (const Eigen::Tensor<Scalar,3> &mps, const TensorsFinite<Scalar> & tensors, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy                      (const Eigen::Tensor<Scalar,3> &mps, const TensorsFinite<Scalar> & tensors, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_variance             (const Eigen::Tensor<Scalar,3> &mps, const TensorsFinite<Scalar> & tensors, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
-    template<typename Scalar> [[nodiscard]] extern RealScalar<Scalar> energy_normalized           (const Eigen::Tensor<Scalar,3> &mps, const TensorsFinite<Scalar> & tensors, RealScalar<Scalar> energy_minimum, RealScalar<Scalar> energy_maximum, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_minus_energy_shift      (const Eigen::Tensor<Scalar,3> & multisite_mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy                         (const Eigen::Tensor<Scalar,3> & multisite_mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_variance                (const Eigen::Tensor<Scalar,3> & multisite_mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_normalized              (const Eigen::Tensor<Scalar,3> & multisite_mps, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, RealScalar<Scalar> energy_min, RealScalar<Scalar> energy_max, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+
+
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_minus_energy_shift   (const Eigen::Tensor<Scalar,3> &mps, const TensorsFinite<Scalar> & tensors, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy                      (const Eigen::Tensor<Scalar,3> &mps, const TensorsFinite<Scalar> & tensors, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_variance             (const Eigen::Tensor<Scalar,3> &mps, const TensorsFinite<Scalar> & tensors, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> energy_normalized           (const Eigen::Tensor<Scalar,3> &mps, const TensorsFinite<Scalar> & tensors, RealScalar<Scalar> energy_minimum, RealScalar<Scalar> energy_maximum, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> * measurements = nullptr);
 
     /* clang-format on */
 }

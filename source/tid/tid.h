@@ -116,10 +116,10 @@ namespace tid {
         ur       &insert(std::string_view label, level l); // For adding leafs to the tree
     };
 
-    [[nodiscard]] extern ur   &get(std::string_view key, level l = level::parent, bool unscoped = false);
-    [[nodiscard]] extern ur   &get_unscoped(std::string_view key, level l = level::parent);
-    [[nodiscard]] extern token tic_token(std::string_view key, level l = level::parent, double add_time = 0);
-    [[nodiscard]] extern token tic_scope(std::string_view key, level l = level::parent, double add_time = 0);
+    [[nodiscard]] ur   &get(std::string_view key, level l = level::parent, bool unscoped = false);
+    [[nodiscard]] ur   &get_unscoped(std::string_view key, level l = level::parent);
+    [[nodiscard]] token tic_token(std::string_view key, level l = level::parent, double add_time = 0);
+    [[nodiscard]] token tic_scope(std::string_view key, level l = level::parent, double add_time = 0);
 
     extern void add(std::string_view key, std::string_view label = "");
     extern void tic(std::string_view key, level l = level::parent);
@@ -154,12 +154,12 @@ namespace tid {
         extern void               ur_prefix_push_back(std::string_view key);
         extern void               ur_prefix_pop_back(std::string_view key);
         template<typename T = std::vector<std::string_view>>
-        extern T split(std::string_view strv, std::string_view delims);
+        T split(std::string_view strv, std::string_view delims);
     }
-    [[nodiscard]] extern std::vector<internal::ur_ref_t> get_tree(const tid::ur &u, std::string_view prefix = "", level l = level::normal);
-    [[nodiscard]] extern std::vector<internal::ur_ref_t> get_tree(std::string_view prefix = "", level l = level::normal);
-    [[nodiscard]] extern std::vector<internal::ur_ref_t> search(const tid::ur &u, std::string_view match);
-    [[nodiscard]] extern std::vector<internal::ur_ref_t> search(std::string_view match);
+    [[nodiscard]] std::vector<internal::ur_ref_t> get_tree(const tid::ur &u, std::string_view prefix = "", level l = level::normal);
+    [[nodiscard]] std::vector<internal::ur_ref_t> get_tree(std::string_view prefix = "", level l = level::normal);
+    [[nodiscard]] std::vector<internal::ur_ref_t> search(const tid::ur &u, std::string_view match);
+    [[nodiscard]] std::vector<internal::ur_ref_t> search(std::string_view match);
     void                                                 set_level(level l);
     //    void                                                 merge_thread_enries();
     void print_tree(const tid::ur &u, std::string_view prefix = "", level l = level::normal);

@@ -4,5 +4,4 @@ set(test_inc
 set(test_lnk
     xdmrg++-qm-spin
     xdmrg++-math-rnd
-    xdmrg++-math-linalg
     )

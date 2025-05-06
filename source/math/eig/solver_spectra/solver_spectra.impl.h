@@ -76,6 +76,8 @@ void eig::solver_spectra<MatrixType>::eigs() {
     auto tol_cfg = config.tol.value_or(static_cast<double>(tol_def));
     auto tol     = std::max<Real>(static_cast<Real>(tol_cfg), tol_min); /*!< 1e-12 is good, see link above. */
     auto maxiter = config.maxIter.value_or(1000);
+
+
     auto sort    = get_spectra_sort_rule(config.ritz.value());
     matrix.set_mode(config.form.value());
     matrix.set_side(config.side.value());
@@ -131,8 +133,8 @@ void eig::solver_spectra<MatrixType>::eigs() {
             if constexpr(std::is_same_v<MatrixType, MatVecMPOS<Scalar>>) {
                 if (config.primme_massMatrixMatvec.has_value()) {
                     auto matrixB = GenMatVec<MatrixType>(matrix);
-                    matrixB.set_maxiters(maxiter);
-                    matrixB.set_tolerance(tol);
+                    matrixB.set_maxiters(5000);
+                    matrixB.set_tolerance(1e-6f);
                     Spectra::SymGEigsSolver<MatrixType, GenMatVec<MatrixType>, Spectra::GEigsMode::RegularInverse> sol(matrix,matrixB, nev_internal, ncv_internal);
                     return run(sol, result.get_eigvals<Form::SYMM, type>(), result.get_eigvecs<Form::SYMM, type>());
                 }

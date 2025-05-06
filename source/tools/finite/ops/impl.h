@@ -369,7 +369,7 @@ template<typename Scalar>
 std::optional<tools::finite::ops::RealScalar<Scalar>> tools::finite::ops::get_spin_component_along_axis(StateFinite<Scalar> &state, std::string_view axis) {
     auto t_align = tid::tic_scope("align", tid::level::higher);
     if(qm::spin::half::is_valid_axis(axis)) {
-        return tools::finite::measure::spin_component(state, qm::spin::half::get_pauli(axis));
+        return tools::finite::measure::spin_component<Scalar>(state, qm::spin::half::get_pauli(axis));
     } else
         return std::nullopt;
 }

@@ -638,7 +638,7 @@ void eig::solver::eigs(MatrixProductType &matrix, int nev, int ncv, Ritz ritz, F
     eigs_init(matrix.rows(), nev, ncv, ritz, form, type, side, sigma, shift_invert, matrix.storage, compute_eigvecs, remove_phase, residual);
     switch(config.lib.value()) {
         case Lib::ARPACK: {
-            if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
+            if constexpr(sfinae::is_any_v<Scalar, fp32, fp64, cx32, cx64>) {
                 solver_arpack<MatrixProductType> solver(matrix, config, result);
                 solver.eigs();
                 break;
@@ -648,7 +648,7 @@ void eig::solver::eigs(MatrixProductType &matrix, int nev, int ncv, Ritz ritz, F
             }
         }
         case Lib::PRIMME: {
-            if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
+            if constexpr(sfinae::is_any_v<Scalar, fp32, fp64, cx32, cx64>) {
                 eigs_primme(matrix);
                 break;
             } else {
@@ -708,7 +708,7 @@ void eig::solver::eigs(MatrixProductType &matrix) {
     set_default_config(matrix);
     switch(config.lib.value()) {
         case Lib::ARPACK: {
-            if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
+            if constexpr(sfinae::is_any_v<Scalar, fp32, fp64, cx32, cx64>) {
                 config.tag = fmt::format("{}{}arpack", config.tag, config.tag.empty() ? "" : " ");
                 solver_arpack<MatrixProductType> solver(matrix, config, result);
                 solver.eigs();
@@ -719,9 +719,8 @@ void eig::solver::eigs(MatrixProductType &matrix) {
             }
         }
         case Lib::PRIMME: {
-            if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
+            if constexpr(sfinae::is_any_v<Scalar, fp32, fp64, cx32, cx64>) {
                 config.tag = fmt::format("{}{}primme", config.tag, config.tag.empty() ? "" : " ");
-                eig::log->warn("Running with PRIMME ...");
                 eigs_primme(matrix);
                 break;
             } else {

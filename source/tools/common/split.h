@@ -13,7 +13,7 @@ class MpsSite;
 namespace tools::common::split {
     /* clang-format off */
     template<typename Scalar, typename T>
-    extern std::vector<MpsSite<Scalar>> split_mps (const Eigen::Tensor<T,3> & multisite_mps,
+    std::vector<MpsSite<Scalar>> split_mps (const Eigen::Tensor<T,3> & multisite_mps,
                                            const std::vector<long>         & spin_dims,
                                            const std::vector<size_t>       & positions,
                                            long                              center_position,
@@ -22,7 +22,7 @@ namespace tools::common::split {
 
     namespace internal{
         template<typename Scalar, typename T>
-        extern std::vector<MpsSite<Scalar>>
+        std::vector<MpsSite<Scalar>>
                     split_mps_into_As(const Eigen::Tensor<T,3> & multisite_mps,
                                       const std::vector<long>       & spin_dims,
                                       const std::vector<size_t>     & positions,
@@ -30,7 +30,7 @@ namespace tools::common::split {
                                       svd::config                   & svd_cfg);
 
         template<typename Scalar, typename T>
-        extern std::deque<MpsSite<Scalar>>
+        std::deque<MpsSite<Scalar>>
                     split_mps_into_Bs(const Eigen::Tensor<T,3> & multisite_mps,
                                       const std::vector<long>       & spin_dims,
                                       const std::vector<size_t>     & positions,
