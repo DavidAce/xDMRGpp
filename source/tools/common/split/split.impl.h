@@ -5,7 +5,7 @@
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
-#include "math/linalg/tensor.h"
+#include "math/linalg/tensor/to_string.h"
 #include "math/svd.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tid/tid.h"

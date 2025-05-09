@@ -65,10 +65,10 @@ class h5_enum_algo_stop {
 template<typename Scalar>
 class h5pp_table_measurements_finite {
     private:
+    using RealScalar                 = decltype(std::real(std::declval<Scalar>()));
     static inline h5pp::hid::h5t h5_type;
     static void                  register_table_type();
-    static constexpr auto        nan = std::numeric_limits<double>::quiet_NaN();
-    using RealScalar                 = decltype(std::real(std::declval<Scalar>()));
+    static constexpr auto        nan = std::numeric_limits<RealScalar>::quiet_NaN();
 
     public:
     struct table {

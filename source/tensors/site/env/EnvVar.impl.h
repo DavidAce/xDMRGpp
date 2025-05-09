@@ -1,7 +1,7 @@
 #pragma once
-#include "EnvVar.h"
 #include "config/debug.h"
 #include "debug/exceptions.h"
+#include "EnvVar.h"
 #include "math/hash.h"
 #include "math/num.h"
 #include "tensors/site/mpo/MpoSite.h"
@@ -9,7 +9,9 @@
 #include "tools/common/log.h"
 #include <utility>
 
-
+namespace settings {
+    inline constexpr bool debug_edges_var = false;
+}
 
 template<typename Scalar>
 EnvVar<Scalar>::EnvVar(std::string side_, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) : EnvBase<Scalar>(std::move(side_), "var", mps, mpo) {
@@ -18,7 +20,7 @@ EnvVar<Scalar>::EnvVar(std::string side_, const MpsSite<Scalar> &mps, const MpoS
 
 template<typename Scalar>
 EnvVar<Scalar> EnvVar<Scalar>::enlarge(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) const {
-    tools::log->trace("EnvVar<Scalar>::enlarge(mps,mpo): {}{}[{}]", tag, side, get_position());
+    if constexpr(settings::debug_edges_var) tools::log->trace("EnvVar<Scalar>::enlarge(mps,mpo): {}{}[{}]", tag, side, get_position());
     // enlarge() uses "this" block together with mps and mpo to generate a new environment block corresponding to a neighboring site
     if constexpr(settings::debug)
         if(not num::all_equal(get_position(), mps.get_position(), mpo.get_position()))
@@ -48,7 +50,7 @@ EnvVar<Scalar> EnvVar<Scalar>::enlarge(const MpsSite<Scalar> &mps, const MpoSite
     env.unique_id_env = get_unique_id();
     env.unique_id_mps = mps.get_unique_id();
     env.unique_id_mpo = mpo.get_unique_id_sq();
-    if constexpr(settings::debug) {
+    if constexpr(settings::debug_edges_var) {
         tools::log->trace("class_env_{}::enlarge(mps,mpo): side({}), pos({}): unique_id_env: {}", tag, side, get_position(), env.unique_id_env.value());
         tools::log->trace("class_env_{}::enlarge(mps,mpo): side({}), pos({}): unique_id_mps: {}", tag, side, get_position(), env.unique_id_mps.value());
         tools::log->trace("class_env_{}::enlarge(mps,mpo): side({}), pos({}): unique_id_mpo: {}", tag, side, get_position(), env.unique_id_mpo.value());
@@ -79,7 +81,7 @@ void EnvVar<Scalar>::refresh(const EnvVar &env, const MpsSite<Scalar> &mps, cons
     //   unique_id_mpo != mpo.unique_id_sq;
 
     if(not has_block()) {
-        if constexpr(settings::debug) tools::log->trace("Refreshing {} env{}({}): missing block", tag, side, get_position());
+        if constexpr(settings::debug_edges_var) tools::log->trace("Refreshing {} env{}({}): missing block", tag, side, get_position());
         *this = env.enlarge(mps, mpo);
         return;
     }
@@ -87,14 +89,14 @@ void EnvVar<Scalar>::refresh(const EnvVar &env, const MpsSite<Scalar> &mps, cons
     std::string reason;
     if(env.get_unique_id() != unique_id_env) {
         refresh = true;
-        if constexpr(settings::debug) {
+        if constexpr(settings::debug_edges_var) {
             reason.append(fmt::format("| env({}) new {} ", env.get_position(), env.get_unique_id()));
             if(unique_id_env) reason.append(fmt::format("!= old {} ", unique_id_env.value()));
         }
     }
     if(mps.get_unique_id() != unique_id_mps) {
         refresh = true;
-        if constexpr(settings::debug) {
+        if constexpr(settings::debug_edges_var) {
             reason.append(fmt::format("| mps({}) new {} ", mps.get_position(), mps.get_unique_id()));
             if(unique_id_mps) reason.append(fmt::format("!= old {} ", unique_id_mps.value()));
         }
@@ -102,7 +104,7 @@ void EnvVar<Scalar>::refresh(const EnvVar &env, const MpsSite<Scalar> &mps, cons
     auto mpo_unique_id = tag == "ene" ? mpo.get_unique_id() : mpo.get_unique_id_sq();
     if(mpo_unique_id != unique_id_mpo) {
         refresh = true;
-        if constexpr(settings::debug) {
+        if constexpr(settings::debug_edges_var) {
             reason.append(fmt::format("| mpo({}) new {} ", mpo.get_position(), mpo_unique_id));
             if(unique_id_mpo) reason.append(fmt::format("!= old {} ", unique_id_mpo.value()));
         }
@@ -110,7 +112,7 @@ void EnvVar<Scalar>::refresh(const EnvVar &env, const MpsSite<Scalar> &mps, cons
 
     if(refresh) {
         [[maybe_unused]] size_t unique_id_bef;
-        if constexpr(settings::debug) {
+        if constexpr(settings::debug_edges_var) {
             unique_id_bef = get_unique_id();
             tools::log->trace("Refreshing {} env{}({}): modified {}", tag, side, get_position(), reason);
         }
@@ -121,7 +123,7 @@ void EnvVar<Scalar>::refresh(const EnvVar &env, const MpsSite<Scalar> &mps, cons
         unique_id_mps = mps.get_unique_id();
         unique_id_mpo = mpo.get_unique_id_sq();
 
-        if constexpr(settings::debug) {
+        if constexpr(settings::debug_edges_var) {
             if(unique_id_bef == get_unique_id()) tools::log->debug("Refreshing {} env{}({}): id did not change: {}", tag, side, get_position(), unique_id_bef);
             //                throw except::logic_error("Refreshing {} env{}({}): failed: id did not change: {}", tag, side, get_position(),
             //                unique_id_bef);
@@ -136,10 +138,9 @@ void EnvVar<Scalar>::set_edge_dims(const MpsSite<Scalar> &mps, const MpoSite<Sca
     if(side == "R") edge = mpo.template get_MPO2_edge_right<Scalar>();
     std::size_t unique_id_edge = hash::hash_buffer(edge.data(), static_cast<size_t>(edge.size()));
     if(unique_id_env and unique_id_env.value() == unique_id_edge) return;
-    if constexpr(settings::debug)
-        if(side != "L" and side != "R") throw except::runtime_error("Wrong side: {}", side);
+    assert(side == "L" or side == "R");
 
-    tools::log->trace("EnvVar<Scalar>::set_edge_dims: {}{}({}): {}", tag, side, get_position(), edge.dimensions());
+    if constexpr(settings::debug_edges_var) tools::log->trace("EnvVar<Scalar>::set_edge_dims: {}{}({}): {}", tag, side, get_position(), edge.dimensions());
     set_edge_dims(mps.template get_M_bare_as<Scalar>(), mpo.template MPO2_as<Scalar>(), edge);
     unique_id     = get_unique_id();
     unique_id_env = unique_id_edge;

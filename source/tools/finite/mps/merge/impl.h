@@ -8,7 +8,7 @@
 #include "debug/exceptions.h"
 #include "general/iter.h"
 #include "math/cast.h"
-#include "math/linalg/tensor.h"
+#include "math/linalg/tensor/to_string.h"
 #include "math/num.h"
 #include "math/svd.h"
 #include "qm/mpo.h"

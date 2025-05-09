@@ -5,7 +5,6 @@
 #include "general/iter.h"
 #include "io/fmt_f128_t.h"
 #include "math/cast.h"
-#include "math/linalg/tensor.h"
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/tenx.h"

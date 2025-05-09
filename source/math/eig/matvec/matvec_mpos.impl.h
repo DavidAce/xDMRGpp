@@ -6,8 +6,6 @@
 #include "general/sfinae.h"
 #include "io/fmt_f128_t.h"
 #include "math/eig/solver.h"
-#include "math/linalg/matrix.h"
-#include "math/linalg/tensor.h"
 #include "math/svd.h"
 #include "math/tenx.h"
 #include "matvec_mpos.h"

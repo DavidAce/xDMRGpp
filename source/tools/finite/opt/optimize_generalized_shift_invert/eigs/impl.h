@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include "../../../opt_meta.h"
 #include "../../../opt_mps.h"
 #include "algorithms/AlgorithmStatus.h"
@@ -120,18 +119,18 @@ template<typename CalcType, typename Scalar>
 void eigs_manager_generalized_shift_invert(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results,
                                            const OptMeta &meta) {
     eig::solver solver;
-    auto       &cfg           = solver.config;
-    cfg.loglevel              = 2;
-    cfg.compute_eigvecs       = eig::Vecs::ON;
-    cfg.tol                   = meta.eigs_tol.value_or(settings::precision::eigs_tol_min); // 1e-12 is good. This Sets "eps" in primme, see link above.
-    cfg.maxIter               = meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
-    cfg.maxNev                = meta.eigs_nev.value_or(1);
-    cfg.maxNcv                = meta.eigs_ncv.value_or(settings::precision::eigs_ncv);
-    cfg.maxTime               = meta.eigs_time_max.value_or(2 * 60 * 60); // Two hours default
+    auto       &cfg     = solver.config;
+    cfg.loglevel        = 2;
+    cfg.compute_eigvecs = eig::Vecs::ON;
+    cfg.tol             = meta.eigs_tol.value_or(settings::precision::eigs_tol_min); // 1e-12 is good. This Sets "eps" in primme, see link above.
+    cfg.maxIter         = meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
+    cfg.maxNev          = meta.eigs_nev.value_or(1);
+    cfg.maxNcv          = meta.eigs_ncv.value_or(settings::precision::eigs_ncv);
+    cfg.maxTime         = meta.eigs_time_max.value_or(2 * 60 * 60); // Two hours default
+    cfg.lib             = meta.eigs_lib.empty() ? eig::Lib::PRIMME : eig::StringToLib(meta.eigs_lib);
     cfg.primme_minRestartSize = meta.primme_minRestartSize;
     cfg.primme_maxBlockSize   = meta.primme_maxBlockSize;
     cfg.primme_locking        = 0;
-    cfg.lib                   = eig::Lib::PRIMME;
     cfg.primme_method         = eig::stringToMethod(meta.primme_method);
     cfg.tag += meta.label;
     switch(meta.optRitz) {
@@ -168,8 +167,7 @@ void eigs_manager_generalized_shift_invert(const TensorsFinite<Scalar> &tensors,
 
 template<typename Scalar>
 opt_mps<Scalar> internal::optimize_generalized_shift_invert(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                            [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta,
-                                                            reports::eigs_log<Scalar> &elog) {
+                                                            [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<Scalar> &elog) {
     if(meta.optSolver == OptSolver::EIG) return optimize_generalized_shift_invert_eig(tensors, initial_mps, status, meta, elog);
 
     // auto meta2          = meta;
@@ -219,5 +217,3 @@ opt_mps<Scalar> internal::optimize_generalized_shift_invert(const TensorsFinite<
 
     return results.front();
 }
-
-

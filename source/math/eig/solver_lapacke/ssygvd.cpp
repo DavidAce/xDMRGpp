@@ -19,7 +19,6 @@
 #include "math/cast.h"
 #include <chrono>
 #include <Eigen/Eigenvalues>
-#include <math/linalg/matrix.h>
 
 using namespace eig;
 
@@ -78,7 +77,6 @@ int eig::solver::ssygvd(fp32 *matrixA, fp32 *matrixB, size_type L) {
         auto            B      = Eigen::Map<Eigen::MatrixXf>(matrixB, L, L);
         auto            solver = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf>(B);
         Eigen::VectorXf Bevals = solver.eigenvalues().real();
-        eig::log->warn("B:\n{}\n", linalg::matrix::to_string(Bevals, 8));
         throw std::runtime_error("LAPACK ssygvd failed with error: " + std::to_string(info));
     }
     return info;

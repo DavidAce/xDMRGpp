@@ -1,27 +1,35 @@
 add_source_target(xdmrg++-math-eig-lapacke
         TARGET_SOURCES
-        solver_sgeev.cpp   # Standard problems
-        solver_ssyevd.cpp  # Standard problems
-        solver_ssyevx.cpp  # Standard problems
-        solver_ssyevr.cpp  # Standard problems
-        solver_ssygvd.cpp  # Generalized problems
-        solver_ssygvx.cpp  # Generalized problems
+        sgeev.cpp   # Standard problems
+        ssyevd.cpp  # Standard problems
+        ssyevx.cpp  # Standard problems
+        ssyevr.cpp  # Standard problems
+        ssygvd.cpp  # Generalized problems
+        ssygvx.cpp  # Generalized problems
 
-        solver_dgeev.cpp   # Standard problems
-        solver_dsyevd.cpp  # Standard problems
-        solver_dsyevx.cpp  # Standard problems
-        solver_dsyevr.cpp  # Standard problems
-        solver_dsygvd.cpp  # Generalized problems
-        solver_dsygvx.cpp  # Generalized problems
+        dgeev.cpp   # Standard problems
+        dsyevd.cpp  # Standard problems
+        dsyevx.cpp  # Standard problems
+        dsyevr.cpp  # Standard problems
+        dsygvd.cpp  # Generalized problems
+        dsygvx.cpp  # Generalized problems
 
-        solver_cgeev.cpp
-        solver_cheevd.cpp
-        solver_cheevr.cpp
+        qgeev_eigen.cpp
+        qsyevd_eigen.cpp
+        qsygvd_eigen.cpp
 
-        solver_zgeev.cpp
-        solver_zheevd.cpp
-        solver_zheevr.cpp
 
+        cgeev.cpp
+        cheevd.cpp
+        cheevr.cpp
+
+        zgeev.cpp
+        zheevd.cpp
+        zheevr.cpp
+
+        wgeev_eigen.cpp
+        wheevd_eigen.cpp
+        whegvd_eigen.cpp
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

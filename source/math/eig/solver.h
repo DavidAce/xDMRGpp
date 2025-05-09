@@ -40,6 +40,10 @@ namespace eig {
         int dsygvd(fp64 *matrixA, fp64 *matrixB, size_type L);
         int dsygvx(fp64 *matrixA, fp64 *matrixB, size_type L, char range, int il, int iu, fp64 vl, fp64 vu);
 
+        int qgeev_eigen(fp128 *matrix, size_type L);
+        int qsyevd_eigen(fp128 *matrix, size_type L);
+        int qsygvd_eigen(fp128 *matrixA, fp128 *matrixB, size_type L);
+
         int cheev(cx32 *matrix, size_type L);
         int cheevd(cx32 *matrix, size_type L);
         int cheevr(cx32 *matrix, size_type L, char range, int il, int iu, fp32 vl, fp32 vu);
@@ -57,6 +61,10 @@ namespace eig {
         int zhegvd(cx64 *matrixA, cx64 *matrixB, size_type L);
         int zhegvx(cx64 *matrixA, cx64 *matrixB, size_type L, char range, int il, int iu, double vl, double vu);
         int zggev(cx64 *matrixA, cx64 *matrixB, size_type L);
+
+        int wgeev_eigen(cx128 *matrix, size_type L);
+        int wheevd_eigen(cx128 *matrix, size_type L);
+        int whegvd_eigen(cx128 *matrixA, cx128 *matrixB, size_type L);
 
         void eig_init(Form form, Type type, Vecs compute_eigvecs, Dephase remove_phase_);
         template<Form form = Form::SYMM, typename Scalar>

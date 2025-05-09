@@ -5,7 +5,6 @@
 #include "dimensions.h"
 #include "general/iter.h"
 #include "math/cast.h"
-#include "math/linalg/matrix.h"
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/tenx.h"

@@ -34,7 +34,6 @@
 #include "tools/finite/print.h"
 #include <h5pp/h5pp.h>
 
-
 template<typename Scalar>
 AlgorithmFinite<Scalar>::AlgorithmFinite(OptRitz opt_ritz, AlgorithmType algo_type) : AlgorithmBase(opt_ritz, algo_type) {
     tools::log->trace("Constructing class_algorithm_finite");
@@ -350,6 +349,10 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     // Do eig instead of eigs when it's cheap (e.g. near the edges or early in the simulation)
     m1.optSolver = m1.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
     m1.label     = enum2sv(m1.optAlgo);
+
+
+    m1.optSolver = OptSolver::H1H2;
+    m1.eigs_lib  = "SPECTRA";
 
     m1.validate();
     return m1;

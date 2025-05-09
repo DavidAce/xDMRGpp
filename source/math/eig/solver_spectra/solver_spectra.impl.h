@@ -114,7 +114,7 @@ void eig::solver_spectra<MatrixType>::eigs() {
         result.meta.time_op        = matrix.t_multOPv->get_time();
         result.meta.n              = matrix.rows();
         result.meta.tag            = config.tag;
-        result.meta.ritz           = eig::RitzToString(config.ritz.value());
+        result.meta.ritz           = eig::RitzToShortString(config.ritz.value());
         result.meta.form           = config.form.value();
         result.meta.type           = config.type.value();
         result.meta.time_total     = t_spectra->get_time();
@@ -133,8 +133,8 @@ void eig::solver_spectra<MatrixType>::eigs() {
             if constexpr(std::is_same_v<MatrixType, MatVecMPOS<Scalar>>) {
                 if (config.primme_massMatrixMatvec.has_value()) {
                     auto matrixB = GenMatVec<MatrixType>(matrix);
-                    matrixB.set_maxiters(5000);
-                    matrixB.set_tolerance(1e-6f);
+                    matrixB.set_maxiters(200000);
+                    matrixB.set_tolerance(1e-10f);
                     Spectra::SymGEigsSolver<MatrixType, GenMatVec<MatrixType>, Spectra::GEigsMode::RegularInverse> sol(matrix,matrixB, nev_internal, ncv_internal);
                     return run(sol, result.get_eigvals<Form::SYMM, type>(), result.get_eigvecs<Form::SYMM, type>());
                 }

@@ -1,5 +1,9 @@
 #pragma once
-
 #include "linalg/common.h"
-#include "linalg/matrix.h"
-#include "linalg/tensor.h"
+#include "linalg/matrix/gramSchmidt.h"
+#include "linalg/matrix/kronecker.h"
+#include "linalg/matrix/to_string.h"
+#include "linalg/tensor/kronecker.h"
+#include "linalg/tensor/to_string.h"
+#include "linalg/tensor/trace.h"
+#include "linalg/tensor/util.h"

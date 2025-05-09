@@ -30,7 +30,6 @@
 #include "tools/finite/ops.h"
 #include <complex>
 #include <h5pp/h5pp.h>
-#include <math/linalg/matrix.h>
 
 using tools::common::h5::save::should_save;
 
@@ -77,7 +76,7 @@ void tools::finite::h5::save::measurements(h5pp::File &h5file, const StorageInfo
                                            const EdgesFinite<Scalar> &edges, const AlgorithmStatus &status) {
     if(not should_save(sinfo, settings::storage::table::measurements::policy)) return;
     auto t_hdf = tid::tic_scope("measurements", tid::level::highest);
-
+    tools::log->trace("Saving measurements with type {} ({} bits)", sfinae::type_name<Scalar>(), sizeof(Scalar));
     sinfo.assert_well_defined();
     // Define the table
     std::string table_path = fmt::format("{}/measurements", sinfo.get_state_prefix());
@@ -165,7 +164,8 @@ void tools::finite::h5::save::expectations(h5pp::File &h5file, const StorageInfo
             auto                 rows = safe_cast<hsize_t>(state.measurements.expectation_values_sz->dimension(0));
             std::vector<hsize_t> dims = {rows, 0};
             std::vector<hsize_t> chnk = {rows, settings::storage::dataset::expectation_values_spin_xyz::chunksize};
-            h5file.createDataset(dset_path, h5pp::type::getH5Type<double>(), H5D_CHUNKED, dims, chnk);
+            using Real = typename MeasurementsStateFinite<Scalar>::RealScalar;
+            h5file.createDataset(dset_path, h5pp::type::getH5Type<Real>(), H5D_CHUNKED, dims, chnk);
         }
         tools::log->trace("Writing to dataset: {} | event {} | policy {}", dset_path, enum2sv(sinfo.storage_event),
                           flag2str(settings::storage::dataset::expectation_values_spin_xyz::policy));
@@ -292,7 +292,8 @@ void tools::finite::h5::save::subsystem_entanglement_entropies(h5pp::File &h5fil
     if(not attrs.link_exists) {
         std::vector<hsize_t> dims = {rows, cols, 0};
         std::vector<hsize_t> chnk = {rows, cols, settings::storage::dataset::subsystem_entanglement_entropies::chunksize};
-        h5file.createDataset(dset_path, h5pp::type::getH5Type<double>(), H5D_CHUNKED, dims, chnk, std::nullopt, 2);
+        using Real = typename MeasurementsStateFinite<Scalar>::RealScalar;
+        h5file.createDataset(dset_path, h5pp::type::getH5Type<Real>(), H5D_CHUNKED, dims, chnk, std::nullopt, 2);
         h5file.writeAttribute("extent-1,offset,iter", dset_path, "index");
         h5file.writeAttribute("Entanglement entropies for subsystems", dset_path, "description");
     }
@@ -327,7 +328,8 @@ void tools::finite::h5::save::information_lattice(h5pp::File &h5file, const Stor
     if(not attrs.link_exists) {
         std::vector<hsize_t> dims = {rows, cols, 0};
         std::vector<hsize_t> chnk = {rows, cols, settings::storage::dataset::information_lattice::chunksize};
-        h5file.createDataset(dset_path, h5pp::type::getH5Type<double>(), H5D_CHUNKED, dims, chnk, std::nullopt, 2);
+        using Real = typename MeasurementsStateFinite<Scalar>::RealScalar;
+        h5file.createDataset(dset_path, h5pp::type::getH5Type<Real>(), H5D_CHUNKED, dims, chnk, std::nullopt, 2);
         h5file.writeAttribute("extent-1,offset,iter", dset_path, "index");
         h5file.writeAttribute("Information lattice", dset_path, "description");
     }
@@ -393,7 +395,8 @@ void tools::finite::h5::save::number_probabilities(h5pp::File &h5file, const Sto
         auto                 cols = static_cast<hsize_t>(state.measurements.number_probabilities->dimension(1));
         std::vector<hsize_t> dims = {rows, cols, 0};
         std::vector<hsize_t> chnk = {rows, cols, settings::storage::dataset::number_probabilities::chunksize};
-        h5file.createDataset(dset_path, h5pp::type::getH5Type<double>(), H5D_CHUNKED, dims, chnk, std::nullopt, 6);
+        using Real = typename MeasurementsStateFinite<Scalar>::RealScalar;
+        h5file.createDataset(dset_path, h5pp::type::getH5Type<Real>(), H5D_CHUNKED, dims, chnk, std::nullopt, 6);
         h5file.writeAttribute("n_count, site, time", dset_path, "index");
         h5file.writeAttribute("Probability of finding n_count particles to the left of a site at a time index", dset_path, "description");
     }

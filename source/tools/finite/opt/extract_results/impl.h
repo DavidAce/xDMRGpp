@@ -4,7 +4,6 @@
 #include "../../opt_mps.h"
 #include "config/settings.h"
 #include "math/eig.h"
-#include "math/linalg/tensor.h"
 #include "math/num.h"
 #include "math/tenx.h"
 #include "measure/MeasurementsTensorsFinite.h"

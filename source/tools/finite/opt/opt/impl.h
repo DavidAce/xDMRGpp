@@ -84,7 +84,6 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::find_ground_state(const 
     return result;
 }
 
-
 template<typename Scalar>
 tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
                                                                           const AlgorithmStatus &status, OptMeta &meta) {
@@ -102,26 +101,30 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
     reports::eigs_log<Scalar> elog;
     reports::subs_log<Scalar> slog;
     // Dispatch optimization to the correct routine depending on the chosen algorithm
-    switch(meta.optAlgo) {
-        case OptAlgo::DMRG: {
-            result = internal::optimize_energy(tensors, initial_mps, status, meta, elog);
-            break;
-        }
-        case OptAlgo::DMRGX: {
-            result = internal::optimize_overlap(tensors, initial_mps, status, meta, slog);
-            break;
-        }
-        case OptAlgo::HYBRID_DMRGX: {
-            result = internal::optimize_subspace_variance(tensors, initial_mps, status, meta, elog);
-            break;
-        }
-        case OptAlgo::XDMRG: {
-            result = internal::optimize_folded_spectrum(tensors, initial_mps, status, meta, elog);
-            break;
-        }
-        case OptAlgo::GDMRG: {
-            result = internal::optimize_generalized_shift_invert(tensors, initial_mps, status, meta, elog);
-            break;
+    if(meta.optSolver == OptSolver::H1H2) {
+        result = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta, elog);
+    } else {
+        switch(meta.optAlgo) {
+            case OptAlgo::DMRG: {
+                result = internal::optimize_energy(tensors, initial_mps, status, meta, elog);
+                break;
+            }
+            case OptAlgo::DMRGX: {
+                result = internal::optimize_overlap(tensors, initial_mps, status, meta, slog);
+                break;
+            }
+            case OptAlgo::HYBRID_DMRGX: {
+                result = internal::optimize_subspace_variance(tensors, initial_mps, status, meta, elog);
+                break;
+            }
+            case OptAlgo::XDMRG: {
+                result = internal::optimize_folded_spectrum(tensors, initial_mps, status, meta, elog);
+                break;
+            }
+            case OptAlgo::GDMRG: {
+                result = internal::optimize_generalized_shift_invert(tensors, initial_mps, status, meta, elog);
+                break;
+            }
         }
     }
 
@@ -135,8 +138,6 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
     result.validate_result();
     return result;
 }
-
-
 
 using namespace tools::finite::opt;
 using namespace tools::finite::opt::internal;
@@ -235,7 +236,6 @@ bool comparator::eigval_and_overlap(const opt_mps<Scalar> &lhs, const opt_mps<Sc
     return comparator::eigval(lhs, rhs);
 }
 
-
 template<typename Scalar>
 Comparator<Scalar>::Comparator(const OptMeta &meta_, RealScalar<Scalar> target_energy_) : meta(&meta_), target_energy(target_energy_) {}
 
@@ -253,7 +253,6 @@ bool Comparator<Scalar>::operator()(const opt_mps<Scalar> &lhs, const opt_mps<Sc
     }
     return comparator::eigval(lhs, rhs);
 }
-
 
 template<typename Scalar>
 EigIdxComparator<Scalar>::EigIdxComparator(OptRitz ritz_, Scalar shift_, Scalar *data_, long size_) : ritz(ritz_), shift(shift_), eigvals(data_, size_) {}
@@ -276,4 +275,3 @@ bool EigIdxComparator<Scalar>::operator()(long lidx, long ridx) {
         default: throw std::logic_error("EigvalComparator: Invalid OptRitz");
     }
 }
-

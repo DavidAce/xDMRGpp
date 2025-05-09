@@ -184,7 +184,6 @@ std::vector<opt_mps<Scalar>> subspace::find_subspace(const TensorsFinite<Scalar>
     return subspace;
 }
 
-
 template<typename T, typename Scalar>
 std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_part(const TensorsFinite<Scalar> &tensors, RealScalar<Scalar> energy_target,
                                                                      const OptMeta &meta, reports::subs_log<Scalar> &slog) {
@@ -311,7 +310,8 @@ void convTestFun([[maybe_unused]] double *eval, [[maybe_unused]] void *evec, dou
             auto       rows        = static_cast<long>(primme->n);
             auto       cols        = static_cast<long>(primme->numEvals);
             MatrixType eigvecs     = Eigen::Map<MatrixType>(eigvecs_vec.data(), rows, cols);
-            eigvecs                = linalg::matrix::modified_gram_schmidt(eigvecs); // Orthogonalize
+            auto mgs                = linalg::matrix::modified_gram_schmidt(eigvecs); // Orthogonalize
+            eigvecs = std::move(mgs.Q);
             std::vector<long> valid_cols;
             for(long col = 0; col < eigvecs.cols(); ++col) {
                 if(result.meta.residual_norms.at(static_cast<size_t>(col)) > problemTol) continue;
@@ -457,7 +457,8 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const Ten
         // Normalize the columns (they are not normalized if primme hasn't converged!)
         // Normalize the columns (they are not necessarily normalized if primme hasn't converged!)
         if(solver.result.meta.nev_converged != nev) {
-            eigvecs = linalg::matrix::modified_gram_schmidt(eigvecs); // Orthogonalize
+            auto mgs = linalg::matrix::modified_gram_schmidt(eigvecs); // Orthogonalize
+            eigvecs  = std::move(mgs.Q);
             std::vector<long> valid_cols;
             for(long col = 0; col < eigvecs.cols(); ++col) {
                 if(solver.result.meta.residual_norms.at(static_cast<size_t>(col)) > solver.result.meta.problemNorm * solver.config.tol.value()) continue;
@@ -522,7 +523,6 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const Ten
     return std::make_pair(eigvecs, eigvals);
 }
 
-
 //
 // template std::pair<MatrixType<fp64>, VectorReal<fp64>> subspace::find_subspace_primme<fp64>(const TensorsFinite<fp64> &tensors, double eigval_target,
 //                                                                                             const OptMeta &meta, reports::subs_log<fp64> &slog);
@@ -564,7 +564,6 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_lapack(const Ten
     slog.subs_add_entry(nev, max_overlap, min_overlap, subspace_error, time_eig, time_ham, 0, 1, 0, 0);
     return {eigvecs, eigvals};
 }
-
 
 template<typename T, typename Scalar>
 MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
@@ -613,7 +612,6 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite<Scalar> &m
     return H1_sub;
 }
 
-
 template<typename T, typename Scalar>
 MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                                             const std::vector<opt_mps<Scalar>> &eigvecs) {
@@ -661,4 +659,3 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<Sc
     }
     return H2_sub;
 }
-

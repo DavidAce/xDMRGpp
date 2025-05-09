@@ -99,13 +99,20 @@ void eig::solver::eig(Scalar *matrix, size_type L, Vecs compute_eigvecs_, Dephas
                 config.tag = fmt::format("{}{}lapack dgeev", config.tag, config.tag.empty() ? "" : " ");
                 info       = dgeev(matrix, L);
             }
+        } else if constexpr(std::is_same_v<Scalar, fp128>) {
+            eig_init(form, Type::FP128, compute_eigvecs_, remove_phase_);
+            if constexpr(form == Form::SYMM) {
+                config.tag = fmt::format("{}{}eigen qsyevd", config.tag, config.tag.empty() ? "" : " ");
+                info       = qsyevd_eigen(matrix, L);
+            } else if constexpr(form == Form::NSYM) {
+                config.tag = fmt::format("{}{}eigen qgeev", config.tag, config.tag.empty() ? "" : " ");
+                info       = qgeev_eigen(matrix, L);
+            }
         } else if constexpr(std::is_same_v<Scalar, cx32>) {
             eig_init(form, Type::CX32, compute_eigvecs_, remove_phase_);
             if constexpr(form == Form::SYMM) {
                 config.tag = fmt::format("{}{}lapack cheevd", config.tag, config.tag.empty() ? "" : " ");
                 info       = cheevd(matrix, L);
-                //                if(config.tag.empty()) config.tag = "zheev";
-                //                info = zheev(matrix, L);
             } else if constexpr(form == Form::NSYM) {
                 config.tag = fmt::format("{}{}lapack cgeev", config.tag, config.tag.empty() ? "" : " ");
                 info       = cgeev(matrix, L);
@@ -115,11 +122,18 @@ void eig::solver::eig(Scalar *matrix, size_type L, Vecs compute_eigvecs_, Dephas
             if constexpr(form == Form::SYMM) {
                 config.tag = fmt::format("{}{}lapack zheevd", config.tag, config.tag.empty() ? "" : " ");
                 info       = zheevd(matrix, L);
-                //                if(config.tag.empty()) config.tag = "zheev";
-                //                info = zheev(matrix, L);
             } else if constexpr(form == Form::NSYM) {
                 config.tag = fmt::format("{}{}lapack zgeev", config.tag, config.tag.empty() ? "" : " ");
                 info       = zgeev(matrix, L);
+            }
+        } else if constexpr(std::is_same_v<Scalar, cx128>) {
+            eig_init(form, Type::CX128, compute_eigvecs_, remove_phase_);
+            if constexpr(form == Form::SYMM) {
+                config.tag = fmt::format("{}{}eigen wheevd", config.tag, config.tag.empty() ? "" : " ");
+                info       = wheevd_eigen(matrix, L);
+            } else if constexpr(form == Form::NSYM) {
+                config.tag = fmt::format("{}{}eigen wgeev", config.tag, config.tag.empty() ? "" : " ");
+                info       = wgeev_eigen(matrix, L);
             }
         } else {
             throw except::runtime_error("Unknown type");
@@ -127,7 +141,7 @@ void eig::solver::eig(Scalar *matrix, size_type L, Vecs compute_eigvecs_, Dephas
 
     } catch(std::exception &ex) {
         eig::log->error("Eigenvalue solver failed: {}", ex.what());
-        throw except::runtime_error("Eigenvalue solver Failed: {}", ex.what());
+        throw except::runtime_error("Eigenvalue solver failed: {}", ex.what());
     }
     result.build_eigvals_cx32();
     result.build_eigvecs_cx32();

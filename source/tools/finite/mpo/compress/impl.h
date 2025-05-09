@@ -6,8 +6,7 @@
 #include "general/sfinae.h"
 #include "io/fmt_custom.h"
 #include "math/float.h"
-#include "math/linalg/matrix.h"
-#include "math/linalg/tensor.h"
+#include "math/linalg/matrix/to_string.h"
 #include "math/svd.h"
 #include "tid/tid.h"
 #include <complex>

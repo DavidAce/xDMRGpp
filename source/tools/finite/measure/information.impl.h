@@ -1,16 +1,15 @@
 #pragma once
 
-#include "information.h"
 #include "config/settings.h"
 #include "debug/info.h"
 #include "dimensions.h"
 #include "entanglement_entropy.h"
 #include "general/iter.h"
+#include "information.h"
 #include "io/fmt_custom.h"
 #include "math/eig.h"
 #include "math/float.h"
-#include "math/linalg/matrix.h"
-#include "math/linalg/tensor.h"
+#include "math/linalg/matrix/to_string.h"
 #include "math/num.h"
 #include "math/stat.h"
 #include "math/svd.h"
@@ -311,7 +310,6 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
 
     return entanglement_entropy_log2;
 }
-
 
 template<typename Scalar>
 std::pair<std::deque<std::vector<size_t>>, std::deque<std::vector<size_t>>> get_missing_subsystems(const RealArrayXX<Scalar> &see) {
@@ -621,7 +619,6 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
     check_see_progress<Scalar>(see, LogPolicy::DEBUG, spdlog::level::info);
     return see;
 }
-
 
 template<typename Scalar>
 RealArrayXX<Scalar> tools::finite::measure::information_lattice(const RealArrayXX<Scalar> &SEE) {

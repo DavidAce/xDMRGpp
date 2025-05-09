@@ -86,7 +86,7 @@ void EnvBase<Scalar>::build_block(Eigen::Tensor<Scalar, 3> &otherblock, const Ei
     /*!< Contracts a site into the block-> */
     // Note that otherblock, mps and mpo should correspond to the same site! I.e. their "get_position()" are all equal.
     // This can't be checked here though, so do that before calling this function.
-    if constexpr(settings::debug) tools::log->trace("EnvBase<Scalar>::build_block(otherblock,mps,mpo): side({}), pos({})", side, get_position());
+    if constexpr(settings::debug) tools::log->trace("EnvBase<Scalar>::build_block(): side({}), pos({})", side, get_position());
     unique_id      = std::nullopt;
     unique_id_env  = std::nullopt;
     unique_id_mps  = std::nullopt;
@@ -417,7 +417,7 @@ Eigen::Tensor<T, 3> EnvBase<Scalar>::get_expansion_term(const MpsSite<Scalar> &m
     assert(get_position() == mps.get_position());
     assert(mps.get_position() == mpo.get_position());
     decltype(auto) mpo_tensor = tag == "ene" ? mpo.template MPO_as<T>() : mpo.template MPO2_as<T>();
-    decltype(auto) mps_tensor = mps.template get_M_as<T>();
+    decltype(auto) mps_tensor = mps.template get_M_bare_as<T>();
     decltype(auto) blk_tensor = get_block_as<T>();
     return get_expansion_term_exec<T>(mps_tensor, mpo_tensor, blk_tensor, side);
 }

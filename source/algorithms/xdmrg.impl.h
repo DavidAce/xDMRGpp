@@ -6,7 +6,6 @@
 #include "general/iter.h"
 #include "io/fmt_custom.h"
 #include "math/eig.h"
-#include "math/linalg/matrix.h"
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/svd.h"

@@ -96,6 +96,28 @@ namespace eig {
         }
     }
 
+    inline std::string_view RitzToShortString(Ritz ritz) {
+        switch(ritz) {
+            case Ritz::LA: return "LA";
+            case Ritz::SA: return "SA";
+            case Ritz::LM: return "LM";
+            case Ritz::SM: return "SM";
+            case Ritz::LR: return "LR";
+            case Ritz::SR: return "SR";
+            case Ritz::LI: return "LI";
+            case Ritz::SI: return "SI";
+            case Ritz::BE: return "BE";
+            case Ritz::primme_smallest: return "SA";
+            case Ritz::primme_largest: return "LA";
+            case Ritz::primme_closest_geq: return "SM";
+            case Ritz::primme_closest_leq: return "SM";
+            case Ritz::primme_closest_abs: return "SM";
+            case Ritz::primme_largest_abs: return "LM";
+            default: throw std::logic_error("No valid eig::Ritz given");
+        }
+    }
+
+
     inline std::string_view FactorizationToString(Factorization fact) {
         switch(fact) {
             case Factorization::NONE: return "NONE";

@@ -3,7 +3,6 @@
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
-#include "math/linalg/matrix.h"
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/tenx.h"
@@ -251,7 +250,6 @@ Eigen::Tensor<Scalar, 3> get_random_spinor_tensor(const std::array<long, 3> &dim
                 Gmap.colwise().normalize();
                 auto GtG   = Gmap.adjoint() * Gmap;
                 isIdentity = GtG.isIdentity(1e-12);
-                tools::log->info("G round {}:\n{}\n{}\n", rounds, linalg::matrix::to_string(Gmap, 16), linalg::matrix::to_string(GtG, 16));
                 if(isIdentity) break;
             }
             rounds++;

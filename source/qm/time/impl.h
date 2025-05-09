@@ -2,7 +2,7 @@
 #include "debug/exceptions.h"
 #include "general/iter.h"
 #include "io/fmt_custom.h"
-#include "math/linalg.h"
+#include "math/linalg/tensor/to_string.h"
 #include "math/tenx.h"
 #include "qm/time.h"
 #include "tools/common/log.h"
@@ -12,7 +12,8 @@
 
 template<typename T, typename Scalar>
 requires sfinae::is_std_complex_v<T>
-std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd) {
+std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
+                                                                    const Eigen::Tensor<Scalar, 2> &h_odd) {
     using RealT       = decltype(std::real(std::declval<T>()));
     auto h_evn_matrix = tenx::asScalarType<T>(tenx::MatrixMap(h_evn));
     auto h_odd_matrix = tenx::asScalarType<T>(tenx::MatrixMap(h_odd));
@@ -26,7 +27,8 @@ std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_1st_order(cx128 delta_
 
 template<typename T, typename Scalar>
 requires sfinae::is_std_complex_v<T>
-std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_2nd_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd) {
+std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_2nd_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
+                                                                    const Eigen::Tensor<Scalar, 2> &h_odd) {
     using RealT       = decltype(std::real(std::declval<T>()));
     auto h_evn_matrix = tenx::asScalarType<T>(tenx::MatrixMap(h_evn));
     auto h_odd_matrix = tenx::asScalarType<T>(tenx::MatrixMap(h_odd));
@@ -47,7 +49,8 @@ std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_2nd_order(cx128 delta_
  */
 template<typename T, typename Scalar>
 requires sfinae::is_std_complex_v<T>
-std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_4th_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd) {
+std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_4th_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
+                                                                    const Eigen::Tensor<Scalar, 2> &h_odd) {
     using RealT = decltype(std::real(std::declval<T>()));
 
     auto  h_evn_matrix = tenx::asScalarType<T>(tenx::MatrixMap(h_evn));

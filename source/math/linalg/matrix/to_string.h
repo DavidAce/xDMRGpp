@@ -1,36 +1,10 @@
 #pragma once
-#include "common.h"
+#include "../common.h"
+#include "debug/exceptions.h"
 #include "math/float.h"
-#include "unsupported/Eigen/KroneckerProduct"
 #include <Eigen/Core>
 
 namespace linalg::matrix {
-    template<auto N, auto M>
-    constexpr auto multiply() {
-        if constexpr(N == -1 or M == -1)
-            return -1;
-        else
-            return N * M;
-    }
-
-    template<typename DA, typename DB>
-    using KroneckerResultType = Eigen::Matrix<cplx_or_real<typename DA::Scalar, typename DB::Scalar>, multiply<DA::RowsAtCompileTime, DB::RowsAtCompileTime>(),
-                                              multiply<DA::ColsAtCompileTime, DB::ColsAtCompileTime>(), Eigen::ColMajor>;
-
-    template<typename DerivedA, typename DerivedB>
-    KroneckerResultType<DerivedA, DerivedB> kronecker(const Eigen::PlainObjectBase<DerivedA> &A, const Eigen::PlainObjectBase<DerivedB> &B, bool mirror) {
-        if(mirror)
-            return Eigen::kroneckerProduct(B.derived(), A.derived());
-        else
-            return Eigen::kroneckerProduct(A.derived(), B.derived());
-    }
-
-    template<typename DerivedA, typename DerivedB>
-    auto kronecker(const Eigen::EigenBase<DerivedA> &A, const Eigen::EigenBase<DerivedB> &B, bool mirror = false) {
-        if constexpr(is_PlainObject<DerivedA>::value and is_PlainObject<DerivedB>::value)
-            return kronecker(A, B, mirror);
-        else { return kronecker(A.derived().eval(), B.derived().eval(), mirror); }
-    }
 
     template<typename T, typename IOFormat_t, typename = std::enable_if_t<std::is_same_v<IOFormat_t, Eigen::IOFormat>>>
     std::string to_string(const Eigen::EigenBase<T> &m, const IOFormat_t &f) {
@@ -117,29 +91,4 @@ namespace linalg::matrix {
         Eigen::IOFormat f(prec, flags, sep, "\n", "[", "]", "[", "]");
         return to_string(m, f);
     }
-
-    template<typename T>
-    Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> modified_gram_schmidt(const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &Vconst) {
-        // Orthonormalize with Modified Gram Schmidt
-        using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-        using Real       = decltype(std::real(std::declval<T>()));
-        MatrixType V     = Vconst;
-        MatrixType Q     = MatrixType::Zero(V.rows(), V.cols());
-        MatrixType R     = MatrixType::Zero(V.cols(), V.cols());
-        for(long i = 0; i < V.cols(); ++i) {
-            Q.col(i) = V.col(i);
-            R(i, i)  = Q.col(i).norm();
-            if(std::abs(R(i, i)) < std::numeric_limits<Real>::epsilon()) {
-                // tools::log->error("Q.col({}) is a zero vector:\n Q: \n{}\n", i, linalg::matrix::to_string(Q.real(), 8));
-                continue;
-            }
-            Q.col(i) /= R(i, i);
-            for(long j = i + 1; j < V.cols(); ++j) {
-                R(i, j) = Q.col(i).dot(V.col(j));
-                V.col(j) -= Q.col(i) * R(i, j);
-            }
-        }
-        return Q;
-    }
-
 }

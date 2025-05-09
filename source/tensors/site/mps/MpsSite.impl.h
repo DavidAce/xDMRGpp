@@ -5,7 +5,7 @@
 #include "config/enums.h"
 #include "math/float.h"
 #include "math/hash.h"
-#include "math/linalg/tensor.h"
+#include "math/linalg/tensor/to_string.h"
 #include "math/num.h"
 #include "MpsSite.h"
 #include "tid/tid.h"
@@ -21,7 +21,6 @@ namespace settings {
     inline constexpr bool verbose_merge     = false;
     inline constexpr bool verbose_apply_mpo = false;
 }
-
 
 template<typename Scalar>
 MpsSite<Scalar>::MpsSite() = default;
@@ -45,8 +44,6 @@ template<typename Scalar>
 MpsSite<Scalar>::MpsSite(const MpsSite &other) = default;
 template<typename Scalar>
 MpsSite<Scalar> &MpsSite<Scalar>::operator=(const MpsSite &other) = default;
-
-
 
 template<typename Scalar>
 bool MpsSite<Scalar>::isCenter() const {
@@ -94,7 +91,7 @@ bool MpsSite<Scalar>::is_normalized(RealScalar prec) const {
     if constexpr(!settings::debug) {
         if(is_norm_cached.has_value()) return is_norm_cached.value();
     }
-    prec = std::max(prec, std::numeric_limits<RealScalar>::epsilon() * 100);
+    prec       = std::max(prec, std::numeric_limits<RealScalar>::epsilon() * 100);
     auto t_dbg = tid::tic_token("is_normalized", tid::level::highest);
     if(isCenter() or get_label() == "AC") {
         auto norm      = tools::common::contraction::contract_mps_norm(get_M());
@@ -144,7 +141,7 @@ void MpsSite<Scalar>::assert_dimensions() const {
 
 template<typename Scalar>
 void MpsSite<Scalar>::assert_normalized(RealScalar prec) const {
-    prec = std::max(prec, std::numeric_limits<RealScalar>::epsilon()* 100);
+    prec = std::max(prec, std::numeric_limits<RealScalar>::epsilon() * 100);
     if(not is_normalized(prec))
         throw except::runtime_error("MpsSite<Scalar>::assert_normalized({0:.2e}): {1}^dagger {1} is not normalized at pos {2}", fp(prec), get_label(),
                                     get_position());

@@ -36,6 +36,7 @@ namespace tools::finite::opt {
         std::array<long, 3>        problem_dims = {};
         std::vector<size_t>        chosen_sites = {};
         std::string                label;
+        std::string                eigs_lib;
         std::optional<double>      subspace_tol          = std::nullopt;
         std::optional<double>      eigv_target           = std::nullopt; // AKA shift
         std::optional<double>      eigs_tol              = std::nullopt;

@@ -7,7 +7,6 @@
 #include "general/iter.h"
 #include "general/sfinae.h"
 #include "math/cast.h"
-#include "math/linalg/tensor.h"
 #include "math/num.h"
 #include "math/stat.h"
 #include "StateFinite.h"
