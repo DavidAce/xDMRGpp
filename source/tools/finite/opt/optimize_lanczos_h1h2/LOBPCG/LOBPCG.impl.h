@@ -180,7 +180,10 @@ void LOBPCG<Scalar>::build() {
         return;
     }
 
-    if(use_preconditioner) { W = MultPX(W); }
+    if(use_preconditioner) {
+        Q.rightCols(wBlocks) = MultPX(Q.rightCols(wBlocks));
+        // W = MultPX(W);
+    }
 
     if(Q.colwise().norm().minCoeff() == 0) {
         eig::log->warn("Q before DGKS: \n{}\n", linalg::matrix::to_string(Q, 8));

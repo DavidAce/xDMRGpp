@@ -167,7 +167,7 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
     solver.set_jcbMaxBlockSize(1024);
-    solver.set_chebyshevFilterDegree(4);
+    solver.set_chebyshevFilterDegree(1);
     solver.set_ResidualHistoryLength(4);
     solver.use_refined_rayleigh_ritz = false;
     solver.run();
