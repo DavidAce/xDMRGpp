@@ -127,9 +127,16 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
             }
         }
     }
-
+    auto meta2      = meta;
+    meta2.optSolver = OptSolver::EIGS;
+    auto val1       = result.get_hsquared();
+    auto result2          = internal::optimize_folded_spectrum(tensors, initial_mps, status, meta2, elog);
+    auto val2       = result.get_hsquared();
     slog.print_subs_report();
     elog.print_eigs_report();
+    tools::log->info("val1(H1H2) = {:.16f},  val2(EIGS) = {:.16f}", val1, val2);
+    if(val1 - val2 > 10) {
+        throw except::runtime_error("Eigval mismatch: val1(H1H2) = {:.16f},  val2(EIGS) = {:.16f}", val1, val2);}
 
     // Finish up
     result.set_optsolver(meta.optSolver);

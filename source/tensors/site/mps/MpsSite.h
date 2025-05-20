@@ -107,10 +107,10 @@ class MpsSite {
 
     [[nodiscard]] bool                            is_real() const;
     [[nodiscard]] bool                            has_nan() const;
-    [[nodiscard]] bool                            is_normalized(RealScalar prec = std::numeric_limits<RealScalar>::epsilon() * 100) const;
+    [[nodiscard]] bool                            is_normalized(RealScalar prec = std::numeric_limits<RealScalar>::epsilon()) const;
     void                                          assert_validity() const;
     void                                          assert_dimensions() const;
-    void                                          assert_normalized(RealScalar prec = std::numeric_limits<RealScalar>::epsilon() * 100) const;
+    void                                          assert_normalized(RealScalar prec = std::numeric_limits<RealScalar>::epsilon()) const;
     [[nodiscard]] bool                            isCenter() const;
     [[nodiscard]] bool                            has_L() const;
     [[nodiscard]] bool                            has_M() const;

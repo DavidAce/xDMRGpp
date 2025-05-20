@@ -307,7 +307,7 @@ void tools::finite::env::internal::get_optimally_mixed_block(const std::vector<s
             nonZeroCols = std::move(mgs.nonZeroCols);
             V           = mgs.Q(Eigen::all, nonZeroCols);
             numMGS++;
-            if(nonZeroCols.size() == mgs.Q.cols()) break;
+            if(nonZeroCols.size() == static_cast<size_t>(mgs.Q.cols())) break;
         }
 
         // V should now have orthonormal vectors

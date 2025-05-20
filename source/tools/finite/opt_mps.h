@@ -121,6 +121,10 @@ namespace tools::finite::opt {
         [[nodiscard]] auto get_vector_as() const {
             return tenx::VectorCast(get_tensor_as<T>());
         }
+        template<typename T>
+        [[nodiscard]] auto get_tensor_as_matrix() const {
+            return tenx::MatrixCast(get_tensor_as<T>(), get_tensor().size(), Eigen::Index{1});
+        }
         [[nodiscard]] const auto &get_name() const { return get(name, "name"); }
         [[nodiscard]] const auto &get_bond() const { return get(bond, "bond"); }
         [[nodiscard]] const auto &get_sites() const { return get(sites, "sites"); }
@@ -227,8 +231,9 @@ namespace tools::finite::opt {
         template<typename T> void set_eigs_eigval(T eigs_eigval_) { eigs_eigval = eigs_eigval_; }
         template<typename T> void set_eigs_ritz(T eigs_ritz_) { eigs_ritz = eigs_ritz_; }
         template<typename T> void set_eigs_shift(T eigs_shift_) {
-            if constexpr(sfinae::is_std_complex_v<Scalar>){eigs_shift = static_cast<Scalar>(eigs_shift_);}
-            else {
+            if constexpr(sfinae::is_std_complex_v<Scalar>) {
+                eigs_shift = static_cast<Scalar>(eigs_shift_);
+            } else {
                 eigs_shift = static_cast<Scalar>(std::real(eigs_shift_));
             }
         }

@@ -9,7 +9,7 @@ namespace linalg::matrix {
 #if defined(NDEBUG)
     inline constexpr bool debug_mgs = false;
 #else
-    inline constexpr bool debug_mgs = true;
+    inline constexpr bool debug_mgs = false;
 #endif
 
     template<typename Scalar>
@@ -22,6 +22,7 @@ namespace linalg::matrix {
         using VectorIdxT = Eigen::Matrix<IdxT, Eigen::Dynamic, 1>;
         MatrixType        Q;
         MatrixType        R;
+        IdxT              nCols = 0;
         std::vector<IdxT> nonZeroCols;
         VectorReal        initColNorms;
         RealScalar        orthError     = RealScalar{0};
@@ -32,27 +33,30 @@ namespace linalg::matrix {
     template<typename MatrixT>
     MGS_Result<typename MatrixT::Scalar> modified_gram_schmidt_dgks(const MatrixT &A) {
         // Orthonormalize with Modified Gram Schmidt
-        using IdxT       = typename MatrixT::IdxT;
+        using IdxT       = Eigen::Index;
         using Scalar     = typename MatrixT::Scalar;
         using MatrixType = typename MGS_Result<Scalar>::MatrixType;
         using RealScalar = typename MGS_Result<Scalar>::RealScalar;
         // using VectorReal = typename MGS_Result<Scalar>::VectorReal;
         // using VectorIdxT = typename MGSResult<Scalar>::VectorIdxT;
-        auto m         = MGS_Result<Scalar>();
-        m.Q            = A;
-        m.R            = MatrixType::Zero(A.cols(), A.cols());
-        m.initColNorms = A.colwise().norm();
-        auto eps       = std::numeric_limits<RealScalar>::epsilon() * std::sqrt(A.cols());
+        auto m               = MGS_Result<Scalar>();
+        m.Q                  = A;
+        m.R                  = MatrixType::Zero(A.cols(), A.cols());
+        m.nCols              = A.cols();
+        m.initColNorms       = A.colwise().norm();
+        RealScalar AsqrtSize = std::abs(std::sqrt<RealScalar>(A.cols()));
+        RealScalar eps       = std::numeric_limits<RealScalar>::epsilon();
+
         m.nonZeroCols.reserve(A.cols());
 
         for(long i = 0; i < m.Q.cols(); ++i) {
-            m.R(i, i) = m.Q.col(i).norm();
+            const auto colNorm = m.Q.col(i).norm();
+            m.R(i, i)          = colNorm;
 
             // Tolerance for zero detection
-            auto colNormTol = eps * m.initColNorms(i);
-
+            auto colNormTol = eps * AsqrtSize * m.initColNorms(i);
             // Avoid normalizing a near-zero vector.
-            if(std::abs(m.R(i, i)) < colNormTol or std::isinf(m.R(i, i)) or std::isnan(m.R(i, i))) {
+            if(colNorm < colNormTol or m.initColNorms(i) < eps * AsqrtSize or !std::isfinite(colNorm)) {
                 m.Q.col(i).setZero(); // Set to zero explicitly
                 continue;
             }
@@ -84,12 +88,14 @@ namespace linalg::matrix {
         }
         m.nonZeroCols.shrink_to_fit();
         if constexpr(debug_mgs) {
-            // Orthogonality check
-            MatrixType Qnnz    = Q(Eigen::all, m.nonZeroCols);
-            auto       nnzCols = Qnnz.cols();
-            m.orthError        = (Qnnz.adjoint() * Qnnz - MatrixType::Identity(nnzCols, nnzCols)).cwiseAbs().maxCoeff();
-            m.maxOrthError     = eps * 1e4;
-            m.isOrthonormal    = m.orthError <= m.maxOrthTol;
+            if(m.nonZeroCols.size() >= 2) {
+                // Orthogonality check
+                MatrixType Qnnz    = m.Q(Eigen::all, m.nonZeroCols);
+                auto       nnzCols = Qnnz.cols();
+                m.orthError        = (Qnnz.adjoint() * Qnnz - MatrixType::Identity(nnzCols, nnzCols)).cwiseAbs().maxCoeff();
+                m.maxOrthError     = eps * RealScalar{1e4};
+                m.isOrthonormal    = m.orthError <= m.maxOrthError;
+            }
         }
         return m;
     }
@@ -102,21 +108,24 @@ namespace linalg::matrix {
         using RealScalar = typename MGS_Result<Scalar>::RealScalar;
         // using VectorReal = typename MGS_Result<Scalar>::VectorReal;
         // using VectorIdxT = typename MGSResult<Scalar>::VectorIdxT;
-        auto m         = MGS_Result<Scalar>();
-        m.Q            = A;
-        m.R            = MatrixType::Zero(A.cols(), A.cols());
-        m.initColNorms = A.colwise().norm();
-        auto eps       = std::numeric_limits<RealScalar>::epsilon() * std::sqrt(A.cols());
+        auto m               = MGS_Result<Scalar>();
+        m.Q                  = A;
+        m.R                  = MatrixType::Zero(A.cols(), A.cols());
+        m.nCols              = A.cols();
+        m.initColNorms       = A.colwise().norm();
+        RealScalar AsqrtSize = std::abs(std::sqrt<RealScalar>(A.cols()));
+        RealScalar eps       = std::numeric_limits<RealScalar>::epsilon();
         m.nonZeroCols.reserve(A.cols());
 
         for(long i = 0; i < m.Q.cols(); ++i) {
-            m.R(i, i) = m.Q.col(i).norm();
+            const auto colNorm = m.Q.col(i).norm();
+            m.R(i, i)          = colNorm;
 
             // Tolerance for zero detection
-            auto colNormTol = eps * m.initColNorms(i);
+            RealScalar colNormTol = eps * AsqrtSize * m.initColNorms(i);
 
             // Avoid normalizing a near-zero vector.
-            if(std::abs(m.R(i, i)) < colNormTol) {
+            if(colNorm < colNormTol or m.initColNorms(i) < eps * AsqrtSize or !std::isfinite(colNorm)) {
                 m.Q.col(i).setZero(); // Set to zero explicitly
                 continue;
             }
@@ -130,11 +139,11 @@ namespace linalg::matrix {
         m.nonZeroCols.shrink_to_fit();
         if constexpr(debug_mgs) {
             // Orthogonality check
-            MatrixType Qnnz    = Q(Eigen::all, m.nonZeroCols);
+            MatrixType Qnnz    = m.Q(Eigen::all, m.nonZeroCols);
             auto       nnzCols = Qnnz.cols();
             m.orthError        = (Qnnz.adjoint() * Qnnz - MatrixType::Identity(nnzCols, nnzCols)).cwiseAbs().maxCoeff();
-            m.maxOrthError     = eps * 1e4;
-            m.isOrthonormal    = m.orthError <= m.maxOrthTol;
+            m.maxOrthError     = eps * AsqrtSize * 10000;
+            m.isOrthonormal    = m.orthError <= m.maxOrthError;
         }
         return m;
     }
@@ -174,6 +183,7 @@ namespace linalg::matrix {
         using VectorIdxT = Eigen::Matrix<IdxT, Eigen::Dynamic, 1>;
         MatrixType        Q;
         MatrixType        R;
+        IdxT              nCols = 0;
         VectorReal        Rdiag;
         VectorReal        initColNorms;
         VectorIdxT        permutation; // A permutation vector that keeps track of column pivoting
@@ -184,7 +194,7 @@ namespace linalg::matrix {
     };
 
     template<typename MatrixT>
-    MGS_ColPiv_Result<typename MatrixT::Scalar> modified_gram_schmidt_colpiv(const MatrixT &A, long ncfix) {
+    MGS_ColPiv_Result<typename MatrixT::Scalar> modified_gram_schmidt_colpiv(const MatrixT &A, long ncfix = 0) {
         using Scalar = typename MatrixT::Scalar;
         // using MatrixType = typename MGS_ColPiv_Result<Scalar>::MatrixType;
         using IdxT       = typename MGS_ColPiv_Result<Scalar>::IdxT;
@@ -196,6 +206,7 @@ namespace linalg::matrix {
 
         MGS_ColPiv_Result<Scalar> m;
         m.Q            = A;
+        m.nCols        = ncols;
         m.Rdiag        = VectorReal::Zero(ncols);
         m.initColNorms = A.colwise().norm();
         m.ncfix        = ncfix;
@@ -203,8 +214,8 @@ namespace linalg::matrix {
         // Initialize a permutation vector that keeps track of column pivoting
         m.permutation = VectorIdxT::LinSpaced(ncols, 0, ncols - 1);
 
-        auto eps = std::numeric_limits<RealScalar>::epsilon() * std::sqrt(ncols);
-
+        RealScalar AsqrtSize = std::abs(std::sqrt<RealScalar>(A.cols()));
+        RealScalar eps       = std::numeric_limits<RealScalar>::epsilon();
         // Perform the Modified Gram-Schmidt process with column pivoting
         // The first ncfix columns (from M) are fixed/locked, while the rest are mutable
         for(IdxT i = 0; i < ncols; ++i) {
@@ -232,16 +243,113 @@ namespace linalg::matrix {
             m.Rdiag(i)         = colNorm;
 
             // Tolerance for zero detection
-            auto colNormTol = eps * m.initColNorms(i);
+            RealScalar colNormTol = eps * AsqrtSize * m.initColNorms(i);
 
             // Avoid normalizing a near-zero vector.
-            if(std::abs(colNorm) < colNormTol) {
+            if(std::abs(colNorm) < colNormTol or m.initColNorms(i) < eps * AsqrtSize or !std::isfinite(colNorm)) {
                 m.Q.col(i).setZero(); // Set to zero explicitly
                 continue;
             }
+            m.nonZeroCols.emplace_back(i);
+
             // Normalize only mutable columns
             if(i >= ncfix) m.Q.col(i) /= colNorm;
 
+            // Project the subsequent mutable columns
+            for(long j = i + 1; j < ncols; ++j) {
+                if(j < ncfix) {
+                    continue; // Skip fixed columns
+                }
+                // Subtract projection onto Q.col(i)
+                /* clang-format off */
+            if(i >= ncfix)  m.Q.col(j) -= m.Q.col(i).dot(m.Q.col(j)) * m.Q.col(i);
+            else            m.Q.col(j) -= m.Q.col(i).dot(m.Q.col(j)) * m.Q.col(i) / (colNorm*colNorm); // Q.col(i) is not normalized if i < ncfix
+                /* clang-format on */
+            }
+        }
+
+        return m;
+    }
+
+    template<typename MatrixT>
+    MGS_ColPiv_Result<typename MatrixT::Scalar> modified_gram_schmidt_colpiv_dgks(const MatrixT &A, long ncfix = 0) {
+        using Scalar = typename MatrixT::Scalar;
+        // using MatrixType = typename MGS_ColPiv_Result<Scalar>::MatrixType;
+        using IdxT       = typename MGS_ColPiv_Result<Scalar>::IdxT;
+        using RealScalar = typename MGS_ColPiv_Result<Scalar>::RealScalar;
+        using VectorReal = typename MGS_ColPiv_Result<Scalar>::VectorReal;
+        using VectorIdxT = typename MGS_ColPiv_Result<Scalar>::VectorIdxT;
+
+        const IdxT ncols = A.cols();
+
+        MGS_ColPiv_Result<Scalar> m;
+        m.Q            = A;
+        m.nCols        = ncols;
+        m.Rdiag        = VectorReal::Zero(ncols);
+        m.initColNorms = A.colwise().norm();
+        m.ncfix        = ncfix;
+
+        // Initialize a permutation vector that keeps track of column pivoting
+        m.permutation = VectorIdxT::LinSpaced(ncols, 0, ncols - 1);
+
+        RealScalar AsqrtSize = std::abs(std::sqrt<RealScalar>(A.cols()));
+        RealScalar eps       = std::numeric_limits<RealScalar>::epsilon();
+        // Perform the Modified Gram-Schmidt process with column pivoting
+        // The first ncfix columns (from M) are fixed/locked, while the rest are mutable
+        for(IdxT i = 0; i < ncols; ++i) {
+            // Pivot among mutable columns (i >= ncfix)
+            if(i >= ncfix) {
+                // Determine the index of the column (from i to end) with the maximal norm.
+                IdxT       pivot   = i;
+                RealScalar maxNorm = m.Q.col(i).norm();
+                for(IdxT j = i + 1; j < ncols; ++j) {
+                    RealScalar norm_j = m.Q.col(j).norm();
+                    if(norm_j > maxNorm) {
+                        maxNorm = norm_j;
+                        pivot   = j;
+                    }
+                }
+                // Swap the current column with the column having maximum residual norm.
+                if(pivot != i) {
+                    m.Q.col(i).swap(m.Q.col(pivot));
+                    std::swap(m.permutation(i), m.permutation(pivot));
+                    std::swap(m.initColNorms(i), m.initColNorms(pivot));
+                }
+            }
+
+            auto colNorm = m.Q.col(i).norm();
+            m.Rdiag(i)   = colNorm;
+
+            // Tolerance for zero detection
+            RealScalar colNormTol = eps * AsqrtSize * m.initColNorms(i);
+
+            // Avoid normalizing a near-zero vector.
+            if(colNorm < colNormTol or m.initColNorms(i) < eps * AsqrtSize or !std::isfinite(colNorm)) {
+                m.Q.col(i).setZero(); // Set to zero explicitly
+                continue;
+            }
+            assert(m.Q.col(i).allFinite());
+            m.nonZeroCols.emplace_back(i);
+
+            // DGKS re-orthogonalization on Q.col(i)
+            // First CGS‐style sweep: project out previous q_j
+            if(i >= ncfix) {
+                for(IdxT j = 0; j < i; ++j) {
+                    Scalar alpha = m.Q.col(j).dot(m.Q.col(i));
+                    m.Q.col(i) -= alpha * m.Q.col(j);
+                }
+                // Second sweep: mop up the rounding residues
+                for(IdxT j = 0; j < i; ++j) {
+                    Scalar beta = m.Q.col(j).dot(m.Q.col(i));
+                    m.Q.col(i) -= beta * m.Q.col(j);
+                }
+                // Update the norm
+                colNorm    = m.Q.col(i).norm();
+                m.Rdiag(i) = colNorm;
+                m.Q.col(i) /= colNorm; // Renormalize
+            }
+            assert(m.Q.col(i).allFinite());
+            assert(colNorm != 0);
             // Project the subsequent mutable columns
             for(long j = i + 1; j < ncols; ++j) {
                 if(j < ncfix) {

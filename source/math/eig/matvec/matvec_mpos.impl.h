@@ -947,7 +947,7 @@ void MatVecMPOS<Scalar>::MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long
     auto mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
     auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
     if(invJcbDiagB.size() == 0) invJcbDiagB = get_diagonal_new(0, mpos_B, envL_B, envR_B).array().cwiseInverse();
-    auto invCfg  = InvMatVecCfg<Scalar>{.maxiters = maxiters, .tolerance = tolerance, .invdiag = invJcbDiagB.data()};
+    auto invCfg = InvMatVecCfg<Scalar>{.maxiters = maxiters, .tolerance = tolerance, .invdiag = invJcbDiagB.data()};
     if(mpos_B.size() == 1) {
         tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos_B.front(), envL_B, envR_B, invCfg);
     } else if(!mpos_B_shf.empty()) {
@@ -1042,6 +1042,20 @@ template<typename Scalar>
 typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::operator*(const VectorType &x) const {
     assert(x.size() == get_size());
     VectorType y(x.size());
+    MultAx(x.data(), y.data());
+    return y;
+}
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultAX(const Eigen::Ref<const MatrixType> &X) const {
+    assert(X.rows() == get_size());
+    MatrixType Y(X.rows(), X.cols());
+    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultAx(X.col(i).data(), Y.col(i).data()); }
+    return Y;
+}
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx(const Eigen::Ref<const VectorType> &x) const {
+    assert(x.rows() == get_size());
+    VectorType y(x.rows());
     MultAx(x.data(), y.data());
     return y;
 }
@@ -1344,9 +1358,18 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] void *x, [[maybe_unused]] int *
 }
 
 template<typename Scalar>
-void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] Scalar *mps_in_, [[maybe_unused]] Scalar *mps_out_, Scalar shift) {
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultPX(const Eigen::Ref<const MatrixType> &X) {
+    if(jcbMaxBlockSize == 0 or preconditioner == eig::Preconditioner::NONE) return X;
+    assert(X.rows() == get_size());
+    MatrixType Y(X.rows(), X.cols());
+    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultPc(X.col(i).data(), Y.col(i).data()); }
+    return Y;
+}
+
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_unused]] Scalar *mps_out_, Scalar shift) {
     if(preconditioner == eig::Preconditioner::NONE) return;
-    auto mps_in  = Eigen::Map<VectorType>(mps_in_, size_mps);
+    auto mps_in  = Eigen::Map<const VectorType>(mps_in_, size_mps);
     auto mps_out = Eigen::Map<VectorType>(mps_out_, size_mps);
     CalcPc(shift);
     if(jcbMaxBlockSize == 1) {

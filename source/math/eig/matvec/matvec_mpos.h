@@ -30,6 +30,7 @@ class MatVecMPOS {
     using CplxScalar = std::complex<RealScalar>;
     using T32        = std::conditional_t<std::is_same_v<Scalar, fp64>, float, std::complex<float>>;
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using BlockType  = Eigen::Block<MatrixType, Eigen::Dynamic, Eigen::Dynamic, true>; // contiguous block
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     using SparseType = Eigen::SparseMatrix<Scalar>;
     using MatrixRowM = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
@@ -57,10 +58,10 @@ class MatVecMPOS {
     eig::Form             form            = eig::Form::SYMM;
     eig::Side             side            = eig::Side::R;
     std::optional<Scalar> jcbShift        = std::nullopt;
-    long                  jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
-    VectorType            jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
-    VectorType            invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
-    mutable VectorType    invJcbDiagB; // Userd with spectra
+    long                  jcbMaxBlockSize = 1l;             // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
+    VectorType            jcbDiagA, jcbDiagB;               // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
+    VectorType            invJcbDiagonal;                   // The inverted diagonals used when jcBMaxBlockSize == 1
+    mutable VectorType    invJcbDiagB;                      // Userd with spectra
     std::vector<std::pair<long, SparseType>> sInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as sparse matrices
     std::vector<std::pair<long, MatrixType>> dInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as dense matrices
     // std::vector<std::pair<long, MatrixType>> dJcbBlocksA;   // the blocks for the Jacobi preconditioner stored as dense matrices
@@ -141,11 +142,11 @@ class MatVecMPOS {
     // void                             thomas(const long rows, const VectorType &x, const VectorType &dl, const VectorType &dm, const VectorType &du);
 
     // Shift stuff
-    CplxScalar sigma         = CplxScalar(0.0, 0.0); // The shift
-    bool       readyShift    = false;                // Flag to make sure the shift has occurred
-    bool       readyFactorOp = false;                // Flag to check if factorization has occurred
-    bool       readyCalcPc   = false;
-    bool       lockCalcPc    = false;
+    CplxScalar   sigma         = CplxScalar(0.0, 0.0); // The shift
+    bool         readyShift    = false;                // Flag to make sure the shift has occurred
+    bool         readyFactorOp = false;                // Flag to check if factorization has occurred
+    mutable bool readyCalcPc   = false;
+    mutable bool lockCalcPc    = false;
 
     public:
     MatVecMPOS() = default;
@@ -179,10 +180,13 @@ class MatVecMPOS {
     Eigen::Tensor<Scalar, 3> operator*(const Eigen::Tensor<Scalar, 3> &x) const;
     Eigen::Tensor<Scalar, 1> operator*(const Eigen::Tensor<Scalar, 1> &x) const;
     VectorType               operator*(const VectorType &x) const;
+    MatrixType               MultAX(const Eigen::Ref<const MatrixType> &X) const;
+    VectorType               MultAx(const Eigen::Ref<const VectorType> &x) const;
 
-    void CalcPc(Scalar shift = 0.0);                                   //  Calculates the diagonal or tridiagonal part of A
-    void MultPc(Scalar *mps_in_, Scalar *mps_out, Scalar shift = 0.0); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
-    void MultPc(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
+    void       CalcPc(Scalar shift = 0.0);                                         // Calculates the diagonal or tridiagonal part of A
+    void       MultPc(const Scalar *mps_in_, Scalar *mps_out, Scalar shift = 0.0); // Applies the preconditioner
+    void       MultPc(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); // Applies the preconditioner
+    MatrixType MultPX(const Eigen::Ref<const MatrixType> &X); //  Applies the preconditioner onto many columns in X
 
     // Various utility functions
     mutable long num_mv = 0;

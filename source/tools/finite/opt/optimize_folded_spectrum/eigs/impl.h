@@ -296,9 +296,10 @@ void eigs_manager_folded_spectrum(const TensorsFinite<Scalar> &tensors, const op
         }
         default: throw except::logic_error("undhandled ritz: {}", enum2sv(meta.optRitz));
     }
-
-    cfg.primme_preconditioner = folded_spectrum::preconditioner_jacobi<CalcType>;
-    cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
+    if(meta.eigs_jcbMaxBlockSize.has_value() and meta.eigs_jcbMaxBlockSize.value() > 0) {
+        cfg.primme_preconditioner = folded_spectrum::preconditioner_jacobi<CalcType>;
+        cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
+    }
 
     const auto &mpos                  = tensors.get_model().get_mpo_active();
     const auto &envv                  = tensors.get_edges().get_var_active();
@@ -339,7 +340,8 @@ void eigs_manager_folded_spectrum(const TensorsFinite<Scalar> &tensors, const op
 }
 template<typename Scalar>
 opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                   [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+                                                                       [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta,
+                                                                       reports::eigs_log<Scalar> &elog) {
     if(meta.optSolver == OptSolver::EIG) return optimize_folded_spectrum_eig(tensors, initial_mps, status, meta, elog);
 
     using namespace internal;

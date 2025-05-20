@@ -40,7 +40,7 @@ namespace iter {
 
             bool operator!=(const enumerate_iterator &other) const { return iter != other.iter; }
 
-            std::pair<std::reference_wrapper<index_type>, reference> operator*() { return {index, *iter}; }
+            std::pair<index_type, reference> operator*() { return {index, *iter}; }
 
             private:
             index_type index;

@@ -116,6 +116,27 @@ add_source_target(xdmrg++-tools-finite-opt
             optimize_lanczos_h1h2/fp64.cpp
             optimize_lanczos_h1h2/fp128.cpp
 
+            optimize_lanczos_h1h2/SolverBase/cx32.cpp
+            optimize_lanczos_h1h2/SolverBase/cx64.cpp
+            optimize_lanczos_h1h2/SolverBase/cx128.cpp
+            optimize_lanczos_h1h2/SolverBase/fp32.cpp
+            optimize_lanczos_h1h2/SolverBase/fp64.cpp
+            optimize_lanczos_h1h2/SolverBase/fp128.cpp
+
+            optimize_lanczos_h1h2/LOBPCG/cx32.cpp
+            optimize_lanczos_h1h2/LOBPCG/cx64.cpp
+            optimize_lanczos_h1h2/LOBPCG/cx128.cpp
+            optimize_lanczos_h1h2/LOBPCG/fp32.cpp
+            optimize_lanczos_h1h2/LOBPCG/fp64.cpp
+            optimize_lanczos_h1h2/LOBPCG/fp128.cpp
+
+            optimize_lanczos_h1h2/BlockLanczos/cx32.cpp
+            optimize_lanczos_h1h2/BlockLanczos/cx64.cpp
+            optimize_lanczos_h1h2/BlockLanczos/cx128.cpp
+            optimize_lanczos_h1h2/BlockLanczos/fp32.cpp
+            optimize_lanczos_h1h2/BlockLanczos/fp64.cpp
+            optimize_lanczos_h1h2/BlockLanczos/fp128.cpp
+
             opt_mps/cx32.cpp
             opt_mps/cx64.cpp
             opt_mps/cx128.cpp

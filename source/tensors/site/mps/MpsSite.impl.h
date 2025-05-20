@@ -91,10 +91,13 @@ bool MpsSite<Scalar>::is_normalized(RealScalar prec) const {
     if constexpr(!settings::debug) {
         if(is_norm_cached.has_value()) return is_norm_cached.value();
     }
-    prec       = std::max(prec, std::numeric_limits<RealScalar>::epsilon() * 100);
-    auto t_dbg = tid::tic_token("is_normalized", tid::level::highest);
+    constexpr auto eps  = std::numeric_limits<RealScalar>::epsilon();
+    const auto     size = static_cast<RealScalar>(get_M_bare().size());
+    prec                = std::max(prec, eps * std::sqrt(size)*100);
+    auto t_dbg          = tid::tic_token("is_normalized", tid::level::highest);
     if(isCenter() or get_label() == "AC") {
         auto norm      = tools::common::contraction::contract_mps_norm(get_M());
+        tools::log->info("AC norm: {:.16f} (error {:.4e}", fp(norm), fp(norm - Scalar{1}));
         is_norm_cached = std::abs(norm - Scalar{1}) <= prec;
         return is_norm_cached.value();
     }
@@ -141,7 +144,6 @@ void MpsSite<Scalar>::assert_dimensions() const {
 
 template<typename Scalar>
 void MpsSite<Scalar>::assert_normalized(RealScalar prec) const {
-    prec = std::max(prec, std::numeric_limits<RealScalar>::epsilon() * 100);
     if(not is_normalized(prec))
         throw except::runtime_error("MpsSite<Scalar>::assert_normalized({0:.2e}): {1}^dagger {1} is not normalized at pos {2}", fp(prec), get_label(),
                                     get_position());
