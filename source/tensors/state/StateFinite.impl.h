@@ -776,7 +776,9 @@ void StateFinite<Scalar>::tag_site_normalized(size_t pos, bool tag) const {
 
 template<typename Scalar>
 bool StateFinite<Scalar>::is_normalized_on_all_sites(RealScalar prec) const {
-    if(tag_normalized_sites.size() != get_length()) throw except::runtime_error("Cannot check normalization status on all sites, size mismatch in site list");
+    if(tag_normalized_sites.size() != get_length())
+        // tools::log->warn("tag_normalized_sites.size() != get_length()");
+        throw except::runtime_error("Cannot check normalization status on all sites, size mismatch in site list");
     // If all tags are false then we should definitely normalize:
     auto normalized_none = std::none_of(tag_normalized_sites.begin(), tag_normalized_sites.end(), [](bool v) { return v; });
     if(normalized_none) {

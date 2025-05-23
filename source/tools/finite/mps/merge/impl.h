@@ -207,7 +207,6 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
     return moves;
 }
 
-
 template<typename Scalar>
 bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy) {
     // When a state needs to be normalized it's enough to "move" the center position around the whole chain.
@@ -217,7 +216,8 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
     if(norm_policy == NormPolicy::IFNEEDED) {
         // We may only go ahead with a normalization if it's really needed.
         tools::log->trace("normalize_state: checking if needed");
-        if(state.is_normalized_on_all_sites()) return false; // Return false, i.e. did "not" perform a normalization.
+        if(state.is_normalized_on_all_sites(static_cast<RealScalar<Scalar>>(settings::precision::max_norm_error)))
+            return false; // Return false, i.e. did "not" perform a normalization.
         // Otherwise, we just do the normalization
     }
 
@@ -227,8 +227,8 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
     auto cnt   = pos >= 0;
     auto steps = 0;
     if(tools::log->level() <= spdlog::level::debug)
-        tools::log->debug("normalize_state: old local norm = {:.16f} | pos {} | dir {} | bond dims {}", fp(tools::finite::measure::norm(state)), pos, dir,
-                          tools::finite::measure::bond_dimensions(state));
+        tools::log->debug("normalize_state: {} old local norm = {:.16f} | pos {} | dir {} | bond dims {}", enum2sv(norm_policy),
+                          fp(tools::finite::measure::norm(state)), pos, dir, tools::finite::measure::bond_dimensions(state));
 
     // Start with SVD at the current center position
     // NOTE: You have thought that this is unnecessary and removed it, only to find bugs much later.

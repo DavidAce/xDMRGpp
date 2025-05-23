@@ -1,6 +1,6 @@
 #pragma once
 #include "io/fmt_custom.h"
-#include "SolverExit.h"
+#include "StopReason.h"
 #include "math/eig/log.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/eig/solver.h"
@@ -32,8 +32,8 @@ struct GeneralizedLanczos {
         VectorReal                rNorms;
         std::vector<Eigen::Index> nonZeroCols; // Nonzero Gram Schmidt columns
         Eigen::Index              numZeroRows   = 0;
-        std::vector<std::string>  exitMsg       = {};
-        SolverExit               exit          = SolverExit::ok;
+        std::vector<std::string>  stopMessage       = {};
+        StopReason               stopReason          = StopReason::ok;
         OptRitz                   ritz_internal = OptRitz::NONE;
     };
 
@@ -223,12 +223,12 @@ struct GeneralizedLanczos {
 
                 if(i == 0) {
                     eig::log->info("converged subspace");
-                    status.exit |= SolverExit::converged_subspace;
-                    status.exitMsg.emplace_back("Converged: the current solution is likely exact");
+                    status.stopReason |= StopReason::converged_subspace;
+                    status.stopMessage.emplace_back("Converged: the current solution is likely exact");
                 } else {
                     eig::log->info("saturated subspace");
-                    status.exit |= SolverExit::saturated_subspace;
-                    status.exitMsg.emplace_back("Converged: exhausted the subspace directions");
+                    status.stopReason |= StopReason::saturated_subspace;
+                    status.stopMessage.emplace_back("Converged: exhausted the subspace directions");
                 }
                 break;
             }
@@ -282,7 +282,7 @@ struct GeneralizedLanczos {
     void diagonalizeLanczosBlocks() {
         // We now have T1 and T2 to do whatever with
         if(T1.rows() == 0 or T2.rows() == 0) return;
-        if(status.exit == SolverExit::converged_subspace) return;
+        if(status.stopReason != StopReason::none) return;
         auto numZeroRowsT1 = (T1.cwiseAbs().rowwise().maxCoeff().array() <= eps).count();
         auto numZeroRowsT2 = (T2.cwiseAbs().rowwise().maxCoeff().array() <= eps).count();
         status.numZeroRows = std::max({numZeroRowsT1, numZeroRowsT2});
@@ -360,7 +360,7 @@ struct GeneralizedLanczos {
     }
 
     void extractLanczosSolution() {
-        if(status.exit == SolverExit::converged_subspace) return;
+        if(status.stopReason != StopReason::none) return;
         eig::log->info("ritz_evals             = {}", linalg::matrix::to_string(ritz_evals.transpose(), 16));
 
             // Check if H2 is PD
@@ -439,36 +439,36 @@ struct GeneralizedLanczos {
 
         if(status.iter >= 1ul) {
             if(status.absDiff.maxCoeff() < absDiffTol and status.iter >= 3) {
-                status.exitMsg.emplace_back(fmt::format("saturated: abs diff {::.3e} < tol {:.3e}", fv(status.absDiff), absDiffTol));
-                status.exit |= SolverExit::saturated_absDiffTol;
+                status.stopMessage.emplace_back(fmt::format("saturated: abs diff {::.3e} < tol {:.3e}", fv(status.absDiff), absDiffTol));
+                status.stopReason |= StopReason::saturated_absDiffTol;
             }
             if(status.relDiff.maxCoeff() < relDiffTol and status.iter >= 3) {
-                status.exitMsg.emplace_back(fmt::format("saturated: rel diff {::.3e} < {:.3e}", fv(status.relDiff), relDiffTol));
-                status.exit |= SolverExit::saturated_relDiffTol;
+                status.stopMessage.emplace_back(fmt::format("saturated: rel diff {::.3e} < {:.3e}", fv(status.relDiff), relDiffTol));
+                status.stopReason |= StopReason::saturated_relDiffTol;
             }
 
             // if(status.VColOK.size() == 1) {
-            //     status.exitMsg.emplace_back(fmt::format("saturated: only one valid eigenvector"));
-            //     status.exit |= SolverExit::one_valid_eigenvector;
+            //     status.stopMessage.emplace_back(fmt::format("saturated: only one valid eigenvector"));
+            //     status.stopReason |= StopReason::one_valid_eigenvector;
             // }
             //
             // if(status.VColOK.empty()) {
-            //     status.exitMsg.emplace_back(fmt::format("mixedColOk is empty"));
-            //     status.exit |= SolverExit::no_valid_eigenvector;
+            //     status.stopMessage.emplace_back(fmt::format("mixedColOk is empty"));
+            //     status.stopReason |= StopReason::no_valid_eigenvector;
             // }
         }
 
         if(status.rNorms.maxCoeff() < rnormTol()) {
-            status.exitMsg.emplace_back(fmt::format("converged rNorms {::.3e} < tol {:.3e}", fv(status.rNorms), rnormTol()));
-            status.exit |= SolverExit::converged_rnormTol;
+            status.stopMessage.emplace_back(fmt::format("converged rNorms {::.3e} < tol {:.3e}", fv(status.rNorms), rnormTol()));
+            status.stopReason |= StopReason::converged_rnormTol;
         }
         if(status.iter >= std::max<size_t>(1ul, max_iters)) {
-            status.exitMsg.emplace_back(fmt::format("iter ({}) >= maxiter ({})", status.iter, max_iters));
-            status.exit |= SolverExit::max_iterations;
+            status.stopMessage.emplace_back(fmt::format("iter ({}) >= maxiter ({})", status.iter, max_iters));
+            status.stopReason |= StopReason::max_iterations;
         }
-        eig::log->info("ncv {} (nnz {}) | rnorms = {::.8e} | optVal = {::.8e} | optIdx = {} | absDiff = {::.8e} | relDiff = {::.8e} | iter = {} | exitMsg = {}",
+        eig::log->info("ncv {} (nnz {}) | rnorms = {::.8e} | optVal = {::.8e} | optIdx = {} | absDiff = {::.8e} | relDiff = {::.8e} | iter = {} | stopMessage = {}",
                        ncv, status.nonZeroCols.size(), fv(status.rNorms), fv(status.optVal), status.optIdx, fv(status.absDiff), fv(status.relDiff), status.iter,
-                       status.exitMsg);
+                       status.stopMessage);
         status.iter++;
     }
 };

@@ -34,9 +34,9 @@
 namespace eig {
 
 #ifdef NDEBUG
-    inline constexpr bool debug = false;
+    inline constexpr bool debug_matvec_mpos = false;
 #else
-    inline constexpr bool debug = true;
+    inline constexpr bool debug_matvec_mpos = false;
 #endif
 }
 
@@ -502,7 +502,7 @@ typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_diagonal_block(l
             MatrixType blkres                                         = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // MatrixType blkdbg = dbg.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // if(!blkres.isApprox(blkdbg)) {
-            if constexpr(eig::debug)
+            if constexpr(eig::debug_matvec_mpos)
                 eig::log->trace("IX {:5} JY {:5} J0 {:5} JN {:5} R0 {:5} RN {:5} C0 {:5} CN {:5} R0_ijk {} RN_ijk {} C0_ijk {}, CN_ijk {} R_ext {} C_ext {} "
                                 "ext_blk2 {} off_res {} ext_res {}",
                                 IX, JY, J0, JN, R0, RN, C0, CN, R0_ijk, RN_ijk, C0_ijk, CN_ijk, R_ext, C_ext, ext_blk2, off_res, ext_res);
@@ -628,7 +628,7 @@ typename MatVecMPOS<Scalar>::MatrixType
             MatrixType blkres = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // MatrixType blkdbg = dbg.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // if(!blkres.isApprox(blkdbg)) {
-            if constexpr(eig::debug)
+            if constexpr(eig::debug_matvec_mpos)
                 eig::log->trace("IX {:5} JY {:5} J0 {:5} JN {:5} R0 {:5} RN {:5} C0 {:5} CN {:5} R0_ijk {} RN_ijk {} C0_ijk {}, CN_ijk {} R_ext {} C_ext {} "
                                 "ext_blk2 {} off_res {} ext_res {}",
                                 IX, JY, J0, JN, R0, RN, C0, CN, R0_ijk, RN_ijk, C0_ijk, CN_ijk, R_ext, C_ext, ext_blk2, off_res, ext_res);
@@ -1113,7 +1113,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
         for(long blkidx = 0; blkidx < nblocks; ++blkidx) {
             long offset = blkidx * jcbBlockSize;
             long extent = std::min((blkidx + 1) * jcbBlockSize - offset, size_mps - offset);
-            // if constexpr(eig::debug) eig::log->trace("calculating block {}/{} ... done", blkidx, nblocks);
+            // if constexpr(eig::debug_matvec_mpos) eig::log->trace("calculating block {}/{} ... done", blkidx, nblocks);
             auto t_dblk = tid::ur("dblk");
             t_dblk.tic();
 
@@ -1163,7 +1163,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                 }
                 case eig::Factorization::LLT: {
                     auto t_llt = tid::ur("t_llt");
-                    if constexpr(eig::debug) eig::log->trace("llt factorizing block {}/{}", blkidx, nblocks);
+                    if constexpr(eig::debug_matvec_mpos) eig::log->trace("llt factorizing block {}/{}", blkidx, nblocks);
                     t_llt.tic();
                     VectorType D = block.diagonal().cwiseAbs().cwiseSqrt().cwiseInverse();
                     block        = (D.asDiagonal() * block * D.asDiagonal()).eval();
@@ -1174,7 +1174,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     }
                     lltSuccess = llt->info() == Eigen::Success;
                     t_llt.toc();
-                    if constexpr(eig::debug)
+                    if constexpr(eig::debug_matvec_mpos)
                         eig::log->debug("llt factorized block {}/{} : info {} thread {} tdblk {:.3e} s tllt {:.3e} s", blkidx, nblocks,
                                         static_cast<int>(llt->info()), omp_get_thread_num(), t_dblk.get_time(), t_llt.get_time());
 
@@ -1190,7 +1190,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     [[fallthrough]];
                 }
                 case eig::Factorization::LU: {
-                    if constexpr(eig::debug) eig::log->trace("lu factorizing block {}/{}", blkidx, nblocks);
+                    if constexpr(eig::debug_matvec_mpos) eig::log->trace("lu factorizing block {}/{}", blkidx, nblocks);
                     auto t_lu = tid::ur("t_lu");
                     t_lu.tic();
                     VectorType D = block.diagonal().cwiseAbs().cwiseSqrt().cwiseInverse();
@@ -1199,14 +1199,14 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     t_lu.toc();
                     luSuccess = true;
                     // eig::log->info("-- lu : time {:.3e}", t_lu.get_last_interval());
-                    if constexpr(eig::debug)
+                    if constexpr(eig::debug_matvec_mpos)
                         eig::log->debug("lu factorized block {}/{} : info {} thread {} time: blk {:.3e} s | lu {:.3e} s", blkidx, nblocks,
                                         static_cast<int>(llt->info()), omp_get_thread_num(), t_dblk.get_time(), t_lu.get_time());
                     break;
                 }
                 case eig::Factorization::LDLT: {
                     eig::log->info("-- ldlt");
-                    if constexpr(eig::debug) eig::log->trace("ldlt factorizing block {}/{}", blkidx, nblocks);
+                    if constexpr(eig::debug_matvec_mpos) eig::log->trace("ldlt factorizing block {}/{}", blkidx, nblocks);
                     ldlt->compute(block);
                     ldltSuccess = ldlt->info() == Eigen::Success;
                     if(ldltSuccess) break;
@@ -1228,7 +1228,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                 //     *sparseRM = block.sparseView(static_cast<RealScalar>(1e-1), stdv);
                 //     sparseRM->makeCompressed();
                 //     sp = static_cast<double>(sparseRM->nonZeros()) / static_cast<double>(sparseRM->size());
-                //     // if constexpr(eig::debug)
+                //     // if constexpr(eig::debug_matvec_mpos)
                 //     //     eig::log->trace("bf sparseI block {}/{}: nnz: {:.3e}", blkidx, nblocks,
                 //     //                     static_cast<double>(sparseRM->nonZeros()) / static_cast<double>(sparseRM->size()));
                 //     t_sparse.toc();
@@ -1242,7 +1242,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                 //     bicg->compute(*sparseRM);
                 //     bicgSuccess = bicg->info() == Eigen::Success;
                 //     t_ilut.toc();
-                //     if constexpr(eig::debug)
+                //     if constexpr(eig::debug_matvec_mpos)
                 //         eig::log->trace("ILUT factorized block {}/{} sparcity {} : info {} thread {} t_dblk {:.3e} s t_sparse {:.3e} s t_ilut {:.3e} s mean "
                 //                         "{:.3e} stdv {:.3e} iter {} tol {:.3e}",
                 //                         blkidx, nblocks, sp, static_cast<int>(bicg->info()), omp_get_thread_num(), t_dblk.get_time(), t_sparse.get_time(),
@@ -1281,7 +1281,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                 //     cg->compute(*sparseCM);
                 //     cgSuccess = cg->info() == Eigen::Success;
                 //     t_ildlt.toc();
-                //     if constexpr(eig::debug)
+                //     if constexpr(eig::debug_matvec_mpos)
                 //         eig::log->trace("ILDLT factorized block {}/{} sparcity {} : info {} thread {} t_dblk {:.3e} s t_sparse {:.3e} s t_ildlt {:.3e} s mean
                 //         "
                 //                         "{:.3e} stdv {:.3e} iter {} tol {:.3e}",

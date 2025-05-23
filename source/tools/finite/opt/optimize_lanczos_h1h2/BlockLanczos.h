@@ -9,7 +9,7 @@
 #include "math/linalg/matrix/to_string.h"
 #include "math/tenx.h"
 #include "SolverBase.h"
-#include "SolverExit.h"
+#include "StopReason.h"
 #include <Eigen/Eigenvalues>
 
 template<typename Scalar>

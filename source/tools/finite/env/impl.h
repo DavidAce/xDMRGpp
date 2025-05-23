@@ -199,13 +199,13 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> delinearize_expansion_terms_
         norms_fmt.col(5).topRows(matrix_M_Q.cols())       = matrix_M_Q.colwise().norm();
         norms_fmt.col(6).topRows(matrix_M_P.cols())       = matrix_M_P.colwise().norm();
 
-        tools::log->info("stdevH      : {:.3e}", stdevH);
-        tools::log->info("factor_S    : {:.3e}", factor_S);
-        tools::log->info("factor_Q    : {:.3e}", factor_Q);
+        tools::log->info("stdevH      : {:.3e}", fp(stdevH));
+        tools::log->info("factor_S    : {:.3e}", fp(factor_S));
+        tools::log->info("factor_Q    : {:.3e}", fp(factor_Q));
         tools::log->info("alpha       : {:.3e}", std::max(res.alpha_h1v, res.alpha_h2v));
-        tools::log->info("avg_M       : {:.3e}", avg_M);
-        tools::log->info("gavg_M      : {:.3e}", gavg_M);
-        tools::log->info("maxr_P      : {:.3e}", maxr_P);
+        tools::log->info("avg_M       : {:.3e}", fp(avg_M));
+        tools::log->info("gavg_M      : {:.3e}", fp(gavg_M));
+        tools::log->info("maxr_P      : {:.3e}", fp(maxr_P));
         tools::log->info("max_keep    : {}", max_keep);
         tools::log->info("nFixLCol    : {}", nFixedLeftCols);
         tools::log->info("norms: \n{}\n", linalg::matrix::to_string(norms_fmt.topRows(max_keep), 8));
@@ -864,7 +864,7 @@ void merge_expansion_terms_l2r(const StateFinite<Scalar> &state, MpsSite<Scalar>
         auto           multisite_mpsR = state.template get_multisite_mps<Scalar>({posR});
         auto           norm_old       = tools::common::contraction::contract_mps_norm(multisite_mpsR);
         constexpr auto eps            = std::numeric_limits<Real>::epsilon();
-        if(std::abs(norm_old) < eps) { throw except::runtime_error("merge_expansion_term_PL: norm_old {:.5e} < eps {:.5e}", norm_old, eps); }
+        if(std::abs(norm_old) < eps) { throw except::runtime_error("merge_expansion_term_PL: norm_old {:.5e} < eps {:.5e}", fp(norm_old), fp(eps)); }
         Eigen::Tensor<Scalar, 3> M_tmp = mpsR.get_M_bare() * mpsR.get_M_bare().constant(std::pow(norm_old, -Real(0.5))); // Rescale by the norm
         mpsR.set_M(M_tmp);
         state.clear_cache();

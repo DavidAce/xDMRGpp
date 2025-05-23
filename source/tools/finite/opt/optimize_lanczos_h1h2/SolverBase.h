@@ -9,7 +9,7 @@
 #include "math/linalg/matrix/gramSchmidt.h"
 #include "math/linalg/matrix/to_string.h"
 #include "math/tenx.h"
-#include "SolverExit.h"
+#include "StopReason.h"
 // #include "tensors/site/env/EnvEne.h"
 // #include "tensors/site/env/EnvPair.h"
 // #include "tensors/site/env/EnvVar.h"
@@ -46,33 +46,46 @@ class SolverBase {
         VectorReal                rNorms;
         std::vector<Eigen::Index> nonZeroCols; // Nonzero Gram Schmidt columns
         Eigen::Index              numZeroRows   = 0;
-        std::vector<std::string>  exitMsg       = {};
-        SolverExit                exit          = SolverExit::ok;
+        std::vector<std::string>  stopMessage   = {};
+        StopReason                stopReason    = StopReason::none;
         OptRitz                   ritz_internal = OptRitz::NONE;
     };
 
+    private:
+    Eigen::Index i_HQ     = -1;
+    Eigen::Index i_HQ_cur = -1;
+
     protected:
-    bool use_preconditioner                         = false;
-    int  chebyshev_filter_degree                    = 0;
-    bool use_chebyshev_basis_during_ritz_extraction = false;
+    Eigen::Index qBlocks = 0;
+
+    const MatrixType &get_HQ();
+    const MatrixType &get_HQ_cur();
+    void unset_HQ();
+    void unset_HQ_cur();
+
+    bool use_preconditioner                       = false;
+    int  chebyshev_filter_degree                  = 0;
+    bool use_extra_ritz_vectors_in_the_next_basis = false; /*!< Add the b next-best ritz vector block M to form the next basis (LOBPCG only) */
 
     public:
     Status                      status = {};
-    Eigen::Index                N;                        /*!< The size of the underlying state tensor */
-    Eigen::Index                mps_size;                 /*!< The size of the underlying state tensor in mps representation (equal to N!) */
-    std::array<Eigen::Index, 3> mps_shape;                /*!< The shape of the underlying state tensor in mps representation */
-    Eigen::Index                nev              = 1;     /*!< Number of eigenvalues to find */
-    Eigen::Index                ncv              = 8;     /*!< Krylov dimension, i.e. {V, H1V..., H2V...} ( minimum 2, recommend 3 or more) */
-    Eigen::Index                b                = 2;     /*!< The block size */
+    Eigen::Index                N;                                 /*!< The size of the underlying state tensor */
+    Eigen::Index                mps_size;                          /*!< The size of the underlying state tensor in mps representation (equal to N!) */
+    std::array<Eigen::Index, 3> mps_shape;                         /*!< The shape of the underlying state tensor in mps representation */
+    Eigen::Index                nev                       = 1;     /*!< Number of eigenvalues to find */
+    Eigen::Index                ncv                       = 8;     /*!< Krylov dimension, i.e. {V, H1V..., H2V...} ( minimum 2, recommend 3 or more) */
+    Eigen::Index                b                         = 2;     /*!< The block size */
     bool                        use_refined_rayleigh_ritz = false; /*!< Refined ritz extraction uses 1 matvec per nev */
 
-    OptAlgo                          algo;    /*!< Selects the current DMRG algorithm */
-    OptRitz                          ritz;    /*!< Selects the target eigenvalues */
-    MatVecMPOS<Scalar>              &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
-    MatrixType                       T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
-    MatrixType                       A, B, W, Q, X;
-    MatrixType                       HQ, HX; /*! Save H*Q when preconditioning */
-    MatrixType                       V;      /*! Holds the current ritz eigenvectors. Use this to pass initial guesses */
+    OptAlgo             algo;    /*!< Selects the current DMRG algorithm */
+    OptRitz             ritz;    /*!< Selects the target eigenvalues */
+    MatVecMPOS<Scalar> &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
+    MatrixType          T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
+    MatrixType          A, B, W, Q, M;
+    MatrixType          HQ;     /*! Save H*Q when preconditioning */
+    MatrixType          HQ_cur; /*! Save H*Q_cur when preconditioning */
+
+    MatrixType                       V; /*! Holds the current ritz eigenvectors. Use this to pass initial guesses */
     VectorReal                       T_evals;
     MatrixType                       T_evecs;
     Eigen::HouseholderQR<MatrixType> hhqr;
@@ -132,7 +145,7 @@ class SolverBase {
 
     MatrixType MultPX(const Eigen::Ref<const MatrixType> &X);
 
-    std::vector<Eigen::Index> get_ritz_indices(OptRitz ritz, Eigen::Index num, const VectorReal &evals);
+    std::vector<Eigen::Index> get_ritz_indices(OptRitz ritz, Eigen::Index offset, Eigen::Index num, const VectorReal &evals);
 
     void init();
 
@@ -141,11 +154,12 @@ class SolverBase {
     void diagonalizeT();
 
     template<typename Comp>
-    std::vector<Eigen::Index> getIndices(const VectorType &v, const Eigen::Index k, Comp comp) {
+    std::vector<Eigen::Index> getIndices(const VectorType &v, const Eigen::Index offset, const Eigen::Index num, Comp comp) {
         std::vector<Eigen::Index> idx(static_cast<size_t>(v.size()));
-        std::iota(idx.begin(), idx.end(), 0);                             // 1) build an index array [0, 1, 2, …, N-1]
-        std::partial_sort(idx.begin(), idx.begin() + k, idx.end(), comp); // Sort k elements
-        return std::vector(idx.begin(), idx.begin() + k);                 // now idx[0..k) are the k sorted indices
+        Eigen::Index              numSort = offset + num;
+        std::iota(idx.begin(), idx.end(), 0);                                   // 1) build an index array [0, 1, 2, …, N-1]
+        std::partial_sort(idx.begin(), idx.begin() + numSort, idx.end(), comp); // Sort the first offset+num elements
+        return std::vector(idx.begin() + offset, idx.begin() + offset + num);   // now idx[offset...offset+num) are the num sorted indices
     }
 
     void extractRitzVectors();
@@ -166,7 +180,7 @@ class SolverBase {
         init();
         while(true) {
             step();
-            if(status.exit != SolverExit::ok) break;
+            if(status.stopReason != StopReason::none) break;
         }
     }
 };

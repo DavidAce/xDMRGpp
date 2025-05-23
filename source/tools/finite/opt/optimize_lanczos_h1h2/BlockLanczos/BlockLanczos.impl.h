@@ -1,6 +1,6 @@
 #pragma once
 #include "../BlockLanczos.h"
-#include "../SolverExit.h"
+#include "../StopReason.h"
 #include "io/fmt_custom.h"
 #include "math/eig/log.h"
 #include "math/eig/matvec/matvec_mpos.h"
@@ -116,15 +116,9 @@ void BlockLanczos<Scalar>::build() {
             hhqr.compute(W); // Gives us Q_next * B
             B = hhqr.matrixQR().topLeftCorner(b, b).template triangularView<Eigen::Upper>();
 
-            if(i == 0) {
-                eig::log->info("converged subspace a iteration {}", i);
-                status.exit |= SolverExit::converged_subspace;
-                status.exitMsg.emplace_back("Converged: the current solution is likely exact");
-            } else {
-                eig::log->info("saturated subspace at iteration {}", i);
-                status.exit |= SolverExit::saturated_subspace;
-                status.exitMsg.emplace_back("Converged: exhausted the subspace directions");
-            }
+            eig::log->debug("saturated basis");
+            status.stopReason |= StopReason::saturated_basis;
+            status.stopMessage.emplace_back("saturated basis: exhausted subspace search");
             break;
         }
 
@@ -204,7 +198,7 @@ void BlockLanczos<Scalar>::build() {
 
 template<typename Scalar>
 void BlockLanczos<Scalar>::extractResidualNorms() {
-    // if(status.exit == SolverExit::converged_subspace) return;
+    if(status.stopReason != StopReason::none) return;
     if(T.rows() < b) return;
 
     // Calculate residual norms

@@ -20,8 +20,8 @@ struct KrylovSingleOp {
         long                     numMGS  = 0;
         std::vector<long>        nonZeroCols; // Nonzero Gram Schmidt columns
         std::vector<long>        mixedColOk;  // New states with acceptable norm and eigenvalue
-        std::vector<std::string> exitMsg = {};
-        SolverExit              exit    = SolverExit::ok;
+        std::vector<std::string> stopMessage = {};
+        StopReason              stopReason    = StopReason::ok;
     };
 
     public:

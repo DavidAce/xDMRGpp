@@ -156,23 +156,28 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     auto H2 = MatVecMPOS<CalcType>(mpos, envv);
     // BlockLanczos<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, initial.template get_tensor_as_matrix<CalcType>(), mpos, enve, envv);
     LOBPCG<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, initial.template get_tensor_as_matrix<CalcType>(), H1, H2);
-    solver.b              = 1;
-    solver.status.initVal = initial.get_energy();
-    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
     solver.tol            = opt_meta.eigs_tol.has_value() ? static_cast<RealScalar>(opt_meta.eigs_tol.value()) //
                                                           : eps * 10000;
-    solver.max_matvecs    = opt_meta.eigs_iter_max.value_or(500);
-
+    eig::setLevel(spdlog::level::trace);
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.set_jcbMaxBlockSize(1024);
-    solver.set_chebyshevFilterDegree(1);
-    solver.set_ResidualHistoryLength(4);
-    solver.use_refined_rayleigh_ritz = false;
+    solver.b              = 1;
+    solver.status.initVal = initial.get_energy();
+    solver.max_iters      = 1000;   // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
+    solver.max_matvecs    = 10000; // opt_meta.eigs_iter_max.value_or(500);
+    solver.use_preconditioner = false;
+    solver.set_jcbMaxBlockSize(0);
+    solver.set_chebyshevFilterDegree(0);
+    solver.set_maxLanczosResidualHistory(8);
+    solver.set_maxRitzResidualHistory(0);
+    solver.set_maxExtraRitzHistory(1);
+    solver.use_refined_rayleigh_ritz = true;
+    solver.inject_randomness         = false;
+
     solver.run();
 
-    tools::log->debug("KrylovDualOp: status.exit = {}", solver.status.exitMsg);
+    tools::log->debug("KrylovDualOp: status.stopReason = {}", solver.status.stopMessage);
     // Extract solution
     opt_mps<Scalar> res;
     res.is_basis_vector = false;
@@ -305,8 +310,8 @@ template<typename Scalar>
 //     auto &nonZeroCols = lanczos.status.nonZeroCols;
 //     auto &iter        = lanczos.status.iter;
 //     auto &numMGS      = lanczos.status.numMGS;
-//     auto &exitMsg     = lanczos.status.exitMsg;
-//     auto &exit        = lanczos.status.exit;
+//     auto &stopMessage     = lanczos.status.stopMessage;
+//     auto &stopReason        = lanczos.status.stopReason;
 //
 //     std::vector<long> mixedColOk;
 //
@@ -345,37 +350,37 @@ template<typename Scalar>
 //
 //     if(iter >= 1ul) {
 //         if(absDiff < absDiffTol and iter >= 3) {
-//             exitMsg.emplace_back(std::format("saturated: abs diff {:.3e} < tol {:.3e}", std::abs(oldVal - optVal), absDiffTol));
-//             exit |= SolverExit::saturated_absDiffTol;
+//             stopMessage.emplace_back(std::format("saturated: abs diff {:.3e} < tol {:.3e}", std::abs(oldVal - optVal), absDiffTol));
+//             stopReason |= StopReason::saturated_absDiffTol;
 //         }
 //         if(relDiff < relDiffTol and iter >= 3) {
-//             exitMsg.emplace_back(std::format("saturated: rel diff {:.3e} < {:.3e}", relDiff, relDiffTol));
-//             exit |= SolverExit::saturated_relDiffTol;
+//             stopMessage.emplace_back(std::format("saturated: rel diff {:.3e} < {:.3e}", relDiff, relDiffTol));
+//             stopReason |= StopReason::saturated_relDiffTol;
 //         }
 //
 //         if(mixedColOk.size() == 1) {
-//             exitMsg.emplace_back(fmt::format("saturated: only one valid eigenvector"));
-//             exit |= SolverExit::one_valid_eigenvector;
+//             stopMessage.emplace_back(fmt::format("saturated: only one valid eigenvector"));
+//             stopReason |= StopReason::one_valid_eigenvector;
 //         }
 //
 //         if(mixedColOk.empty()) {
-//             exitMsg.emplace_back(fmt::format("mixedColOk is empty"));
-//             exit |= SolverExit::no_valid_eigenvector;
+//             stopMessage.emplace_back(fmt::format("mixedColOk is empty"));
+//             stopReason |= StopReason::no_valid_eigenvector;
 //         }
 //     }
-//     tools::log->info("ncv {} (nnz {}) | rnorm = {:.8e} | optVal = {:.8e} | optIdx = {} | absDiff = {:.8e} | relDiff = {:.8e} | iter = {} | exitMsg = {}",
+//     tools::log->info("ncv {} (nnz {}) | rnorm = {:.8e} | optVal = {:.8e} | optIdx = {} | absDiff = {:.8e} | relDiff = {:.8e} | iter = {} | stopMessage = {}",
 //     ncv,
-//                      nonZeroCols.size(), rnorm, optVal, optIdx, absDiff, relDiff, iter, exitMsg);
+//                      nonZeroCols.size(), rnorm, optVal, optIdx, absDiff, relDiff, iter, stopMessage);
 //
 //     if(iter >= std::max<size_t>(1ul, max_iters)) {
-//         exitMsg.emplace_back(fmt::format("iter ({}) >= maxiter ({})", iter, max_iters));
-//         exit |= SolverExit::max_iterations;
+//         stopMessage.emplace_back(fmt::format("iter ({}) >= maxiter ({})", iter, max_iters));
+//         stopReason |= StopReason::max_iterations;
 //     }
 //     if(rnorm < lanczos.rnormTol()) {
-//         exitMsg.emplace_back(std::format("converged rnorm {:.3e} < tol {:.3e}", rnorm, lanczos.rnormTol()));
-//         exit |= SolverExit::converged_rnormTol;
+//         stopMessage.emplace_back(std::format("converged rnorm {:.3e} < tol {:.3e}", rnorm, lanczos.rnormTol()));
+//         stopReason |= StopReason::converged_rnormTol;
 //     }
-//     if(exit != SolverExit::ok) { return; }
+//     if(stopReason != StopReason::ok) { return; }
 //
 //     // Orthonormalize with Modified Gram Schmidt
 //     auto t_mgs = tid::tic_token("mgs");
