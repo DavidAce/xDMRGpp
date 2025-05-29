@@ -1,5 +1,5 @@
 #pragma once
-#include "matvec_dense.h"
+#include "../matvec_dense.h"
 #include "io/fmt_custom.h"
 #include "math/cast.h"
 #include "math/eig/log.h"

@@ -220,7 +220,6 @@ namespace tenx {
         using ScalarM                     = typename TensorM::Scalar;
         constexpr auto               rank = TensorM::NumDimensions;
         Eigen::Tensor<ScalarM, rank> R(M.dimensions());
-        ;
         asDiagonalInverseContract(R, L, M, Mdim);
         return R;
     }

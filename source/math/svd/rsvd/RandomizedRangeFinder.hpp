@@ -34,7 +34,7 @@ MatrixType singleShot(const MatrixType &a, const Eigen::Index dim, RandomEngineT
   MatrixType result{a * standardNormalRandom<MatrixType, RandomEngineType>(numCols, dim, engine)};
 
   Eigen::ColPivHouseholderQR<Eigen::Ref<MatrixType>> qr(result);
-  result.noalias() = qr.householderQ() * MatrixType::Identity(numRows, dim);
+  result.noalias() = qr.householderQ().setLength(result.cols()) * MatrixType::Identity(numRows, dim);
 
   return result;
 }
@@ -85,7 +85,7 @@ struct RandomizedSubspaceIterations<MatrixType, RandomEngineType,
 
 //    Eigen::ColPivHouseholderQR<Eigen::Ref<MatrixType>> qr(tmpRows);
     Eigen::HouseholderQR<Eigen::Ref<MatrixType>> qr(tmpRows);
-    tmpRows.noalias() = qr.householderQ() * MatrixType::Identity(numRows, dim);
+    tmpRows.noalias() = qr.householderQ().setLength(tmpRows.cols()) * MatrixType::Identity(numRows, dim);
 
     return tmpRows;
   }
@@ -130,7 +130,7 @@ struct RandomizedSubspaceIterations<MatrixType, RandomEngineType,
     tmpRows.noalias() = a * tmpCols;
 //    Eigen::ColPivHouseholderQR<Eigen::Ref<MatrixType>> qr(tmpRows);
     Eigen::HouseholderQR<Eigen::Ref<MatrixType>> qr(tmpRows);
-    tmpRows.noalias() = qr.householderQ() * MatrixType::Identity(numRows, dim);
+    tmpRows.noalias() = qr.householderQ().setLength(tmpRows.cols()) * MatrixType::Identity(numRows, dim);
 
     return tmpRows;
   }
@@ -161,7 +161,7 @@ struct RandomizedSubspaceIterations<MatrixType, RandomEngineType,
 
     tmpRows.noalias() = a * tmpCols;
     Eigen::ColPivHouseholderQR<Eigen::Ref<MatrixType>> qr(tmpRows);
-    tmpRows.noalias() = qr.householderQ() * MatrixType::Identity(numRows, dim);
+    tmpRows.noalias() = qr.householderQ().setLength(tmpRows.cols()) * MatrixType::Identity(numRows, dim);
 
     return tmpRows;
   }
@@ -186,14 +186,14 @@ struct RandomizedSubspaceIterations<MatrixType, RandomEngineType,
       tmpRows.noalias() = a * tmpCols;
       Eigen::ColPivHouseholderQR<Eigen::Ref<MatrixType>> qrRows(tmpRows);
 
-      tmpCols.noalias() = a.adjoint() * qrRows.householderQ();
+      tmpCols.noalias() = a.adjoint() * qrRows.householderQ().setLength(tmpRows.cols());
       Eigen::ColPivHouseholderQR<Eigen::Ref<MatrixType>> qrCols(tmpCols);
-      tmpCols.noalias() = qrCols.householderQ() * MatrixType::Identity(numCols, dim);
+      tmpCols.noalias() = qrCols.householderQ().setLength(tmpCols.cols()) * MatrixType::Identity(numCols, dim);
     }
 
     tmpRows.noalias() = a * tmpCols;
     Eigen::ColPivHouseholderQR<Eigen::Ref<MatrixType>> qr(tmpRows);
-    tmpRows.noalias() = qr.householderQ() * MatrixType::Identity(numRows, dim);
+    tmpRows.noalias() = qr.householderQ().setLength(tmpRows.cols()) * MatrixType::Identity(numRows, dim);
 
     return tmpRows;
   }

@@ -588,7 +588,7 @@ BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(const OptMeta &o
     rebuild_edges(); // Use fresh edges
     if constexpr(settings::debug) assert_validity();
     if(has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::POSTOPT_1SITE) and opt_meta.optExit != OptExit::NONE) {
-        expresult = tools::finite::env::expand_bond_postopt_1site(get_state(), get_model(), get_edges(), opt_meta);
+        expresult = tools::finite::env::rexpand_bond_postopt_1site(get_state(), get_model(), get_edges(), opt_meta);
     } else if(has_any_flags(opt_meta.bondexp_policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE)) {
         expresult = tools::finite::env::expand_bond_preopt_nsite(get_state(), get_model(), get_edges(), opt_meta);
     } else {

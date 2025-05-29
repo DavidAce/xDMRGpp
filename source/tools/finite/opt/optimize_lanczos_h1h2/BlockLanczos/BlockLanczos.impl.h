@@ -47,7 +47,7 @@ void BlockLanczos<Scalar>::write_Q_next_B_DGKS(Eigen::Index i) {
 
     // Run QR(W) = Q_next * B.
     hhqr.compute(W); // Gives us Q_next * B,  B = Q_next.adjoint() * W, where W = (H*Q_cur - projections)
-    Q.middleCols((i + 1) * b, b) = hhqr.householderQ() * MatrixType::Identity(N, b);                            // Q_next
+    Q.middleCols((i + 1) * b, b) = hhqr.householderQ().setLength(W.cols()) * MatrixType::Identity(N, b);                            // Q_next
     B                            = hhqr.matrixQR().topLeftCorner(b, b).template triangularView<Eigen::Upper>(); // B
 }
 
@@ -91,7 +91,7 @@ void BlockLanczos<Scalar>::build() {
         // 2) Compute A and add it to T
         A                           = Q_cur.adjoint() * W;
         T.block(i * b, i * b, b, b) = A;
-        status.H_norm_approx        = std::max(status.H_norm_approx, A.norm() * std::abs(std::sqrt<RealScalar>(b)));
+        status.max_eval_est        = std::max(status.max_eval_est, A.norm() * std::abs(std::sqrt<RealScalar>(b)));
 
         // 3) Subtract projections to A and B once
         W.noalias() -= Q_cur * A; // Qi * Qi.adjoint()*H*Qi

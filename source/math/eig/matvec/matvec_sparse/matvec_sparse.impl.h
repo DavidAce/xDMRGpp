@@ -1,7 +1,7 @@
 
 #pragma once
-#include "matvec_sparse.h"
-#include "../log.h"
+#include "../../log.h"
+#include "../matvec_sparse.h"
 #include "io/fmt_custom.h"
 #include "math/float.h"
 #include "tid/tid.h"

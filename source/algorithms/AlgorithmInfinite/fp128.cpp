@@ -1,4 +1,4 @@
-#include "../AlgorithmInfinite.impl.h"
+#include "AlgorithmInfinite.impl.h"
 
 using Scalar = fp128;
 

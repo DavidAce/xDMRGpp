@@ -1,10 +1,11 @@
 #pragma once
-#include "AlgorithmFinite.h"
+#include "../AlgorithmFinite.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "debug/info.h"
 #include "general/iter.h"
 #include "math/cast.h"
+#include "math/linalg/matrix/to_string.h"
 #include "math/num.h"
 #include "math/stat.h"
 #include "math/tenx/span.h"
@@ -13,6 +14,7 @@
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/env/EnvEne.h"
 #include "tensors/site/env/EnvVar.h"
+#include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/h5/storage_info.h"
@@ -260,7 +262,6 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
         case ScalarType::CX128: m1.optType = OptType::CX128; break;
     }
 
-
     // Set the target eigenvalue
     m1.optRitz = status.opt_ritz;
     m1.optAlgo = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
@@ -350,12 +351,37 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     m1.optSolver = m1.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
     m1.label     = enum2sv(m1.optAlgo);
 
-
     m1.optSolver = OptSolver::H1H2;
     m1.eigs_lib  = "SPECTRA";
 
     m1.validate();
     return m1;
+}
+
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::expand_bonds_postopt() {
+    OptMeta opt_meta;
+    switch(settings::precision::optScalar) {
+        case ScalarType::FP32: opt_meta.optType = OptType::FP32; break;
+        case ScalarType::FP64: opt_meta.optType = OptType::FP64; break;
+        case ScalarType::FP128: opt_meta.optType = OptType::FP128; break;
+        case ScalarType::CX32: opt_meta.optType = OptType::CX32; break;
+        case ScalarType::CX64: opt_meta.optType = OptType::CX64; break;
+        case ScalarType::CX128: opt_meta.optType = OptType::CX128; break;
+    }
+    opt_meta.bondexp_policy    = settings::strategy::dmrg_bond_expansion_policy;
+    opt_meta.bondexp_maxiter   = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
+    opt_meta.bondexp_nkrylov   = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
+    opt_meta.bondexp_maxalpha  = settings::strategy::dmrg_bond_expansion::postopt::maxalpha;
+    opt_meta.bondexp_minalpha  = settings::strategy::dmrg_bond_expansion::postopt::minalpha;
+    opt_meta.bondexp_blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
+    opt_meta.bondexp_factor    = std::clamp(std::pow(10.0, static_cast<double>(status.algorithm_has_stuck_for)), 1e0, 1e3);
+    opt_meta.optAlgo           = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
+
+    opt_meta.optRitz = status.opt_ritz;
+    opt_meta.optExit = OptExit::SUCCESS;
+    opt_meta.svd_cfg = svd::config(status.bond_lim, status.trnc_lim);
+    expand_bonds(opt_meta);
 }
 
 template<typename Scalar>
@@ -408,6 +434,7 @@ void AlgorithmFinite<Scalar>::expand_bonds(BondExpansionPolicy bep, OptAlgo algo
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::move_center_point(std::optional<long> num_moves) {
     RealScalar var_before_move = 0;
+
     if(tensors.state->template get_position<long>() >= 0) { var_before_move = tools::finite::measure::energy_variance(tensors); }
     auto old_pos = status.position;
     if(not num_moves.has_value()) {
@@ -448,10 +475,30 @@ void AlgorithmFinite<Scalar>::move_center_point(std::optional<long> num_moves) {
     try {
         long moves = 0;
         while(num_moves > moves++) {
+            // long getpos = tensors.template get_position<long>() + tensors.state->get_direction();
+            // if(getpos == std::clamp<long>(getpos, 0, tensors.template get_length<long>() - 1l)){
+            //     const auto &mps             = tensors.get_state().get_mps_site(getpos);
+            //     auto        dim             = mps.dimensions();
+            //     auto        M               = tenx::MatrixCast(mps.get_M(), dim[0] * dim[1], dim[2]);
+            //     auto        M_bare          = tenx::MatrixCast(mps.get_M_bare(), dim[0] * dim[1], dim[2]);
+            //     tools::log->info("M      before move: \n{}\n", linalg::matrix::to_string(M, 8));
+            //     tools::log->info("M bare before move: \n{}\n", linalg::matrix::to_string(M_bare, 8));
+            // }
+
             if(tensors.position_is_outward_edge()) status.iter++;
             tools::log->trace("Moving center position | step {} | pos {} | dir {} ", status.step, tensors.template get_position<long>(),
                               tensors.state->get_direction());
-            status.step += tensors.move_center_point(svd::config(status.bond_lim, status.trnc_lim));
+
+            auto pos_bef_exp = tensors.template get_position<long>();
+            expand_bonds_postopt();
+            auto pos_aft_exp = tensors.template get_position<long>();
+
+            if(pos_bef_exp != pos_aft_exp) {
+                status.step += std::abs(pos_aft_exp - pos_bef_exp); // The expansion took care of moving moving the state position
+            } else {
+                status.step += tensors.move_center_point(svd::config(status.bond_lim, status.trnc_lim));
+            }
+
             // Do not go past the edge if you aren't there already!
             // It's important to stay at the inward edge, so we can do convergence checks and so on
             if(tensors.position_is_inward_edge()) break;
@@ -472,6 +519,16 @@ void AlgorithmFinite<Scalar>::move_center_point(std::optional<long> num_moves) {
         auto var_after_move = tools::finite::measure::energy_variance(tensors);
         tools::log->debug("Moved center position {} -> {} | var {:.2e} -> {:.2e}", old_pos, status.position, fp(var_before_move), fp(var_after_move));
     }
+
+    // long getpos = tensors.template get_position<long>() + tensors.state->get_direction();
+    // if(getpos == std::clamp<long>(getpos, 0, tensors.template get_length<long>() - 1l)){
+    //     const auto &mps             = tensors.get_state().get_mps_site();
+    //     auto        dim             = mps.dimensions();
+    //     auto        M               = tenx::MatrixCast(mps.get_M(), dim[0] * dim[1], dim[2]);
+    //     auto        M_bare          = tenx::MatrixCast(mps.get_M_bare(), dim[0] * dim[1], dim[2]);
+    //     tools::log->info("M      after move: \n{}\n", linalg::matrix::to_string(M, 8));
+    //     tools::log->info("M bare after move: \n{}\n", linalg::matrix::to_string(M_bare, 8));
+    // }
 }
 
 template<typename Scalar>
@@ -1344,7 +1401,6 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
         else
             threshold = std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
     }
-    threshold = 1e-15; // std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
     saturation_sensitivity =
         std::max(saturation_sensitivity.value(), static_cast<RealScalar>(std::sqrt(status.trnc_lim))); // Large trnc causes noise that never saturates
     tools::log->trace("Checking convergence of variance mpo | convergence threshold {:.2e} | sensitivity {:.2e}", fp(threshold.value()),

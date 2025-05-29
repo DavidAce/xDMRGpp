@@ -1,4 +1,4 @@
-#include "../matvec_sparse.impl.h"
+#include "matvec_sparse.impl.h"
 
 using Scalar = fp32;
 template class MatVecSparse<Scalar, false>;

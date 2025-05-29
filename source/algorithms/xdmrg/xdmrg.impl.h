@@ -1,8 +1,8 @@
 #pragma once
-#include "xdmrg.h"
+#include "../fdmrg.h"
+#include "../xdmrg.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
-#include "fdmrg.h"
 #include "general/iter.h"
 #include "io/fmt_custom.h"
 #include "math/eig.h"
@@ -12,6 +12,7 @@
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/mpo/MpoSite.h"
+#include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/h5.h"
@@ -369,16 +370,18 @@ void xdmrg<Scalar>::update_state() {
     tensors.rebuild_edges();
 
     tools::log->debug("Updating state: {}", opt_meta.string()); // Announce the current configuration for optimization
-    auto bond_dims_old = tensors.state->get_mps_dims_active();
+
+    auto variance_before_update  = tools::finite::measure::energy_variance(tensors);
+    auto bond_dims_before_update = tensors.state->get_mps_dims_active();
 
     expand_bonds(opt_meta);
 
-    auto variance_after_exp = tools::finite::measure::energy_variance(tensors);
-    auto bond_dims_exp      = tensors.state->get_mps_dims_active();
+    auto variance_after_preexp  = tools::finite::measure::energy_variance(tensors);
+    auto bond_dims_after_preexp = tensors.state->get_mps_dims_active();
 
     // Run the optimization
-    auto initial_state = opt::get_opt_initial_mps(tensors, opt_meta);
-    auto opt_state     = opt::get_updated_state(tensors, initial_state, status, opt_meta);
+    auto        initial_state = opt::get_opt_initial_mps(tensors, opt_meta);
+    auto opt_state = opt::get_updated_state(tensors, initial_state, status, opt_meta);
 
     // Determine the quality of the optimized state.
     opt_state.set_relchange(opt_state.get_variance() / var_latest);
@@ -417,15 +420,8 @@ void xdmrg<Scalar>::update_state() {
     if constexpr(settings::debug) logPolicy = LogPolicy::VERBOSE;
     tensors.merge_multisite_mps(opt_state.get_tensor(), MergeEvent::OPT, opt_meta.svd_cfg, logPolicy);
     tensors.rebuild_edges(); // This will only do work if edges were modified, which is the case in 1-site dmrg.
-
-    if constexpr(settings::debug) {
-        if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
-        auto variance_after_svd = tools::finite::measure::energy_variance(tensors);
-        tools::log->debug("Before update: variance {:8.2e} | mps dims {}", fp(var_latest), bond_dims_old);
-        tools::log->debug("After  expns.: variance {:8.2e} | mps dims {}", fp(variance_after_exp), bond_dims_exp);
-        tools::log->debug("After  merge : variance {:8.2e} | mps dims {}", fp(variance_after_svd), tensors.state->get_mps_dims_active());
-        tools::log->debug("Variance change from  SVD: {:.16f}%", fp(100 * variance_after_svd / opt_state.get_variance()));
-    }
+    auto variance_after_svd  = tools::finite::measure::energy_variance(tensors);
+    auto bond_dims_after_svd = tensors.state->get_mps_dims_active();
 
     // Update current energy density ε
     if(status.opt_ritz == OptRitz::TE)
@@ -445,7 +441,15 @@ void xdmrg<Scalar>::update_state() {
     last_optalgo   = opt_state.get_optalgo();
     if constexpr(settings::debug) tensors.assert_validity();
 
-    expand_bonds(opt_meta);
+    auto variance_after_postexp = tools::finite::measure::energy_variance(tensors);
+    auto bond_dims_postexp      = tensors.state->get_mps_dims_active();
+    if constexpr(settings::debug) {
+        if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
+        tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", fp(variance_before_update), bond_dims_before_update);
+        tools::log->debug("After  pre expns.        : variance {:8.2e} | mps dims {}", fp(variance_after_preexp), bond_dims_after_preexp);
+        tools::log->debug("After  merge             : variance {:8.2e} | mps dims {}", fp(variance_after_svd), bond_dims_after_svd);
+        tools::log->debug("Variance change from  SVD: {:.16f}%", fp(100 * variance_after_svd / opt_state.get_variance()));
+    }
 }
 
 template<typename Scalar>

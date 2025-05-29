@@ -1,6 +1,6 @@
 #pragma once
-#include "matvec_zero.h"
-#include "../log.h"
+#include "../../log.h"
+#include "../matvec_zero.h"
 #include "general/sfinae.h"
 #include "math/eig/solver.h"
 #include "math/svd.h"

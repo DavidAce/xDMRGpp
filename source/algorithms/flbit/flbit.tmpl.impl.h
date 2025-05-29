@@ -1,7 +1,7 @@
+#include "../flbit.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "debug/info.h"
-#include "flbit.h"
 #include "flbit.tmpl.h"
 #include "general/iter.h"
 #include "math/eig/view.h"

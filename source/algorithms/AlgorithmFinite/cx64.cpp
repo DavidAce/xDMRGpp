@@ -1,4 +1,4 @@
-#include "../AlgorithmFinite.impl.h"
+#include "AlgorithmFinite.impl.h"
 
 using Scalar = cx64;
 

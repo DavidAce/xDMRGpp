@@ -1,4 +1,4 @@
-#include "../xdmrg.impl.h"
+#include "xdmrg.impl.h"
 
 using Scalar = fp64;
 

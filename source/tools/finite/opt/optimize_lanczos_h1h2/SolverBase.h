@@ -14,6 +14,7 @@
 // #include "tensors/site/env/EnvPair.h"
 // #include "tensors/site/env/EnvVar.h"
 #include <Eigen/Eigenvalues>
+#include <source_location>
 
 template<typename Scalar>
 class SolverBase {
@@ -31,13 +32,14 @@ class SolverBase {
 
     private:
     struct Status {
-        VectorReal optVal;
-        VectorReal oldVal;
-        VectorReal absDiff;
-        VectorReal relDiff;
-        RealScalar initVal       = std::numeric_limits<RealScalar>::quiet_NaN();
-        RealScalar H_norm_approx = RealScalar{1};
-
+        VectorReal                optVal;
+        VectorReal                oldVal;
+        VectorReal                absDiff;
+        VectorReal                relDiff;
+        RealScalar                initVal      = std::numeric_limits<RealScalar>::quiet_NaN();
+        RealScalar                max_eval_est = RealScalar{1};
+        RealScalar                min_eval_est = RealScalar{1};
+        RealScalar                H_norm_est() { return std::max(std::abs(max_eval_est), std::abs(min_eval_est)); }
         std::vector<Eigen::Index> optIdx;
         Eigen::Index              iter        = 0;
         Eigen::Index              num_matvecs = 0;
@@ -60,11 +62,35 @@ class SolverBase {
 
     const MatrixType &get_HQ();
     const MatrixType &get_HQ_cur();
-    void unset_HQ();
-    void unset_HQ_cur();
+    void              unset_HQ();
+    void              unset_HQ_cur();
 
-    bool use_preconditioner                       = false;
-    int  chebyshev_filter_degree                  = 0;
+    [[nodiscard]] MatrixType chebyshevFilter(const Eigen::Ref<const MatrixType> &Qref,       /*!< input Q (orthonormal) */
+                                             RealScalar                          lambda_min, /*!< estimated smallest eigenvalue */
+                                             RealScalar                          lambda_max, /*!< estimated largest eigenvalue */
+                                             RealScalar                          lambda_cut, /*!< cut-off (e.g. λmin for low-end) */
+                                             int                                 degree      /*!< polynomial degree k */
+    );
+    [[nodiscard]] MatrixType qr_and_chebyshevFilter(const Eigen::Ref<const MatrixType> &Qref /*!< input Q (may be non-orthonormal) */);
+    void                     orthonormalize(const Eigen::Ref<const MatrixType> X,       // (N, xcols)
+                                            Eigen::Ref<MatrixType>             Y,       // (N, ycols)
+                                            RealScalar                         normTol, // The largest allowed norm error
+                                            RealScalar                         orthTol, // The largest allowed orthonormality error
+                                            Eigen::Ref<VectorIdxT>             mask     // block norm mask, size = n_blocks = ycols / blockWidth
+                        );
+    void                     compress_cols(MatrixType &X, const VectorIdxT &mask);
+    void                     compress_rows_and_cols(MatrixType &X, const VectorIdxT &mask);
+
+    void assert_allfinite(const Eigen::Ref<const MatrixType> X, const std::source_location &location = std::source_location::current());
+    void assert_orthonormal(const Eigen::Ref<const MatrixType> X, RealScalar threshold, const std::source_location &location = std::source_location::current());
+    void assert_orthogonal(const Eigen::Ref<const MatrixType> X, const Eigen::Ref<const MatrixType> Y, RealScalar threshold,
+                           const std::source_location &location = std::source_location::current());
+
+    bool       use_preconditioner                      = false;
+    int        chebyshev_filter_degree                 = 0;                 /*!< The chebyshev polynomial degree to use when filtering */
+    RealScalar chebyshev_filter_relative_gap_threshold = RealScalar{1e-2f}; /*!< Enable chebyshev filtering if the relative spectral gap is smaller than this */
+    RealScalar chebyshev_filter_lambda_cut_bias =
+        RealScalar{1e-1f};                                 /*!< A percentage between 0 and 1. Value 0.1 puts lambda_cut 10% towards evals(1) from evals(0) */
     bool use_extra_ritz_vectors_in_the_next_basis = false; /*!< Add the b next-best ritz vector block M to form the next basis (LOBPCG only) */
 
     public:
@@ -77,15 +103,16 @@ class SolverBase {
     Eigen::Index                b                         = 2;     /*!< The block size */
     bool                        use_refined_rayleigh_ritz = false; /*!< Refined ritz extraction uses 1 matvec per nev */
 
-    OptAlgo             algo;    /*!< Selects the current DMRG algorithm */
-    OptRitz             ritz;    /*!< Selects the target eigenvalues */
-    MatVecMPOS<Scalar> &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
-    MatrixType          T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
-    MatrixType          A, B, W, Q, M;
-    MatrixType          HQ;     /*! Save H*Q when preconditioning */
-    MatrixType          HQ_cur; /*! Save H*Q_cur when preconditioning */
-
-    MatrixType                       V; /*! Holds the current ritz eigenvectors. Use this to pass initial guesses */
+    OptAlgo                          algo;    /*!< Selects the current DMRG algorithm */
+    OptRitz                          ritz;    /*!< Selects the target eigenvalues */
+    MatVecMPOS<Scalar>              &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
+    MatrixType                       T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
+    MatrixType                       A, B, W, Q, M;
+    MatrixType                       HQ;     /*! Save H*Q when preconditioning */
+    MatrixType                       HQ_cur; /*! Save H*Q_cur when preconditioning */
+    MatrixType                       V;      /*! Holds the current top ritz eigenvectors. Use this to pass initial guesses */
+    MatrixType                       HV;     /*! Holds the current top ritz eigenvectors multiplied by H. */
+    MatrixType                       V_prev; /*! Holds the previous top ritz eigenvectors */
     VectorReal                       T_evals;
     MatrixType                       T_evecs;
     Eigen::HouseholderQR<MatrixType> hhqr;
@@ -100,12 +127,12 @@ class SolverBase {
 
     /*! Norm tolerance of ritz-vector residuals.
      * Lanczos converges if rnorm < normTolR * H_norm. */
-    RealScalar rnormTol() const { return tol * status.H_norm_approx; }
+    RealScalar rnormTol() const { return tol * status.max_eval_est; }
 
     /*! Norm tolerance of B-matrices.
      * Triggers the Lanczos recurrence breakdown. */
     [[nodiscard]] RealScalar bNormTol(const RealScalar B_norm) const noexcept {
-        auto scale = std::max({status.H_norm_approx, B_norm, RealScalar{1}}); //  H_norm tracks A norms already
+        auto scale = std::max({status.max_eval_est, B_norm, RealScalar{1}}); //  H_norm tracks A norms already
         return N * eps * scale;
     }
     /*! Norm tolerance of B-matrices.
@@ -139,6 +166,8 @@ class SolverBase {
     RealScalar relDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000;
 
     void set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize);
+    void set_chebyshevFilterRelGapThreshold(RealScalar threshold);
+    void set_chebyshevFilterLambdaCutBias(RealScalar bias);
     void set_chebyshevFilterDegree(Eigen::Index degree);
 
     MatrixType MultHX(const Eigen::Ref<const MatrixType> &X);
@@ -151,7 +180,7 @@ class SolverBase {
 
     virtual void build() = 0;
 
-    void diagonalizeT();
+    virtual void diagonalizeT();
 
     template<typename Comp>
     std::vector<Eigen::Index> getIndices(const VectorType &v, const Eigen::Index offset, const Eigen::Index num, Comp comp) {
@@ -162,8 +191,8 @@ class SolverBase {
         return std::vector(idx.begin() + offset, idx.begin() + offset + num);   // now idx[offset...offset+num) are the num sorted indices
     }
 
-    void extractRitzVectors();
-    void updateStatus();
+    virtual void extractRitzVectors();
+    void         updateStatus();
 
     virtual void extractResidualNorms() = 0;
 

@@ -71,6 +71,7 @@ class AlgorithmFinite : public AlgorithmBase {
     void         set_parity_shift_mpo(std::optional<std::string> target_axis = std::nullopt);
     void         set_parity_shift_mpo_squared(std::optional<std::string> target_axis = std::nullopt);
     void         try_moving_sites();
+    void         expand_bonds_postopt();
     void         expand_bonds(OptMeta &meta);
     void         expand_bonds(BondExpansionPolicy bep, OptAlgo algo, OptRitz ritz, std::optional<svd::config> svd_cfg = std::nullopt);
     void         move_center_point(std::optional<long> num_moves = std::nullopt);

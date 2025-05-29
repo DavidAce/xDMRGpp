@@ -1,5 +1,5 @@
 #pragma once
-#include "idmrg.h"
+#include "../idmrg.h"
 #include "config/settings.h"
 #include "tensors/edges/EdgesInfinite.h"
 #include "tensors/model/ModelInfinite.h"

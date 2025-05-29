@@ -1,5 +1,5 @@
 #pragma once
-#include "fdmrg.h"
+#include "../fdmrg.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "io/fmt_custom.h"

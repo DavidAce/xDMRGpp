@@ -1,5 +1,5 @@
 #pragma once
-#include "AlgorithmFinite.h"
+#include "../AlgorithmFinite.h"
 #include "qm/gate.h"
 #include "qm/lbit.h"
 #include <deque>

@@ -1,5 +1,5 @@
 #pragma once
-#include "itebd.h"
+#include "../itebd.h"
 #include "config/settings.h"
 #include "qm/time.h"
 #include "tensors/model/ModelInfinite.h"

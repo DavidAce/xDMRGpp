@@ -1,5 +1,5 @@
 #pragma once
-#include "AlgorithmInfinite.h"
+#include "../AlgorithmInfinite.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "debug/info.h"

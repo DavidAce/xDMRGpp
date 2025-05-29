@@ -109,7 +109,7 @@ struct GeneralizedLanczos {
         // Now extract r0 orthonormal vectors. Hopefully r0 >= s,
         // but it is OK if r0 == 1 (highly unlikely if we padded with random columns though).
         Q.setZero(N, b * (m + 1));
-        Q.leftCols(b) = QR0.householderQ() * MatrixType::Identity(N, b); // Extract the b left-most columns
+        Q.leftCols(b) = QR0.householderQ().setLength(Q.cols()) * MatrixType::Identity(N, b); // Extract the b left-most columns
 
         assert(Q.leftCols(b).allFinite());
         for(Eigen::Index i = 0; i < b; ++i) {
@@ -178,7 +178,7 @@ struct GeneralizedLanczos {
             eig::log->info("colNormTol {:.3e} | r1 = {}, Rdiag() = {::.5e}", colNormTol, r1, fv(Rdiag));
 
             if(r1 >= b) {
-                Q_next = QR1.householderQ() * Id_Nb; // Extract the left-most b columns
+                Q_next = QR1.householderQ().setLength(W.cols()) * Id_Nb; // Extract the left-most b columns
                 Q_next_norms = Q_next.colwise().norm();
                 eig::log->info("Q_next_norms = {::.5e}", Q_next_norms);
 

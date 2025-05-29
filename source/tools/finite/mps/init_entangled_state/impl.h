@@ -44,7 +44,7 @@ Eigen::Tensor<Scalar, 2> get_random_unitary_matrix(long rows, long cols) {
 
     auto qr = Eigen::ColPivHouseholderQR<mat_t>();
     qr.compute(M);
-    mat_t Q = qr.householderQ().setLength(qr.nonzeroPivots());
+    mat_t Q = qr.householderQ().setLength(M.cols()) * mat_t::Identity(M.rows(), qr.nonzeroPivots());
     if(rows != cols) { return tenx::TensorCast(Q.leftCols(std::min(Q.cols(), cols))); }
     vec_t R = qr.matrixR().diagonal().topRows(qr.nonzeroPivots());
     Q *= R.cwiseProduct(R.cwiseAbs().cwiseInverse()).asDiagonal();

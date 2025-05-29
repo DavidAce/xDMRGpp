@@ -1,4 +1,4 @@
-#include "../idmrg.impl.h"
+#include "idmrg.impl.h"
 
 using Scalar = fp64;
 

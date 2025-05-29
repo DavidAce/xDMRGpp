@@ -1,4 +1,4 @@
-#include "../flbit.tmpl.impl.h"
+#include "flbit.tmpl.impl.h"
 
 using Scalar = fp128;
 

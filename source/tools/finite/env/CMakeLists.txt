@@ -10,6 +10,13 @@ add_source_target(xdmrg++-tools-finite-env
         fp64.cx64.cpp
         fp128.cx128.cpp
 
+        residual_expansion/cx32.cpp
+        residual_expansion/cx64.cpp
+        residual_expansion/cx128.cpp
+        residual_expansion/fp32.cpp
+        residual_expansion/fp64.cpp
+        residual_expansion/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

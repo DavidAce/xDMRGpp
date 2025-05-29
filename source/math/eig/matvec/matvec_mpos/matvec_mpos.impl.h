@@ -1,6 +1,7 @@
 // #define DMRG_ENABLE_TBLIS
 #pragma once
-#include "../log.h"
+#include "../../log.h"
+#include "../matvec_mpos.h"
 #include "config/settings.h"
 #include "debug/info.h"
 #include "general/sfinae.h"
@@ -8,8 +9,6 @@
 #include "math/eig/solver.h"
 #include "math/svd.h"
 #include "math/tenx.h"
-#include "matvec_mpos.h"
-#include "matvec_mpos.impl.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/site/env/EnvEne.h"
 #include "tensors/site/env/EnvVar.h"
