@@ -330,10 +330,10 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
         target_tol  = std::clamp(target_tol, settings::precision::eigs_tol_min, settings::precision::eigs_tol_max);
         m1.eigs_tol = target_tol;
     }
-    if(m1.optAlgo == OptAlgo::GDMRG) {
-        m1.eigs_tol = std::sqrt(m1.eigs_tol.value_or(settings::precision::eigs_tol_min)); // GDMRG seems happy with higher tol
-        // m1.eigs_tol = settings::precision::eigs_tol_max;
-    }
+    // if(m1.optAlgo == OptAlgo::GDMRG) {
+    // m1.eigs_tol = std::sqrt(m1.eigs_tol.value_or(settings::precision::eigs_tol_min)); // GDMRG seems happy with higher tol
+    // m1.eigs_tol = settings::precision::eigs_tol_max;
+    // }
 
     m1.eigs_jcbMaxBlockSize = settings::precision::eigs_jcb_min_blocksize;
     if(status.algorithm_saturated_for + status.algorithm_has_stuck_for > 0) {
@@ -351,8 +351,7 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     m1.optSolver = m1.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
     m1.label     = enum2sv(m1.optAlgo);
 
-    m1.optSolver = OptSolver::H1H2;
-    m1.eigs_lib  = "SPECTRA";
+    if(has_any_flags(m1.optType, OptType::FP128, OptType::CX128)) m1.optSolver = OptSolver::H1H2;
 
     m1.validate();
     return m1;

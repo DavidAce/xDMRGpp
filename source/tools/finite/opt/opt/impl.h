@@ -62,7 +62,6 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_opt_initial_mps(cons
             break;
         }
     }
-
     initial_mps.validate_initial_mps();
     tensors.clear_cache();
     tensors.clear_measurements();
@@ -79,6 +78,7 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::find_ground_state(const 
     // Finish up
     result.set_optsolver(meta.optSolver);
     result.set_optalgo(meta.optAlgo);
+    result.set_opttype(meta.optType);
     result.set_optexit(meta.optExit);
     result.validate_result();
     return result;
@@ -127,20 +127,27 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
             }
         }
     }
-    auto meta2      = meta;
-    meta2.optSolver = OptSolver::EIGS;
-    auto val1       = result.get_hsquared();
-    auto result2          = internal::optimize_folded_spectrum(tensors, initial_mps, status, meta2, elog);
-    auto val2       = result.get_hsquared();
+    // auto meta2      = meta;
+    // meta2.optSolver = OptSolver::EIGS;
+    // meta2.optAlgo   = OptAlgo::XDMRG;
+    // meta2.optRitz   = OptRitz::SM;
+    // auto result2    = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta2, elog);
+    auto meta3      = meta;
+    meta3.optSolver = OptSolver::H1H2;
+    meta3.optType   = meta.optType == OptType::FP128 ? OptType::FP64 : OptType::FP128;
+    meta3.optAlgo   = OptAlgo::GDMRG;
+    meta3.optRitz   = OptRitz::LM;
+    if(meta.optSolver != meta3.optSolver or meta.optType != meta3.optType or meta.optAlgo != meta3.optAlgo or meta.optRitz != meta3.optRitz) {
+        auto result3 = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta3, elog);
+    }
+
     slog.print_subs_report();
     elog.print_eigs_report();
-    tools::log->info("val1(H1H2) = {:.16f},  val2(EIGS) = {:.16f}", val1, val2);
-    if(val1 - val2 > 10) {
-        throw except::runtime_error("Eigval mismatch: val1(H1H2) = {:.16f},  val2(EIGS) = {:.16f}", val1, val2);}
 
     // Finish up
     result.set_optsolver(meta.optSolver);
     result.set_optalgo(meta.optAlgo);
+    result.set_opttype(meta.optType);
     result.set_optexit(meta.optExit);
     result.validate_result();
     return result;

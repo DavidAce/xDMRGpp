@@ -59,8 +59,10 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
                 res.set_eigs_ncv(solver.result.meta.ncv);
                 res.set_eigs_tol(solver.result.meta.tol);
                 res.set_eigs_ritz(solver.result.meta.ritz);
+                res.set_eigs_type(eig::TypeToString(solver.result.meta.type));
                 res.set_eigs_shift(solver.result.meta.sigma);
                 res.set_optalgo(meta.optAlgo);
+                res.set_opttype(meta.optType);
                 res.set_optsolver(meta.optSolver);
                 if(solver.result.meta.residual_norms.size() > udx) res.set_eigs_rnorm(solver.result.meta.residual_norms.at(udx));
                 auto mpos    = tensors.get_model().get_mpo_active();
@@ -95,7 +97,6 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
         }
     }
 }
-
 
 template<typename CalcType, typename Scalar>
 void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, const OptMeta &meta,
@@ -138,8 +139,10 @@ void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<
                 res.set_eigs_tol(solver.result.meta.tol);
                 res.set_eigs_eigval(eigvals[idx]);
                 res.set_eigs_ritz(solver.result.meta.ritz);
+                res.set_eigs_type(eig::TypeToString(solver.result.meta.type));
                 res.set_eigs_shift(solver.result.meta.sigma);
                 res.set_optalgo(meta.optAlgo);
+                res.set_opttype(meta.optType);
                 res.set_optsolver(meta.optSolver);
 
                 if(solver.result.meta.residual_norms.size() > udx) res.set_eigs_rnorm(solver.result.meta.residual_norms.at(udx));

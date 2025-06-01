@@ -104,49 +104,11 @@ void GD<Scalar>::selective_orthonormalize(const Eigen::Ref<const MatrixType> X, 
     }
 }
 
-template<typename Scalar> typename GD<Scalar>::MatrixType GD<Scalar>::get_wBlock() {
-    // We add Lanczos-style residual blocks
-    W = HV;
-    assert(W.allFinite());
-    A                   = V.adjoint() * W;
-    status.max_eval_est = std::max({status.max_eval_est, A.norm() * std::abs(std::sqrt<RealScalar>(b))});
-
-    // 3) Subtract projections to A and B once
-    W.noalias() -= V * A; // Qi * Qi.adjoint()*H*Qi
-    if(V_prev.rows() == N and V_prev.cols() == b) {
-        B = V_prev.adjoint() * W;
-        W.noalias() -= V_prev * B.adjoint();
-        status.max_eval_est = std::max({status.max_eval_est, B.norm() * std::abs(std::sqrt<RealScalar>(b))});
-    }
-    if constexpr(settings::debug_GD) {
-        bool allFinite = W.allFinite();
-        if(!allFinite) { eig::log->warn("W is not all finite: \n{}\n", linalg::matrix::to_string(W, 8)); }
-        assert(allFinite);
-    }
-    return W;
-}
-template<typename Scalar> typename GD<Scalar>::MatrixType GD<Scalar>::get_mBlock() {
-    // M are the b next-best ritz vectors from the previous iteration
-    assert_allfinite(M);
-    return M;
-}
-template<typename Scalar> typename GD<Scalar>::MatrixType GD<Scalar>::get_sBlock() {
-    // Make a residual block "S = (HQ-λQ)"
-    MatrixType S = HV - V * T_evals(status.optIdx).asDiagonal(); // Put the residual "R" in S.
-    assert_allfinite(S);
-    return S;
-}
-template<typename Scalar> typename GD<Scalar>::MatrixType GD<Scalar>::get_rBlock() {
-    // Get a random block
-    return MatrixType::Random(N, b);
-}
-
 template<typename Scalar>
-void GD<Scalar>::build_Q_res_i() {
-    const Eigen::Index N = H1.rows();
+typename GD<Scalar>::MatrixType GD<Scalar>::get_Q_res(std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultPX) {
+    assert(V.rows() == N);
     assert(V.cols() == b);
     assert_orthonormal(V, orthTolQ);
-
     // Now V has b orthonormalized ritz vectors
 
     // Start defining the residual blocks (we have ritz-type and lanczos type)
@@ -166,21 +128,23 @@ void GD<Scalar>::build_Q_res_i() {
         break; // If all are at min, break to avoid infinite loop
         /* clang-format on */
     }
+    MatrixType Q_res(N, (wBlocks + sBlocks) * b);
 
-    Q_res_i.conservativeResize(N, (wBlocks + sBlocks) * b);
-    assert(N >= Q_res_i.cols() + V.cols());
-    if(Q_res_i.cols() == 0) return;
+    assert(N >= Q_res.cols() + V.cols());
+    // eig::log->warn("V \n{}\n", linalg::matrix::to_string(V, 8));
+    // eig::log->warn("HV \n{}\n", linalg::matrix::to_string(HV, 8));
 
     Eigen::Index wOffset = 0;
     Eigen::Index sOffset = wBlocks + mBlocks;
+    if(wBlocks > 0) Q_res.middleCols(wOffset * b, b) = get_wBlock();
+    if(sBlocks > 0) Q_res.middleCols(sOffset * b, b) = get_sBlock();
+    // eig::log->warn("Q_res before filtering: \n{}\n", linalg::matrix::to_string(Q_res, 8));
 
-    if(wBlocks > 0) Q_res_i.middleCols(wOffset * b, b) = get_wBlock();
-    if(sBlocks > 0) Q_res_i.middleCols(sOffset * b, b) = get_sBlock();
     if(chebyshev_filter_degree >= 1) {
         // Apply the chebyshev filter on newly generated residual and random blocks
 
-        auto W = wBlocks > 0 ? Q_res_i.middleCols(wOffset * b, b) : Q_res_i.middleCols(wOffset * b, 0);
-        auto S = sBlocks > 0 ? Q_res_i.middleCols(sOffset * b, b) : Q_res_i.middleCols(sOffset * b, 0);
+        auto W = wBlocks > 0 ? Q_res.middleCols(wOffset * b, b) : Q_res.middleCols(wOffset * b, 0);
+        auto S = sBlocks > 0 ? Q_res.middleCols(sOffset * b, b) : Q_res.middleCols(sOffset * b, 0);
 
         /* clang-format off */
         if(wBlocks > 0) {W = qr_and_chebyshevFilter(W);}
@@ -190,71 +154,83 @@ void GD<Scalar>::build_Q_res_i() {
     if(use_preconditioner) {
         // Precondition the latest W, S and R,
         /* clang-format off */
-        if(wBlocks > 0) {Q_res_i.middleCols(wOffset * b, b) = -MultPX(Q_res_i.middleCols(wOffset * b, b));}
-        if(sBlocks > 0) {Q_res_i.middleCols(sOffset * b, b) = -MultPX(Q_res_i.middleCols(sOffset * b, b));}
+        if(wBlocks > 0) {Q_res.middleCols(wOffset * b, b) = -MultPX(Q_res.middleCols(wOffset * b, b));}
+        if(sBlocks > 0) {Q_res.middleCols(sOffset * b, b) = -MultPX(Q_res.middleCols(sOffset * b, b));}
         /* clang-format on */
     }
 
     // pick a relative breakdown tolerance:
     auto       breakdownTol      = eps * 10 * std::max({RealScalar{1}, status.H_norm_est()});
-    VectorIdxT active_block_mask = VectorIdxT::Ones(wBlocks + mBlocks + sBlocks + rBlocks);
-
+    VectorIdxT active_block_mask = VectorIdxT::Ones(wBlocks + sBlocks);
+    // eig::log->warn("Q_res before compression: \n{}\n", linalg::matrix::to_string(Q_res, 8));
     // orthonormalize(Q_enr, Q_enr_i, breakdownTol, 10000 * breakdownTol, active_block_mask);
-    orthonormalize(V, Q_res_i, breakdownTol, 10000 * breakdownTol, active_block_mask);
-    assert_orthogonal(V, Q_res_i, breakdownTol);
-    orthonormalize(Q, Q_res_i, breakdownTol, 10000 * breakdownTol, active_block_mask);
-    assert_orthogonal(Q_enr, Q_res_i, breakdownTol);
-    compress_cols(Q_res_i, active_block_mask);
+    orthonormalize(V, Q_res, breakdownTol, 10000 * breakdownTol, active_block_mask);
+    assert_orthogonal(V, Q_res, breakdownTol);
+    orthonormalize(Q, Q_res, breakdownTol, 10000 * breakdownTol, active_block_mask);
+    assert_orthogonal(Q, Q_res, breakdownTol);
+    compress_cols(Q_res, active_block_mask);
+    // eig::log->warn("Q_res after  compression: \n{}\n", linalg::matrix::to_string(Q_res, 8));
 
-    if(Q_res_i.cols() == 0) {
-        // // Happy breakdown!
-        eig::log->warn("optVal {::.16f}: ", fv(status.optVal));
-        eig::log->warn("T_evals {::.16f}: ", fv(T_evals));
-        eig::log->debug("saturated basis");
-        status.stopReason |= StopReason::saturated_basis;
-        status.stopMessage.emplace_back("saturated basis: exhausted subspace search");
-        return;
-    }
-
-    if constexpr(settings::print_q) eig::log->warn("Q_enr_i after compression: \n{}\n", linalg::matrix::to_string(Q_res_i, 8));
-    assert_allfinite(Q_res_i);
-    assert_orthonormal(Q_res_i, orthTolQ);
+    assert_allfinite(Q_res);
+    assert_orthonormal(Q_res, orthTolQ);
+    if constexpr(settings::print_q) eig::log->warn("Q_res after compression: \n{}\n", linalg::matrix::to_string(Q_res, 8));
+    return Q_res;
 }
 
 template<typename Scalar>
 void GD<Scalar>::build() {
-    build_Q_res_i();
-    assert(Q_res_i.rows() == N);
+    switch(algo) {
+        case OptAlgo::DMRG: [[fallthrough]];
+        case OptAlgo::DMRGX: [[fallthrough]];
+        case OptAlgo::HYBRID_DMRGX: [[fallthrough]];
+        case OptAlgo::XDMRG: {
+            auto Q_res = get_Q_res([this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return this->MultPX(X); });
+            build(Q_res, Q, HQ, [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return this->MultHX(X); });
+            break;
+        }
+        case OptAlgo::GDMRG: {
+            auto Q_res = get_Q_res([this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return this->MultP2X(X); });
+            build(Q_res, Q, H1Q, H2Q);
+            break;
+        }
+        default: throw except::runtime_error("invalid algo {}", enum2sv(algo));
+    }
+}
+
+template<typename Scalar>
+void GD<Scalar>::build(MatrixType &Q_res, MatrixType &Q, MatrixType &HQ, std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultHX) {
     if(status.stopReason != StopReason::none) return;
+    assert(Q_res.rows() == N);
     // Roll until satisfying |Q_cur.adjoint() * Q_enr| < orthTolQ and Q_enr.cols()/b < max Blocks
 
     // Append the enrichment for this iteration
 
     // eig::log->warn("Q_enr maxBLocks {}: \n{}\n", maxBlocks, linalg::matrix::to_string(Q_enr, 8));
     auto oldBlocks = Q.cols() / b;
-    auto newBlocks = std::max<Eigen::Index>(1, std::min<Eigen::Index>({(Q.cols() + Q_res_i.cols()) / b, (N / b)}));
-    if(newBlocks > maxBasisBlocks or Q.cols() == 0 or Q_res_i.cols() == 0) {
+    auto newBlocks = std::max<Eigen::Index>(1, std::min<Eigen::Index>({(Q.cols() + Q_res.cols()) / b, (N / b)}));
+    if(newBlocks > maxBasisBlocks or Q.cols() == 0 or Q_res.cols() == 0) {
         // (re)start
 
         Eigen::Index vBlocks = V.cols() / b;
-        Eigen::Index mBlocks = use_extra_ritz_vectors_in_the_next_basis ? M.cols() / b : 0;
+        Eigen::Index mBlocks = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
         Eigen::Index rBlocks = inject_randomness ? 1 : 0;
         Eigen::Index kBlocks = std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() / b - vBlocks + mBlocks + rBlocks, maxRetainBlocks));
-        Eigen::Index qBlocks = Q_res_i.cols() / b;
+        Eigen::Index qBlocks = Q_res.cols() / b;
         MatrixType   Q_keep  = Q.rightCols(kBlocks * b);
         MatrixType   HQ_keep = HQ.rightCols(kBlocks * b);
-        Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res_i.cols());
-        HQ.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res_i.cols());
+        if(mBlocks > 0) M = get_mBlock(); // Before modifying Q
+        Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
+        HQ.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
         auto vOffset = 0;
         auto mOffset = vBlocks;
         auto rOffset = vBlocks + mBlocks;
         auto kOffset = vBlocks + mBlocks + rBlocks;
         auto qOffset = vBlocks + mBlocks + rBlocks + kBlocks;
         if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
-        if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = get_mBlock();
+        if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = M;
         if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
         if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
-        if(qBlocks > 0) Q.middleCols(qOffset * b, qBlocks * b) = Q_res_i;
+        if(qBlocks > 0) Q.middleCols(qOffset * b, qBlocks * b) = Q_res;
         MatrixType Qold = Q;
         hhqr.compute(Q);
         Q = hhqr.householderQ().setLength(Q.cols()) * MatrixType::Identity(N, Q.cols());
@@ -264,7 +240,7 @@ void GD<Scalar>::build() {
 
         // Start building HQ
         if(vBlocks > 0) HQ.middleCols(vOffset * b, vBlocks * b) = HV;
-        if(mBlocks > 0) HQ.middleCols(mOffset * b, mBlocks * b) = MultHX(Q.middleCols(mOffset * b, mBlocks * b)); // No chance that this can be avoided
+        if(mBlocks > 0) HQ.middleCols(mOffset * b, mBlocks * b) = HM; // HM was set during the last set_mBlock() call
         if(rBlocks > 0) HQ.middleCols(rOffset * b, rBlocks * b) = MultHX(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
         if(kBlocks > 0) HQ.middleCols(kOffset * b, kBlocks * b) = HQ_keep;
         if(qBlocks > 0) HQ.middleCols(qOffset * b, qBlocks * b) = MultHX(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
@@ -272,7 +248,6 @@ void GD<Scalar>::build() {
         // that is, if the orthonormalization of Q rotated those columns.
         // To know for sure, we have to check E
         for(Eigen::Index i = 0; i < Q.cols(); ++i) {
-            if(mOffset * b <= i && i < (mOffset + mBlocks) * b) continue; // Skip because it was already built
             if(rOffset * b <= i && i < (rOffset + rBlocks) * b) continue; // Skip because it was already built
             if(qOffset * b <= i && i < (qOffset + qBlocks) * b) continue; // Skip because it was already built
             if(E(i) < normTolQ) {
@@ -286,164 +261,214 @@ void GD<Scalar>::build() {
         // Append enrichment
         Q.conservativeResize(N, newBlocks * b);
         HQ.conservativeResize(N, newBlocks * b);
-        auto copyBlocks              = std::min<Eigen::Index>(Q.cols() / b, Q_res_i.cols() / b);
-        Q.rightCols(copyBlocks * b)  = Q_res_i.leftCols(copyBlocks * b);
-        HQ.rightCols(copyBlocks * b) = MultHX(Q_res_i);
+        auto copyBlocks              = std::min<Eigen::Index>(Q.cols() / b, Q_res.cols() / b);
+        Q.rightCols(copyBlocks * b)  = Q_res.leftCols(copyBlocks * b);
+        HQ.rightCols(copyBlocks * b) = MultHX(Q_res);
     }
 
     assert(Q.colwise().norm().minCoeff() > eps);
     assert(HQ.colwise().norm().minCoeff() > eps);
-
-    // Form T
-    T = Q.adjoint() * HQ;
-    assert(T.colwise().norm().minCoeff() > eps);
-
-    if constexpr(settings::print_q) eig::log->warn("T : \n{}\n", linalg::matrix::to_string(T, 8));
-
-    // Solve T by calling diagonalizeT() elsewhere
 }
 
 template<typename Scalar>
-void GD<Scalar>::diagonalizeT() {
+void GD<Scalar>::build(MatrixType &Q1_res, MatrixType &Q2_res, MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q) {
     if(status.stopReason != StopReason::none) return;
-    if(T.rows() == 0) return;
-    assert(T.colwise().norm().minCoeff() != 0);
-    // We expect Q to have some non-orthogonality, so we should
-    // use solve a generalized eigenvalue problem instead.
-    // The ritz vectors V = (Q * eigenvectors) that we get are G-orthonormal,
-    // meaning they are the usual ritz vectors if G == I. But if G != I, we should
-    // orthonormalize as V = QR(V)
+    assert(Q1_res.rows() == N);
+    assert(Q2_res.rows() == N);
 
-    G = Q.adjoint() * Q;                             // Gram matrix
-    G = RealScalar{0.5f} * (G + G.adjoint()).eval(); // Symmetrize
-    assert_orthonormal(G, RealScalar{2e-1f});
+    auto       breakdownTol = eps * 100 * std::max({RealScalar{1}, status.H_norm_est()});
+    VectorIdxT mask         = VectorIdxT::Ones(Q2_res.cols() / b);
+    orthonormalize(Q1_res, Q2_res, breakdownTol * 1000, breakdownTol, mask);
+    compress_cols(Q2_res, mask);
 
-    T = RealScalar{0.5f} * (T + T.adjoint()).eval(); // Symmetrize
-    Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> es(T, G, Eigen::Ax_lBx);
-    if(es.info() == Eigen::Success and T_evals.minCoeff() > 0) {
-        T_evals = es.eigenvalues();
-        T_evecs = es.eigenvectors().colwise().normalized();
-    } else {
-        eig::log->warn("G: \n{}\n", linalg::matrix::to_string(G, 8));
-        Eigen::SelfAdjointEigenSolver<MatrixType> es2(T);
+    // Roll until satisfying |Q_cur.adjoint() * Q_enr| < orthTolQ and Q_enr.cols()/b < max Blocks
 
-        T_evals = es2.eigenvalues();
-        T_evecs = es2.eigenvectors();
-        assert_allfinite(T_evecs);
-    }
-    status.max_eval_est = std::max(status.min_eval_est, T_evals.maxCoeff());
-    status.min_eval_est = std::min(status.min_eval_est, T_evals.minCoeff());
-}
+    // Append the enrichment for this iteration
 
-template<typename Scalar>
-void GD<Scalar>::extractRitzVectors() {
-    if(status.stopReason != StopReason::none) return;
-    if(T.rows() < b) return;
-    if(max_wBlocks > 0) V_prev = V;
-    // Here we DO NOT assume that Q is orthonormal.
+    // eig::log->warn("Q_enr maxBLocks {}: \n{}\n", maxBlocks, linalg::matrix::to_string(Q_enr, 8));
+    auto oldBlocks = Q.cols() / b;
+    auto newBlocks = std::max<Eigen::Index>(1, std::min<Eigen::Index>({(Q.cols() + Q1_res.cols() + Q2_res.cols()) / b, (N / b)}));
+    if(newBlocks > maxBasisBlocks or Q.cols() == 0 or Q1_res.cols() == 0 or Q2_res.cols() == 0) {
+        // (re)start
 
-    // Get indices of the top b (the block size) eigenvalues as a std::vector<Eigen::Index>
-    status.optIdx = get_ritz_indices(ritz, 0, b, T_evals);
-    auto Z        = T_evecs(Eigen::all, status.optIdx);
-    // Refined extraction
-    if(use_refined_rayleigh_ritz) {
-        // Get the regular ritz vector residual
-        status.rNorms = (HQ * Z - Q * T_evals.asDiagonal() * Z).colwise().norm();
-
-        for(Eigen::Index j = 0; j < static_cast<Eigen::Index>(status.optIdx.size()); ++j) {
-            const auto &theta = T_evals(status.optIdx[j]);
-
-            MatrixType M = HQ - theta * Q; // Residual
-
-            Eigen::JacobiSVD<MatrixType> svd;
-            svd.compute(M, Eigen::ComputeThinV);
-
-            Eigen::Index min_idx;
-            svd.singularValues().minCoeff(&min_idx);
-            V.col(j) = (Q * svd.matrixV().col(min_idx)).normalized();
-
-            RealScalar refinedRnorm = svd.singularValues()(min_idx);
-            if(svd.info() == Eigen::Success and refinedRnorm < 10 * status.rNorms(j)) {
-                // Accept the solution
-                auto Z_ref       = svd.matrixV().col(min_idx);
-                V.col(j)         = (Q * Z_ref).normalized();
-                status.rNorms(j) = refinedRnorm;
-            } else {
-                auto GnormError = (G.adjoint() * G - MatrixType::Identity(G.cols(), G.cols())).norm();
-                eig::log->info("refinement failed on ritz vector {} | rnorm: refined={:.5e}, standard={:.5e} | GnormError {:.5e} | info {} ", j, refinedRnorm,
-                               status.rNorms(j), GnormError, static_cast<int>(svd.info()));
-                // eig::log->info("G\n{}\n", linalg::matrix::to_string(G, 8));
-                // eig::log->info("T_evecs\n{}\n", linalg::matrix::to_string(T_evecs, 8));
-                // eig::log->warn("T_evals: \n{}\n", linalg::matrix::to_string(T_evals, 8));
-                V.col(j)   = Q * T_evecs(Eigen::all, status.optIdx[j]);
-                T_evals(j) = (V.col(j).adjoint() * MultHX(V.col(j))).real().coeff(0);
-            }
-
-            // MatrixType M = HQ - theta * Q;  // Residual
-            // MatrixType K = M.adjoint() * M; // Squared residual
-            //
-            // // Symmetrize
-            // K = RealScalar{0.5f} * (K + K.adjoint()).eval();
-            //
-            // Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> gsolver(K, G, Eigen::Ax_lBx);
-            //
-            // RealScalar refinedRnorm = std::sqrt(std::abs(gsolver.eigenvalues()(0)));
-            // if(gsolver.info() == Eigen::Success and refinedRnorm < 10 * status.rNorms(j)) {
-            //     // Accept the solution
-            //     auto Z_ref       = gsolver.eigenvectors().col(0); // eigenvector for smallest eigenvalue
-            //     V.col(j)         = (Q * Z_ref).normalized();
-            //     status.rNorms(j) = refinedRnorm;
-            // } else {
-            //     auto GnormError = (G.adjoint() * G - MatrixType::Identity(G.cols(), G.cols())).norm();
-            //     eig::log->info("refinement failed on ritz vector {} | rnorm: refined={:.5e}, standard={:.5e} | GnormError {:.5e} ", j, refinedRnorm,
-            //                    status.rNorms(j), GnormError);
-            //     eig::log->info("gsolver eigenvalues: {}", linalg::matrix::to_string(gsolver.eigenvalues().transpose(), 8));
-            //     // eig::log->info("G\n{}\n", linalg::matrix::to_string(G, 8));
-            //     // eig::log->info("T_evecs\n{}\n", linalg::matrix::to_string(T_evecs, 8));
-            //     // eig::log->warn("T_evals: \n{}\n", linalg::matrix::to_string(T_evals, 8));
-            //     V.col(j)   = Q * T_evecs(Eigen::all, status.optIdx[j]);
-            //     T_evals(j) = (V.col(j).adjoint() * MultHX(V.col(j))).real().coeff(0);
-            // }
+        Eigen::Index vBlocks = V.cols() / b;
+        Eigen::Index mBlocks = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
+        Eigen::Index rBlocks = inject_randomness ? 1 : 0;
+        Eigen::Index kBlocks = std::max<Eigen::Index>(
+            0, std::min<Eigen::Index>(Q.cols() / b - (vBlocks + mBlocks + rBlocks) - Q1_res.cols() / b - Q2_res.cols() / b, maxRetainBlocks));
+        Eigen::Index qBlocks  = (Q1_res.cols() + Q2_res.cols()) / b;
+        MatrixType   Q_keep   = Q.rightCols(kBlocks * b);
+        MatrixType   H1Q_keep = H1Q.rightCols(kBlocks * b);
+        MatrixType   H2Q_keep = H2Q.rightCols(kBlocks * b);
+        if(mBlocks > 0) M = get_mBlock(); // Before modifying Q
+        Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q1_res.cols() + Q2_res.cols());
+        H1Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q1_res.cols() + Q2_res.cols());
+        H2Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q1_res.cols() + Q2_res.cols());
+        auto vOffset = 0;
+        auto mOffset = vBlocks;
+        auto rOffset = vBlocks + mBlocks;
+        auto kOffset = vBlocks + mBlocks + rBlocks;
+        auto qOffset = vBlocks + mBlocks + rBlocks + kBlocks;
+        if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
+        if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = M;
+        if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
+        if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
+        if(qBlocks > 0) {
+            Q.middleCols(qOffset * b, qBlocks * b).leftCols(Q1_res.cols())  = Q1_res;
+            Q.middleCols(qOffset * b, qBlocks * b).rightCols(Q2_res.cols()) = Q2_res;
         }
+        MatrixType Qold = Q;
+        hhqr.compute(Q);
+        Q = hhqr.householderQ().setLength(Q.cols()) * MatrixType::Identity(N, Q.cols());
+
+        VectorReal D = (Qold.conjugate().array() * Q.array()).colwise().sum().real();
+        VectorReal E = (D.cwiseAbs() - VectorType::Ones(D.size())).cwiseAbs();
+
+        // Build H1Q and H2Q
+        if(vBlocks > 0) H1Q.middleCols(vOffset * b, vBlocks * b) = H1V;
+        if(vBlocks > 0) H2Q.middleCols(vOffset * b, vBlocks * b) = H2V;
+
+        if(mBlocks > 0) H1Q.middleCols(mOffset * b, mBlocks * b) = H1M; // Set during the last call to set_mBlock(...)
+        if(mBlocks > 0) H2Q.middleCols(mOffset * b, mBlocks * b) = H2M; // Set during the last call to set_mBlock(...)
+
+        if(rBlocks > 0) H1Q.middleCols(rOffset * b, rBlocks * b) = MultH1X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
+        if(rBlocks > 0) H2Q.middleCols(rOffset * b, rBlocks * b) = MultH2X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
+
+        if(kBlocks > 0) H1Q.middleCols(kOffset * b, kBlocks * b) = H1Q_keep;
+        if(kBlocks > 0) H2Q.middleCols(kOffset * b, kBlocks * b) = H2Q_keep;
+
+        if(qBlocks > 0) H1Q.middleCols(qOffset * b, qBlocks * b) = MultH1X(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
+        if(qBlocks > 0) H2Q.middleCols(qOffset * b, qBlocks * b) = MultH2X(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
+
+        // We may need to rebuild columns of H1Q and H2Q that were affected by QR,
+        // that is, if the orthonormalization of Q rotated those columns.
+        // To know for sure, we have to check E
+        for(Eigen::Index i = 0; i < Q.cols(); ++i) {
+            if(rOffset * b <= i && i < (rOffset + rBlocks) * b) continue; // Skip because it was already built
+            if(qOffset * b <= i && i < (qOffset + qBlocks) * b) continue; // Skip because it was already built
+            if(E(i) < normTolQ) {
+                RealScalar sign = D(i) > 0 ? RealScalar{1} : RealScalar{-1};
+                H1Q.col(i) *= sign; // Q and HQ columns were preserved up to a sign
+                H2Q.col(i) *= sign; // Q and HQ columns were preserved up to a sign
+            } else {
+                H1Q.col(i) = MultH1X(Q.col(i)); // HQ column was not preserved in QR
+                H2Q.col(i) = MultH2X(Q.col(i)); // HQ column was not preserved in QR
+            }
+        }
+    } else if(oldBlocks != newBlocks) {
+        // Append enrichment
+        Q.conservativeResize(N, newBlocks * b);
+        H1Q.conservativeResize(N, newBlocks * b);
+        H2Q.conservativeResize(N, newBlocks * b);
+
+        auto copyBlocks                                      = std::min<Eigen::Index>(Q.cols() / b, (Q1_res.cols() + Q1_res.cols()) / b);
+        Q.rightCols(copyBlocks * b).leftCols(Q1_res.cols())  = Q1_res;
+        Q.rightCols(copyBlocks * b).rightCols(Q2_res.cols()) = Q2_res;
+
+        H1Q.rightCols(copyBlocks * b).leftCols(Q1_res.cols())  = MultH1X(Q1_res);
+        H1Q.rightCols(copyBlocks * b).rightCols(Q2_res.cols()) = MultH1X(Q2_res);
+
+        H2Q.rightCols(copyBlocks * b).leftCols(Q1_res.cols())  = MultH2X(Q1_res);
+        H2Q.rightCols(copyBlocks * b).rightCols(Q2_res.cols()) = MultH2X(Q2_res);
     }
 
-    else {
-        // Regular Rayleigh-Ritz
-        V = Q * Z;
-    }
-
-    // Orthonormalize because Q may not be fully orthonormal
-    MatrixType evals = V.adjoint() * MultHX(V);
-    eig::log->info("evals before : {}", linalg::matrix::to_string(evals.transpose(), 16));
-    hhqr.compute(V);
-    V = hhqr.householderQ().setLength(V.cols()) * MatrixType::Identity(V.rows(), V.cols());
-    V.adjoint() * MultHX(V);
-    eig::log->info("evals afterqr: {}", linalg::matrix::to_string(evals.transpose(), 16));
-    if(use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b) {
-        auto top_2b_indices = get_ritz_indices(ritz, b, b, T_evals);
-        M                   = Q * T_evecs(Eigen::all, top_2b_indices);
-        assert_allfinite(M);
-        // Orthonormalize because Q may not be fully orthonormal
-        hhqr.compute(M);
-        M = hhqr.householderQ().setLength(M.cols()) * MatrixType::Identity(M.rows(), M.cols());
-        assert_allfinite(M);
-    }
+    assert(Q.colwise().norm().minCoeff() > eps);
+    assert(H1Q.colwise().norm().minCoeff() > eps);
+    assert(H2Q.colwise().norm().minCoeff() > eps);
 }
 
 template<typename Scalar>
-void GD<Scalar>::extractResidualNorms() {
+void GD<Scalar>::build(MatrixType &Q_res, MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q) {
     if(status.stopReason != StopReason::none) return;
-    if(T.rows() < b) return;
-    assert_orthonormal(V, normTolQ);
-    // Here we assume V is already orthonormal (even if Q was not a good orthonormal basis)
-    // We can also do this calculation even if we already have residual norms from
-    // refined extraction. These are more accurate, and we need HV later anyway.
+    assert(Q_res.rows() == N);
 
-    // Step 1: Apply H to new V
-    HV = MultHX(V);
+    // Roll until satisfying |Q_cur.adjoint() * Q_enr| < orthTolQ and Q_enr.cols()/b < max Blocks
 
-    // Step 5: Residuals
-    status.rNorms = (HV - V * T_evals(status.optIdx).asDiagonal()).colwise().norm();
+    // Append the enrichment for this iteration
+
+    // eig::log->warn("Q_enr maxBLocks {}: \n{}\n", maxBlocks, linalg::matrix::to_string(Q_enr, 8));
+    auto oldBlocks = Q.cols() / b;
+    auto newBlocks = std::max<Eigen::Index>(1, std::min<Eigen::Index>({(Q.cols() + Q_res.cols()) / b, (N / b)}));
+    if(newBlocks > maxBasisBlocks or Q.cols() == 0 or Q_res.cols() == 0) {
+        // (re)start
+
+        Eigen::Index vBlocks = V.cols() / b;
+        Eigen::Index mBlocks = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
+        Eigen::Index rBlocks = inject_randomness ? 1 : 0;
+        Eigen::Index kBlocks =
+            std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() / b - (vBlocks + mBlocks + rBlocks) - Q_res.cols() / b, maxRetainBlocks));
+        Eigen::Index qBlocks  = (Q_res.cols()) / b;
+        MatrixType   Q_keep   = Q.rightCols(kBlocks * b);
+        MatrixType   H1Q_keep = H1Q.rightCols(kBlocks * b);
+        MatrixType   H2Q_keep = H2Q.rightCols(kBlocks * b);
+        if(mBlocks > 0) M = get_mBlock(); // Before modifying Q
+        Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
+        H1Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
+        H2Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
+        auto vOffset = 0;
+        auto mOffset = vBlocks;
+        auto rOffset = vBlocks + mBlocks;
+        auto kOffset = vBlocks + mBlocks + rBlocks;
+        auto qOffset = vBlocks + mBlocks + rBlocks + kBlocks;
+        if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
+        if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = M;
+        if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
+        if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
+        if(qBlocks > 0) Q.middleCols(qOffset * b, qBlocks * b) = Q_res;
+
+        MatrixType Qold = Q;
+        hhqr.compute(Q);
+        Q = hhqr.householderQ().setLength(Q.cols()) * MatrixType::Identity(N, Q.cols());
+
+        VectorReal D = (Qold.conjugate().array() * Q.array()).colwise().sum().real();
+        VectorReal E = (D.cwiseAbs() - VectorType::Ones(D.size())).cwiseAbs();
+
+        // Build H1Q and H2Q
+        if(vBlocks > 0) H1Q.middleCols(vOffset * b, vBlocks * b) = H1V;
+        if(vBlocks > 0) H2Q.middleCols(vOffset * b, vBlocks * b) = H2V;
+
+        if(mBlocks > 0) H1Q.middleCols(mOffset * b, mBlocks * b) = H1M; // Set during the last call to set_mBlock(...)
+        if(mBlocks > 0) H2Q.middleCols(mOffset * b, mBlocks * b) = H2M; // Set during the last call to set_mBlock(...)
+
+        if(rBlocks > 0) H1Q.middleCols(rOffset * b, rBlocks * b) = MultH1X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
+        if(rBlocks > 0) H2Q.middleCols(rOffset * b, rBlocks * b) = MultH2X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
+
+        if(kBlocks > 0) H1Q.middleCols(kOffset * b, kBlocks * b) = H1Q_keep;
+        if(kBlocks > 0) H2Q.middleCols(kOffset * b, kBlocks * b) = H2Q_keep;
+
+        if(qBlocks > 0) H1Q.middleCols(qOffset * b, qBlocks * b) = MultH1X(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
+        if(qBlocks > 0) H2Q.middleCols(qOffset * b, qBlocks * b) = MultH2X(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
+
+        // We may need to rebuild columns of H1Q and H2Q that were affected by QR,
+        // that is, if the orthonormalization of Q rotated those columns.
+        // To know for sure, we have to check E
+        for(Eigen::Index i = 0; i < Q.cols(); ++i) {
+            if(rOffset * b <= i && i < (rOffset + rBlocks) * b) continue; // Skip because it was already built
+            if(qOffset * b <= i && i < (qOffset + qBlocks) * b) continue; // Skip because it was already built
+            if(E(i) < normTolQ) {
+                RealScalar sign = D(i) > 0 ? RealScalar{1} : RealScalar{-1};
+                H1Q.col(i) *= sign; // Q and HQ columns were preserved up to a sign
+                H2Q.col(i) *= sign; // Q and HQ columns were preserved up to a sign
+            } else {
+                H1Q.col(i) = MultH1X(Q.col(i)); // HQ column was not preserved in QR
+                H2Q.col(i) = MultH2X(Q.col(i)); // HQ column was not preserved in QR
+            }
+        }
+    } else if(oldBlocks != newBlocks) {
+        // Append enrichment
+        Q.conservativeResize(N, newBlocks * b);
+        H1Q.conservativeResize(N, newBlocks * b);
+        H2Q.conservativeResize(N, newBlocks * b);
+
+        auto copyBlocks               = std::min<Eigen::Index>(Q.cols() / b, (Q_res.cols()) / b);
+        Q.rightCols(copyBlocks * b)   = Q_res.leftCols(copyBlocks * b);
+        H1Q.rightCols(copyBlocks * b) = MultH1X(Q_res.leftCols(copyBlocks * b));
+        H2Q.rightCols(copyBlocks * b) = MultH2X(Q_res.leftCols(copyBlocks * b));
+    }
+
+    assert(Q.colwise().norm().minCoeff() > eps);
+    assert(H1Q.colwise().norm().minCoeff() > eps);
+    assert(H2Q.colwise().norm().minCoeff() > eps);
 }
 
 template<typename Scalar>
@@ -486,3 +511,239 @@ void GD<Scalar>::set_maxRetainBlocks(Eigen::Index rb) {
     if(rb != maxRetainBlocks) eig::log->debug("GD: maxRetainBlocks = {}", rb);
     maxRetainBlocks = rb;
 }
+//
+// template<typename Scalar>
+// typename GD<Scalar>::MatrixType GD<Scalar>::get_Q_res(const MatrixType &Q, const MatrixType &HV,
+//                                                       std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultPX) {
+//     assert(V.rows() == N);
+//     assert(V.cols() == b);
+//     assert_orthonormal(V, orthTolQ);
+//     // Now V has b orthonormalized ritz vectors
+//
+//     // Start defining the residual blocks (we have ritz-type and lanczos type)
+//     Eigen::Index wBlocks_old = wBlocks;
+//     Eigen::Index sBlocks_old = sBlocks;
+//
+//     auto get_total_blocks = [&]() { return wBlocks + sBlocks; };
+//
+//     wBlocks = std::min(max_wBlocks, wBlocks_old + 1); // Add space for one more W block
+//     sBlocks = std::min(max_sBlocks, sBlocks_old + 1); // Add space for one more S block
+//
+//     // Try to keep W and S if possible, drop R, M first
+//     while(N - V.cols() < get_total_blocks() * b) {
+//         /* clang-format off */
+//         if(wBlocks > 0) { wBlocks--; continue; }
+//         if(sBlocks > 0) { sBlocks--; continue; }
+//         break; // If all are at min, break to avoid infinite loop
+//         /* clang-format on */
+//     }
+//     MatrixType Q_res(N, (wBlocks + sBlocks) * b);
+//
+//     assert(N >= Q_res.cols() + V.cols());
+//     // eig::log->warn("V \n{}\n", linalg::matrix::to_string(V, 8));
+//     // eig::log->warn("HV \n{}\n", linalg::matrix::to_string(HV, 8));
+//
+//     Eigen::Index wOffset = 0;
+//     Eigen::Index sOffset = wBlocks + mBlocks;
+//     if(wBlocks > 0) Q_res.middleCols(wOffset * b, b) = get_wBlock();
+//     if(sBlocks > 0) Q_res.middleCols(sOffset * b, b) = get_sBlock();
+//     // eig::log->warn("Q_res before filtering: \n{}\n", linalg::matrix::to_string(Q_res, 8));
+//
+//     if(chebyshev_filter_degree >= 1) {
+//         // Apply the chebyshev filter on newly generated residual and random blocks
+//
+//         auto W = wBlocks > 0 ? Q_res.middleCols(wOffset * b, b) : Q_res.middleCols(wOffset * b, 0);
+//         auto S = sBlocks > 0 ? Q_res.middleCols(sOffset * b, b) : Q_res.middleCols(sOffset * b, 0);
+//
+//         /* clang-format off */
+//         if(wBlocks > 0) {W = qr_and_chebyshevFilter(W);}
+//         if(sBlocks > 0) {S = qr_and_chebyshevFilter(S);}
+//         /* clang-format on */
+//     }
+//     if(use_preconditioner) {
+//         // Precondition the latest W, S and R,
+//         /* clang-format off */
+//         if(wBlocks > 0) {Q_res.middleCols(wOffset * b, b) = -MultPX(Q_res.middleCols(wOffset * b, b));}
+//         if(sBlocks > 0) {Q_res.middleCols(sOffset * b, b) = -MultPX(Q_res.middleCols(sOffset * b, b));}
+//         /* clang-format on */
+//     }
+//
+//     // pick a relative breakdown tolerance:
+//     auto       breakdownTol      = eps * 10 * std::max({RealScalar{1}, status.H_norm_est()});
+//     VectorIdxT active_block_mask = VectorIdxT::Ones(wBlocks + sBlocks);
+//     // eig::log->warn("Q_res before compression: \n{}\n", linalg::matrix::to_string(Q_res, 8));
+//     // orthonormalize(Q_enr, Q_enr_i, breakdownTol, 10000 * breakdownTol, active_block_mask);
+//     orthonormalize(V, Q_res, breakdownTol, 10000 * breakdownTol, active_block_mask);
+//     assert_orthogonal(V, Q_res, breakdownTol);
+//     orthonormalize(Q, Q_res, breakdownTol, 10000 * breakdownTol, active_block_mask);
+//     assert_orthogonal(Q, Q_res, breakdownTol);
+//     compress_cols(Q_res, active_block_mask);
+//     // eig::log->warn("Q_res after  compression: \n{}\n", linalg::matrix::to_string(Q_res, 8));
+//
+//     assert_allfinite(Q_res);
+//     assert_orthonormal(Q_res, orthTolQ);
+//     if constexpr(settings::print_q) eig::log->warn("Q_res after compression: \n{}\n", linalg::matrix::to_string(Q_res, 8));
+//     return Q_res;
+// }
+
+// template<typename Scalar>
+// void GD<Scalar>::build_Q_res_i() {
+//     const Eigen::Index N = H1.rows();
+//     assert(V.cols() == b);
+//     assert_orthonormal(V, orthTolQ);
+//
+//     // Now V has b orthonormalized ritz vectors
+//
+//     // Start defining the residual blocks (we have ritz-type and lanczos type)
+//     Eigen::Index wBlocks_old = wBlocks;
+//     Eigen::Index sBlocks_old = sBlocks;
+//
+//     auto get_total_blocks = [&]() { return wBlocks + sBlocks; };
+//
+//     wBlocks = std::min(max_wBlocks, wBlocks_old + 1); // Add space for one more W block
+//     sBlocks = std::min(max_sBlocks, sBlocks_old + 1); // Add space for one more S block
+//
+//     // Try to keep W and S if possible, drop R, M first
+//     while(N - V.cols() < get_total_blocks() * b) {
+//         /* clang-format off */
+//         if(wBlocks > 0) { wBlocks--; continue; }
+//         if(sBlocks > 0) { sBlocks--; continue; }
+//         break; // If all are at min, break to avoid infinite loop
+//         /* clang-format on */
+//     }
+//
+//     Q_res_i.conservativeResize(N, (wBlocks + sBlocks) * b);
+//     assert(N >= Q_res_i.cols() + V.cols());
+//     if(Q_res_i.cols() == 0) return;
+//
+//     Eigen::Index wOffset = 0;
+//     Eigen::Index sOffset = wBlocks + mBlocks;
+//
+//     if(wBlocks > 0) Q_res_i.middleCols(wOffset * b, b) = get_wBlock();
+//     if(sBlocks > 0) Q_res_i.middleCols(sOffset * b, b) = get_sBlock();
+//     if(chebyshev_filter_degree >= 1) {
+//         // Apply the chebyshev filter on newly generated residual and random blocks
+//
+//         auto W = wBlocks > 0 ? Q_res_i.middleCols(wOffset * b, b) : Q_res_i.middleCols(wOffset * b, 0);
+//         auto S = sBlocks > 0 ? Q_res_i.middleCols(sOffset * b, b) : Q_res_i.middleCols(sOffset * b, 0);
+//
+//         /* clang-format off */
+//         if(wBlocks > 0) {W = qr_and_chebyshevFilter(W);}
+//         if(sBlocks > 0) {S = qr_and_chebyshevFilter(S);}
+//         /* clang-format on */
+//     }
+//     if(use_preconditioner) {
+//         // Precondition the latest W, S and R,
+//         /* clang-format off */
+//         if(wBlocks > 0) {Q_res_i.middleCols(wOffset * b, b) = -MultPX(Q_res_i.middleCols(wOffset * b, b));}
+//         if(sBlocks > 0) {Q_res_i.middleCols(sOffset * b, b) = -MultPX(Q_res_i.middleCols(sOffset * b, b));}
+//         /* clang-format on */
+//     }
+//
+//     // pick a relative breakdown tolerance:
+//     auto       breakdownTol      = eps * 10 * std::max({RealScalar{1}, status.H_norm_est()});
+//     VectorIdxT active_block_mask = VectorIdxT::Ones(wBlocks + mBlocks + sBlocks + rBlocks);
+//
+//     // orthonormalize(Q_enr, Q_enr_i, breakdownTol, 10000 * breakdownTol, active_block_mask);
+//     orthonormalize(V, Q_res_i, breakdownTol, 10000 * breakdownTol, active_block_mask);
+//     assert_orthogonal(V, Q_res_i, breakdownTol);
+//     orthonormalize(Q, Q_res_i, breakdownTol, 10000 * breakdownTol, active_block_mask);
+//     assert_orthogonal(Q, Q_res_i, breakdownTol);
+//     compress_cols(Q_res_i, active_block_mask);
+//
+//     if(Q_res_i.cols() == 0) {
+//         // // Happy breakdown!
+//         eig::log->warn("optVal {::.16f}: ", fv(status.optVal));
+//         eig::log->warn("T_evals {::.16f}: ", fv(T_evals));
+//         eig::log->debug("saturated basis");
+//         status.stopReason |= StopReason::saturated_basis;
+//         status.stopMessage.emplace_back("saturated basis: exhausted subspace search");
+//         return;
+//     }
+//
+//     if constexpr(settings::print_q) eig::log->warn("Q_enr_i after compression: \n{}\n", linalg::matrix::to_string(Q_res_i, 8));
+//     assert_allfinite(Q_res_i);
+//     assert_orthonormal(Q_res_i, orthTolQ);
+// }
+
+// template<typename Scalar>
+// void GD<Scalar>::build() {
+//     build_Q_res_i();
+//     assert(Q_res_i.rows() == N);
+//     if(status.stopReason != StopReason::none) return;
+//     // Roll until satisfying |Q_cur.adjoint() * Q_enr| < orthTolQ and Q_enr.cols()/b < max Blocks
+//
+//     // Append the enrichment for this iteration
+//
+//     // eig::log->warn("Q_enr maxBLocks {}: \n{}\n", maxBlocks, linalg::matrix::to_string(Q_enr, 8));
+//     auto oldBlocks = Q.cols() / b;
+//     auto newBlocks = std::max<Eigen::Index>(1, std::min<Eigen::Index>({(Q.cols() + Q_res_i.cols()) / b, (N / b)}));
+//     if(newBlocks > maxBasisBlocks or Q.cols() == 0 or Q_res_i.cols() == 0) {
+//         // (re)start
+//
+//         Eigen::Index vBlocks = V.cols() / b;
+//         Eigen::Index mBlocks = use_extra_ritz_vectors_in_the_next_basis ? M.cols() / b : 0;
+//         Eigen::Index rBlocks = inject_randomness ? 1 : 0;
+//         Eigen::Index kBlocks = std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() / b - vBlocks + mBlocks + rBlocks, maxRetainBlocks));
+//         Eigen::Index qBlocks = Q_res_i.cols() / b;
+//         MatrixType   Q_keep  = Q.rightCols(kBlocks * b);
+//         MatrixType   HQ_keep = HQ.rightCols(kBlocks * b);
+//         Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res_i.cols());
+//         HQ.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res_i.cols());
+//         auto vOffset = 0;
+//         auto mOffset = vBlocks;
+//         auto rOffset = vBlocks + mBlocks;
+//         auto kOffset = vBlocks + mBlocks + rBlocks;
+//         auto qOffset = vBlocks + mBlocks + rBlocks + kBlocks;
+//         if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
+//         if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = get_mBlock();
+//         if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
+//         if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
+//         if(qBlocks > 0) Q.middleCols(qOffset * b, qBlocks * b) = Q_res_i;
+//         MatrixType Qold = Q;
+//         hhqr.compute(Q);
+//         Q = hhqr.householderQ().setLength(Q.cols()) * MatrixType::Identity(N, Q.cols());
+//
+//         VectorReal D = (Qold.conjugate().array() * Q.array()).colwise().sum().real();
+//         VectorReal E = (D.cwiseAbs() - VectorType::Ones(D.size())).cwiseAbs();
+//
+//         // Start building HQ
+//         if(vBlocks > 0) HQ.middleCols(vOffset * b, vBlocks * b) = HV;
+//         if(mBlocks > 0) HQ.middleCols(mOffset * b, mBlocks * b) = MultHX(Q.middleCols(mOffset * b, mBlocks * b)); // No chance that this can be avoided
+//         if(rBlocks > 0) HQ.middleCols(rOffset * b, rBlocks * b) = MultHX(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
+//         if(kBlocks > 0) HQ.middleCols(kOffset * b, kBlocks * b) = HQ_keep;
+//         if(qBlocks > 0) HQ.middleCols(qOffset * b, qBlocks * b) = MultHX(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
+//         // We may need to rebuild columns of HQ that were affected by QR,
+//         // that is, if the orthonormalization of Q rotated those columns.
+//         // To know for sure, we have to check E
+//         for(Eigen::Index i = 0; i < Q.cols(); ++i) {
+//             if(mOffset * b <= i && i < (mOffset + mBlocks) * b) continue; // Skip because it was already built
+//             if(rOffset * b <= i && i < (rOffset + rBlocks) * b) continue; // Skip because it was already built
+//             if(qOffset * b <= i && i < (qOffset + qBlocks) * b) continue; // Skip because it was already built
+//             if(E(i) < normTolQ) {
+//                 RealScalar sign = D(i) > 0 ? RealScalar{1} : RealScalar{-1};
+//                 HQ.col(i) *= sign; // Q and HQ columns were preserved up to a sign
+//             } else {
+//                 HQ.col(i) = MultHX(Q.col(i)); // HQ column was not preserved in QR
+//             }
+//         }
+//     } else if(oldBlocks != newBlocks) {
+//         // Append enrichment
+//         Q.conservativeResize(N, newBlocks * b);
+//         HQ.conservativeResize(N, newBlocks * b);
+//         auto copyBlocks              = std::min<Eigen::Index>(Q.cols() / b, Q_res_i.cols() / b);
+//         Q.rightCols(copyBlocks * b)  = Q_res_i.leftCols(copyBlocks * b);
+//         HQ.rightCols(copyBlocks * b) = MultHX(Q_res_i);
+//     }
+//
+//     assert(Q.colwise().norm().minCoeff() > eps);
+//     assert(HQ.colwise().norm().minCoeff() > eps);
+//
+//     // Form T
+//     T = Q.adjoint() * HQ;
+//     assert(T.colwise().norm().minCoeff() > eps);
+//
+//     if constexpr(settings::print_q) eig::log->warn("T : \n{}\n", linalg::matrix::to_string(T, 8));
+//
+//     // Solve T by calling diagonalizeT() elsewhere
+// }

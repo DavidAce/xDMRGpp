@@ -20,7 +20,6 @@ namespace settings {
     constexpr bool print_q = false;
 }
 
-
 template<typename Scalar>
 void LOBPCG<Scalar>::shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent) {
     auto from = matrix.middleCols(offset_old * b, extent * b);
@@ -99,40 +98,6 @@ std::pair<typename LOBPCG<Scalar>::VectorIdxT, typename LOBPCG<Scalar>::VectorId
         Qk = hhqr.householderQ().setLength(Qk.cols()) * MatrixType::Identity(N, b);
     }
     return {active_block_mask, change_block_mask};
-}
-
-template<typename Scalar> typename LOBPCG<Scalar>::MatrixType LOBPCG<Scalar>::get_wBlock() {
-    // We add Lanczos-style residual blocks
-    W = HV;
-    assert_allfinite(W);
-    A                    = V.adjoint() * W;
-    status.max_eval_est = std::max({status.max_eval_est, A.norm() * std::abs(std::sqrt<RealScalar>(b))});
-
-    // 3) Subtract projections to A and B once
-    W.noalias() -= V * A; // Qi * Qi.adjoint()*H*Qi
-    if(V_prev.rows() == N and V_prev.cols() == b) {
-        B = V_prev.adjoint() * W;
-        W.noalias() -= V_prev * B.adjoint();
-        status.max_eval_est = std::max({status.max_eval_est, B.norm() * std::abs(std::sqrt<RealScalar>(b))});
-    }
-    assert_allfinite(W);
-    return W;
-}
-template<typename Scalar> typename LOBPCG<Scalar>::MatrixType LOBPCG<Scalar>::get_mBlock() {
-    // M are the b next-best ritz vectors from the previous iteration
-    assert(M.cols() == b);
-    assert_allfinite(M);
-    return M;
-}
-template<typename Scalar> typename LOBPCG<Scalar>::MatrixType LOBPCG<Scalar>::get_sBlock() {
-    // Make a residual block "S = (HQ-λQ)"
-    MatrixType S = HV - V * T_evals(status.optIdx).asDiagonal(); // Put the residual "R" in S.
-    assert_allfinite(S);
-    return S;
-}
-template<typename Scalar> typename LOBPCG<Scalar>::MatrixType LOBPCG<Scalar>::get_rBlock() {
-    // Get a random block
-    return MatrixType::Random(N, b);
 }
 
 template<typename Scalar>
@@ -580,137 +545,6 @@ void LOBPCG<Scalar>::build() {
     if constexpr(settings::print_q) eig::log->warn("T : \n{}\n", linalg::matrix::to_string(T, 8));
 
     // Solve T by calling diagonalizeT() elsewhere
-}
-
-template<typename Scalar>
-void LOBPCG<Scalar>::diagonalizeT() {
-    if(status.stopReason != StopReason::none) return;
-    if(T.rows() == 0) return;
-    assert(T.colwise().norm().minCoeff() != 0);
-    // We expect Q to have some non-orthogonality, so we should
-    // use solve a generalized eigenvalue problem instead.
-    // The ritz vectors V = (Q * eigenvectors) that we get are G-orthonormal,
-    // meaning they are the usual ritz vectors if G == I. But if G != I, we should
-    // orthonormalize as V = QR(V)
-    G = Q.adjoint() * Q;
-    G = RealScalar{0.5} * (G + G.adjoint());
-    T = RealScalar{0.5} * (T + T.adjoint());
-    Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> es(T, G, Eigen::Ax_lBx);
-    if(es.info() == Eigen::Success and T_evals.minCoeff() > 0) {
-        T_evals = es.eigenvalues();
-        T_evecs = es.eigenvectors().colwise().normalized();
-    } else {
-        eig::log->warn("G: \n{}\n", linalg::matrix::to_string(G, 8));
-        Eigen::SelfAdjointEigenSolver<MatrixType> es2(T);
-
-        T_evals = es2.eigenvalues();
-        T_evecs = es2.eigenvectors();
-        eig::log->warn("T_evecs: \n{}\n", linalg::matrix::to_string(T_evecs, 8));
-        eig::log->warn("T_evals: \n{}\n", linalg::matrix::to_string(T_evals, 8));
-
-        assert_allfinite(T_evecs);
-    }
-    status.max_eval_est = std::max(status.min_eval_est, T_evals.maxCoeff());
-    status.min_eval_est = std::min(status.min_eval_est, T_evals.minCoeff());
-}
-
-template<typename Scalar>
-void LOBPCG<Scalar>::extractRitzVectors() {
-    if(status.stopReason != StopReason::none) return;
-    if(T.rows() < b) return;
-    // Here we DO NOT assume that Q is orthonormal.
-
-    // Get indices of the top b (the block size) eigenvalues as a std::vector<Eigen::Index>
-    status.optIdx = get_ritz_indices(ritz, 0, b, T_evals);
-    auto Z        = T_evecs(Eigen::all, status.optIdx);
-    // Refined extraction
-    if(use_refined_rayleigh_ritz) {
-        // Get the regular ritz vector residual
-        status.rNorms = (HQ * Z - Q * T_evals.asDiagonal() * Z).colwise().norm();
-
-        for(Eigen::Index j = 0; j < static_cast<Eigen::Index>(status.optIdx.size()); ++j) {
-            const auto &theta = T_evals(status.optIdx[j]);
-
-            MatrixType M = HQ - theta * Q;  // Residual
-            MatrixType G = Q.adjoint() * Q; // Gram Matrix
-            MatrixType K = M.adjoint() * M; // Squared residual
-
-            // Symmetrize
-            G = RealScalar{0.5f} * (G + G.adjoint()).eval();
-            K = RealScalar{0.5f} * (K + K.adjoint()).eval();
-
-            Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> gsolver(K, G, Eigen::Ax_lBx);
-
-            RealScalar refinedRnorm = std::sqrt(std::abs(gsolver.eigenvalues()(0)));
-            if(gsolver.info() == Eigen::Success and refinedRnorm < 10 * status.rNorms(j)) {
-                // Accept the solution
-                auto Z_ref       = gsolver.eigenvectors().col(0); // eigenvector for smallest eigenvalue
-                V.col(j)         = (Q * Z_ref).normalized();
-                status.rNorms(j) = refinedRnorm;
-            } else {
-                auto GnormError = (G.adjoint() * G - MatrixType::Identity(G.cols(), G.cols())).norm();
-                eig::log->info("refinement failed on ritz vector {} | rnorm: refined={:.5e}, standard={:.5e} | GnormError {:.5e} | info {} ", j, refinedRnorm,
-                               status.rNorms(j), GnormError, static_cast<int>(gsolver.info()));
-                eig::log->info("gsolver eigenvalues: {}", linalg::matrix::to_string(gsolver.eigenvalues().transpose(), 8));
-                eig::log->info("G\n{}\n", linalg::matrix::to_string(G, 8));
-                eig::log->info("T_evecs\n{}\n", linalg::matrix::to_string(T_evecs, 8));
-                eig::log->warn("T_evals: \n{}\n", linalg::matrix::to_string(T_evals, 8));
-                V.col(j)   = Q * T_evecs(Eigen::all, status.optIdx[j]);
-                T_evals(j) = (V.col(j).adjoint() * MultHX(V.col(j))).real().coeff(0);
-            }
-        }
-    }
-
-    else {
-        // Regular Rayleigh-Ritz
-        V = Q * Z;
-    }
-
-    // Orthonormalize because Q may not be fully orthonormal
-    hhqr.compute(V);
-    V = hhqr.householderQ().setLength(V.cols()) * MatrixType::Identity(V.rows(), V.cols());
-
-    if(use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b) {
-        auto top_2b_indices = get_ritz_indices(ritz, b, b, T_evals);
-        M                   = Q * T_evecs(Eigen::all, top_2b_indices);
-        assert_allfinite(M);
-        // Orthonormalize because Q may not be fully orthonormal
-        hhqr.compute(M);
-        M = hhqr.householderQ().setLength(M.cols()) * MatrixType::Identity(M.rows(), M.cols());
-        assert_allfinite(M);
-
-    }
-}
-
-template<typename Scalar>
-void LOBPCG<Scalar>::extractResidualNorms() {
-    if(status.stopReason != StopReason::none) return;
-    if(T.rows() < b) return;
-
-    // Basically, since
-    //     a) ritz evecs: V = Q*Z, where Z are a selection of columns from T,
-    //     b) ritz evals: TZ =  Λ*Z (eigenvalue problem)
-    // we can do |HV - ΛV| = |(H(QZ) - (QZ)Λ| = |(HQ)Z - Q(TZ)| = |(HQ - QT)*Z|,
-    // where Z are the desired ritz-eigenvector columns of T.
-    // For this to be effective, we need to have HQ already.
-
-    if(!use_refined_rayleigh_ritz) {
-        auto Z        = T_evecs(Eigen::all, status.optIdx);
-        status.rNorms = (HQ * Z - Q * T_evals.asDiagonal() * Z).colwise().norm();
-    } else if(status.rNorms.size() == 0) {
-        HV            = MultHX(V);
-        status.rNorms = (HV - V * T_evals(status.optIdx).asDiagonal()).colwise().norm();
-    }
-
-    //
-    // // eig::log->info("rnorms: {::.5e}", fv(status.rNorms));
-    // if(!use_refined_rayleigh_ritz) {
-    //     Eigen::Index qcols = std::min(Q.cols(), T_evecs.rows());
-    //     auto         Z     = T_evecs(Eigen::all, status.optIdx);
-    //     status.rNorms      = ((get_HQ().leftCols(qcols) - Q.leftCols(qcols) * T) * Z).colwise().norm();
-    // }
-
-    // eig::log->info("rnorms: {::.5e}", fv(status.rNorms));
 }
 
 template<typename Scalar>

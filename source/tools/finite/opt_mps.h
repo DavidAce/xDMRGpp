@@ -49,10 +49,12 @@ namespace tools::finite::opt {
         std::optional<RealScalar<Scalar>>       eigs_rnorm     = std::nullopt;
         std::optional<RealScalar<Scalar>>       eigs_eigval    = std::nullopt;
         std::optional<std::string>              eigs_ritz      = std::nullopt;
+        std::optional<std::string>              eigs_type      = std::nullopt;
         std::optional<Scalar>                   eigs_shift     = std::nullopt;
         std::optional<OptAlgo>                  optAlgo        = std::nullopt;
         std::optional<OptSolver>                optSolver      = std::nullopt;
         std::optional<OptRitz>                  optRitz        = std::nullopt;
+        std::optional<OptType>                  optType        = std::nullopt;
         std::optional<OptExit>                  optExit        = std::nullopt;
         std::optional<long>                     bond_lim       = std::nullopt;
         std::optional<double>                   trnc_lim       = std::nullopt;
@@ -157,9 +159,11 @@ namespace tools::finite::opt {
         [[nodiscard]] auto        get_eigs_rnorm() const { return get_or_nan(eigs_rnorm); }
         [[nodiscard]] auto        get_eigs_eigval() const { return get_or_nan(eigs_eigval); }
         [[nodiscard]] auto        get_eigs_ritz() const { return eigs_ritz.value_or("--"); }
+        [[nodiscard]] auto        get_eigs_type() const { return eigs_type.value_or("--"); }
         [[nodiscard]] auto        get_eigs_shift() const { return get_or_nan(eigs_shift); }
         [[nodiscard]] auto        get_optsolver() const { return get(optSolver, "optSolver"); }
         [[nodiscard]] auto        get_optalgo() const { return get(optAlgo, "optAlgo"); }
+        [[nodiscard]] auto        get_opttype() const { return get(optType, "optType"); }
         [[nodiscard]] auto        get_optexit() const { return get(optExit, "optExit"); }
         [[nodiscard]] auto        get_bond_lim() const { return get(bond_lim, "bond_lim"); }
         [[nodiscard]] auto        get_trnc_lim() const { return get(trnc_lim, "trnc_lim"); }
@@ -230,6 +234,7 @@ namespace tools::finite::opt {
         template<typename T> void set_eigs_rnorm(T eigs_rnorm_) { eigs_rnorm = static_cast<RealScalar<Scalar>>(eigs_rnorm_); }
         template<typename T> void set_eigs_eigval(T eigs_eigval_) { eigs_eigval = eigs_eigval_; }
         template<typename T> void set_eigs_ritz(T eigs_ritz_) { eigs_ritz = eigs_ritz_; }
+        template<typename T> void set_eigs_type(T eigs_type_) { eigs_type = eigs_type_; }
         template<typename T> void set_eigs_shift(T eigs_shift_) {
             if constexpr(sfinae::is_std_complex_v<Scalar>) {
                 eigs_shift = static_cast<Scalar>(eigs_shift_);
@@ -240,6 +245,7 @@ namespace tools::finite::opt {
 
         template<typename T> void set_optsolver(T optSolver_) { optSolver = optSolver_; }
         template<typename T> void set_optalgo(T optAlgo_) { optAlgo = optAlgo_; }
+        template<typename T> void set_opttype(T optType_) { optType = optType_; }
         template<typename T> void set_optexit(T optExit_) { optExit = optExit_; }
         template<typename T> void set_bond_limit(T bond_lim_) { bond_lim = bond_lim_; }
         template<typename T> void set_trnc_limit(T trnc_lim_) { trnc_lim = trnc_lim_; }

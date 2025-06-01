@@ -45,6 +45,10 @@ class LOBPCG : public SolverBase<Scalar> {
     using SolverBase<Scalar>::Q;
     using SolverBase<Scalar>::M;
     using SolverBase<Scalar>::HQ;
+    using SolverBase<Scalar>::get_wBlock;
+    using SolverBase<Scalar>::get_mBlock;
+    using SolverBase<Scalar>::get_sBlock;
+    using SolverBase<Scalar>::get_rBlock;
     // using SolverBase<Scalar>::HQ_cur;
     // using SolverBase<Scalar>::get_HQ;
     // using SolverBase<Scalar>::get_HQ_cur;
@@ -97,17 +101,9 @@ class LOBPCG : public SolverBase<Scalar> {
     Eigen::Index sBlocks     = 0;
     MatrixType   G;
 
-    MatrixType get_wBlock();
-    MatrixType get_mBlock();
-    MatrixType get_sBlock();
-    MatrixType get_rBlock();
-
     public:
     bool inject_randomness = false;
     void build() final;
-    void diagonalizeT() final;
-    void extractRitzVectors() final;
-    void extractResidualNorms() final;
     void set_maxLanczosResidualHistory(Eigen::Index k);
     void set_maxExtraRitzHistory(Eigen::Index m);
     void set_maxRitzResidualHistory(Eigen::Index s);

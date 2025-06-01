@@ -177,8 +177,10 @@ std::vector<opt_mps<Scalar>> subspace::find_subspace(const TensorsFinite<Scalar>
         subspace.back().set_eigs_idx(idx);
         subspace.back().set_eigs_eigval(eigvals(idx));
         subspace.back().set_eigs_ritz(enum2sv(meta.optRitz));
+        subspace.back().set_eigs_type(enum2sv(meta.optType));
         subspace.back().set_optsolver(meta.optSolver);
         subspace.back().set_optalgo(meta.optAlgo);
+        subspace.back().set_opttype(meta.optType);
         subspace.back().validate_basis_vector();
     }
     return subspace;
@@ -310,8 +312,8 @@ void convTestFun([[maybe_unused]] double *eval, [[maybe_unused]] void *evec, dou
             auto       rows        = static_cast<long>(primme->n);
             auto       cols        = static_cast<long>(primme->numEvals);
             MatrixType eigvecs     = Eigen::Map<MatrixType>(eigvecs_vec.data(), rows, cols);
-            auto mgs                = linalg::matrix::modified_gram_schmidt(eigvecs); // Orthogonalize
-            eigvecs = std::move(mgs.Q);
+            auto       mgs         = linalg::matrix::modified_gram_schmidt(eigvecs); // Orthogonalize
+            eigvecs                = std::move(mgs.Q);
             std::vector<long> valid_cols;
             for(long col = 0; col < eigvecs.cols(); ++col) {
                 if(result.meta.residual_norms.at(static_cast<size_t>(col)) > problemTol) continue;

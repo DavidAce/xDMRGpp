@@ -80,8 +80,8 @@ void assert_orthonormal_rows(const Eigen::MatrixBase<Derived> &X,
             tools::log->warn("X: \n{}\n", linalg::matrix::to_string(X, 8));
             tools::log->warn("X.adjoint()*X: \n{}\n", linalg::matrix::to_string(XX, 8));
             tools::log->warn("X orthError: {:.5e}", orthError);
-            throw except::runtime_error("{}:{}: {}: matrix has non-orthonormal rows: error = {:.5e} > threshold = {:.5e}", location.file_name(), location.line(),
-                                        location.function_name(), orthError, threshold);
+            throw except::runtime_error("{}:{}: {}: matrix has non-orthonormal rows: error = {:.5e} > threshold = {:.5e}", location.file_name(),
+                                        location.line(), location.function_name(), orthError, threshold);
         }
     }
 }
@@ -191,11 +191,8 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> get_rexpansion_terms_l2r(con
 
     MatrixT P_matrix;
     if(P1.size() > 0) {
-        P_matrix       = tenx::MatrixMap(P1, P1.dimension(0) * P1.dimension(1), P1.dimension(2));
-        auto P1_matrix = P_matrix.leftCols(P1.dimension(2));
-        P1_matrix      = tenx::MatrixMap(P1, P1.dimension(0) * P1.dimension(1), P1.dimension(2));
-        // tools::log->info("P before dgks(M,P1): \n{}\n", linalg::matrix::to_string(P_matrix, 8));
-        dgks(M_matrix, P1_matrix);
+        P_matrix = tenx::MatrixMap(P1, P1.dimension(0) * P1.dimension(1), P1.dimension(2));
+        dgks(M_matrix, P_matrix);
     }
     if(P2.size() > 0) {
         P_matrix.conservativeResize(M_matrix.rows(), P_matrix.cols() + P2.dimension(2));
@@ -407,7 +404,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
         mpsP.stash_U(U, pos0);
         mps0.take_stash(mpsP);
         tools::log->debug("Moved MPS {}{} - {}{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions());
-        assert(state.template get_position<long>() == pos0);
+        assert(state.template get_position<long>() == static_cast<long>(pos0));
     }
 
     const auto    &mpoP  = model.get_mpo(posP);
@@ -430,7 +427,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
         tools::log->debug("Bond expansion l2r {} | {} α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.3e} | svd_ε {:.2e} | χlim {} | χ {} -> {} -> {} -> {}", pos_expanded,
                           flag2str(opt_meta.bondexp_policy), res.alpha_mps, res.alpha_h1v, res.alpha_h2v, svd_cfg.truncation_limit.value(),
                           svd_cfg.rank_max.value(), dimP_old, M.dimensions(), M_P.dimensions(), mpsP.dimensions());
-        assert(state.template get_position<long>() == posP);
+        assert(state.template get_position<long>() == static_cast<long>(posP));
 
     } else {
         // [N Λc, M] are now [A(i-1)Λc, B(i)]
@@ -445,7 +442,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
         tools::log->debug("Bond expansion r2l {} | {} α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.3e} | svd_ε {:.2e} | χlim {} | χ {} -> {} -> {} -> {}", pos_expanded,
                           flag2str(opt_meta.bondexp_policy), res.alpha_mps, res.alpha_h1v, res.alpha_h2v, svd_cfg.truncation_limit.value(),
                           svd_cfg.rank_max.value(), dimP_old, M.dimensions(), M_P.dimensions(), mpsP.dimensions());
-        assert(state.template get_position<long>() == pos0);
+        assert(state.template get_position<long>() == static_cast<long>(pos0));
     }
 
     if(mpsP.dimensions()[0] * std::min(mpsP.dimensions()[1], mpsP.dimensions()[2]) < std::max(mpsP.dimensions()[1], mpsP.dimensions()[2])) {

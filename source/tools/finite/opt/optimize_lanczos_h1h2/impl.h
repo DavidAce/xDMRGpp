@@ -2,22 +2,18 @@
 #include "../../opt_meta.h"
 #include "../../opt_mps.h"
 #include "algorithms/AlgorithmStatus.h"
+#include "BlockLanczos.h"
 #include "config/settings.h"
+#include "GD.h"
 #include "general/iter.h"
 #include "general/sfinae.h"
-// #include "GeneralizedLanczos.h"
 #include "io/fmt_f128_t.h"
-// #include "KrylovDualOp.h"
-// #include "KrylovSingleOp.h"
-#include "BlockLanczos.h"
-#include "GD.h"
 #include "LOBPCG.h"
 #include "math/eig.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/float.h"
 #include "math/linalg/matrix/gramSchmidt.h"
 #include "math/num.h"
-#include "RGB.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/env/EnvVar.h"
@@ -168,12 +164,12 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
     solver.max_matvecs    = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
-    // solver.set_jcbMaxBlockSize(512);
-    solver.set_chebyshevFilterDegree(0);
-    solver.set_chebyshevFilterLambdaCutBias(0.1);
-    solver.set_chebyshevFilterRelGapThreshold(1e-4);
-    solver.set_maxBasisBlocks(20);
-    solver.set_maxRetainBlocks(5);
+    solver.set_jcbMaxBlockSize(512);
+    solver.set_chebyshevFilterDegree(2);
+    solver.set_chebyshevFilterLambdaCutBias(0.1f);
+    solver.set_chebyshevFilterRelGapThreshold(1e-4f);
+    solver.set_maxBasisBlocks(ncv);
+    solver.set_maxRetainBlocks(ncv / 4);
     solver.set_maxLanczosResidualHistory(0);
     solver.set_maxRitzResidualHistory(1);
     solver.set_maxExtraRitzHistory(1);
@@ -187,7 +183,7 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     // Extract solution
     opt_mps<Scalar> res;
     res.is_basis_vector = false;
-    res.set_name(fmt::format("eigenvector 0 [h1h2 RGB]"));
+    res.set_name(fmt::format("eigenvector 0 [{} H1H2]", enum2sv(opt_meta.optAlgo)));
     res.set_tensor(Eigen::TensorMap<Eigen::Tensor<CalcType, 3>>(solver.V.col(0).data(), solver.mps_shape));
     res.set_overlap(std::abs(initial.get_vector().dot(res.get_vector())));
     res.set_sites(initial.get_sites());
@@ -197,7 +193,9 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     res.set_eigs_ncv(ncv);
     res.set_eigs_tol(solver.tol);
     res.set_eigs_ritz(enum2sv(opt_meta.optRitz));
+    res.set_eigs_type(enum2sv(opt_meta.optType));
     res.set_optalgo(opt_meta.optAlgo);
+    res.set_opttype(opt_meta.optType);
     res.set_optsolver(opt_meta.optSolver);
     res.set_energy_shifted(initial.get_energy_shifted());
 
@@ -223,27 +221,25 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     res.set_energy_shifted(std::real(vh1v));
     res.set_hsquared(std::real(vh2v));
 
-
     // tools::log->info("lancsoz {}: {:.34f} [{}] | ⟨H⟩ {:.16f} | ⟨H²⟩ {:.16f} | ⟨H²⟩-⟨H⟩² {:.4e} | sites {} (size {}) | rnorm {:.3e} | ngs {} | iters "
     // "{} | {:.3e} s | {} | var {:.4e}",
     // sfinae::type_name<CalcType>(), fp(optVal), optIdx, fp(res.get_energy()), fp(res.get_hsquared()), fp(res.get_variance()), sites,
     // mps_size, fp(rnorm), ngs, iter, t_mixblk->get_last_interval(), exit_msg, fp(vh2v - vh1v * vh1v));
     elog.eigs_add_entry(res, spdlog::level::debug);
 
-
-    auto absdiff = std::abs(res.get_hsquared() - res.get_eigs_eigval());
-    auto reldiff = absdiff / (0.5 * std::abs(res.get_hsquared() + res.get_eigs_eigval()));
-    if(reldiff > RealScalar{1e-2f}) {
-        elog.print_eigs_report();
-        Eigen::Matrix<CalcType, Eigen::Dynamic, 1> Vcol0_vector = solver.V.col(0);
-        Eigen::Tensor<CalcType, 3> Vcol0 = tenx::TensorCast(Vcol0_vector, solver.mps_shape);
-        auto VH2V = tools::finite::measure::expval_hamiltonian_squared(tenx::asScalarType<Scalar>(Vcol0), mpos, envv);
-        MatrixType<CalcType> overlap = res.template get_vector_as<CalcType>().adjoint() * solver.V.col(0);
-        tools::log->info("overlap: {}", linalg::matrix::to_string(overlap, 16));
-        tools::log->info("VH2V   : {:.16f}", VH2V);
-        throw except::logic_error("Eigs solver eigenvalue mismatch: eigs {:.16f} != hsq {:.16f} | diff: abs {:.5e} rel {:.5e}", res.get_eigs_eigval(),
-                                  res.get_hsquared(), absdiff, reldiff);
-    }
+    // auto absdiff = std::abs(res.get_hsquared() - res.get_eigs_eigval());
+    // auto reldiff = absdiff / (0.5 * std::abs(res.get_hsquared() + res.get_eigs_eigval()));
+    // if(reldiff > RealScalar{1e-2f}) {
+    //     elog.print_eigs_report();
+    //     Eigen::Matrix<CalcType, Eigen::Dynamic, 1> Vcol0_vector = solver.V.col(0);
+    //     Eigen::Tensor<CalcType, 3> Vcol0 = tenx::TensorCast(Vcol0_vector, solver.mps_shape);
+    //     auto VH2V = tools::finite::measure::expval_hamiltonian_squared(tenx::asScalarType<Scalar>(Vcol0), mpos, envv);
+    //     MatrixType<CalcType> overlap = res.template get_vector_as<CalcType>().adjoint() * solver.V.col(0);
+    //     tools::log->info("overlap: {}", linalg::matrix::to_string(overlap, 16));
+    //     tools::log->info("VH2V   : {:.16f}", VH2V);
+    //     throw except::logic_error("Eigs solver eigenvalue mismatch: eigs {:.16f} != hsq {:.16f} | diff: abs {:.5e} rel {:.5e}", res.get_eigs_eigval(),
+    //                               res.get_hsquared(), absdiff, reldiff);
+    // }
     return res;
 }
 

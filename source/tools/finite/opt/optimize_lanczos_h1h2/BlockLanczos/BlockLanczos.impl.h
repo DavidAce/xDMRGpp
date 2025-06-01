@@ -196,29 +196,3 @@ void BlockLanczos<Scalar>::build() {
     }
 }
 
-template<typename Scalar>
-void BlockLanczos<Scalar>::extractResidualNorms() {
-    if(status.stopReason != StopReason::none) return;
-    if(T.rows() < b) return;
-
-    // Calculate residual norms
-    // if(use_preconditioner) {
-    // for(Eigen::Index i = 0; i < nev; ++i) { // Only consider nev rnorms
-    //     if(algo == OptAlgo::DMRG)
-    //         status.rNorms(i) = (H1.MultAX(V.col(i)) - status.optVal(i) * V.col(i)).template lpNorm<Eigen::Infinity>();
-    //     else if(algo == OptAlgo::GDMRG)
-    //         status.rNorms(i) = (H1.MultAX(V.col(i)) - status.optVal(i) * H2.MultAX(V.col(i))).template lpNorm<Eigen::Infinity>();
-    //     else
-    //         status.rNorms(i) = (H2.MultAX(V.col(i)) - status.optVal(i) * V.col(i)).template lpNorm<Eigen::Infinity>();
-    // }
-    // }
-    // else {
-
-
-    // rnorm estimates can be computed faster (Saad 2011, Proposition 6.8)
-    std::vector<Eigen::Index> zrows(B.cols());
-    std::vector<Eigen::Index> zcols = status.optIdx;
-    std::iota(zrows.begin(), zrows.end(), T_evecs.rows() - B.cols());
-    auto Zbot = T_evecs(zrows, zcols);
-    for(int i = 0; i < nev; ++i) { status.rNorms(i) = (B * Zbot.col(i)).norm(); }
-}

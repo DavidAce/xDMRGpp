@@ -44,7 +44,17 @@ class GD : public SolverBase<Scalar> {
     using SolverBase<Scalar>::W;
     using SolverBase<Scalar>::Q;
     using SolverBase<Scalar>::M;
+    using SolverBase<Scalar>::HM;
+    using SolverBase<Scalar>::H1M;
+    using SolverBase<Scalar>::H2M;
     using SolverBase<Scalar>::HQ;
+    using SolverBase<Scalar>::H1Q;
+    using SolverBase<Scalar>::H2Q;
+
+    using SolverBase<Scalar>::get_wBlock;
+    using SolverBase<Scalar>::get_mBlock;
+    using SolverBase<Scalar>::get_sBlock;
+    using SolverBase<Scalar>::get_rBlock;
     // using SolverBase<Scalar>::HQ_cur;
     // using SolverBase<Scalar>::get_HQ;
     // using SolverBase<Scalar>::get_HQ_cur;
@@ -52,6 +62,9 @@ class GD : public SolverBase<Scalar> {
     // using SolverBase<Scalar>::unset_HQ_cur;
     using SolverBase<Scalar>::V;
     using SolverBase<Scalar>::HV;
+    using SolverBase<Scalar>::H1V;
+    using SolverBase<Scalar>::H2V;
+    using SolverBase<Scalar>::S;
     using SolverBase<Scalar>::V_prev;
     using SolverBase<Scalar>::T_evals;
     using SolverBase<Scalar>::T_evecs;
@@ -69,8 +82,13 @@ class GD : public SolverBase<Scalar> {
 
     using SolverBase<Scalar>::bIsOK;
     using SolverBase<Scalar>::get_ritz_indices;
+    using SolverBase<Scalar>::extractRitzVectors;
     using SolverBase<Scalar>::MultHX;
+    using SolverBase<Scalar>::MultH1X;
+    using SolverBase<Scalar>::MultH2X;
     using SolverBase<Scalar>::MultPX;
+    using SolverBase<Scalar>::MultP1X;
+    using SolverBase<Scalar>::MultP2X;
     using SolverBase<Scalar>::assert_allfinite;
     using SolverBase<Scalar>::assert_orthonormal;
     using SolverBase<Scalar>::assert_orthogonal;
@@ -98,35 +116,29 @@ class GD : public SolverBase<Scalar> {
     Eigen::Index maxBasisBlocks  = 8;
     Eigen::Index maxRetainBlocks = 1;
     MatrixType   G;
-    MatrixType   Q_res_i; // Enrichment created on iteration i
+    // Store all Qenr_i
+    void delete_blocks_from_left_until_orthogonal(const Eigen::Ref<const MatrixType> X,         // (N, xcols)
+                                                  MatrixType                        &Y,         // (N, ycols)
+                                                  MatrixType                        &HY,        // (N, ycols)
+                                                  Eigen::Index                       maxBlocks, // Keep this many blocks at most
+                                                  RealScalar                         threshold  // Allow this much overlap between V and Q_enr
+    );
+    void selective_orthonormalize(const Eigen::Ref<const MatrixType> X,            // (N, xcols)
+                                  Eigen::Ref<MatrixType>             Y,            // (N, ycols)
+                                  RealScalar                         breakdownTol, // The smallest allowed norm
+                                  VectorIdxT                        &mask          // block norm mask, size = n_blocks = ycols / blockWidth
+    );
 
-    MatrixType Q_enr;                                                                                 // Store all Qenr_i
-    MatrixType HQ_enr;                                                                                // Store all Qenr_i
-    void       delete_blocks_from_left_until_orthogonal(const Eigen::Ref<const MatrixType> X,         // (N, xcols)
-                                                        MatrixType                        &Y,         // (N, ycols)
-                                                        MatrixType                        &HY,        // (N, ycols)
-                                                        Eigen::Index                       maxBlocks, // Keep this many blocks at most
-                                                        RealScalar                         threshold  // Allow this much overlap between V and Q_enr
-          );
-    void       selective_orthonormalize(const Eigen::Ref<const MatrixType> X,            // (N, xcols)
-                                        Eigen::Ref<MatrixType>             Y,            // (N, ycols)
-                                        RealScalar                         breakdownTol, // The smallest allowed norm
-                                        VectorIdxT                        &mask          // block norm mask, size = n_blocks = ycols / blockWidth
-          );
+    // MatrixType get_Q_res(const MatrixType &Q, const MatrixType &HV, std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultPX);
 
-    void build_Q_res_i();
-
-    MatrixType get_wBlock();
-    MatrixType get_mBlock();
-    MatrixType get_sBlock();
-    MatrixType get_rBlock();
+    MatrixType get_Q_res(std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultPX);
 
     public:
     bool inject_randomness = false;
     void build() final;
-    void diagonalizeT() final;
-    void extractRitzVectors() final;
-    void extractResidualNorms() final;
+    void build(MatrixType &Q_res, MatrixType &Q, MatrixType &HQ, std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultHX);
+    void build(MatrixType &Q1_res, MatrixType &Q2_res, MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q);
+    void build(MatrixType &Q_res, MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q);
     void set_maxLanczosResidualHistory(Eigen::Index k);
     void set_maxExtraRitzHistory(Eigen::Index m);
     void set_maxRitzResidualHistory(Eigen::Index s);

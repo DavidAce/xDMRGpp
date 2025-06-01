@@ -130,13 +130,6 @@ add_source_target(xdmrg++-tools-finite-opt
             optimize_lanczos_h1h2/LOBPCG/fp64.cpp
             optimize_lanczos_h1h2/LOBPCG/fp128.cpp
 
-            optimize_lanczos_h1h2/RGB/cx32.cpp
-            optimize_lanczos_h1h2/RGB/cx64.cpp
-            optimize_lanczos_h1h2/RGB/cx128.cpp
-            optimize_lanczos_h1h2/RGB/fp32.cpp
-            optimize_lanczos_h1h2/RGB/fp64.cpp
-            optimize_lanczos_h1h2/RGB/fp128.cpp
-
             optimize_lanczos_h1h2/GD/cx32.cpp
             optimize_lanczos_h1h2/GD/cx64.cpp
             optimize_lanczos_h1h2/GD/cx128.cpp

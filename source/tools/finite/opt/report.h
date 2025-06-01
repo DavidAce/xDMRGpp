@@ -39,6 +39,7 @@ namespace tools::finite::opt::reports {
         struct eigs_entry {
             std::string               description;
             std::string               ritz;
+            std::string               type;
             long                      size, idx, nev, ncv;
             Real                      energy, hsquared, variance, eigval, overlap, norm, rnorm, rnorm_H1, rnorm_H2, grad;
             double                    tol;
@@ -56,6 +57,7 @@ namespace tools::finite::opt::reports {
             std::string description = fmt::format("{:<24}", mps.get_name());
             entries.push_back(eigs_entry{.description = description,
                                          .ritz        = std::string(mps.get_eigs_ritz()),
+                                         .type        = std::string(mps.get_eigs_type()),
                                          .size        = mps.get_tensor().size(),
                                          .idx         = mps.get_eigs_idx(),
                                          .nev         = mps.get_eigs_nev(),
@@ -77,7 +79,7 @@ namespace tools::finite::opt::reports {
                                          .time        = mps.get_time(),
                                          .time_mv     = mps.get_time_mv(),
                                          .time_pc     = mps.get_time_pc(),
-                                         .level = level});
+                                         .level       = level});
         }
         void clear() { entries.clear(); }
         auto size() { return entries.size(); }

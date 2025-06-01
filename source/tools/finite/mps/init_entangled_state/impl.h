@@ -51,7 +51,6 @@ Eigen::Tensor<Scalar, 2> get_random_unitary_matrix(long rows, long cols) {
     return tenx::TensorMap(Q);
 }
 
-
 template<typename Scalar>
 void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
     tools::log->debug("Setting Néel state of type {} on axis {} with a midchain singlet {}", enum2sv(type), axis,
@@ -119,7 +118,6 @@ void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scala
     tools::log->debug("Initial state: {}", bitfield);
 }
 
-
 template<typename Scalar>
 void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<Scalar> &state, StateInitType type, long bond_lim) {
     tools::log->info("Setting random entangled state with Haar distribution | bond_lim {}", bond_lim);
@@ -171,7 +169,6 @@ void tools::finite::mps::init::random_entangled_state(StateFinite<Scalar> &state
     // TODO: Make version with/without eigenspinors
     set_random_entangled_state_with_random_spinors(state, type, bond_lim);
 }
-
 
 template<typename Scalar>
 void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<Scalar> &state, StateInitType type, long bond_lim) {
@@ -226,9 +223,9 @@ void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(St
 }
 
 template<typename Scalar>
-Eigen::Tensor<Scalar, 3> get_random_spinor_tensor(const std::array<long, 3> &dims, std::string_view label,
-                                                                const std::vector<Eigen::VectorXcd> &eigenspinors) {
+Eigen::Tensor<Scalar, 3> get_random_spinor_tensor(const std::array<long, 3> &dims, std::string_view label, const std::vector<Eigen::VectorXcd> &eigenspinors) {
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using RealScalar = typename MatrixType::RealScalar;
     if(label == "A") {
         auto G = Eigen::Tensor<Scalar, 3>(dims);
         G.setZero();
@@ -239,17 +236,17 @@ Eigen::Tensor<Scalar, 3> get_random_spinor_tensor(const std::array<long, 3> &dim
         while(true) {
             for(long j = 0; j < dims[2]; ++j) {
                 for(long i = 0; i < dims[1]; ++i) {
-                    auto idx          = rnd::uniform_integer_box(0ul, eigenspinors.size() - 1);
-                    auto off          = std::array<long, 3>{0, i, j};
-                    auto eigspin =   tenx::TensorCast(eigenspinors.at(idx));
+                    auto idx     = rnd::uniform_integer_box(0ul, eigenspinors.size() - 1);
+                    auto off     = std::array<long, 3>{0, i, j};
+                    auto eigspin = tenx::TensorCast(eigenspinors.at(idx));
                     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
-                        if (!tenx::isReal(eigspin)) throw except::runtime_error("get_random_spinor_tensor(): Detected non-real eigenspinor.");
+                        if(!tenx::isReal(eigspin)) throw except::runtime_error("get_random_spinor_tensor(): Detected non-real eigenspinor.");
                     }
                     G.slice(off, ext) = tenx::asScalarType<Scalar>(eigspin).reshape(ext);
                 }
                 Gmap.colwise().normalize();
                 auto GtG   = Gmap.adjoint() * Gmap;
-                isIdentity = GtG.isIdentity(1e-12);
+                isIdentity = GtG.isIdentity(RealScalar{1e-12f});
                 if(isIdentity) break;
             }
             rounds++;
@@ -298,7 +295,6 @@ void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspi
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
-
 
 template<typename Scalar>
 void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
@@ -382,7 +378,6 @@ void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspi
     state.clear_cache();
     state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
-
 
 template<typename Scalar>
 void tools::finite::mps::init::randomize_given_state(StateFinite<Scalar> &state, StateInitType type) {

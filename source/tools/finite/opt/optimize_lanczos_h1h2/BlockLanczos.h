@@ -63,6 +63,4 @@ class BlockLanczos : SolverBase<Scalar> {
     void write_Q_next_B_DGKS(Eigen::Index i);
 
     void build() final;
-
-    void extractResidualNorms() final;
 };

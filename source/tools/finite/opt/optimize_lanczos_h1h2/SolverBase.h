@@ -39,7 +39,8 @@ class SolverBase {
         RealScalar                initVal      = std::numeric_limits<RealScalar>::quiet_NaN();
         RealScalar                max_eval_est = RealScalar{1};
         RealScalar                min_eval_est = RealScalar{1};
-        RealScalar                H_norm_est() { return std::max(std::abs(max_eval_est), std::abs(min_eval_est)); }
+        RealScalar                H_norm_est() const { return std::max(std::abs(max_eval_est), std::abs(min_eval_est)); }
+        RealScalar                condition = RealScalar{1};
         std::vector<Eigen::Index> optIdx;
         Eigen::Index              iter        = 0;
         Eigen::Index              num_matvecs = 0;
@@ -60,6 +61,10 @@ class SolverBase {
     protected:
     Eigen::Index qBlocks = 0;
 
+    MatrixType get_wBlock();
+    MatrixType get_mBlock();
+    MatrixType get_sBlock();
+    MatrixType get_rBlock();
     const MatrixType &get_HQ();
     const MatrixType &get_HQ_cur();
     void              unset_HQ();
@@ -107,12 +112,17 @@ class SolverBase {
     OptRitz                          ritz;    /*!< Selects the target eigenvalues */
     MatVecMPOS<Scalar>              &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
     MatrixType                       T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
-    MatrixType                       A, B, W, Q, M;
-    MatrixType                       HQ;     /*! Save H*Q when preconditioning */
-    MatrixType                       HQ_cur; /*! Save H*Q_cur when preconditioning */
-    MatrixType                       V;      /*! Holds the current top ritz eigenvectors. Use this to pass initial guesses */
-    MatrixType                       HV;     /*! Holds the current top ritz eigenvectors multiplied by H. */
-    MatrixType                       V_prev; /*! Holds the previous top ritz eigenvectors */
+    MatrixType                       A, B, W, Q;
+    MatrixType                       HQ;              /*!< Save H*Q when preconditioning */
+    MatrixType                       HQ_cur;          /*!< Save H*Q_cur when preconditioning */
+    MatrixType                       H1Q, H2Q;        /*!< H1 or H2 times the basis blocks Q used for GDMRG */
+    MatrixType                       V;               /*!< Holds the current top ritz eigenvectors. Use this to pass initial guesses */
+    MatrixType                       HV;              /*!< Holds the current top ritz eigenvectors multiplied by H. */
+    MatrixType                       H1V;             /*!< Holds the current top ritz eigenvectors multiplied by H1 (for GDMRG). */
+    MatrixType                       H2V;             /*!< Holds the current top ritz eigenvectors multiplied by H2 (for GDMRG). */
+    MatrixType                       V_prev;          /*!< Holds the previous top ritz eigenvectors */
+    MatrixType                       S;               /*!< The residual vectors for the top b ritz vectors*/
+    MatrixType                       M, HM, H1M, H2M; /*!< The b next best residual vectors M, and with the applied operators */
     VectorReal                       T_evals;
     MatrixType                       T_evecs;
     Eigen::HouseholderQR<MatrixType> hhqr;
@@ -127,7 +137,7 @@ class SolverBase {
 
     /*! Norm tolerance of ritz-vector residuals.
      * Lanczos converges if rnorm < normTolR * H_norm. */
-    RealScalar rnormTol() const { return tol * status.max_eval_est; }
+    RealScalar rnormTol() const { return tol * status.H_norm_est(); }
 
     /*! Norm tolerance of B-matrices.
      * Triggers the Lanczos recurrence breakdown. */
@@ -171,36 +181,48 @@ class SolverBase {
     void set_chebyshevFilterDegree(Eigen::Index degree);
 
     MatrixType MultHX(const Eigen::Ref<const MatrixType> &X);
+    MatrixType MultH1X(const Eigen::Ref<const MatrixType> &X);
+    MatrixType MultH2X(const Eigen::Ref<const MatrixType> &X);
 
     MatrixType MultPX(const Eigen::Ref<const MatrixType> &X);
+    MatrixType MultP1X(const Eigen::Ref<const MatrixType> &X);
+    MatrixType MultP2X(const Eigen::Ref<const MatrixType> &X);
 
     std::vector<Eigen::Index> get_ritz_indices(OptRitz ritz, Eigen::Index offset, Eigen::Index num, const VectorReal &evals);
 
     void init();
 
     virtual void build() = 0;
-
     virtual void diagonalizeT();
+    virtual void diagonalizeT1T2(); /*!< For GDMRG (generalized problem) */
 
     template<typename Comp>
     std::vector<Eigen::Index> getIndices(const VectorType &v, const Eigen::Index offset, const Eigen::Index num, Comp comp) {
         std::vector<Eigen::Index> idx(static_cast<size_t>(v.size()));
         Eigen::Index              numSort = offset + num;
-        std::iota(idx.begin(), idx.end(), 0);                                   // 1) build an index array [0, 1, 2, …, N-1]
-        std::partial_sort(idx.begin(), idx.begin() + numSort, idx.end(), comp); // Sort the first offset+num elements
-        return std::vector(idx.begin() + offset, idx.begin() + offset + num);   // now idx[offset...offset+num) are the num sorted indices
+        std::iota(idx.begin(), idx.end(), 0); // 1) build an index array [0, 1, 2, …, N-1]
+        std::partial_sort(idx.begin(), idx.begin() + numSort, idx.end(),
+                          [&](auto i, auto j) { return comp(std::real(v(i)), std::real(v(j))); }); // Sort the first offset+num elements
+        return std::vector(idx.begin() + offset, idx.begin() + offset + num);                      // now idx[offset...offset+num) are the num sorted indices
     }
 
-    virtual void extractRitzVectors();
-    void         updateStatus();
 
-    virtual void extractResidualNorms() = 0;
+    void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
+    void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
+    void extractRitzVectors();
+
+    void refineRitzVectors(MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
+    void refineRitzVectors(MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
+    void refineRitzVectors();
+
+    void updateStatus();
+
 
     void step() {
         build();
         diagonalizeT();
         extractRitzVectors();
-        extractResidualNorms();
+        refineRitzVectors();
         updateStatus();
         status.iter++;
     }

@@ -91,7 +91,7 @@ class TensorsFinite {
     /* clang-format off */
     template<typename T> [[nodiscard]] const Eigen::Tensor<T, 3>            &get_multisite_mps() const { return state-> template get_multisite_mps<T>();}
     template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo() const { return model->template get_multisite_mpo<T>();}
-    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo_squared() const { return model-> template get_multisite_mpo<T>();}
+    template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo_squared() const { return model-> template get_multisite_mpo_squared<T>();}
     [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_ene_blk() const;
     [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_var_blk() const;
     template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_ene_blk_as() const;
