@@ -39,7 +39,7 @@ namespace tools::finite::env {
     template<typename Scalar>  double                        get_optimal_mixing_factor_var_old(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionPolicy bep);
     template<typename Scalar>  BondExpansionResult<Scalar>   expand_bond_ssite_preopt(StateFinite<Scalar> &state, ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, const OptMeta &opt_meta);
     template<typename Scalar>  BondExpansionResult<Scalar>   expand_bond_postopt_1site(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, const OptMeta &opt_meta);
-    template<typename Scalar>  BondExpansionResult<Scalar>   rexpand_bond_postopt_1site(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, const OptMeta &opt_meta);
+    template<typename Scalar>  BondExpansionResult<Scalar>   rexpand_bond_postopt_1site(StateFinite<Scalar> &state, ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, const OptMeta &opt_meta);
     template<typename Scalar>  BondExpansionResult<Scalar>   expand_bond_preopt_nsite(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, const OptMeta &opt_meta);
     template<typename Scalar> void                           assert_edges(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges);
     template<typename Scalar> void                           assert_edges_var(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges);

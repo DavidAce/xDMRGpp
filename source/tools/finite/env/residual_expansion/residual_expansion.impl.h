@@ -317,7 +317,7 @@ void merge_rexpansion_terms_l2r(const StateFinite<Scalar> &state, MpsSite<Scalar
 }
 
 template<typename Scalar>
-BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
+BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(StateFinite<Scalar> &state, ModelFinite<Scalar> &model,
                                                                            EdgesFinite<Scalar> &edges, const OptMeta &opt_meta) {
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
         throw except::runtime_error("expand_bond_postopt_1site: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
@@ -330,6 +330,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
     // Case list
     // (a)     [ML, P] [MR 0]^T : postopt_rear (AC,B) -->
     // (b)     [ML, 0] [MR P]^T : postopt_rear (A,AC) <--
+    using R = decltype(std::real(std::declval<Scalar>()));
 
     std::vector<size_t> pos_expanded;
     auto                pos = state.template get_position<size_t>();
@@ -405,6 +406,9 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
         mps0.take_stash(mpsP);
         tools::log->debug("Moved MPS {}{} - {}{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions());
         assert(state.template get_position<long>() == static_cast<long>(pos0));
+        state.active_sites = {pos0};
+        model.active_sites = {pos0};
+        edges.active_sites = {pos0};
     }
 
     const auto    &mpoP  = model.get_mpo(posP);
@@ -431,7 +435,6 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
 
     } else {
         // [N Λc, M] are now [A(i-1)Λc, B(i)]
-        using R = decltype(std::real(std::declval<Scalar>()));
         assert_orthonormal<2>(N); // A(i-1) should be left-orthonormal
         assert_orthonormal<1>(M); // B(i) should be right-orthonormal
 
@@ -455,6 +458,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
     if constexpr(settings::debug_rexpansion) mpsR.assert_normalized();
     state.clear_cache();
     state.clear_measurements();
+
     env::rebuild_edges(state, model, edges);
 
     assert(mpsL.get_chiR() == mpsR.get_chiL());
