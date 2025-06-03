@@ -65,21 +65,22 @@ void optimize_generalized_shift_invert_eig_executor(const TensorsFinite<Scalar> 
 
     if(meta.optRitz == OptRitz::NONE) return;
     eig::solver solver;
-    auto        matrixA = tensors.template get_effective_hamiltonian<CalcType>();
-    auto        matrixB = tensors.template get_effective_hamiltonian_squared<CalcType>();
-    auto        nev     = std::min<int>(static_cast<int>(matrixA.dimension(0)), meta.eigs_nev.value_or(1));
+    using R      = decltype(std::real(std::declval<CalcType>()));
+    auto matrixA = tensors.template get_effective_hamiltonian<CalcType>();
+    auto matrixB = tensors.template get_effective_hamiltonian_squared<CalcType>();
+    auto nev     = std::min<int>(static_cast<int>(matrixA.dimension(0)), meta.eigs_nev.value_or(1));
     switch(meta.optRitz) {
         case OptRitz::SR: {
             auto il = 1;
             auto iu = nev;
-            solver.eig(matrixA.data(), matrixB.data(), matrixA.dimension(0), 'I', il, iu, 0.0, 1.0);
+            solver.eig(matrixA.data(), matrixB.data(), matrixA.dimension(0), 'I', il, iu, R{0}, R{1});
             extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true);
             break;
         }
         case OptRitz::LR: {
             auto il = static_cast<int>(matrixA.dimension(0) - (nev - 1));
             auto iu = static_cast<int>(matrixA.dimension(0));
-            solver.eig(matrixA.data(), matrixB.data(), matrixA.dimension(0), 'I', il, iu, 0.0, 1.0);
+            solver.eig(matrixA.data(), matrixB.data(), matrixA.dimension(0), 'I', il, iu, R{0}, R{1});
             extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true);
             break;
         }
@@ -162,7 +163,8 @@ void optimize_generalized_shift_invert_eig_executor(const TensorsFinite<Scalar> 
 
 template<typename Scalar>
 opt_mps<Scalar> tools::finite::opt::internal::optimize_generalized_shift_invert_eig(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                      [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+                                                                                    [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta,
+                                                                                    reports::eigs_log<Scalar> &elog) {
     if(meta.optSolver == OptSolver::EIGS) return optimize_generalized_shift_invert(tensors, initial_mps, status, meta, elog);
     if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_generalized_shift_invert_eig(): not implemented for type {}", enum2sv(meta.optType));
@@ -181,14 +183,22 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_generalized_shift_invert_
     std::vector<opt_mps<Scalar>> results;
     if constexpr(sfinae::is_std_complex_v<Scalar>) {
         switch(meta.optType) {
+            case OptType::FP32: optimize_generalized_shift_invert_eig_executor<fp32>(tensors, initial_mps, results, meta); break;
             case OptType::FP64: optimize_generalized_shift_invert_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
+            case OptType::FP128: optimize_generalized_shift_invert_eig_executor<fp128>(tensors, initial_mps, results, meta); break;
+            case OptType::CX32: optimize_generalized_shift_invert_eig_executor<cx32>(tensors, initial_mps, results, meta); break;
             case OptType::CX64: optimize_generalized_shift_invert_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+            case OptType::CX128: optimize_generalized_shift_invert_eig_executor<cx128>(tensors, initial_mps, results, meta); break;
             default: throw except::runtime_error("optimize_generalized_shift_invert_eig(): not implemented for type {}", enum2sv(meta.optType));
         }
     } else {
         switch(meta.optType) {
+            case OptType::FP32: optimize_generalized_shift_invert_eig_executor<fp32>(tensors, initial_mps, results, meta); break;
             case OptType::FP64: optimize_generalized_shift_invert_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
+            case OptType::FP128: optimize_generalized_shift_invert_eig_executor<fp128>(tensors, initial_mps, results, meta); break;
+            case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
             case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
+            case OptType::CX128: throw except::logic_error("Cannot run OptType::CX128 with Scalar type {}", sfinae::type_name<Scalar>());
             default: throw except::runtime_error("optimize_generalized_shift_invert_eig(): not implemented for type {}", enum2sv(meta.optType));
         }
     }
@@ -205,6 +215,3 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_generalized_shift_invert_
     for(const auto &mps : results) elog.eigs_add_entry(mps, spdlog::level::debug);
     return results.front();
 }
-
-
-

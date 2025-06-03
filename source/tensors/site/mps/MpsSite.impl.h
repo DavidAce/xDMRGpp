@@ -97,7 +97,7 @@ bool MpsSite<Scalar>::is_normalized(RealScalar prec) const {
     auto t_dbg          = tid::tic_token("is_normalized", tid::level::highest);
     if(isCenter() or get_label() == "AC") {
         auto norm      = tools::common::contraction::contract_mps_norm(get_M());
-        tools::log->info("AC norm: {:.16f} (error {:.4e}", fp(norm), fp(norm - Scalar{1}));
+        tools::log->info("AC norm: {:.16f} (error {:.4e})", fp(norm), fp(norm - Scalar{1}));
         is_norm_cached = std::abs(norm - Scalar{1}) <= prec;
         return is_norm_cached.value();
     }

@@ -18,6 +18,7 @@ namespace tools::finite::multisite {
     template<typename Scalar>  std::array<long, 4> get_dimensions(const ModelFinite<Scalar> &model, std::optional<std::vector<size_t>> sites = std::nullopt);
     template<typename Scalar>  std::array<long, 4> get_dimensions_squared(const ModelFinite<Scalar> &model, std::optional<std::vector<size_t>> sites = std::nullopt);
     template<typename Scalar>  std::vector<size_t> generate_site_list(StateFinite<Scalar> &state, long threshold, size_t max_sites, size_t min_sites = 1, const std::string &tag = "");
+    template<typename Scalar>  std::vector<size_t> generate_site_list_old(StateFinite<Scalar> &state, long threshold, size_t max_sites, size_t min_sites = 1, const std::string &tag = "");
     // template<typename Scalar>  std::vector<size_t> generate_site_list_old(StateFinite<Scalar> &state, long threshold, size_t max_sites, size_t min_sites = 1, const std::string &tag = "");
     template<typename Scalar>  std::vector<size_t> generate_truncated_site_list(StateFinite<Scalar> &state, long threshold, long bond_lim, size_t max_sites, size_t min_sites = 1);
                               extern std::vector<size_t> activate_sites(long threshold, size_t max_sites, size_t min_sites = 1);

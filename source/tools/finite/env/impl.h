@@ -172,7 +172,7 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> delinearize_expansion_terms_
     R factor_min = static_cast<R>(settings::strategy::dmrg_bond_expansion::postopt::minalpha);
     R factor_max = static_cast<R>(settings::strategy::dmrg_bond_expansion::postopt::maxalpha);
     R factor_S   = min_M / maxr_P; // std::clamp<R>(std::max(min_M, R{1e-8}) / maxr_P, factor_min, factor_max);
-    R factor_Q   = std::clamp<R>(std::max(min_M, R{1e-8}), factor_min, factor_max);
+    R factor_Q   = std::clamp<R>(std::max(min_M, R{1e-8f}), factor_min, factor_max);
 
     // Form the new M_P
     auto M_S  = tenx::TensorCast(tenx::MatrixMap(M_P, dim0 * dim1, dim2)(Eigen::all, mgsr.permutation.topRows(max_keep)), dim0, dim1, max_keep);
@@ -938,13 +938,13 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_postopt_1site(StateF
     auto res = get_mixing_factors_postopt_rnorm(pos_expanded, state, model, edges, opt_meta);
     internal::set_mixing_factors_to_stdv_H<Scalar>(pos_expanded, state, model, edges, opt_meta, res);
     if(res.alpha_h1v == 0 and res.alpha_h2v == 0) {
-        res.msg = fmt::format("Expansion canceled: {}{} - {}{} | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                              mpsR.dimensions(), res.alpha_mps, res.alpha_h1v, res.alpha_h2v);
+        res.msg = fmt::format("Expansion canceled: {}{} - {}{} | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | ene {:.16f} var {:.5e}", mpsL.get_tag(), mpsL.dimensions(),
+                              mpsR.get_tag(), mpsR.dimensions(), res.alpha_mps, res.alpha_h1v, res.alpha_h2v, res.ene_old, res.var_old);
         return res;
     }
 
-    tools::log->debug("Expanding {}{} - {}{} | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | factor {:.1e}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                      mpsR.dimensions(), res.alpha_mps, res.alpha_h1v, res.alpha_h2v, opt_meta.bondexp_factor);
+    tools::log->debug("Expanding {}{} - {}{} | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | factor {:.1e} | ene {:.16f} var {:.5e}", mpsL.get_tag(), mpsL.dimensions(),
+                      mpsR.get_tag(), mpsR.dimensions(), res.alpha_mps, res.alpha_h1v, res.alpha_h2v, opt_meta.bondexp_factor, res.ene_old, res.var_old);
 
     // Set up the SVD
     // Bond dimension can't grow faster than x spin_dim.

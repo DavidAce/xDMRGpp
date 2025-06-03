@@ -223,13 +223,13 @@ void GD<Scalar>::build(MatrixType &Q_res, MatrixType &Q, MatrixType &HQ, std::fu
         HQ.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
         auto vOffset = 0;
         auto mOffset = vBlocks;
-        auto rOffset = vBlocks + mBlocks;
-        auto kOffset = vBlocks + mBlocks + rBlocks;
-        auto qOffset = vBlocks + mBlocks + rBlocks + kBlocks;
+        auto kOffset = vBlocks + mBlocks;
+        auto rOffset = vBlocks + mBlocks + kBlocks;
+        auto qOffset = vBlocks + mBlocks + kBlocks + rBlocks;
         if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
         if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = M;
-        if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
         if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
+        if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
         if(qBlocks > 0) Q.middleCols(qOffset * b, qBlocks * b) = Q_res;
         MatrixType Qold = Q;
         hhqr.compute(Q);
@@ -241,8 +241,8 @@ void GD<Scalar>::build(MatrixType &Q_res, MatrixType &Q, MatrixType &HQ, std::fu
         // Start building HQ
         if(vBlocks > 0) HQ.middleCols(vOffset * b, vBlocks * b) = HV;
         if(mBlocks > 0) HQ.middleCols(mOffset * b, mBlocks * b) = HM; // HM was set during the last set_mBlock() call
-        if(rBlocks > 0) HQ.middleCols(rOffset * b, rBlocks * b) = MultHX(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
         if(kBlocks > 0) HQ.middleCols(kOffset * b, kBlocks * b) = HQ_keep;
+        if(rBlocks > 0) HQ.middleCols(rOffset * b, rBlocks * b) = MultHX(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
         if(qBlocks > 0) HQ.middleCols(qOffset * b, qBlocks * b) = MultHX(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
         // We may need to rebuild columns of HQ that were affected by QR,
         // that is, if the orthonormalization of Q rotated those columns.
@@ -301,18 +301,18 @@ void GD<Scalar>::build(MatrixType &Q1_res, MatrixType &Q2_res, MatrixType &Q, Ma
         MatrixType   H1Q_keep = H1Q.rightCols(kBlocks * b);
         MatrixType   H2Q_keep = H2Q.rightCols(kBlocks * b);
         if(mBlocks > 0) M = get_mBlock(); // Before modifying Q
-        Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q1_res.cols() + Q2_res.cols());
-        H1Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q1_res.cols() + Q2_res.cols());
-        H2Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q1_res.cols() + Q2_res.cols());
+        Q.conservativeResize(N, (vBlocks + mBlocks + kBlocks + rBlocks) * b + Q1_res.cols() + Q2_res.cols());
+        H1Q.conservativeResize(N, (vBlocks + mBlocks + kBlocks + rBlocks) * b + Q1_res.cols() + Q2_res.cols());
+        H2Q.conservativeResize(N, (vBlocks + mBlocks + kBlocks + rBlocks) * b + Q1_res.cols() + Q2_res.cols());
         auto vOffset = 0;
         auto mOffset = vBlocks;
-        auto rOffset = vBlocks + mBlocks;
-        auto kOffset = vBlocks + mBlocks + rBlocks;
-        auto qOffset = vBlocks + mBlocks + rBlocks + kBlocks;
+        auto kOffset = vBlocks + mBlocks;
+        auto rOffset = vBlocks + mBlocks + kBlocks;
+        auto qOffset = vBlocks + mBlocks + kBlocks + rBlocks;
         if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
         if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = M;
-        if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
         if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
+        if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
         if(qBlocks > 0) {
             Q.middleCols(qOffset * b, qBlocks * b).leftCols(Q1_res.cols())  = Q1_res;
             Q.middleCols(qOffset * b, qBlocks * b).rightCols(Q2_res.cols()) = Q2_res;
@@ -331,11 +331,11 @@ void GD<Scalar>::build(MatrixType &Q1_res, MatrixType &Q2_res, MatrixType &Q, Ma
         if(mBlocks > 0) H1Q.middleCols(mOffset * b, mBlocks * b) = H1M; // Set during the last call to set_mBlock(...)
         if(mBlocks > 0) H2Q.middleCols(mOffset * b, mBlocks * b) = H2M; // Set during the last call to set_mBlock(...)
 
-        if(rBlocks > 0) H1Q.middleCols(rOffset * b, rBlocks * b) = MultH1X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
-        if(rBlocks > 0) H2Q.middleCols(rOffset * b, rBlocks * b) = MultH2X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
-
         if(kBlocks > 0) H1Q.middleCols(kOffset * b, kBlocks * b) = H1Q_keep;
         if(kBlocks > 0) H2Q.middleCols(kOffset * b, kBlocks * b) = H2Q_keep;
+
+        if(rBlocks > 0) H1Q.middleCols(rOffset * b, rBlocks * b) = MultH1X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
+        if(rBlocks > 0) H2Q.middleCols(rOffset * b, rBlocks * b) = MultH2X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
 
         if(qBlocks > 0) H1Q.middleCols(qOffset * b, qBlocks * b) = MultH1X(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
         if(qBlocks > 0) H2Q.middleCols(qOffset * b, qBlocks * b) = MultH2X(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
@@ -402,18 +402,18 @@ void GD<Scalar>::build(MatrixType &Q_res, MatrixType &Q, MatrixType &H1Q, Matrix
         MatrixType   H1Q_keep = H1Q.rightCols(kBlocks * b);
         MatrixType   H2Q_keep = H2Q.rightCols(kBlocks * b);
         if(mBlocks > 0) M = get_mBlock(); // Before modifying Q
-        Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
-        H1Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
-        H2Q.conservativeResize(N, (vBlocks + mBlocks + rBlocks + kBlocks) * b + Q_res.cols());
+        Q.conservativeResize(N, (vBlocks + mBlocks + kBlocks + rBlocks) * b + Q_res.cols());
+        H1Q.conservativeResize(N, (vBlocks + mBlocks + kBlocks + rBlocks) * b + Q_res.cols());
+        H2Q.conservativeResize(N, (vBlocks + mBlocks + kBlocks + rBlocks) * b + Q_res.cols());
         auto vOffset = 0;
         auto mOffset = vBlocks;
-        auto rOffset = vBlocks + mBlocks;
-        auto kOffset = vBlocks + mBlocks + rBlocks;
-        auto qOffset = vBlocks + mBlocks + rBlocks + kBlocks;
+        auto kOffset = vBlocks + mBlocks;
+        auto rOffset = vBlocks + mBlocks + kBlocks;
+        auto qOffset = vBlocks + mBlocks + kBlocks + rBlocks;
         if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
         if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = M;
-        if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
         if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
+        if(rBlocks > 0) Q.middleCols(rOffset * b, rBlocks * b) = get_rBlock();
         if(qBlocks > 0) Q.middleCols(qOffset * b, qBlocks * b) = Q_res;
 
         MatrixType Qold = Q;
@@ -430,11 +430,11 @@ void GD<Scalar>::build(MatrixType &Q_res, MatrixType &Q, MatrixType &H1Q, Matrix
         if(mBlocks > 0) H1Q.middleCols(mOffset * b, mBlocks * b) = H1M; // Set during the last call to set_mBlock(...)
         if(mBlocks > 0) H2Q.middleCols(mOffset * b, mBlocks * b) = H2M; // Set during the last call to set_mBlock(...)
 
-        if(rBlocks > 0) H1Q.middleCols(rOffset * b, rBlocks * b) = MultH1X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
-        if(rBlocks > 0) H2Q.middleCols(rOffset * b, rBlocks * b) = MultH2X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
-
         if(kBlocks > 0) H1Q.middleCols(kOffset * b, kBlocks * b) = H1Q_keep;
         if(kBlocks > 0) H2Q.middleCols(kOffset * b, kBlocks * b) = H2Q_keep;
+
+        if(rBlocks > 0) H1Q.middleCols(rOffset * b, rBlocks * b) = MultH1X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
+        if(rBlocks > 0) H2Q.middleCols(rOffset * b, rBlocks * b) = MultH2X(Q.middleCols(rOffset * b, rBlocks * b)); // No chance that this can be avoided
 
         if(qBlocks > 0) H1Q.middleCols(qOffset * b, qBlocks * b) = MultH1X(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided
         if(qBlocks > 0) H2Q.middleCols(qOffset * b, qBlocks * b) = MultH2X(Q.middleCols(qOffset * b, qBlocks * b)); // Can't be avoided

@@ -50,10 +50,12 @@ template<typename Scalar>
 void SolverBase<Scalar>::set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize) {
     use_preconditioner = jcbMaxBlockSize > 0;
     if(use_preconditioner) {
-        H1.preconditioner = eig::Preconditioner::JACOBI;
-        H2.preconditioner = eig::Preconditioner::JACOBI;
+        H1.preconditioner = eig::Preconditioner::SOLVE;
+        H2.preconditioner = eig::Preconditioner::SOLVE;
         H1.factorization  = eig::Factorization::LU;
         H2.factorization  = eig::Factorization::LLT;
+        H1.set_invMatVecCfg(10000, 1e-1, MatDef::IND);
+        H2.set_invMatVecCfg(10000, 1e-1, MatDef::DEF);
         H1.set_jcbMaxBlockSize(jcbMaxBlockSize);
         H2.set_jcbMaxBlockSize(jcbMaxBlockSize);
     }
@@ -163,6 +165,50 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::qr_and_chebyshevFilt
     assert_allfinite(Qnew);
     return Qnew;
 }
+template<typename Scalar>
+typename SolverBase<Scalar>::RealScalar SolverBase<Scalar>::get_rNorms_log10_change_per_iteration() {
+    VectorReal rNormMeanDiffs_log10 = VectorReal::Zero(b);
+    for(Eigen::Index idx = 0; idx + 1 < status.rNorms_history.size(); ++idx) {
+        const auto &rNorms_curr      = status.rNorms_history[idx + 0];
+        const auto &rNorms_next      = status.rNorms_history[idx + 1];
+        VectorReal  rNormDiffs_log10 = rNorms_next.array().log10() - rNorms_curr.array().log10();
+        rNormMeanDiffs_log10         = (rNormMeanDiffs_log10 * idx + rNormDiffs_log10) / static_cast<RealScalar>(idx + 1);
+    }
+
+    return rNormMeanDiffs_log10.minCoeff();
+}
+
+template<typename Scalar>
+void SolverBase<Scalar>::adjust_preconditioner_tolerance() {
+    auto rNorm_log10_decrease = get_rNorms_log10_change_per_iteration();
+    if(rNorm_log10_decrease == RealScalar{0}) return;
+    auto h1tol_old = H1.get_invMatVecCfg().tolerance;
+    auto h2tol_old = H2.get_invMatVecCfg().tolerance;
+    if(rNorm_log10_decrease > -0.5) {
+        // Decreasing less than half an order of magnitude per iteration,
+        // We could spend more time in the inner solver, so we tighten the tolerance
+        H1.get_invMatVecCfg().tolerance *= RealScalar{0.5};
+        H2.get_invMatVecCfg().tolerance *= RealScalar{0.5};
+    }
+
+    if(rNorm_log10_decrease < -2.0) {
+        // Decreasing more than two orders of magnitude per iteration,
+        // We don't really need to decrease that fast, we are likely spending too many iterations.
+        H1.get_invMatVecCfg().tolerance *= RealScalar{5};
+        H2.get_invMatVecCfg().tolerance *= RealScalar{5};
+    }
+    else if(rNorm_log10_decrease < -1.1) {
+        // Decreasing more than one order of magnitude per iteration,
+        // We don't really need to decrease that fast, we are likely spending too many iterations.
+        H1.get_invMatVecCfg().tolerance *= RealScalar{2};
+        H2.get_invMatVecCfg().tolerance *= RealScalar{2};
+    }
+
+    auto h1tol_new = H1.get_invMatVecCfg().tolerance;
+    auto h2tol_new = H2.get_invMatVecCfg().tolerance;
+    if(h1tol_old != h1tol_new) eig::log->info("adjusted H1 tolerance: {:.3e} -> {:.3e}", h1tol_old, h1tol_new);
+    if(h2tol_old != h2tol_new) eig::log->info("adjusted H2 tolerance: {:.3e} -> {:.3e}", h2tol_old, h2tol_new);
+}
 
 template<typename Scalar>
 typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultHX(const Eigen::Ref<const MatrixType> &X) {
@@ -199,6 +245,7 @@ template<typename Scalar>
 typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultPX(const Eigen::Ref<const MatrixType> &X) {
     // Preconditioning
     status.num_precond += X.cols();
+    adjust_preconditioner_tolerance();
     switch(algo) {
         case OptAlgo::DMRG: return H1.MultPX(X);
         case OptAlgo::DMRGX: [[fallthrough]];
@@ -213,6 +260,7 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultP1X(const Eigen:
     // Preconditioning
     if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultP1X: should only be called by GDMRG");
     status.num_precond += X.cols();
+    adjust_preconditioner_tolerance();
     return H1.MultPX(X);
 }
 
@@ -221,7 +269,7 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultP2X(const Eigen:
     // Preconditioning
     if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultP2X: should only be called by GDMRG");
     status.num_precond += X.cols();
-    // return X;
+    adjust_preconditioner_tolerance();
     return H2.MultPX(X);
 }
 
@@ -384,7 +432,6 @@ void SolverBase<Scalar>::orthonormalize(const Eigen::Ref<const MatrixType> X,   
             if(Yblock.colwise().norm().minCoeff() < normTol) {
                 mask(blk_y) = 0;
                 Yblock.setZero();
-                eig::log->info("mask after DGKS X: {}", mask);
                 continue;
             }
 
@@ -396,7 +443,6 @@ void SolverBase<Scalar>::orthonormalize(const Eigen::Ref<const MatrixType> X,   
             if(Yblock.colwise().norm().minCoeff() < normTol) {
                 mask(blk_y) = 0;
                 Yblock.setZero();
-                eig::log->info("mask after QR y: {}", mask);
                 continue;
             }
 
@@ -890,7 +936,8 @@ void SolverBase<Scalar>::updateStatus() {
         absgap              = std::abs(evals(1) - evals(0));
         relgap              = absgap / status.H_norm_est();
     }
-
+    status.rNorms_history.push_back(status.rNorms);
+    while(status.rNorms_history.size() > 5) status.rNorms_history.pop_front();
     eig::log->info("iter {} | mv {:5} | optVal {::.16f} | blk {:2} | b {} | ritz {} | rNormTol {:.3e} | tol {:.2e} | rNorms = {::.8e} | cond {:.2e} | gap "
                    "{:.3e} (rel {:.3e})",
                    status.iter, status.num_matvecs, fv(status.optVal), Q.cols() / b, b, enum2sv(ritz), rnormTol(), tol,

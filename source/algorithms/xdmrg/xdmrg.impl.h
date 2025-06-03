@@ -380,9 +380,10 @@ void xdmrg<Scalar>::update_state() {
     auto bond_dims_after_preexp = tensors.state->get_mps_dims_active();
 
     // Run the optimization
-    auto        initial_state = opt::get_opt_initial_mps(tensors, opt_meta);
+    auto initial_state = opt::get_opt_initial_mps(tensors, opt_meta);
+    assert(initial_state.get_sites() == opt_meta.chosen_sites);
     auto opt_state = opt::get_updated_state(tensors, initial_state, status, opt_meta);
-
+    assert(opt_state.get_sites() == opt_meta.chosen_sites);
     // Determine the quality of the optimized state.
     opt_state.set_relchange(opt_state.get_variance() / var_latest);
     opt_state.set_bond_limit(opt_meta.svd_cfg->rank_max.value());
@@ -422,6 +423,8 @@ void xdmrg<Scalar>::update_state() {
     tensors.rebuild_edges(); // This will only do work if edges were modified, which is the case in 1-site dmrg.
     auto variance_after_svd  = tools::finite::measure::energy_variance(tensors);
     auto bond_dims_after_svd = tensors.state->get_mps_dims_active();
+    auto mmps = tensors.template get_multisite_mps<Scalar>();
+    auto variance_multisite  = tools::finite::measure::energy_variance(mmps, tensors, std::nullopt);
 
     // Update current energy density ε
     if(status.opt_ritz == OptRitz::TE)
@@ -441,13 +444,12 @@ void xdmrg<Scalar>::update_state() {
     last_optalgo   = opt_state.get_optalgo();
     if constexpr(settings::debug) tensors.assert_validity();
 
-    auto variance_after_postexp = tools::finite::measure::energy_variance(tensors);
-    auto bond_dims_postexp      = tensors.state->get_mps_dims_active();
     if constexpr(settings::debug) {
         if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
         tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", fp(variance_before_update), bond_dims_before_update);
         tools::log->debug("After  pre expns.        : variance {:8.2e} | mps dims {}", fp(variance_after_preexp), bond_dims_after_preexp);
         tools::log->debug("After  merge             : variance {:8.2e} | mps dims {}", fp(variance_after_svd), bond_dims_after_svd);
+        tools::log->debug("After  merge (mmps)      : variance {:8.2e} | mps dims {}", fp(variance_multisite), bond_dims_after_svd);
         tools::log->debug("Variance change from  SVD: {:.16f}%", fp(100 * variance_after_svd / opt_state.get_variance()));
     }
 }

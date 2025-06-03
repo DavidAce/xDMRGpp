@@ -64,10 +64,104 @@ long tools::finite::multisite::get_problem_size(const StateFinite<Scalar> &state
     return (dims[0] * dims[1] * dims[2]);
 }
 
-
 template<typename Scalar>
 std::vector<size_t> tools::finite::multisite::generate_site_list(StateFinite<Scalar> &state, long threshold, size_t max_sites, size_t min_sites,
                                                                  const std::string &tag) {
+    min_sites = std::clamp(min_sites, 1ul, state.template get_length<size_t>());
+    max_sites = std::clamp(max_sites, min_sites, state.template get_length<size_t>());
+    tools::log->trace("Multisite activation {} | pos {} | direction {} | sites min {} max {} | max problem size {}", tag, state.template get_position<long>(),
+                      state.get_direction(), min_sites, max_sites, threshold);
+
+    // Generates a site list for multisite optimization
+
+    const auto                       current_position = state.template get_position<long>();
+    auto                             direction        = state.get_direction();
+    long                             length           = state.template get_length<long>();
+    std::vector<size_t>              sites;
+    std::vector<long>                sizes;
+    std::vector<std::array<long, 3>> shape;
+    // On l2r: [AC, B, B...]
+    // On r2l: [...A, AC, B] <---Note that B is always included! In single-site dmrg, we only take B!
+    long max_pos = direction > 0 ? current_position : current_position + 1;
+    long min_pos = max_pos;
+    long max_off = safe_cast<long>(max_sites) - 1;
+
+    bool at_edge = max_pos >= length or min_pos < 0;
+
+    if(direction > 0) {
+        min_pos = std::clamp<long>(min_pos, 0l, length - 1l);
+        max_pos = std::clamp<long>(min_pos + max_off, min_pos, length - 1l);
+    } else {
+        max_pos = std::clamp<long>(max_pos, 0l, length - 1l);
+        min_pos = std::clamp<long>(max_pos - max_off, 0l, max_pos);
+    }
+
+    auto range = num::range<size_t>(min_pos, max_pos + 1); // +1 to include the right-most
+    if(direction < 0) std::reverse(range.begin(), range.end());
+    tools::log->trace("Candidate range {}", range);
+
+    for(auto &pos : range) {
+        if(pos != std::clamp<long>(pos, 0l, length - 1l)) continue;
+        sites.emplace_back(pos);
+        sizes.emplace_back(get_problem_size(state, sites));
+        shape.emplace_back(get_dimensions(state, sites));
+    }
+    tools::log->trace("Candidate sites {}", sites);
+    tools::log->trace("Candidate sizes {}", sizes);
+    // Evaluate the costs. Threshold depends on optSolver
+    // Case 1: All costs are equal              -> take all sites
+    // Case 2: Costs increase indefinitely      -> take until threshold
+    // Case 3: Costs increase and saturate      -> take until threshold
+
+    std::string reason;
+    while(true) {
+        if(sites.empty() and at_edge) {
+            reason = "Can't select sites beyond the edge";
+            break;
+        }
+        bool allequal = std::all_of(sizes.begin(), sizes.end(), [sizes](long c) { return c == sizes.front(); });
+        auto size     = sizes.back();
+        if(size < threshold and sites.size() == max_sites) {
+            reason = "reached max sites";
+            break;
+        }
+        if(size <= threshold and sites.size() <= max_sites) {
+            reason = fmt::format("problem size <= {} and sites <= {}", threshold, max_sites);
+            break;
+        } else if(sites.size() <= min_sites) {
+            reason = fmt::format("at least {} sites had to be kept", min_sites);
+            break;
+        } else if(allequal and sites.size() <= max_sites) {
+            reason = fmt::format("all problem sizes with fewer sites are equal: {}", size);
+            break;
+        } else if(sites.size() == 1) {
+            throw except::logic_error("At least two sites required!");
+        } else if(sites.empty()) {
+            throw except::logic_error("No sites for a jump");
+        } else {
+            sites.pop_back();
+            sizes.pop_back();
+            shape.pop_back();
+        }
+    }
+
+    std::sort(sites.begin(), sites.end());
+    if(at_edge or shape.empty() or sizes.empty())
+        tools::log->debug("Multisite activation: site {} | direction {} | sites min {} max {} | max problem size {} | chosen sites {} | reason {}",
+                          current_position, direction, min_sites, max_sites, threshold, sites, reason);
+    else
+        tools::log->debug("Multisite activation: site {} | direction {} | sites min {} max {} | max problem size {} | chosen sites {} | "
+                          "shape {} = {} | reason {}",
+                          current_position, direction, min_sites, max_sites, threshold, sites, shape.back(), sizes.back(), reason);
+
+    // if(not at_edge and sites.size() < min_sites) throw except::logic_error("Activated sites ({}) < min_sites ({}): {}", sites.size(), min_sites, sites);
+    // if(not at_edge and sites.size() > max_sites) throw except::logic_error("Activated sites ({}) > max_sites ({}): {}", sites.size(), max_sites, sites);
+    return sites;
+}
+
+template<typename Scalar>
+std::vector<size_t> tools::finite::multisite::generate_site_list_old(StateFinite<Scalar> &state, long threshold, size_t max_sites, size_t min_sites,
+                                                                     const std::string &tag) {
     // TODO: Rewrite generate_site_list
     min_sites = std::clamp(min_sites, 1ul, state.template get_length<size_t>());
     max_sites = std::clamp(max_sites, min_sites, state.template get_length<size_t>());
@@ -164,4 +258,3 @@ std::vector<size_t> tools::finite::multisite::generate_site_list(StateFinite<Sca
     // if(not at_edge and sites.size() > max_sites) throw except::logic_error("Activated sites ({}) > max_sites ({}): {}", sites.size(), max_sites, sites);
     return sites;
 }
-

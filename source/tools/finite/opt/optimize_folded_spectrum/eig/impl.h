@@ -22,6 +22,7 @@ void optimize_folded_spectrum_eig_executor(const TensorsFinite<Scalar> &tensors,
     // Solve the folded spectrum problem H²v=E²x (H² is positive definite)
     if(meta.optRitz == OptRitz::NONE) return;
     eig::solver solver;
+    using R = decltype(std::real(std::declval<CalcType>()));
     auto        matrix = tensors.template get_effective_hamiltonian_squared<CalcType>();
     auto        nev    = std::min<int>(static_cast<int>(matrix.dimension(0)), meta.eigs_nev.value_or(1));
     auto        il     = 1;
@@ -35,52 +36,9 @@ void optimize_folded_spectrum_eig_executor(const TensorsFinite<Scalar> &tensors,
         }
         default: break;
     }
-    solver.eig(matrix.data(), matrix.dimension(0), 'I', il, iu, 0.0, 1.0);
+    solver.eig(matrix.data(), matrix.dimension(0), 'I', il, iu, R{0}, R{1});
     extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true);
 
-    // if(solver.result.meta.eigvals_found and solver.result.meta.eigvecsR_found) {
-    //     // tools::log->info("optimize_variance_eig_executor: vl {:.3e} | vu {:.3e}", vl, vu);
-    //     tools::log->info("Found {} eigvals ({} converged)", solver.result.meta.nev, solver.result.meta.nev_converged);
-    //     auto eigvals = eig::view::get_eigvals<fp64>(solver.result, false);
-    //     auto indices = num::range<long>(0l, eigvals.size());
-    //     auto eigComp = EigIdxComparator(OptRitz::LM, 0, eigvals.data(), eigvals.size());
-    //     std::sort(indices.begin(), indices.end(), eigComp); // Should sort them according to distance from eigval
-    //     indices.resize(std::min(eigvals.size(), 10l));      // We only need the first few indices, say 4
-    //     for(auto idx : indices) { tools::log->info(" -- idx {}: {:.16f}", idx, eigvals(idx)); }
-    // }
-
-    // if(meta.chosen_sites.size() <= 4 and matrix.dimension(0) <= 8192) {
-    //     // Find all eigenvalues within a thin band
-    // auto eigval = initial_mps.get_energy(); // The current energy
-    // auto eigvar = initial_mps.get_variance();
-    // auto eshift = initial_mps.get_eshift();                    // The energy shift is our target energy for excited states
-    // auto vl     = eshift - std::abs(eigval) - 2 * std::sqrt(eigvar); // Find energies at most two sigma away from the band
-    // auto vu     = eshift + std::abs(eigval) + 2 * std::sqrt(eigvar); // Find energies at most two sigma away from the band
-    // solver.eig(matrix.data(), matrix.dimension(0), 'V', 1, 1, vl, vu);
-
-    // if(solver.result.meta.eigvals_found and solver.result.meta.eigvecsR_found) {
-    //     // tools::log->info("optimize_variance_eig_executor: vl {:.3e} | vu {:.3e}", vl, vu);
-    //     tools::log->info("Found {} eigvals ({} converged)", solver.result.meta.nev, solver.result.meta.nev_converged);
-    //     auto eigvals = eig::view::get_eigvals<fp64>(solver.result, false);
-    //     auto indices = num::range<long>(0l, eigvals.size());
-    //     auto eigComp = EigIdxComparator(meta.optRitz, 0, eigvals.data(), eigvals.size());
-    //     std::sort(indices.begin(), indices.end(), eigComp); // Should sort them according to distance from eigval
-    //     indices.resize(std::min(eigvals.size(), 10l));      // We only need the first few indices, say 4
-    //     for(auto idx : indices) { tools::log->info(" -- idx {}: {:.16f}", idx, eigvals(idx)); }
-    // }
-
-    // eig::solver solver1, solver2;
-    // auto        H1 = tensors.get_effective_hamiltonian<Scalar>();
-    // auto        H2 = tensors.get_effective_hamiltonian_squared<Scalar>();
-    // solver1.eig<eig::Form::SYMM>(H1.data(), H1.dimension(0));
-    // solver2.eig<eig::Form::SYMM>(H2.data(), H2.dimension(0));
-    // auto evals1 = eig::view::get_eigvals<fp64>(solver1.result);
-    // auto evals2 = eig::view::get_eigvals<fp64>(solver2.result);
-    // for(long idx = 0; idx < std::min(evals1.size(), evals2.size()); ++idx) {
-    // fmt::print("idx {:2}: H {:20.16f}  H² {:20.16f}\n", idx, evals1[idx], evals2[idx]);
-    // }
-    // fmt::print("\n");
-    // }
 }
 
 template<typename Scalar>
@@ -104,14 +62,22 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum_eig(const
     std::vector<opt_mps<Scalar>> results;
     if constexpr(sfinae::is_std_complex_v<Scalar>) {
         switch(meta.optType) {
+            case OptType::FP32: optimize_folded_spectrum_eig_executor<fp32>(tensors, initial_mps, results, meta); break;
             case OptType::FP64: optimize_folded_spectrum_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
+            case OptType::FP128: optimize_folded_spectrum_eig_executor<fp128>(tensors, initial_mps, results, meta); break;
+            case OptType::CX32: optimize_folded_spectrum_eig_executor<cx32>(tensors, initial_mps, results, meta); break;
             case OptType::CX64: optimize_folded_spectrum_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
+            case OptType::CX128: optimize_folded_spectrum_eig_executor<cx128>(tensors, initial_mps, results, meta); break;
             default: throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
         }
     } else {
         switch(meta.optType) {
+            case OptType::FP32: optimize_folded_spectrum_eig_executor<fp32>(tensors, initial_mps, results, meta); break;
             case OptType::FP64: optimize_folded_spectrum_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
+            case OptType::FP128: optimize_folded_spectrum_eig_executor<fp128>(tensors, initial_mps, results, meta); break;
+            case OptType::CX32:  throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
+            case OptType::CX64:  throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
+            case OptType::CX128: throw except::logic_error("Cannot run OptType::CX128 with Scalar type {}", sfinae::type_name<Scalar>());
             default: throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
         }
     }

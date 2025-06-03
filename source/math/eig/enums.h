@@ -31,7 +31,7 @@ namespace eig {
         primme_largest_abs
     }; // Choice of eigenvalue. LA is largest algebraic, and so on.
     enum class Factorization { NONE, LLT, LDLT, LU, QR, ILUT, ILDLT };
-    enum class Preconditioner { NONE, JACOBI };
+    enum class Preconditioner { NONE, JACOBI, SOLVE };
     enum class Storage { DENSE, SPARSE, MPS }; // Eigen Dense or Sparse, or std::vector for container
     enum class Shinv { ON, OFF };
     enum class Dephase { ON, OFF };

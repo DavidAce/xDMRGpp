@@ -29,7 +29,7 @@ CalcType tools::finite::measure::correlation(const StateFinite<Scalar> &state, c
 template<typename CalcType, typename Scalar, typename OpType>
 Eigen::Tensor<CalcType, 2> tools::finite::measure::correlation_matrix(const StateFinite<Scalar> &state, const Eigen::Tensor<OpType, 2> &op1,
                                                                       const Eigen::Tensor<OpType, 2> &op2) {
-    if constexpr(settings::debug) tools::log->trace("Measuring correlation matrix");
+    tools::log->trace("Measuring correlation matrix");
 
     long                       len = state.template get_length<long>();
     bool                       eq  = tenx::MatrixMap(op1) == tenx::MatrixMap(op2);

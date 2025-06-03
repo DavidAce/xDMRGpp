@@ -946,7 +946,12 @@ void MatVecMPOS<Scalar>::MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long
     auto mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
     auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
     if(invJcbDiagB.size() == 0) invJcbDiagB = get_diagonal_new(0, mpos_B, envL_B, envR_B).array().cwiseInverse();
-    auto invCfg = InvMatVecCfg<Scalar>{.maxiters = maxiters, .tolerance = tolerance, .invdiag = invJcbDiagB.data()};
+    auto invCfg = InvMatVecCfg<Scalar>{.maxiters      = maxiters,
+                                       .tolerance     = tolerance,
+                                       .invdiag       = invJcbDiagB.data(),
+                                       .lltJcbBlocks  = nullptr,
+                                       .ldltJcbBlocks = nullptr,
+                                       .luJcbBlocks   = nullptr};
     if(mpos_B.size() == 1) {
         tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos_B.front(), envL_B, envR_B, invCfg);
     } else if(!mpos_B_shf.empty()) {
@@ -1073,6 +1078,10 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
     auto fname = fmt::format("MatVecMPOS<Scalar>::CalcPc()", sfinae::type_name<Scalar>());
     if(preconditioner == eig::Preconditioner::NONE) {
         eig::log->info("{}: no preconditioner chosen", fname);
+        return;
+    }
+    if(factorization == eig::Factorization::NONE) {
+        eig::log->info("{}: no factorization chosen", fname);
         return;
     }
     if(jcbShift.has_value()) {
@@ -1368,68 +1377,92 @@ typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultPX(const Eigen::
 template<typename Scalar>
 void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_unused]] Scalar *mps_out_, Scalar shift) {
     if(preconditioner == eig::Preconditioner::NONE) return;
-    auto mps_in  = Eigen::Map<const VectorType>(mps_in_, size_mps);
-    auto mps_out = Eigen::Map<VectorType>(mps_out_, size_mps);
-    CalcPc(shift);
-    if(jcbMaxBlockSize == 1) {
-        auto token = t_multPc->tic_token();
-        // Diagonal jacobi preconditioner
-        invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).matrix();
-        mps_out        = invJcbDiagonal.array().cwiseInverse().cwiseProduct(mps_in.array());
-        num_pc++;
-    } else if(jcbMaxBlockSize > 1) {
-        auto token = t_multPc->tic_token();
-        // eig::log->info("-- MultPc");
-#pragma omp parallel for
-        for(size_t idx = 0; idx < dInvJcbBlocks.size(); ++idx) {
-            const auto &[offset, block]               = dInvJcbBlocks[idx];
-            long extent                               = block.rows();
-            mps_out.segment(offset, extent).noalias() = block.template selfadjointView<Eigen::Lower>() * mps_in.segment(offset, extent);
+    CalcPc(shift); // Computes the diagonal jacobi blocks which are useful for both types of preconditioner.
+
+    if(preconditioner == eig::Preconditioner::SOLVE) {
+        auto        mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
+        auto        mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
+        const auto &mpos    = mpos_B.empty() ? mpos_A : mpos_B;
+        const auto &envL    = mpos_B.empty() ? envL_A : envL_B;
+        const auto &envR    = mpos_B.empty() ? envR_A : envR_B;
+        if(jcbMaxBlockSize == 1) {
+            invMatVecCfg.invdiag = invJcbDiagonal.data();
+        } else if(jcbMaxBlockSize > 1) {
+            invMatVecCfg.lltJcbBlocks  = &lltJcbBlocks;
+            invMatVecCfg.ldltJcbBlocks = &ldltJcbBlocks;
+            invMatVecCfg.luJcbBlocks   = &luJcbBlocks;
         }
-#pragma omp parallel for
-        for(size_t idx = 0; idx < sInvJcbBlocks.size(); ++idx) {
-            const auto &[offset, block]               = sInvJcbBlocks[idx];
-            long extent                               = block.rows();
-            mps_out.segment(offset, extent).noalias() = block.template selfadjointView<Eigen::Lower>() * mps_in.segment(offset, extent);
+        if(mpos.size() == 1) {
+            tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos.front(), envL, envR, invMatVecCfg);
+        } else if(!mpos_B_shf.empty()) {
+            throw except::runtime_error("MatVecMPOS<{}>::MultInvBx(...) not implemented for multiple mpos", sfinae::type_name<Scalar>());
         }
-#pragma omp parallel for
-        for(size_t idx = 0; idx < lltJcbBlocks.size(); ++idx) {
-            const auto &[offset, solver] = lltJcbBlocks[idx];
-            long extent                  = solver->rows();
-            auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-            auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-            mps_out_segment.noalias()    = solver->solve(mps_in_segment);
-        }
-#pragma omp parallel for
-        for(size_t idx = 0; idx < ldltJcbBlocks.size(); ++idx) {
-            const auto &[offset, solver] = ldltJcbBlocks[idx];
-            long extent                  = solver->rows();
-            auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-            auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-            mps_out_segment.noalias()    = solver->solve(mps_in_segment);
-        }
-#pragma omp parallel for
-        for(size_t idx = 0; idx < luJcbBlocks.size(); ++idx) {
-            const auto &[offset, solver] = luJcbBlocks[idx];
-            long extent                  = solver->rows();
-            auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-            auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-            mps_out_segment.noalias()    = solver->solve(mps_in_segment);
-        }
-        // // #pragma omp parallel for
-        // for(size_t idx = 0; idx < bicgstabJcbBlocks.size(); ++idx) {
-        //     const auto &[offset, sparseI, solver]     = bicgstabJcbBlocks[idx];
-        //     long extent                               = solver->rows();
-        //     mps_out.segment(offset, extent).noalias() = solver->solveWithGuess(mps_in.segment(offset, extent), mps_out.segment(offset, extent));
-        // }
-        // // #pragma omp parallel for
-        // for(size_t idx = 0; idx < cgJcbBlocks.size(); ++idx) {
-        //     const auto &[offset, sparseI, solver]     = cgJcbBlocks[idx];
-        //     long extent                               = solver->rows();
-        //     mps_out.segment(offset, extent).noalias() = solver->solveWithGuess(mps_in.segment(offset, extent), mps_out.segment(offset, extent));
-        // }
-        num_pc++;
     }
+
+    if(preconditioner == eig::Preconditioner::JACOBI) {
+        auto mps_in  = Eigen::Map<const VectorType>(mps_in_, size_mps);
+        auto mps_out = Eigen::Map<VectorType>(mps_out_, size_mps);
+
+        if(jcbMaxBlockSize == 1) {
+            auto token = t_multPc->tic_token();
+            // Diagonal jacobi preconditioner
+            invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).matrix();
+            mps_out        = invJcbDiagonal.array().cwiseInverse().cwiseProduct(mps_in.array());
+            num_pc++;
+        } else if(jcbMaxBlockSize > 1) {
+            auto token = t_multPc->tic_token();
+// eig::log->info("-- MultPc");
+#pragma omp parallel for
+            for(size_t idx = 0; idx < dInvJcbBlocks.size(); ++idx) {
+                const auto &[offset, block]               = dInvJcbBlocks[idx];
+                long extent                               = block.rows();
+                mps_out.segment(offset, extent).noalias() = block.template selfadjointView<Eigen::Lower>() * mps_in.segment(offset, extent);
+            }
+#pragma omp parallel for
+            for(size_t idx = 0; idx < sInvJcbBlocks.size(); ++idx) {
+                const auto &[offset, block]               = sInvJcbBlocks[idx];
+                long extent                               = block.rows();
+                mps_out.segment(offset, extent).noalias() = block.template selfadjointView<Eigen::Lower>() * mps_in.segment(offset, extent);
+            }
+#pragma omp parallel for
+            for(size_t idx = 0; idx < lltJcbBlocks.size(); ++idx) {
+                const auto &[offset, solver] = lltJcbBlocks[idx];
+                long extent                  = solver->rows();
+                auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()    = solver->solve(mps_in_segment);
+            }
+#pragma omp parallel for
+            for(size_t idx = 0; idx < ldltJcbBlocks.size(); ++idx) {
+                const auto &[offset, solver] = ldltJcbBlocks[idx];
+                long extent                  = solver->rows();
+                auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()    = solver->solve(mps_in_segment);
+            }
+#pragma omp parallel for
+            for(size_t idx = 0; idx < luJcbBlocks.size(); ++idx) {
+                const auto &[offset, solver] = luJcbBlocks[idx];
+                long extent                  = solver->rows();
+                auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()    = solver->solve(mps_in_segment);
+            }
+            // // #pragma omp parallel for
+            // for(size_t idx = 0; idx < bicgstabJcbBlocks.size(); ++idx) {
+            //     const auto &[offset, sparseI, solver]     = bicgstabJcbBlocks[idx];
+            //     long extent                               = solver->rows();
+            //     mps_out.segment(offset, extent).noalias() = solver->solveWithGuess(mps_in.segment(offset, extent), mps_out.segment(offset, extent));
+            // }
+            // // #pragma omp parallel for
+            // for(size_t idx = 0; idx < cgJcbBlocks.size(); ++idx) {
+            //     const auto &[offset, sparseI, solver]     = cgJcbBlocks[idx];
+            //     long extent                               = solver->rows();
+            //     mps_out.segment(offset, extent).noalias() = solver->solveWithGuess(mps_in.segment(offset, extent), mps_out.segment(offset, extent));
+            // }
+        }
+    }
+    num_pc++;
 }
 
 template<typename Scalar>
@@ -1518,6 +1551,17 @@ void MatVecMPOS<Scalar>::set_jcbMaxBlockSize(std::optional<long> size) {
         }
         // jcbMaxBlockSize = std::clamp(size.value(), 1l, size_mps);
     }
+}
+
+template<typename Scalar>
+void MatVecMPOS<Scalar>::set_invMatVecCfg(const InvMatVecCfg<Scalar> &cfg) {
+    invMatVecCfg = cfg;
+}
+template<typename Scalar>
+void MatVecMPOS<Scalar>::set_invMatVecCfg(long maxiters, RealScalar tolerance, MatDef matdef) {
+    invMatVecCfg.maxiters  = maxiters;
+    invMatVecCfg.tolerance = tolerance;
+    invMatVecCfg.matdef    = matdef;
 }
 
 template<typename Scalar>
@@ -1668,6 +1712,15 @@ long MatVecMPOS<Scalar>::get_non_zeros() const {
 template<typename Scalar>
 long MatVecMPOS<Scalar>::get_jcbMaxBlockSize() const {
     return jcbMaxBlockSize;
+}
+
+template<typename Scalar>
+const InvMatVecCfg<Scalar> &MatVecMPOS<Scalar>::get_invMatVecCfg() const {
+    return invMatVecCfg;
+}
+template<typename Scalar>
+InvMatVecCfg<Scalar> &MatVecMPOS<Scalar>::get_invMatVecCfg() {
+    return invMatVecCfg;
 }
 
 template<typename Scalar>

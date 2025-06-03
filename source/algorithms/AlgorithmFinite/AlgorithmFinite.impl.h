@@ -330,10 +330,10 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
         target_tol  = std::clamp(target_tol, settings::precision::eigs_tol_min, settings::precision::eigs_tol_max);
         m1.eigs_tol = target_tol;
     }
-    // if(m1.optAlgo == OptAlgo::GDMRG) {
-    // m1.eigs_tol = std::sqrt(m1.eigs_tol.value_or(settings::precision::eigs_tol_min)); // GDMRG seems happy with higher tol
+    if(m1.optAlgo == OptAlgo::GDMRG) {
+    m1.eigs_tol = std::sqrt(m1.eigs_tol.value_or(settings::precision::eigs_tol_min)); // GDMRG seems happy with higher tol
     // m1.eigs_tol = settings::precision::eigs_tol_max;
-    // }
+    }
 
     m1.eigs_jcbMaxBlockSize = settings::precision::eigs_jcb_min_blocksize;
     if(status.algorithm_saturated_for + status.algorithm_has_stuck_for > 0) {
@@ -352,7 +352,7 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     m1.label     = enum2sv(m1.optAlgo);
 
     if(has_any_flags(m1.optType, OptType::FP128, OptType::CX128)) m1.optSolver = OptSolver::H1H2;
-
+    if(m1.optSolver == OptSolver::EIGS) { m1.optSolver = OptSolver::H1H2; }
     m1.validate();
     return m1;
 }
@@ -1046,7 +1046,7 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
 
         if(state_init == StateInit::RANDOMIZE_PREVIOUS_STATE) trnc_lim = 1e-2;
     }
-    tensors.activate_sites(settings::precision::eigs_max_size_shift_invert, 2); // Activate a pair of sites so that asserts and measurements work
+    tensors.activate_sites(settings::precision::eigs_max_size_shift_invert, 1);
     tensors.rebuild_edges();
     tensors.initialize_state(reason, state_init, state_type.value(), axis.value(), use_eigenspinors.value(), bond_lim.value(), pattern.value());
     tensors.get_state().assert_validity();

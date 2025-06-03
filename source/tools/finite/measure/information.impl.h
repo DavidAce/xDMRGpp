@@ -33,7 +33,7 @@ using tools::finite::measure::RealArrayXX;
 using tools::finite::measure::RealScalar;
 
 namespace settings {
-    inline constexpr bool debug_subsystem_entropy = false;
+    inline constexpr bool debug_subsystem_entropy = true;
 }
 
 template<typename ContainerType>
@@ -94,6 +94,34 @@ inline std::vector<size_t> get_subsystem_complement(size_t length, const std::ve
     return complement;
 }
 
+template<typename CalcType, typename Scalar>
+auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchsize_svd, Eigen::Index svd_rank_max = 100) {
+    svd_rank_max = std::min({svd_rank_max, size});
+
+    using RealScalar  = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>::RealScalar;
+    using VectorCalcT = Eigen::Matrix<CalcType, Eigen::Dynamic, 1>;
+    VectorCalcT eigenvalues;
+    if(size > switchsize_svd) {
+        auto config             = svd::config();
+        config.svd_rtn          = svd::rtn::gersvd; // Randomized svd
+        config.svd_lib          = svd::lib::eigen;
+        config.rank_max         = svd_rank_max;
+        config.truncation_limit = 1e-12;
+        auto svd_solver         = svd::solver(config);
+        auto [U, S, V]          = svd_solver.do_svd_ptr(matrix_ptr, size, size, config);
+        S                       = S.reverse().eval();
+        eigenvalues             = tenx::asScalarType<CalcType>(S);
+    } else {
+        auto eig_solver = eig::solver();
+        eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
+        eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result)); // Eigenvalues
+    }
+
+    // tools::log->info("eigenvalues eig: {}", eigenvalues_eig.transpose());
+    // tools::log->info("eigenvalues svd: {}", eigenvalues_svd.transpose());
+    return eigenvalues;
+}
+
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite<Scalar> &state, const std::vector<size_t> &sites,
                                                                                Precision prec, size_t eig_max_size, std::string_view side) {
@@ -116,10 +144,14 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     auto eig_size_rho = static_cast<double>(std::pow(2.0, sites.size()));
     auto eig_size_cmp = static_cast<double>(std::pow(2.0, cites.size())); // The complement of rho
     auto eig_size_trf = static_cast<double>(chiL * chiR);
-    auto eig_cost_rho = eig_size_rho <= static_cast<double>(eig_max_size) ? std::pow(eig_size_rho, 3.0) : std::numeric_limits<double>::infinity();
-    auto eig_cost_cmp = eig_size_cmp <= static_cast<double>(eig_max_size) ? std::pow(eig_size_cmp, 3.0) : std::numeric_limits<double>::infinity();
-    auto eig_cost_trf = eig_size_trf <= static_cast<double>(eig_max_size) ? std::pow(eig_size_trf, 3.0) : std::numeric_limits<double>::infinity();
+    // auto eig_cost_rho = eig_size_rho <= static_cast<double>(eig_max_size) ? std::pow(eig_size_rho, 3.0) : std::numeric_limits<double>::infinity();
+    // auto eig_cost_cmp = eig_size_cmp <= static_cast<double>(eig_max_size) ? std::pow(eig_size_cmp, 3.0) : std::numeric_limits<double>::infinity();
+    // auto eig_cost_trf = eig_size_trf <= static_cast<double>(eig_max_size) ? std::pow(eig_size_trf, 3.0) : std::numeric_limits<double>::infinity();
 
+    auto eig_cost_rho = std::pow<double>(std::min(eig_size_rho, static_cast<double>(eig_max_size)), 3.0);
+    auto eig_cost_cmp = std::pow<double>(std::min(eig_size_cmp, static_cast<double>(eig_max_size)), 3.0);
+    auto eig_cost_trf = std::pow<double>(std::min(eig_size_trf, static_cast<double>(eig_max_size)), 3.0);
+    
     auto eig_sizes = std::array{eig_size_rho, eig_size_cmp, eig_size_trf};
     // auto eig_costs = std::array{eig_cost_rho, eig_cost_cmp, eig_cost_trf};
 
@@ -194,8 +226,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                     mat      = state.template get_transfer_matrix<fp32>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
-                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp32>(solver.result)); // Eigenvalues
+                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
             } else {
                 Eigen::Tensor<cx32, 2> mat;
                 if(min_cost_idx == 0) {
@@ -208,8 +239,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                     mat      = state.template get_transfer_matrix<cx32>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
-                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp32>(solver.result)); // Eigenvalues
+                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
             }
             break;
         }
@@ -228,8 +258,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                     mat      = state.template get_transfer_matrix<fp64>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
-                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp64>(solver.result)); // Eigenvalues
+                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
             } else {
                 Eigen::Tensor<cx64, 2> mat;
                 if(min_cost_idx == 0) {
@@ -242,8 +271,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                     mat      = state.template get_transfer_matrix<cx64>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
-                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp64>(solver.result)); // Eigenvalues
+                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
             }
             break;
         }
@@ -262,8 +290,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                     mat      = state.template get_transfer_matrix<fp128>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
-                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp128>(solver.result)); // Eigenvalues
+                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
             } else {
                 Eigen::Tensor<fp128, 2> mat;
                 if(min_cost_idx == 0) {
@@ -276,8 +303,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                     mat      = state.template get_transfer_matrix<fp128>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
-                solver.eig<eig::Form::SYMM>(mat.data(), mat.dimension(0), eig::Vecs::OFF);
-                evs = tenx::asScalarType<RealScalar<Scalar>>(eig::view::get_eigvals<fp128>(solver.result)); // Eigenvalues
+                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
             }
             break;
         }

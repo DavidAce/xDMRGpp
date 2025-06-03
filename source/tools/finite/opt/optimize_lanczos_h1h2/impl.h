@@ -164,12 +164,12 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
     solver.max_matvecs    = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
-    solver.set_jcbMaxBlockSize(512);
-    solver.set_chebyshevFilterDegree(2);
+    // solver.set_jcbMaxBlockSize(512);
+    solver.set_chebyshevFilterDegree(0);
     solver.set_chebyshevFilterLambdaCutBias(0.1f);
-    solver.set_chebyshevFilterRelGapThreshold(1e-4f);
+    solver.set_chebyshevFilterRelGapThreshold(1e-3f);
     solver.set_maxBasisBlocks(ncv);
-    solver.set_maxRetainBlocks(ncv / 4);
+    solver.set_maxRetainBlocks((2 * ncv) / 5);
     solver.set_maxLanczosResidualHistory(0);
     solver.set_maxRitzResidualHistory(1);
     solver.set_maxExtraRitzHistory(1);

@@ -1,6 +1,7 @@
-#include "hamiltonian.h"
+#pragma once
 #include "config/settings.h"
 #include "expectation_value.h"
+#include "hamiltonian.h"
 #include "math/num.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
@@ -25,26 +26,42 @@ Scalar tools::finite::measure::expval_hamiltonian(const Eigen::Tensor<Scalar, 3>
     return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
 }
 
-
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {
-    auto mps = state.get_mps_active();
-    auto mpo = model.get_mpo_active();
-    auto env = edges.get_ene_active();
-    auto t_H = tid::tic_scope("H", tid::level::highest);
-    return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
+    assert(num::all_equal(state.active_sites, model.active_sites, edges.active_sites));
+    const auto &mps = state.get_mps_active();
+    const auto &mpo = model.get_mpo_active();
+    const auto &env = edges.get_ene_active();
+    auto        t_H = tid::tic_scope("H", tid::level::highest);
+    // This only works if mps contains the center (e.g. AC, [AC, B], [A, AC] and so on
+    bool has_center = std::count(state.active_sites.begin(), state.active_sites.end(), state.template get_position<long>()) > 0;
+    if(has_center) {
+        return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
+    } else {
+        auto mmps = state.template get_multisite_mps<Scalar>();
+        return tools::finite::measure::expectation_value<Scalar>(mmps, mmps, mpo, env);
+    }
 }
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
                                                   const EdgesFinite<Scalar> &edges) {
+    assert(num::all_equal(state.active_sites, model.active_sites, edges.active_sites));
+
     const auto &mps = state.get_mps(sites);
     const auto &mpo = model.get_mpo(sites);
     const auto &env = edges.get_multisite_env_ene(sites);
     auto        t_H = tid::tic_scope("H", tid::level::highest);
-    return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
-}
 
+    // This only works if mps contains the center (e.g. AC, [AC, B], [A, AC] and so on
+    bool has_center = std::count(state.active_sites.begin(), state.active_sites.end(), state.template get_position<long>()) > 0;
+    if(has_center) {
+        return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
+    } else {
+        auto mmps = state.template get_multisite_mps<Scalar>();
+        return tools::finite::measure::expectation_value<Scalar>(mmps, mmps, mpo, env);
+    }
+}
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const Eigen::Tensor<Scalar, 3>                                   &mps,
@@ -57,32 +74,48 @@ Scalar tools::finite::measure::expval_hamiltonian(const Eigen::Tensor<Scalar, 3>
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian_squared(const Eigen::Tensor<Scalar, 3> &mps, const ModelFinite<Scalar> &model,
                                                           const EdgesFinite<Scalar> &edges) {
+    assert(num::all_equal(model.active_sites, edges.active_sites));
     auto mpo = model.get_mpo_active();
     auto env = edges.get_var_active();
     auto t_H = tid::tic_scope("H2", tid::level::highest);
     return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
 }
 
-
-
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian_squared(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
                                                           const EdgesFinite<Scalar> &edges) {
+    assert(num::all_equal(state.active_sites, model.active_sites, edges.active_sites));
     auto mps  = state.get_mps_active();
     auto mpo  = model.get_mpo_active();
     auto env  = edges.get_var_active();
     auto t_H2 = tid::tic_scope("H2", tid::level::highest);
-    return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
+
+    // This only works if mps contains the center (e.g. AC, [AC, B], [A, AC] and so on
+    bool has_center = std::count(state.active_sites.begin(), state.active_sites.end(), state.template get_position<long>()) > 0;
+    if(has_center) {
+        return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
+    } else {
+        auto mmps = state.template get_multisite_mps<Scalar>();
+        return tools::finite::measure::expectation_value<Scalar>(mmps, mmps, mpo, env);
+    }
 }
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian_squared(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
                                                           const EdgesFinite<Scalar> &edges) {
+    assert(num::all_equal(state.active_sites, model.active_sites, edges.active_sites));
     const auto &mps = state.get_mps(sites);
     const auto &mpo = model.get_mpo(sites);
     const auto &env = edges.get_multisite_env_var(sites);
     auto        t_H = tid::tic_scope("H2", tid::level::highest);
-    return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
+    // This only works if mps contains the center (e.g. AC, [AC, B], [A, AC] and so on
+    bool has_center = std::count(state.active_sites.begin(), state.active_sites.end(), state.template get_position<long>()) > 0;
+    if(has_center) {
+        return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo, env);
+    } else {
+        auto mmps = state.template get_multisite_mps<Scalar>();
+        return tools::finite::measure::expectation_value<Scalar>(mmps, mmps, mpo, env);
+    }
 }
 
 template<typename Scalar>
@@ -92,7 +125,6 @@ Scalar tools::finite::measure::expval_hamiltonian_squared(const Eigen::Tensor<Sc
     auto t_H2 = tid::tic_scope("H2", tid::level::highest);
     return tools::finite::measure::expectation_value<Scalar>(mps, mps, mpo_refs, envs);
 }
-
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const TensorsFinite<Scalar> &tensors) {
@@ -119,11 +151,11 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const State
     if constexpr(settings::debug) tools::log->trace("Measuring energy: sites {}", state.active_sites);
     auto e_minus_ered = expval_hamiltonian<Scalar>(state, model, edges);
     if constexpr(settings::debug_hamiltonian) {
-        constexpr auto tol = static_cast<RealScalar<Scalar>>(1e-14);
-        const auto &multisite_mps = state.template get_multisite_mps<Scalar>();
-        const auto &multisite_mpo = model.template get_multisite_mpo<Scalar>();
-        const auto &multisite_env = edges.get_multisite_env_ene_blk();
-        auto        edbg          = tools::common::contraction::expectation_value(multisite_mps, multisite_mpo, multisite_env.L, multisite_env.R);
+        constexpr auto tol           = static_cast<RealScalar<Scalar>>(1e-12);
+        const auto    &multisite_mps = state.template get_multisite_mps<Scalar>();
+        const auto    &multisite_mpo = model.template get_multisite_mpo<Scalar>();
+        const auto    &multisite_env = edges.get_multisite_env_ene_blk();
+        auto           edbg          = tools::common::contraction::expectation_value(multisite_mps, multisite_mpo, multisite_env.L, multisite_env.R);
         tools::log->trace("e_minus_ered: {:.16f}", fp(e_minus_ered));
         tools::log->trace("e_minus_edbg: {:.16f}", fp(edbg));
         if(measurements != nullptr and measurements->energy_minus_energy_shift) {
@@ -137,7 +169,6 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const State
     if(measurements != nullptr) measurements->energy_minus_energy_shift = std::real(e_minus_ered);
     return std::real(e_minus_ered);
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
@@ -156,8 +187,8 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen
     assert(num::all_equal(model.active_sites, edges.active_sites));
     // Check if we can contract directly or if we need to use the split method
     // Normally it's only worth splitting the multisite mps when it has more than 3 sites
-    constexpr auto nan = std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
-    auto e_minus_ered = Scalar{nan};
+    constexpr auto nan          = std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
+    auto           e_minus_ered = Scalar{nan};
     if(model.active_sites.size() <= 3) {
         // Contract directly
         const auto &mpo = model.template get_multisite_mpo<Scalar>();
@@ -171,11 +202,11 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen
             const auto mpos = model.get_mpo_active();
             const auto envs = edges.get_ene_active();
             const auto edbg = tools::finite::measure::expectation_value<Scalar>(multisite_mps, mpos, envs, svd_cfg);
-            tools::log->trace("e_minus_ered: {:.16f}{:+.16f}i", e_minus_ered.real(), e_minus_ered.imag());
-            tools::log->trace("e_minus_edbg: {:.16f}{:+.16f}i", edbg.real(), edbg.imag());
+            tools::log->trace("e_minus_ered: {:.16f}", fp(e_minus_ered));
+            tools::log->trace("e_minus_edbg: {:.16f}", fp(edbg));
             if(measurements != nullptr and measurements->energy_minus_energy_shift) {
                 tools::log->trace("e_minus_ehit: {:.16f}", measurements->energy_minus_energy_shift.value());
-                assert(std::abs(e_minus_ered - measurements->energy_minus_energy_shift.value()) < 1e-14);
+                assert(std::abs(e_minus_ered - measurements->energy_minus_energy_shift.value()) < RealScalar<Scalar>{1e-14f});
             }
             assert(std::abs(e_minus_ered - edbg) < 1e-14);
         }
@@ -188,10 +219,10 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen
                           fp(model.get_energy_shift_mpo()), fp(tenx::norm(multisite_mps)));
         e_minus_ered = tools::finite::measure::expectation_value<Scalar>(multisite_mps, mpos, envs, svd_cfg);
         if constexpr(settings::debug_hamiltonian) {
-            constexpr auto tol = static_cast<RealScalar<Scalar>>(1e-14);
-            const auto &mpo  = model.template get_multisite_mpo<cx64>();
-            const auto &env  = edges.get_multisite_env_ene_blk();
-            const auto  edbg = tools::common::contraction::expectation_value(multisite_mps, mpo, env.L, env.R);
+            constexpr auto tol  = static_cast<RealScalar<Scalar>>(1e-14);
+            const auto    &mpo  = model.template get_multisite_mpo<Scalar>();
+            const auto    &env  = edges.get_multisite_env_ene_blk();
+            const auto     edbg = tools::common::contraction::expectation_value(multisite_mps, mpo, env.L, env.R);
             tools::log->trace("e_minus_ered: {:.16f}", fp(e_minus_ered));
             tools::log->trace("e_minus_edbg: {:.16f}", fp(edbg));
             if(measurements != nullptr and measurements->energy_minus_energy_shift) {
@@ -205,7 +236,6 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen
     if(measurements != nullptr) measurements->energy_minus_energy_shift = std::real(e_minus_ered);
     return std::real(e_minus_ered);
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
@@ -223,7 +253,6 @@ RealScalar<Scalar> tools::finite::measure::energy(const StateFinite<Scalar> &sta
     return energy;
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
                                                   const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg,
@@ -240,7 +269,6 @@ RealScalar<Scalar> tools::finite::measure::energy(const Eigen::Tensor<Scalar, 3>
     if(measurements != nullptr) measurements->energy = energy;
     return energy;
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_variance(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
@@ -277,7 +305,6 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const StateFinite<Sca
     return var;
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
                                                            const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg,
@@ -310,7 +337,7 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
     // Check if we can contract directly or if we need to use the split method
     // Normally it's only worth splitting the multisite mps when it has more than 3 sites
     constexpr auto nan = std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
-    Scalar H2 = Scalar{nan};
+    Scalar         H2  = Scalar{nan};
     if(model.active_sites.size() <= 3) {
         // Direct contraction
         const auto &mpo2 = model.template get_multisite_mpo_squared<Scalar>();
@@ -330,11 +357,11 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
         tools::log->trace("Measuring energy variance: state dims {} | sites {}", multisite_mps.dimensions(), model.active_sites);
         H2 = tools::finite::measure::expectation_value<Scalar>(multisite_mps, multisite_mps, mpos, envs, svd_cfg);
         if constexpr(settings::debug_hamiltonian) {
-            const auto &mpo   = model.template get_multisite_mpo_squared<cx64>();
+            const auto &mpo   = model.template get_multisite_mpo_squared<Scalar>();
             const auto &env   = edges.get_multisite_env_var_blk();
             const auto  H2dbg = tools::common::contraction::expectation_value(multisite_mps, mpo, env.L, env.R);
-            tools::log->trace("H2   : {:.16f}{:+.16f}i", H2.real(), H2.imag());
-            tools::log->trace("H2dbg: {:.16f}{:+.16f}i", H2dbg.real(), H2dbg.imag());
+            tools::log->trace("H2   : {:.16f}", fp(H2));
+            tools::log->trace("H2dbg: {:.16f}", fp(H2dbg));
             assert(std::abs(H2 - H2dbg) < static_cast<RealScalar<Scalar>>(1e-14));
         }
     }
@@ -347,11 +374,10 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
     return var;
 }
 
-
-
 template<typename Scalar>
-RealScalar<Scalar>
-tools::finite::measure::energy_shift(const TensorsFinite<Scalar> &tensors) { return std::real(tensors.model->get_energy_shift_mpo()); }
+RealScalar<Scalar> tools::finite::measure::energy_shift(const TensorsFinite<Scalar> &tensors) {
+    return std::real(tensors.model->get_energy_shift_mpo());
+}
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const TensorsFinite<Scalar> &tensors) {
@@ -377,55 +403,53 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const TensorsFinite<S
     return tensors.measurements.energy_variance.value();
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const StateFinite<Scalar> &state, const TensorsFinite<Scalar> &tensors,
-                                             MeasurementsTensorsFinite<Scalar> *measurements) {
+                                                                     MeasurementsTensorsFinite<Scalar> *measurements) {
     return energy_minus_energy_shift(state, tensors.get_model(), tensors.get_edges(), measurements);
 }
 template<typename Scalar>
-RealScalar<Scalar> tools::finite::measure::energy(const StateFinite<Scalar> &state, const TensorsFinite<Scalar> &tensors, MeasurementsTensorsFinite<Scalar> *measurements) {
+RealScalar<Scalar> tools::finite::measure::energy(const StateFinite<Scalar> &state, const TensorsFinite<Scalar> &tensors,
+                                                  MeasurementsTensorsFinite<Scalar> *measurements) {
     return energy(state, tensors.get_model(), tensors.get_edges(), measurements);
 }
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_variance(const StateFinite<Scalar> &state, const TensorsFinite<Scalar> &tensors,
-                                   MeasurementsTensorsFinite<Scalar> *measurements) {
+                                                           MeasurementsTensorsFinite<Scalar> *measurements) {
     return energy_variance(state, tensors.get_model(), tensors.get_edges(), measurements);
 }
 
 template<typename Scalar>
-RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen::Tensor<Scalar, 3> &mps, const TensorsFinite<Scalar> &tensors, std::optional<svd::config> svd_cfg,
-                                             MeasurementsTensorsFinite<Scalar> *measurements) {
+RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen::Tensor<Scalar, 3> &mps, const TensorsFinite<Scalar> &tensors,
+                                                                     std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> *measurements) {
     return energy_minus_energy_shift(mps, tensors.get_model(), tensors.get_edges(), svd_cfg, measurements);
 }
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy(const Eigen::Tensor<Scalar, 3> &mps, const TensorsFinite<Scalar> &tensors, std::optional<svd::config> svd_cfg,
-                          MeasurementsTensorsFinite<Scalar> *measurements) {
+                                                  MeasurementsTensorsFinite<Scalar> *measurements) {
     return energy(mps, tensors.get_model(), tensors.get_edges(), svd_cfg, measurements);
 }
 
 template<typename Scalar>
-RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<Scalar, 3> &mps, const TensorsFinite<Scalar> &tensors, std::optional<svd::config> svd_cfg,
-                                   MeasurementsTensorsFinite<Scalar> *measurements) {
+RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<Scalar, 3> &mps, const TensorsFinite<Scalar> &tensors,
+                                                           std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> *measurements) {
     return energy_variance(mps, tensors.get_model(), tensors.get_edges(), svd_cfg, measurements);
 }
 
-
 template<typename Scalar>
-RealScalar<Scalar> tools::finite::measure::energy_normalized(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
-                                                 RealScalar<Scalar> energy_min, RealScalar<Scalar> energy_max, MeasurementsTensorsFinite<Scalar> *measurements) {
+RealScalar<Scalar> tools::finite::measure::energy_normalized(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
+                                                             const EdgesFinite<Scalar> &edges, RealScalar<Scalar> energy_min, RealScalar<Scalar> energy_max,
+                                                             MeasurementsTensorsFinite<Scalar> *measurements) {
     return (tools::finite::measure::energy(state, model, edges, measurements) - energy_min) / (energy_max - energy_min);
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_normalized(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
-                                                 const EdgesFinite<Scalar> &edges, RealScalar<Scalar> energy_min, RealScalar<Scalar> energy_max, std::optional<svd::config> svd_cfg,
-                                                 MeasurementsTensorsFinite<Scalar> *measurements) {
+                                                             const EdgesFinite<Scalar> &edges, RealScalar<Scalar> energy_min, RealScalar<Scalar> energy_max,
+                                                             std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> *measurements) {
     return (tools::finite::measure::energy(multisite_mps, model, edges, svd_cfg, measurements) - energy_min) / (energy_max - energy_min);
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_normalized(const TensorsFinite<Scalar> &tensors, RealScalar<Scalar> emin, RealScalar<Scalar> emax) {
@@ -435,13 +459,13 @@ RealScalar<Scalar> tools::finite::measure::energy_normalized(const TensorsFinite
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_normalized(const StateFinite<Scalar> &state, const TensorsFinite<Scalar> &tensors, RealScalar<Scalar> emin,
-                                     RealScalar<Scalar> emax, MeasurementsTensorsFinite<Scalar> *measurements) {
+                                                             RealScalar<Scalar> emax, MeasurementsTensorsFinite<Scalar> *measurements) {
     return energy_normalized(state, tensors.get_model(), tensors.get_edges(), emin, emax, measurements);
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_normalized(const Eigen::Tensor<Scalar, 3> &mps, const TensorsFinite<Scalar> &tensors, RealScalar<Scalar> emin,
-                                     RealScalar<Scalar> emax, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> *measurements) {
+                                                             RealScalar<Scalar> emax, std::optional<svd::config> svd_cfg,
+                                                             MeasurementsTensorsFinite<Scalar> *measurements) {
     return energy_normalized(mps, tensors.get_model(), tensors.get_edges(), emin, emax, svd_cfg, measurements);
 }

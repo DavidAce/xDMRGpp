@@ -47,6 +47,7 @@ class SolverBase {
         Eigen::Index              num_precond = 0;
         Eigen::Index              numMGS      = 0;
         VectorReal                rNorms;
+        std::deque<VectorReal>    rNorms_history;
         std::vector<Eigen::Index> nonZeroCols; // Nonzero Gram Schmidt columns
         Eigen::Index              numZeroRows   = 0;
         std::vector<std::string>  stopMessage   = {};
@@ -57,14 +58,16 @@ class SolverBase {
     private:
     Eigen::Index i_HQ     = -1;
     Eigen::Index i_HQ_cur = -1;
+    RealScalar   get_rNorms_log10_change_per_iteration();
+    void         adjust_preconditioner_tolerance();
 
     protected:
     Eigen::Index qBlocks = 0;
 
-    MatrixType get_wBlock();
-    MatrixType get_mBlock();
-    MatrixType get_sBlock();
-    MatrixType get_rBlock();
+    MatrixType        get_wBlock();
+    MatrixType        get_mBlock();
+    MatrixType        get_sBlock();
+    MatrixType        get_rBlock();
     const MatrixType &get_HQ();
     const MatrixType &get_HQ_cur();
     void              unset_HQ();
@@ -206,7 +209,6 @@ class SolverBase {
         return std::vector(idx.begin() + offset, idx.begin() + offset + num);                      // now idx[offset...offset+num) are the num sorted indices
     }
 
-
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors();
@@ -216,7 +218,6 @@ class SolverBase {
     void refineRitzVectors();
 
     void updateStatus();
-
 
     void step() {
         build();

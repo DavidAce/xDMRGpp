@@ -185,15 +185,12 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
             guess.setRandom();
         }
 
-        if(cfg.invdiag != nullptr) {
-            auto invdiag = Eigen::Map<const tenx::VectorType<Scalar>>(cfg.invdiag, matRepl.rows());
-            if(invdiag.allFinite()) {
-                solver.preconditioner().set_invdiag(invdiag);
-            } else {
-                tenx::VectorType<Scalar> ones = tenx::VectorType<Scalar>::Ones(matRepl.rows());
-                solver.preconditioner().set_invdiag(ones);
-            }
-        }
+        solver.preconditioner().set_size(matRepl.rows());
+        solver.preconditioner().set_invdiag(cfg.invdiag);
+        solver.preconditioner().set_lltJcbBlocks(cfg.lltJcbBlocks);
+        solver.preconditioner().set_ldltJcbBlocks(cfg.ldltJcbBlocks);
+        solver.preconditioner().set_luJcbBlocks(cfg.luJcbBlocks);
+
         solver.compute(matRepl);
         res = solver.solveWithGuess(mps, guess);
         tools::log->info("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", get_solver_name(), mps.size(),
