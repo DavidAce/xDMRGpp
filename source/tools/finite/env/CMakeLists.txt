@@ -17,6 +17,13 @@ add_source_target(xdmrg++-tools-finite-env
         residual_expansion/fp64.cpp
         residual_expansion/fp128.cpp
 
+        bond_expansion_preopt_1site/cx32.cpp
+        bond_expansion_preopt_1site/cx64.cpp
+        bond_expansion_preopt_1site/cx128.cpp
+        bond_expansion_preopt_1site/fp32.cpp
+        bond_expansion_preopt_1site/fp64.cpp
+        bond_expansion_preopt_1site/fp128.cpp
+
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

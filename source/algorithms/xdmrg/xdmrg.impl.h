@@ -26,6 +26,7 @@
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
 #include <h5pp/details/h5ppFile.h>
+#include <tools/finite/env/BondExpansionConfig.h>
 
 template<typename Scalar>
 xdmrg<Scalar>::xdmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmFinite<Scalar>(std::move(h5ppFile_), settings::xdmrg::ritz, AlgorithmType::xDMRG) {
@@ -357,7 +358,10 @@ template<typename Scalar>
 void xdmrg<Scalar>::update_state() {
     using namespace tools::finite;
     using namespace tools::finite::opt;
-    auto t_step   = tid::tic_scope("step");
+    auto t_step = tid::tic_scope("step");
+
+    expand_bonds(BondExpansionOrder::PREOPT);
+
     auto opt_meta = get_opt_meta();
     tools::log->debug("Starting {} iter {} | step {} | pos {} | dir {} | ritz {} | type {}", status.algo_type_sv(), status.iter, status.step, status.position,
                       status.direction, enum2sv(settings::get_ritz(status.algo_type)), enum2sv(opt_meta.optType));
@@ -371,19 +375,17 @@ void xdmrg<Scalar>::update_state() {
 
     tools::log->debug("Updating state: {}", opt_meta.string()); // Announce the current configuration for optimization
 
-    auto variance_before_update  = tools::finite::measure::energy_variance(tensors);
+    RealScalar variance_before_update = 0;
+    if constexpr(settings::debug) variance_before_update = tools::finite::measure::energy_variance(tensors);
     auto bond_dims_before_update = tensors.state->get_mps_dims_active();
 
-    expand_bonds(opt_meta);
-
-    auto variance_after_preexp  = tools::finite::measure::energy_variance(tensors);
+    RealScalar variance_after_preexp = 0;
+    if constexpr(settings::debug) variance_after_preexp = tools::finite::measure::energy_variance(tensors);
     auto bond_dims_after_preexp = tensors.state->get_mps_dims_active();
 
     // Run the optimization
     auto initial_state = opt::get_opt_initial_mps(tensors, opt_meta);
-    assert(initial_state.get_sites() == opt_meta.chosen_sites);
-    auto opt_state = opt::get_updated_state(tensors, initial_state, status, opt_meta);
-    assert(opt_state.get_sites() == opt_meta.chosen_sites);
+    auto opt_state     = opt::get_updated_state(tensors, initial_state, status, opt_meta);
     // Determine the quality of the optimized state.
     opt_state.set_relchange(opt_state.get_variance() / var_latest);
     opt_state.set_bond_limit(opt_meta.svd_cfg->rank_max.value());
@@ -420,11 +422,11 @@ void xdmrg<Scalar>::update_state() {
     auto logPolicy = LogPolicy::SILENT;
     if constexpr(settings::debug) logPolicy = LogPolicy::VERBOSE;
     tensors.merge_multisite_mps(opt_state.get_tensor(), MergeEvent::OPT, opt_meta.svd_cfg, logPolicy);
+    tools::log->info("truncation error: {::.5e}", tensors.get_state().get_truncation_errors());
     tensors.rebuild_edges(); // This will only do work if edges were modified, which is the case in 1-site dmrg.
-    auto variance_after_svd  = tools::finite::measure::energy_variance(tensors);
+    RealScalar variance_after_svd = 0;
+    if constexpr(settings::debug) variance_after_svd = tools::finite::measure::energy_variance(tensors);
     auto bond_dims_after_svd = tensors.state->get_mps_dims_active();
-    auto mmps = tensors.template get_multisite_mps<Scalar>();
-    auto variance_multisite  = tools::finite::measure::energy_variance(mmps, tensors, std::nullopt);
 
     // Update current energy density ε
     if(status.opt_ritz == OptRitz::TE)
@@ -442,16 +444,17 @@ void xdmrg<Scalar>::update_state() {
 
     last_optsolver = opt_state.get_optsolver();
     last_optalgo   = opt_state.get_optalgo();
-    if constexpr(settings::debug) tensors.assert_validity();
 
     if constexpr(settings::debug) {
         if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
         tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", fp(variance_before_update), bond_dims_before_update);
         tools::log->debug("After  pre expns.        : variance {:8.2e} | mps dims {}", fp(variance_after_preexp), bond_dims_after_preexp);
         tools::log->debug("After  merge             : variance {:8.2e} | mps dims {}", fp(variance_after_svd), bond_dims_after_svd);
-        tools::log->debug("After  merge (mmps)      : variance {:8.2e} | mps dims {}", fp(variance_multisite), bond_dims_after_svd);
         tools::log->debug("Variance change from  SVD: {:.16f}%", fp(100 * variance_after_svd / opt_state.get_variance()));
     }
+    expand_bonds(BondExpansionOrder::POSTOPT);
+
+    if constexpr(settings::debug) tensors.assert_validity();
 }
 
 template<typename Scalar>
@@ -514,13 +517,14 @@ void xdmrg<Scalar>::set_energy_shift_mpo() {
     // we get the subtraction of two very small terms since E-E_shf should be small.
 
     if(not tensors.position_is_inward_edge()) return;
-    if(static_cast<double>(var_latest) < std::min(1e-14, settings::precision::variance_convergence_threshold))
+
+    if(var_latest < std::min<double>(1e-14, settings::precision::variance_convergence_threshold))
         // No need to improve precision further.
         // The quotient <H-eshift>/<(H-eshift)²> risks being imprecise when both numerator and denominator are close to zero.
         return;
-    double energy_shift = status.energy_tgt;
-    if(settings::precision::use_energy_shifted_mpo) { energy_shift = static_cast<double>(tools::finite::measure::energy(tensors)); }
-    tensors.set_energy_shift_mpo({static_cast<Scalar>(energy_shift)});
+    Scalar energy_shift = static_cast<Scalar>(status.energy_tgt);
+    if(settings::precision::use_energy_shifted_mpo) { energy_shift = tools::finite::measure::energy(tensors); }
+    tensors.set_energy_shift_mpo(energy_shift);
     // if(std::abs(satic_cast<double>(std::real(tensors.model->get_energy_shift_mpo())) - energy_shift) > 10 * std::numeric_limits<double>::epsilon())
     // throw except::runtime_error("Energy shift mismatch: {:.16f} != {:.16f}", tensors.model->get_energy_shift_mpo(), energy_shift);
 }

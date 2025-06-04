@@ -4,6 +4,7 @@
 #include "../sfinae.h"
 #include "math/float.h"
 #include "math/tenx.h"
+#include "tools/common/contraction/IterativeLinearSolverConfig.h"
 #include <array>
 #include <complex>
 #include <Eigen/Cholesky>
@@ -46,9 +47,10 @@ class MatVecMPO {
     bool readyShift    = false;  // Flag to make sure the shift has occurred
     bool readyFactorOp = false;  // Flag to make sure LU factorization has occurred
 
-    Eigen::LDLT<MatrixType>         ldlt; // Stores the ldlt matrix factorization on shift-invert
-    Eigen::LLT<MatrixType>          llt;  // Stores the llt matrix factorization on shift-invert
-    Eigen::PartialPivLU<MatrixType> lu;   // Stores the lu matrix factorization on shift-invert
+    Eigen::LDLT<MatrixType>             ldlt; // Stores the ldlt matrix factorization on shift-invert
+    Eigen::LLT<MatrixType>              llt;  // Stores the llt matrix factorization on shift-invert
+    Eigen::PartialPivLU<MatrixType>     lu;   // Stores the lu matrix factorization on shift-invert
+    IterativeLinearSolverConfig<Scalar> iLinSolvCfg = {};
 
     void init_timers();
 

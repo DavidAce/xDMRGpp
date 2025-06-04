@@ -15,7 +15,7 @@
 #include "tensors/site/mpo/MpoSite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
-#include "tools/common/contraction/InvMatVecCfg.h"
+#include "tools/common/contraction/IterativeLinearSolverConfig.h"
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
 #include <h5pp/h5pp.h>
@@ -946,7 +946,7 @@ void MatVecMPOS<Scalar>::MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long
     auto mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
     auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
     if(invJcbDiagB.size() == 0) invJcbDiagB = get_diagonal_new(0, mpos_B, envL_B, envR_B).array().cwiseInverse();
-    auto invCfg = InvMatVecCfg<Scalar>{.maxiters      = maxiters,
+    auto invCfg = IterativeLinearSolverConfig<Scalar>{.maxiters      = maxiters,
                                        .tolerance     = tolerance,
                                        .invdiag       = invJcbDiagB.data(),
                                        .lltJcbBlocks  = nullptr,
@@ -1386,14 +1386,14 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
         const auto &envL    = mpos_B.empty() ? envL_A : envL_B;
         const auto &envR    = mpos_B.empty() ? envR_A : envR_B;
         if(jcbMaxBlockSize == 1) {
-            invMatVecCfg.invdiag = invJcbDiagonal.data();
+            iLinSolvCfg.invdiag = invJcbDiagonal.data();
         } else if(jcbMaxBlockSize > 1) {
-            invMatVecCfg.lltJcbBlocks  = &lltJcbBlocks;
-            invMatVecCfg.ldltJcbBlocks = &ldltJcbBlocks;
-            invMatVecCfg.luJcbBlocks   = &luJcbBlocks;
+            iLinSolvCfg.lltJcbBlocks  = &lltJcbBlocks;
+            iLinSolvCfg.ldltJcbBlocks = &ldltJcbBlocks;
+            iLinSolvCfg.luJcbBlocks   = &luJcbBlocks;
         }
         if(mpos.size() == 1) {
-            tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos.front(), envL, envR, invMatVecCfg);
+            tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos.front(), envL, envR, iLinSolvCfg);
         } else if(!mpos_B_shf.empty()) {
             throw except::runtime_error("MatVecMPOS<{}>::MultInvBx(...) not implemented for multiple mpos", sfinae::type_name<Scalar>());
         }
@@ -1408,7 +1408,6 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
             // Diagonal jacobi preconditioner
             invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).matrix();
             mps_out        = invJcbDiagonal.array().cwiseInverse().cwiseProduct(mps_in.array());
-            num_pc++;
         } else if(jcbMaxBlockSize > 1) {
             auto token = t_multPc->tic_token();
 // eig::log->info("-- MultPc");
@@ -1554,14 +1553,14 @@ void MatVecMPOS<Scalar>::set_jcbMaxBlockSize(std::optional<long> size) {
 }
 
 template<typename Scalar>
-void MatVecMPOS<Scalar>::set_invMatVecCfg(const InvMatVecCfg<Scalar> &cfg) {
-    invMatVecCfg = cfg;
+void MatVecMPOS<Scalar>::set_iterativeLinearSolverConfig(const IterativeLinearSolverConfig<Scalar> &cfg) {
+    iLinSolvCfg = cfg;
 }
 template<typename Scalar>
-void MatVecMPOS<Scalar>::set_invMatVecCfg(long maxiters, RealScalar tolerance, MatDef matdef) {
-    invMatVecCfg.maxiters  = maxiters;
-    invMatVecCfg.tolerance = tolerance;
-    invMatVecCfg.matdef    = matdef;
+void MatVecMPOS<Scalar>::set_iterativeLinearSolverConfig(long maxiters, RealScalar tolerance, MatDef matdef) {
+    iLinSolvCfg.maxiters  = maxiters;
+    iLinSolvCfg.tolerance = tolerance;
+    iLinSolvCfg.matdef    = matdef;
 }
 
 template<typename Scalar>
@@ -1715,12 +1714,12 @@ long MatVecMPOS<Scalar>::get_jcbMaxBlockSize() const {
 }
 
 template<typename Scalar>
-const InvMatVecCfg<Scalar> &MatVecMPOS<Scalar>::get_invMatVecCfg() const {
-    return invMatVecCfg;
+const IterativeLinearSolverConfig<Scalar> &MatVecMPOS<Scalar>::get_iterativeLinearSolverConfig() const {
+    return iLinSolvCfg;
 }
 template<typename Scalar>
-InvMatVecCfg<Scalar> &MatVecMPOS<Scalar>::get_invMatVecCfg() {
-    return invMatVecCfg;
+IterativeLinearSolverConfig<Scalar> &MatVecMPOS<Scalar>::get_iterativeLinearSolverConfig() {
+    return iLinSolvCfg;
 }
 
 template<typename Scalar>

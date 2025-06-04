@@ -271,11 +271,12 @@ enum class ResetReason { INIT, FIND_WINDOW, SATURATED, NEW_STATE, BOND_UPDATE };
  */
 enum class BondExpansionPolicy : int {
     NONE              = 0,  /*!< No bond expansion (strictly for multisite DMRG, but not recommended anyway) */
-    POSTOPT_1SITE     = 1,  /*!< Strictly single-site expansion of 1 bond ahead, after optimization (as in DMRG3S), using the residual norm as mixing factor */
-    PREOPT_NSITE_REAR = 2,  /*!< Multisite expansion with optimal mixing factors before optimization of [active sites] plus sites behind.  */
-    PREOPT_NSITE_FORE = 4,  /*!< Multisite expansion with optimal mixing factors before optimization, of [active sites] plus sites ahead. */
-    H1                = 8,  /*!< Enable bond expansion using H¹ */
-    H2                = 16, /*!< Enable bond expansion using H² */
+    PREOPT_1SITE      = 1,  /*!< Strictly single-site expansion of 1 bond ahead, after optimization (as in DMRG3S) */
+    POSTOPT_1SITE     = 2,  /*!< Strictly single-site expansion of 1 bond ahead, before optimization */
+    PREOPT_NSITE_REAR = 4,  /*!< Multisite expansion with optimal mixing factors before optimization of [active sites] plus sites behind.  */
+    PREOPT_NSITE_FORE = 8,  /*!< Multisite expansion with optimal mixing factors before optimization, of [active sites] plus sites ahead. */
+    H1                = 16, /*!< Enable bond expansion using H¹ */
+    H2                = 32, /*!< Enable bond expansion using H² */
     DEFAULT           = POSTOPT_1SITE | H1 | H2,
     allow_bitops
 };
@@ -632,6 +633,7 @@ std::string flag2str(const T &item) noexcept {
     }
     if constexpr(std::is_same_v<T, BondExpansionPolicy>) {
         if(has_flag(item, BondExpansionPolicy::POSTOPT_1SITE)) v.emplace_back("POSTOPT_1SITE");
+        if(has_flag(item, BondExpansionPolicy::PREOPT_1SITE)) v.emplace_back("PREOPT_1SITE");
         if(has_flag(item, BondExpansionPolicy::PREOPT_NSITE_REAR)) v.emplace_back("PREOPT_NSITE_REAR");
         if(has_flag(item, BondExpansionPolicy::PREOPT_NSITE_FORE)) v.emplace_back("PREOPT_NSITE_FORE");
         if(has_flag(item, BondExpansionPolicy::H1)) v.emplace_back("H1");
@@ -873,6 +875,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
     if constexpr(std::is_same_v<T, BondExpansionPolicy>) {
         if(item == BondExpansionPolicy::NONE)                           return "NONE";
         if(item == BondExpansionPolicy::POSTOPT_1SITE)                  return "POSTOPT_1SITE";
+        if(item == BondExpansionPolicy::PREOPT_1SITE)                   return "PREOPT_1SITE";
         if(item == BondExpansionPolicy::PREOPT_NSITE_REAR)              return "PREOPT_NSITE_REAR";
         if(item == BondExpansionPolicy::PREOPT_NSITE_FORE)              return "PREOPT_NSITE_FORE";
         if(item == BondExpansionPolicy::H1)                             return "H1";
@@ -1343,6 +1346,7 @@ constexpr auto sv2enum(std::string_view item) {
     if constexpr(std::is_same_v<T, BondExpansionPolicy>) {
         auto policy = BondExpansionPolicy::NONE;
         if(item.find("POSTOPT_1SITE")        != std::string_view::npos) policy |= BondExpansionPolicy::POSTOPT_1SITE;
+        if(item.find("PREOPT_1SITE")         != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_1SITE;
         if(item.find("PREOPT_NSITE_REAR")    != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_NSITE_REAR;
         if(item.find("PREOPT_NSITE_FORE")    != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_NSITE_FORE;
         if(item.find("H1")                   != std::string_view::npos) policy |= BondExpansionPolicy::H1;

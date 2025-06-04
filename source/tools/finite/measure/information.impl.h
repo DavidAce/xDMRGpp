@@ -20,7 +20,6 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
 #include "tools/common/split.h"
 #include "tools/finite/mps.h"
@@ -96,8 +95,8 @@ inline std::vector<size_t> get_subsystem_complement(size_t length, const std::ve
 
 template<typename CalcType, typename Scalar>
 auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchsize_svd, Eigen::Index svd_rank_max = 100) {
-    svd_rank_max = std::min({svd_rank_max, size});
-
+    auto t_ev         = tid::tic_scope("eigenvalues");
+    svd_rank_max      = std::min({svd_rank_max, size});
     using RealScalar  = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>::RealScalar;
     using VectorCalcT = Eigen::Matrix<CalcType, Eigen::Dynamic, 1>;
     VectorCalcT eigenvalues;
@@ -151,7 +150,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     auto eig_cost_rho = std::pow<double>(std::min(eig_size_rho, static_cast<double>(eig_max_size)), 3.0);
     auto eig_cost_cmp = std::pow<double>(std::min(eig_size_cmp, static_cast<double>(eig_max_size)), 3.0);
     auto eig_cost_trf = std::pow<double>(std::min(eig_size_trf, static_cast<double>(eig_max_size)), 3.0);
-    
+
     auto eig_sizes = std::array{eig_size_rho, eig_size_cmp, eig_size_trf};
     // auto eig_costs = std::array{eig_cost_rho, eig_cost_cmp, eig_cost_trf};
 
@@ -233,7 +232,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                     mat      = state.template get_reduced_density_matrix<cx32>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<cx32>(sites);
+                    mat      = state.template get_reduced_density_matrix<cx32>(cites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 2) {
                     mat      = state.template get_transfer_matrix<cx32>(sites, side);
@@ -265,7 +264,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                     mat      = state.template get_reduced_density_matrix<cx64>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<cx64>(sites);
+                    mat      = state.template get_reduced_density_matrix<cx64>(cites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 2) {
                     mat      = state.template get_transfer_matrix<cx64>(sites, side);
@@ -309,14 +308,14 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
         }
     }
 
-    eig_time                                     = solver.result.meta.time_total;
+    eig_time                                     = tid::get("eigenvalues").get_last_interval();
     RealScalar<Scalar> entanglement_entropy_log2 = 0;
     for(const auto &e : evs) {
         if(e > 0) entanglement_entropy_log2 += -e * std::log2(e); // We use log base 2 for information
     }
     // if(eig_time > 1.0)
     if constexpr(settings::debug_subsystem_entropy)
-        tools::log->trace("mode {} side {} | eig {} (max {}) | mat {} | chi {} {} | S {:.8f} | cch {::.2f} GB | mat {:.3e} s | eig {:.3e} s | sites {}",
+        tools::log->trace("mode {} side {} | eig {} (max {}) | mat {} | chi {} {} | S {:.8f} | cch {::.2e} GB | mat {:.3e} s | eig {:.3e} s | sites {}",
                           min_cost_idx, side, eig_sizes, eig_max_size, mat_costs, chiL, chiR, entanglement_entropy_log2, state.get_cache_sizes(), mat_time,
                           eig_time, sites);
     // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after eig");

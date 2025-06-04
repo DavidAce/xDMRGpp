@@ -16,8 +16,8 @@
 #include "tools/finite/opt_mps.h"
 #include "tools/finite/print.h"
 #include <math/cast.h>
+#include <tools/finite/env/BondExpansionConfig.h>
 #include <tools/finite/multisite.h>
-
 
 template<typename Scalar>
 fdmrg<Scalar>::fdmrg() : AlgorithmFinite<Scalar>(settings::xdmrg::ritz, AlgorithmType::fDMRG) {
@@ -295,6 +295,7 @@ void fdmrg<Scalar>::run_algorithm() {
 template<typename Scalar>
 void fdmrg<Scalar>::update_state() {
     auto t_step          = tid::tic_scope("step");
+    expand_bonds(BondExpansionOrder::PREOPT);
     auto opt_meta        = get_opt_meta();
     variance_before_step = std::nullopt;
 
@@ -311,15 +312,7 @@ void fdmrg<Scalar>::update_state() {
     // Hold the variance before the optimization step for comparison
     if(not variance_before_step) variance_before_step = tools::finite::measure::energy_variance(tensors); // Should just take value from cache
 
-    // Expand bonds 1-site dmrg
-    if(opt_meta.bondexp_policy != BondExpansionPolicy::NONE) {
-        expand_bonds(opt_meta.bondexp_policy, opt_meta.optAlgo, opt_meta.optRitz);
-        // update_environment_expansion_alpha();
-        // The expansion may have changed the problem size!
-        opt_meta.problem_dims = tools::finite::multisite::get_dimensions(*tensors.state);
-        opt_meta.problem_size = tools::finite::multisite::get_problem_size(*tensors.state);
-        opt_meta.optSolver    = opt_meta.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
-    }
+
 
     auto initial_mps = tools::finite::opt::get_opt_initial_mps(tensors, opt_meta);
     auto opt_state   = tools::finite::opt::find_ground_state(tensors, initial_mps, status, opt_meta);
@@ -385,5 +378,7 @@ void fdmrg<Scalar>::update_state() {
 
     last_optsolver = opt_state.get_optsolver();
     last_optalgo   = opt_state.get_optalgo();
+
+    expand_bonds(BondExpansionOrder::POSTOPT);
     if constexpr(settings::debug) tensors.assert_validity();
 }

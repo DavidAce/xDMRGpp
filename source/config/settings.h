@@ -228,9 +228,10 @@ namespace settings {
         inline long                dmrg_max_prob_size          = 1024*2*1024;                            /*!< Restricts the dmrg blocksize to keep the problem size below this limit. Problem size = chiL * (spindim ** blocksize) * chiR */
         inline BondExpansionPolicy dmrg_bond_expansion_policy  = BondExpansionPolicy::DEFAULT;           /*!< Select options for bond expansion (aka subspace expansion)  [NONE, POSTOPT_1SITE, PREOPT_NSITE_REAR, PREOPT_NSITE_FORE, H1, H2, DEFAULT=POSTOPT_1SITE | H1 | H2] */
         namespace dmrg_bond_expansion {
+           inline float               bond_factor              = 1.1f;                                    /*!< Expand the bond dimension by this factor above the current bond dimension limit (value  < 1.0 = disabled) */
             namespace postopt {
-                inline double              maxalpha            = 1e-3;                                   /*!< Upper limit for mixing factors derived from the local residual norms */
-                inline double              minalpha            = 1e-15;                                  /*!< Lower limit for mixing factors derived from the local residual norms */
+                inline float               maxalpha            = 1e-3f;                                   /*!< Upper limit for mixing factors derived from the local residual norms */
+                inline float               minalpha            = 1e-15f;                                  /*!< Lower limit for mixing factors derived from the local residual norms */
             }
             namespace preopt {
                 inline size_t              maxiter             = 1;                                      /*!< How many Lanczos iterations to use in the nsite bond expansion */

@@ -9,6 +9,8 @@
 #include "tools/finite/opt_meta.h"
 #include <general/sfinae.h>
 
+struct BondExpansionConfig;
+enum class BondExpansionOrder;
 template<typename Scalar>
 class StateFinite;
 template<typename Scalar>
@@ -71,9 +73,7 @@ class AlgorithmFinite : public AlgorithmBase {
     void         set_parity_shift_mpo(std::optional<std::string> target_axis = std::nullopt);
     void         set_parity_shift_mpo_squared(std::optional<std::string> target_axis = std::nullopt);
     void         try_moving_sites();
-    void         expand_bonds_postopt();
-    void         expand_bonds(OptMeta &meta);
-    void         expand_bonds(BondExpansionPolicy bep, OptAlgo algo, OptRitz ritz, std::optional<svd::config> svd_cfg = std::nullopt);
+    void         expand_bonds(BondExpansionOrder order);
     void         move_center_point(std::optional<long> num_moves = std::nullopt);
     virtual void set_energy_shift_mpo(); // We override this in xdmrg
     void         rebuild_tensors();
@@ -123,7 +123,7 @@ class AlgorithmFinite : public AlgorithmBase {
     void write_tensor_to_file(const T &data, std::string_view name, StorageEvent storage_event, CopyPolicy copy_policy = CopyPolicy::TRY) {
         if(not h5file) return;
         status.event      = storage_event;
-        auto        sinfo = StorageInfo(status, tensors.state->get_name());
+        auto        sinfo = StorageInfo(status, tensors.get_state().get_name(), tensors.get_model().model_type);
         std::string prefix;
         switch(sinfo.storage_event) {
             case StorageEvent::MODEL: {

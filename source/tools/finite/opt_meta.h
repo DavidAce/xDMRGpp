@@ -27,6 +27,7 @@ namespace tools::finite::opt {
         size_t                     bondexp_blocksize = 1ul;
         size_t                     bondexp_nkrylov   = 10ul;
         float                      bondexp_factor    = 1.0f;
+        long                       bondexp_bondlim   = -1l;
         float                      bondexp_minalpha  = 1e-15f;
         float                      bondexp_maxalpha  = 1e-3f;
         size_t                     max_sites         = 2ul;

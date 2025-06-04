@@ -270,7 +270,7 @@ void MpsSite<Scalar>::set_position(const size_t position_) {
 template<typename Scalar>
 void MpsSite<Scalar>::set_truncation_error(double error /* Negative is ignored */) {
     if(error >= 0.0) {
-        // tools::log->warn("Setting truncation error on site {}: {:8.5e}", get_tag(), error);
+        tools::log->warn("Setting truncation error on site {}: {:8.5e}", get_tag(), error);
         truncation_error      = error;
         truncation_error_last = error;
     }
@@ -279,7 +279,7 @@ void MpsSite<Scalar>::set_truncation_error(double error /* Negative is ignored *
 template<typename Scalar>
 void MpsSite<Scalar>::set_truncation_error_LC(double error /* Negative is ignored */) {
     if(error >= 0.0) {
-        // tools::log->warn("Setting truncation error on site {}: {:8.5e} (LC)", get_tag(), error);
+        tools::log->warn("Setting truncation error on site {}: {:8.5e} (LC)", get_tag(), error);
         truncation_error_LC   = error;
         truncation_error_last = error;
     }

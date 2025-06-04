@@ -79,7 +79,7 @@ void MatVecMPO<T>::MultOPv(T *mps_in_, T *mps_out_) {
     Eigen::TensorMap<Eigen::Tensor<T, 3>> mps_out(mps_out_, shape_mps);
     switch(side) {
         case eig::Side::R: {
-            tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpo, envL, envR);
+            tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpo, envL, envR, iLinSolvCfg);
             break;
         }
         case eig::Side::L: {
@@ -104,7 +104,7 @@ void MatVecMPO<T>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize,
                 if(factorization == eig::Factorization::NONE) {
                     Eigen::TensorMap<Eigen::Tensor<T, 3>> x_map(x_ptr, shape_mps);
                     Eigen::TensorMap<Eigen::Tensor<T, 3>> y_map(y_ptr, shape_mps);
-                    tools::common::contraction::matrix_inverse_vector_product(y_map, x_map, mpo, envL, envR);
+                    tools::common::contraction::matrix_inverse_vector_product(y_map, x_map, mpo, envL, envR, iLinSolvCfg);
                 } else if(factorization == eig::Factorization::LDLT) {
                     Eigen::Map<VectorType> x_map(x_ptr, *ldx);
                     Eigen::Map<VectorType> y_map(y_ptr, *ldy);

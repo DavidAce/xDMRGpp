@@ -270,8 +270,8 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_reduced_density_matrix(const std::v
 template<typename Scalar>
 template<typename T>
 std::array<double, 3> StateFinite<Scalar>::get_reduced_density_matrix_cost(const std::vector<size_t> &sites) const {
-    auto t_rho         = tid::tic_scope("rho");
-    auto cites         = num::range<size_t>(sites.front(), sites.back() + 1); // Contiguous list of all sites E.g. [012|6789] -> [012|345|6789]
+    auto t_rho = tid::tic_scope("rho");
+    auto cites = num::range<size_t>(sites.front(), sites.back() + 1); // Contiguous list of all sites E.g. if sites is [012|6789] -> cites is [012|345|6789]
     bool is_contiguous = sites == cites;
     // We have a contiguous set
     // Calculate the numerical cost for contracting top to bottom or side to side. Account for both the number of operations and the memory size
@@ -395,10 +395,10 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
     if constexpr(debug_transfer_matrix) tools::log->trace("cost_t2b {} | cost_s2s {} ({})", costs[0], costs[1], side);
     if(min_cost_idx == 0 /* top to bottom */) {
         if constexpr(debug_transfer_matrix) tools::log->trace("from top");
-        auto M                    = get_multisite_mps<T>(sites, true);
-        auto dim                  = std::array{M.dimension(1) * M.dimension(2), M.dimension(1) * M.dimension(2)};
-        auto res                  = Eigen::Tensor<T, 2>(dim);
-        contract_Mconj_M_0_0( res, M, threads);
+        auto M   = get_multisite_mps<T>(sites, true);
+        auto dim = std::array{M.dimension(1) * M.dimension(2), M.dimension(1) * M.dimension(2)};
+        auto res = Eigen::Tensor<T, 2>(dim);
+        contract_Mconj_M_0_0(res, M, threads);
         return res;
         // res.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).reshape(dim);
         // return res;
@@ -447,7 +447,7 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     contract_trf_Mconj_M_2_1_23_10(trf_tmp4, trf_temp, M, threads);
                     // trf_tmp4.resize(new_dim);
                     // trf_tmp4.device(*threads->dev) = trf_temp.contract(M.conjugate(), tenx::idx({2}, {1})).contract(M, tenx::idx({2, 3}, {1, 0}));
-                    trf_temp                       = std::move(trf_tmp4);
+                    trf_temp = std::move(trf_tmp4);
                 }
                 save_trf_into_cache<T>(trf_temp, sites, i, "l2r");
             }
@@ -487,7 +487,6 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     contract_Mconj_trf5_02_02(trf_temp, M, trf_tmp5, threads);
                     // trf_temp.resize(new_dim);
                     // trf_temp.device(*threads->dev) = M.conjugate().contract(trf_tmp5, tenx::idx({0, 2}, {0, 2}));
-
                 }
                 save_trf_into_cache<T>(trf_temp, sites, i, "r2l");
             }

@@ -2,7 +2,7 @@
 #include "math/tenx/fwd_decl.h"
 // Eigen goes first
 #include "debug/exceptions.h"
-#include "InvMatVecCfg.h"
+#include "IterativeLinearSolverConfig.h"
 #include "JacobiPreconditioner.h"
 #include "math/cast.h"
 #include "math/tenx.h"
@@ -18,6 +18,10 @@ template<typename Scalar_>
 class MatrixReplacement;
 template<typename T>
 using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+
+namespace settings {
+    static constexpr bool debug_invmatvec = false;
+}
 
 namespace Eigen::internal {
     // MatrixReplacement looks-like a Dense Matrix, so let's inherits its traits:
@@ -37,17 +41,16 @@ class MatrixReplacement : public Eigen::EigenBase<MatrixReplacement<Scalar_>> {
     typedef int StorageIndex;
     enum { ColsAtCompileTime = Eigen::Dynamic, MaxColsAtCompileTime = Eigen::Dynamic, IsRowMajor = false };
 
-    const Scalar_      *envL = nullptr;
-    const Scalar_      *envR = nullptr;
-    const Scalar_      *mpo  = nullptr;
-    std::array<long, 3> shape_mps;
-    std::array<long, 4> shape_mpo;
-    std::array<long, 3> shape_envL;
-    std::array<long, 3> shape_envR;
-    std::vector<Scalar> shift_mpo;
-    long                mps_size;
+    const Scalar_              *envL = nullptr;
+    const Scalar_              *envR = nullptr;
+    const Scalar_              *mpo  = nullptr;
+    std::array<Eigen::Index, 3> shape_mps;
+    std::array<Eigen::Index, 4> shape_mpo;
+    std::array<Eigen::Index, 3> shape_envL;
+    std::array<Eigen::Index, 3> shape_envR;
+    Eigen::Index                mps_size;
     // Timers
-    mutable int                 counter = 0;
+    mutable Eigen::Index        counter = 0;
     mutable std::vector<Scalar> tmp;
 
     [[nodiscard]] Eigen::Index rows() const { return safe_cast<Eigen::Index>(mps_size); }; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
@@ -78,7 +81,6 @@ class MatrixReplacement : public Eigen::EigenBase<MatrixReplacement<Scalar_>> {
         if(envR == nullptr) throw std::runtime_error("Rblock is a nullptr!");
         if(mpo == nullptr) throw std::runtime_error("mpo is a nullptr!");
         mps_size = shape_mps[0] * shape_mps[1] * shape_mps[2];
-        //        t_multAx = std::make_unique<class_tic_toc>(true, 5, "Time MultAx");
     }
 };
 
@@ -116,7 +118,7 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
                                                                const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                                const Scalar *const envL_ptr, std::array<long, 3> envL_dims, //
                                                                const Scalar *const envR_ptr, std::array<long, 3> envR_dims, //
-                                                               InvMatVecCfg<Scalar> cfg) {
+                                                               IterativeLinearSolverConfig<Scalar> &cfg) {
     // Here we return x <-- A^-1 * b
     // Where A^-1 * b is obtained by solving
     //       A*x = b
@@ -178,10 +180,10 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
         solver.setMaxIterations(cfg.maxiters);
         solver.setTolerance(cfg.tolerance);
         tenx::VectorType<Scalar> guess;
-        if(res.allFinite()) {
-            guess = res;
+        if(mps.allFinite()) {
+            guess = mps;
         } else {
-            guess.resize(res.size());
+            guess.resize(mps.size());
             guess.setRandom();
         }
 
@@ -193,9 +195,20 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
 
         solver.compute(matRepl);
         res = solver.solveWithGuess(mps, guess);
-        tools::log->info("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", get_solver_name(), mps.size(),
-                         static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.counter,
-                         t_mativec->get_last_interval());
+        if constexpr(settings::debug_invmatvec)
+            tools::log->trace("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", get_solver_name(), mps.size(),
+                              static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.counter,
+                              t_mativec->get_last_interval());
+        cfg.result.iters   = solver.iterations();
+        cfg.result.matvecs = matRepl.counter;
+        cfg.result.precond = solver.preconditioner().iterations();
+        cfg.result.time    = t_mativec->get_last_interval();
+        cfg.result.total_iters += solver.iterations();
+        cfg.result.total_matvecs += matRepl.counter;
+        cfg.result.total_precond += solver.preconditioner().iterations();
+        cfg.result.total_time += t_mativec->get_last_interval();
+        cfg.result.error = solver.error();
+        cfg.result.info  = solver.info();
         if(std::isnan(solver.error())) throw except::runtime_error("NaN in solver");
     };
 

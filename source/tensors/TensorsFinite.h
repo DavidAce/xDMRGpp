@@ -15,6 +15,7 @@
 // #include <tensors/state/StateFinite.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 
+struct BondExpansionConfig;
 class TensorsLocal;
 template<typename Scalar>
 class StateFinite;
@@ -148,7 +149,7 @@ class TensorsFinite {
     void merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg = std::nullopt,
                              LogPolicy log_policy = LogPolicy::SILENT);
 
-    BondExpansionResult<Scalar> expand_bonds(const OptMeta &optMeta);
+    BondExpansionResult<Scalar> expand_bonds(BondExpansionConfig bcfg);
 
     void move_site_mps(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::optional<long> new_pos = std::nullopt);
     void move_site_mpo(const size_t site, const long steps, std::vector<size_t> &sites_mpo);

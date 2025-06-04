@@ -23,7 +23,7 @@
 
 template<typename Scalar>
 StateFinite<Scalar> tools::finite::ed::find_exact_state(const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status,
-                                     tools::finite::opt::reports::eigs_log<Scalar> &elog) {
+                                                        tools::finite::opt::reports::eigs_log<Scalar> &elog) {
     auto sites      = num::range<size_t>(0ul, tensors.template get_length<size_t>());
     auto tensors_ed = tensors;
     tensors_ed.clear_cache();
@@ -39,11 +39,11 @@ StateFinite<Scalar> tools::finite::ed::find_exact_state(const TensorsFinite<Scal
     auto t_tgt = tid::tic_scope("tgt_mps");
 
     tools::finite::opt::opt_mps<Scalar> target_mps("target_mps", tensors_ed.state->template get_multisite_mps<Scalar>(), sites,
-                                           tools::finite::measure::energy_shift(tensors_ed),              // Energy shift for full system
-                                           tools::finite::measure::energy_minus_energy_shift(tensors_ed), // Eigval
-                                           tools::finite::measure::energy_variance(tensors_ed),
-                                           1.0, // Overlap
-                                           tensors_ed.get_length());
+                                                   tools::finite::measure::energy_shift(tensors_ed),              // Energy shift for full system
+                                                   tools::finite::measure::energy_minus_energy_shift(tensors_ed), // Eigval
+                                                   tools::finite::measure::energy_variance(tensors_ed),
+                                                   1.0, // Overlap
+                                                   tensors_ed.get_length());
     t_tgt.toc();
     tools::finite::opt::OptMeta meta;
     meta.optType      = OptType::CX64;
@@ -77,16 +77,16 @@ StateFinite<Scalar> tools::finite::ed::find_exact_state(const TensorsFinite<Scal
     tools::log->info("Bond dimensions χ                  = {}", tools::finite::measure::bond_dimensions(state_ed));
     tools::log->info("Bond dimension  χ (mid)            = {}", tools::finite::measure::bond_dimension_midchain(state_ed));
     tools::log->info("Entanglement entropies Sₑ          = {::8.2e}", fv(tools::finite::measure::entanglement_entropies(state_ed)));
-    tools::log->info("Entanglement entropy   Sₑ (mid)    = {:8.2e}",  fp(tools::finite::measure::entanglement_entropy_midchain(state_ed)));
+    tools::log->info("Entanglement entropy   Sₑ (mid)    = {:8.2e}", fp(tools::finite::measure::entanglement_entropy_midchain(state_ed)));
     if(status.algo_type == AlgorithmType::fLBIT) {
         tools::log->info("Number entropies Sₙ                = {::8.2e}", fv(tools::finite::measure::number_entropies(state_ed)));
-        tools::log->info("Number entropy   Sₙ (mid)          = {:8.2e}",  fp(tools::finite::measure::number_entropy_midchain(state_ed)));
+        tools::log->info("Number entropy   Sₙ (mid)          = {:8.2e}", fp(tools::finite::measure::number_entropy_midchain(state_ed)));
     }
     tools::log->info("Spin components (global X,Y,Z)     = {::8.2e}", fv(tools::finite::measure::spin_components(state_ed)));
 
     auto expectation_values_xyz = tools::finite::measure::spin_expectation_values_xyz(state_ed);
     auto structure_factor_xyz   = tools::finite::measure::spin_structure_factor_xyz(state_ed);
-    auto opdm_spectrum          = tools::finite::measure::opdm_spectrum(state_ed);
+    auto opdm_spectrum          = tools::finite::measure::opdm_spectrum(state_ed, tensors.get_model().model_type);
 
     tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", fv(expectation_values_xyz[0]));
     tools::log->info("Expectation values ⟨σy⟩            = {::+9.6f}", fv(expectation_values_xyz[1]));
@@ -99,5 +99,3 @@ StateFinite<Scalar> tools::finite::ed::find_exact_state(const TensorsFinite<Scal
 
     return state_ed;
 }
-
-

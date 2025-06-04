@@ -182,7 +182,7 @@ void tools::finite::h5::save::opdm(h5pp::File &h5file, const StorageInfo &sinfo,
     // Check if the current entry has already been appended
     auto attrs = tools::common::h5::save::get_save_attrs(h5file, dset_path);
     if(attrs == sinfo) return;
-    const auto &opdm = tools::finite::measure::opdm(state);
+    const auto &opdm = tools::finite::measure::opdm(state, sinfo.model_type);
     if(opdm.size() == 0) return;
     if(not attrs.link_exists) {
         auto                 rows = safe_cast<hsize_t>(opdm.dimension(0));
@@ -203,7 +203,7 @@ void tools::finite::h5::save::opdm(h5pp::File &h5file, const StorageInfo &sinfo,
 template<typename Scalar>
 void tools::finite::h5::save::opdm_spectrum(h5pp::File &h5file, const StorageInfo &sinfo, const StateFinite<Scalar> &state) {
     if(not should_save(sinfo, settings::storage::table::opdm_spectrum::policy)) return;
-    auto opdm_spectrum = tools::finite::measure::opdm_spectrum(state);
+    auto opdm_spectrum = tools::finite::measure::opdm_spectrum(state, sinfo.model_type);
     tools::finite::h5::save::data_as_table(h5file, sinfo, opdm_spectrum, "opdm_spectrum", "One-particle Density Matrix spectrum", "eigval");
 }
 
@@ -534,7 +534,7 @@ template<typename Scalar>
 void tools::finite::h5::save::simulation(h5pp::File &h5file, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
                                          const EdgesFinite<Scalar> &edges, const AlgorithmStatus &status, CopyPolicy copy_policy) {
     if(not state.position_is_inward_edge()) return;
-    auto sinfo   = StorageInfo(status, state.get_name());
+    auto sinfo   = StorageInfo(status, state.get_name(), model.model_type);
     auto t_h5    = tid::tic_scope("h5");
     auto t_event = tid::tic_scope(enum2sv(status.event), tid::level::highest);
 

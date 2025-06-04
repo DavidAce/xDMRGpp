@@ -8,7 +8,7 @@
 #include <Eigen/LU>
 #include <Eigen/Sparse>
 // #include <Eigen/SparseCholesky>
-#include "tools/common/contraction/InvMatVecCfg.h"
+#include "tools/common/contraction/IterativeLinearSolverConfig.h"
 #include <memory>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
@@ -18,7 +18,7 @@ namespace tid {
 }
 template<typename Scalar> class MpoSite;
 template<typename Scalar> struct env_pair;
-template<typename Scalar> struct InvMatVecCfg;
+template<typename Scalar> struct IterativeLinearSolverConfig;
 struct primme_params;
 
 template<typename Scalar_>
@@ -87,7 +87,7 @@ class MatVecMPOS {
     Eigen::LLT<MatrixType>          llt;  // Stores the llt matrix factorization on shift-invert
     Eigen::PartialPivLU<MatrixType> lu;   // Stores the lu matrix factorization on shift-invert
     Eigen::LDLT<MatrixType>         ldlt; // Stores the ldlt matrix factorization on shift-invert
-    InvMatVecCfg<Scalar>            invMatVecCfg;
+    IterativeLinearSolverConfig<Scalar>            iLinSolvCfg;
 
     SparseType                      sparseMatrix;
     VectorType                      solverGuess;
@@ -201,8 +201,8 @@ class MatVecMPOS {
     void         set_side(eig::Side side_);
     void         set_jcbMaxBlockSize(std::optional<long> jcbSize); // the llt preconditioner bandwidth (default 8) (tridiagonal has bandwidth == 1)
 
-    void set_invMatVecCfg(const InvMatVecCfg<Scalar> &cfg);
-    void set_invMatVecCfg(long maxiters = 1000, RealScalar tolerance = RealScalar{1e-5f}, MatDef matdef = MatDef::DEF);
+    void set_iterativeLinearSolverConfig(const IterativeLinearSolverConfig<Scalar> &cfg);
+    void set_iterativeLinearSolverConfig(long maxiters = 1000, RealScalar tolerance = RealScalar{1e-5f}, MatDef matdef = MatDef::DEF);
 
     [[nodiscard]] Scalar                                       get_shift() const;
     [[nodiscard]] eig::Form                                    get_form() const;
@@ -226,8 +226,8 @@ class MatVecMPOS {
     [[nodiscard]] double                                       get_sparsity() const;
     [[nodiscard]] long                                         get_non_zeros() const;
     [[nodiscard]] long                                         get_jcbMaxBlockSize() const;
-    [[nodiscard]] const InvMatVecCfg<Scalar>                  &get_invMatVecCfg() const;
-    [[nodiscard]] InvMatVecCfg<Scalar>                        &get_invMatVecCfg();
+    [[nodiscard]] const IterativeLinearSolverConfig<Scalar>                  &get_iterativeLinearSolverConfig() const;
+    [[nodiscard]] IterativeLinearSolverConfig<Scalar>                        &get_iterativeLinearSolverConfig();
     [[nodiscard]] bool                                         isReadyShift() const;
     [[nodiscard]] bool                                         isReadyFactorOp() const;
 

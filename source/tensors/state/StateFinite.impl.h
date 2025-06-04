@@ -109,7 +109,7 @@ void StateFinite<Scalar>::initialize(AlgorithmType algo_type, size_t model_size,
     L(0)       = 1;
     for(size_t site = 0; site < model_size; site++) {
         std::string label = safe_cast<long>(site) <= position ? "A" : "B";
-        mps_sites.emplace_back(std::make_unique<MpsSite<Scalar>>(M, L, site, 0.0, label));
+        mps_sites.emplace_back(std::make_unique<MpsSite<Scalar>>(M, L, site, -1.0, label));
         if(safe_cast<long>(site) == position) { mps_sites.back()->set_LC(L); }
     }
     if(mps_sites.size() != model_size) throw except::logic_error("Initialized state with wrong size");
@@ -542,13 +542,14 @@ double StateFinite<Scalar>::get_trf_cache_gbts() const {
     double size_fp32 = 0, size_fp64 = 0, size_fp128 = 0, size_cx32 = 0, size_cx64 = 0, size_cx128 = 0;
     for(const auto &elem : get_cache<fp32>().trf) size_fp32 += static_cast<double>(elem.second.size());
     for(const auto &elem : get_cache<fp64>().trf) size_fp64 += static_cast<double>(elem.second.size());
+    for(const auto &elem : get_cache<fp128>().trf) size_fp128 += static_cast<double>(elem.second.size());
     for(const auto &elem : get_cache<cx32>().trf) size_cx32 += static_cast<double>(elem.second.size());
     for(const auto &elem : get_cache<cx64>().trf) size_cx64 += static_cast<double>(elem.second.size());
     for(const auto &elem : get_cache<cx128>().trf) size_cx128 += static_cast<double>(elem.second.size());
 
     size_fp32 *= 4.0 / std::pow(1024.0, 3.0);
     size_fp64 *= 8.0 / std::pow(1024.0, 3.0);
-    size_fp64 *= 16.0 / std::pow(1024.0, 3.0);
+    size_fp128 *= 16.0 / std::pow(1024.0, 3.0);
     size_cx32 *= 8.0 / std::pow(1024.0, 3.0);
     size_cx64 *= 16.0 / std::pow(1024.0, 3.0);
     size_cx128 *= 16.0 / std::pow(1024.0, 3.0);
@@ -567,7 +568,7 @@ double StateFinite<Scalar>::get_mps_cache_gbts() const {
 
     size_fp32 *= 4.0 / std::pow(1024.0, 3.0);
     size_fp64 *= 8.0 / std::pow(1024.0, 3.0);
-    size_fp64 *= 16.0 / std::pow(1024.0, 3.0);
+    size_fp128 *= 16.0 / std::pow(1024.0, 3.0);
     size_cx32 *= 8.0 / std::pow(1024.0, 3.0);
     size_cx64 *= 16.0 / std::pow(1024.0, 3.0);
     size_cx128 *= 32.0 / std::pow(1024.0, 3.0);
@@ -868,5 +869,3 @@ template<typename Scalar>
 const std::vector<bool> &StateFinite<Scalar>::get_normalization_tags() const {
     return tag_normalized_sites;
 }
-
-

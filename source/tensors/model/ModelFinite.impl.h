@@ -350,7 +350,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_compressed_mpos_s
 }
 
 template<typename Scalar>
-std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpos_energy_shifted_view(double energy_per_site) const {
+std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpos_energy_shifted_view(Scalar energy_per_site) const {
     std::vector<Eigen::Tensor<Scalar, 4>> mpos;
     mpos.reserve(MPO.size());
     for(const auto &mpo : MPO) mpos.emplace_back(mpo->MPO_energy_shifted_view(energy_per_site));

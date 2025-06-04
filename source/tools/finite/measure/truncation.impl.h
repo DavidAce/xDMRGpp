@@ -30,8 +30,8 @@ std::vector<fp64> tools::finite::measure::truncation_errors_active(const StateFi
     if(state.active_sites.size() == 1) {
         // In single-site DMRG the active site is a center "AC" site:
         // If we do forward expansion:
-        //  * Going left-to-right, the right bond (LC) is truncated after optimization
-        //  * Going right-to-left, the left bond (L) is truncated after optimization.
+        //  * Going left-to-right, we update AC whose right bond (LC) is truncated after optimization
+        //  * Going right-to-left, we update B whose left  bond (LC) is truncated after optimization.
         // if(state.get_direction() == +1) return {state.get_mps_site(state.active_sites[0]).get_truncation_error_LC()};
         // if(state.get_direction() == -1) return {state.get_mps_site(state.active_sites[0]).get_truncation_error()};
         return {state.get_mps_site(state.active_sites[0]).get_truncation_error_last()};

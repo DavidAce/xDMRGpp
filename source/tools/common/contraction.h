@@ -6,9 +6,9 @@
 #include "math/tenx/eval.h"
 #include "math/tenx/threads.h"
 #include <complex>
-#include "contraction/InvMatVecCfg.h"
+#include "contraction/IterativeLinearSolverConfig.h"
 
-template<typename Scalar> struct InvMatVecCfg;
+template<typename Scalar> struct IterativeLinearSolverConfig;
 
 namespace tools::common::contraction {
     template<typename T>
@@ -73,7 +73,7 @@ namespace tools::common::contraction {
                                        const Scalar * const mpo_ptr, std::array<long,4> mpo_dims,
                                        const Scalar * const envL_ptr, std::array<long,3> envL_dims,
                                        const Scalar * const envR_ptr, std::array<long,3> envR_dims,
-                                       InvMatVecCfg<Scalar> cfg = InvMatVecCfg<Scalar>());
+                                       IterativeLinearSolverConfig<Scalar> & cfg);
 
     template<typename mps_type, typename mpo_type, typename env_type>
     auto expectation_value(const TensorRead<mps_type> & mps,
@@ -184,7 +184,7 @@ namespace tools::common::contraction {
         const TensorRead<mpo_type> & mpo,
         const TensorRead<env_type> & envL,
         const TensorRead<env_type> & envR,
-        InvMatVecCfg<typename res_type::Scalar> cfg = InvMatVecCfg<typename res_type::Scalar>()){
+        IterativeLinearSolverConfig<typename res_type::Scalar> &cfg){
         static_assert(res_type::NumIndices == 3 and "Wrong res tensor rank != 3 passed to calculation of matrix_vector_product");
         static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of matrix_vector_product");
         static_assert(mpo_type::NumIndices == 4 and "Wrong mpo tensor rank != 4 passed to calculation of matrix_vector_product");

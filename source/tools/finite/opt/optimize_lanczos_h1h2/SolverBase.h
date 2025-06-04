@@ -21,6 +21,7 @@ class SolverBase {
     public:
     using RealScalar = decltype(std::real(std::declval<Scalar>()));
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using MatrixReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
     using VectorIdxT = Eigen::Matrix<Eigen::Index, Eigen::Dynamic, 1>;
@@ -36,18 +37,25 @@ class SolverBase {
         VectorReal                oldVal;
         VectorReal                absDiff;
         VectorReal                relDiff;
-        RealScalar                initVal      = std::numeric_limits<RealScalar>::quiet_NaN();
-        RealScalar                max_eval_est = RealScalar{1};
-        RealScalar                min_eval_est = RealScalar{1};
-        RealScalar                H_norm_est() const { return std::max(std::abs(max_eval_est), std::abs(min_eval_est)); }
+        RealScalar                initVal  = std::numeric_limits<RealScalar>::quiet_NaN();
+        RealScalar                max_eval = RealScalar{1};
+        RealScalar                min_eval = RealScalar{1};
+        std::deque<RealScalar>    max_eval_history;
+        size_t                    max_eval_history_max_size = 5;
+        RealScalar                op_norm_est() const;
+        void                      commit_max_eval();
         RealScalar                condition = RealScalar{1};
         std::vector<Eigen::Index> optIdx;
-        Eigen::Index              iter        = 0;
-        Eigen::Index              num_matvecs = 0;
-        Eigen::Index              num_precond = 0;
-        Eigen::Index              numMGS      = 0;
+        Eigen::Index              iter              = 0;
+        Eigen::Index              iter_last_restart = 0;
+        Eigen::Index              num_matvecs       = 0;
+        Eigen::Index              num_precond       = 0;
+        Eigen::Index              numMGS            = 0;
         VectorReal                rNorms;
         std::deque<VectorReal>    rNorms_history;
+        size_t                    rNorms_history_max_size = 5;
+        std::deque<VectorReal>    optVals_history;
+        size_t                    optVals_history_max_size = 5;
         std::vector<Eigen::Index> nonZeroCols; // Nonzero Gram Schmidt columns
         Eigen::Index              numZeroRows   = 0;
         std::vector<std::string>  stopMessage   = {};
@@ -56,10 +64,14 @@ class SolverBase {
     };
 
     private:
-    Eigen::Index i_HQ     = -1;
-    Eigen::Index i_HQ_cur = -1;
-    RealScalar   get_rNorms_log10_change_per_iteration();
-    void         adjust_preconditioner_tolerance();
+    Eigen::Index      i_HQ     = -1;
+    Eigen::Index      i_HQ_cur = -1;
+    RealScalar        get_rNorms_log10_change_per_iteration();
+    RealScalar        get_rNorms_log10_standard_deviation();
+    static RealScalar get_max_standard_deviation(const std::deque<VectorReal> &v, bool apply_log10);
+    bool              rNorm_has_saturated();
+    bool              optVal_has_saturated(RealScalar threshold = 0);
+    void              adjust_preconditioner_tolerance();
 
     protected:
     Eigen::Index qBlocks = 0;
@@ -140,12 +152,12 @@ class SolverBase {
 
     /*! Norm tolerance of ritz-vector residuals.
      * Lanczos converges if rnorm < normTolR * H_norm. */
-    RealScalar rnormTol() const { return tol * status.H_norm_est(); }
+    RealScalar rnormTol() const { return tol * status.op_norm_est(); }
 
     /*! Norm tolerance of B-matrices.
      * Triggers the Lanczos recurrence breakdown. */
     [[nodiscard]] RealScalar bNormTol(const RealScalar B_norm) const noexcept {
-        auto scale = std::max({status.max_eval_est, B_norm, RealScalar{1}}); //  H_norm tracks A norms already
+        auto scale = std::max({status.op_norm_est(), B_norm, RealScalar{1}}); //  H_norm tracks A norms already
         return N * eps * scale;
     }
     /*! Norm tolerance of B-matrices.
@@ -213,9 +225,9 @@ class SolverBase {
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors();
 
-    void refineRitzVectors(MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
-    void refineRitzVectors(MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
-    void refineRitzVectors();
+    void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
+    void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
+    void refinedRitzVectors();
 
     void updateStatus();
 
@@ -223,7 +235,6 @@ class SolverBase {
         build();
         diagonalizeT();
         extractRitzVectors();
-        refineRitzVectors();
         updateStatus();
         status.iter++;
     }

@@ -18,9 +18,10 @@ class JacobiPreconditioner {
     using LUJcbBlocksType   = std::vector<std::tuple<long, std::unique_ptr<LUType>>>;
 
     protected:
-    Eigen::Index             m_rows    = 0;
-    Eigen::Index             m_cols    = 0;
-    const Scalar            *m_invdiag = nullptr;
+    Eigen::Index             m_rows       = 0;
+    Eigen::Index             m_cols       = 0;
+    mutable Eigen::Index     m_iterations = 0;
+    const Scalar            *m_invdiag    = nullptr;
     const LLTJcbBlocksType  *m_lltJcbBlocks;
     const LDLTJcbBlocksType *m_ldltJcbBlocks;
     const LUJcbBlocksType   *m_luJcbBlocks;
@@ -34,7 +35,7 @@ class JacobiPreconditioner {
 
     template<typename MatType>
     explicit JacobiPreconditioner(const MatType &) {}
-
+    Eigen::Index    iterations() { return m_iterations; }
     EIGEN_CONSTEXPR Eigen::Index rows() const EIGEN_NOEXCEPT { return m_rows; }
     EIGEN_CONSTEXPR Eigen::Index cols() const EIGEN_NOEXCEPT { return m_cols; }
 
@@ -102,6 +103,7 @@ class JacobiPreconditioner {
                 x_segment.noalias()          = solver->solve(b_segment);
             }
         }
+        m_iterations++;
     }
 
     template<typename Rhs>

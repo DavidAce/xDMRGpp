@@ -96,13 +96,13 @@ std::vector<size_t> tools::finite::multisite::generate_site_list(StateFinite<Sca
         min_pos = std::clamp<long>(max_pos - max_off, 0l, max_pos);
     }
 
-    auto range = num::range<size_t>(min_pos, max_pos + 1); // +1 to include the right-most
+    auto range = num::range<long>(min_pos, max_pos + 1); // +1 to include the right-most
     if(direction < 0) std::reverse(range.begin(), range.end());
     tools::log->trace("Candidate range {}", range);
 
     for(auto &pos : range) {
         if(pos != std::clamp<long>(pos, 0l, length - 1l)) continue;
-        sites.emplace_back(pos);
+        sites.emplace_back(static_cast<size_t>(pos));
         sizes.emplace_back(get_problem_size(state, sites));
         shape.emplace_back(get_dimensions(state, sites));
     }

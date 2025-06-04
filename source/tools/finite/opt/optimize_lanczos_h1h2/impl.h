@@ -160,7 +160,7 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.b              = 1;
+    solver.b              = 2;
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
     solver.max_matvecs    = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
@@ -204,7 +204,9 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     res.set_time_mv(solver.H1.t_multAx->get_time() + solver.H2.t_multAx->get_time());
     res.set_time_pc(solver.H1.t_multPc->get_time() + solver.H2.t_multPc->get_time());
     res.set_op(solver.H1.num_op + solver.H2.num_op);
-    res.set_mv(solver.status.num_matvecs);
+    res.set_mv(solver.status.num_matvecs                                            //
+               + solver.H1.get_iterativeLinearSolverConfig().result.total_matvecs //
+               + solver.H2.get_iterativeLinearSolverConfig().result.total_matvecs);
     res.set_pc(solver.status.num_precond);
     res.set_iter(solver.status.iter);
     res.set_eigs_rnorm(solver.status.rNorms(0));

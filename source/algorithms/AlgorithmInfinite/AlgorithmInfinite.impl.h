@@ -13,7 +13,6 @@
 #include "tools/infinite/h5.h"
 #include "tools/infinite/measure.h"
 
-
 template<typename Scalar>
 AlgorithmInfinite<Scalar>::AlgorithmInfinite(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz opt_ritz_, AlgorithmType algo_type)
     : AlgorithmBase(std::move(h5ppFile_), opt_ritz_, algo_type) {
@@ -275,7 +274,7 @@ void AlgorithmInfinite<Scalar>::check_convergence_entg_entropy(std::optional<Rea
 template<typename Scalar>
 void AlgorithmInfinite<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
     status.event = storage_event;
-    auto sinfo   = StorageInfo(status, tensors.state->get_name());
+    auto sinfo   = StorageInfo(status, tensors.get_state().get_name(), tensors.get_model().model_type);
     tools::log->debug("Writing to file: Reason [{}] | state prefix [{}]", enum2sv(sinfo.storage_event), sinfo.get_state_prefix());
     // Start saving tensors and metadata
     tools::infinite::h5::save::bonds(*h5file, sinfo, tensors.get_state());

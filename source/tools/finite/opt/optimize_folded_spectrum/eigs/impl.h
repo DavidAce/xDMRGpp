@@ -17,7 +17,6 @@
 #include "tensors/state/StateFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
 // #include "tools/finite/measure.h"
 // #include "tools/finite/multisite.h"

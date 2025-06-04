@@ -91,7 +91,6 @@ void BlockLanczos<Scalar>::build() {
         // 2) Compute A and add it to T
         A                           = Q_cur.adjoint() * W;
         T.block(i * b, i * b, b, b) = A;
-        status.max_eval_est        = std::max(status.max_eval_est, A.norm() * std::abs(std::sqrt<RealScalar>(b)));
 
         // 3) Subtract projections to A and B once
         W.noalias() -= Q_cur * A; // Qi * Qi.adjoint()*H*Qi

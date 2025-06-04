@@ -63,6 +63,7 @@ class Loader {
             if constexpr(std::is_same_v<T, long long>) return std::stoll(param_val);
             if constexpr(std::is_same_v<T, size_t>) return std::stoul(param_val);
             if constexpr(std::is_same_v<T, double>) return std::stod(param_val);
+            if constexpr(std::is_same_v<T, float>) return std::stof(param_val);
             if constexpr(std::is_enum_v<T>) return sv2enum<T>(param_val);
             if constexpr(std::is_same_v<T, std::string>) {
                 if(param_val == "\"\"")

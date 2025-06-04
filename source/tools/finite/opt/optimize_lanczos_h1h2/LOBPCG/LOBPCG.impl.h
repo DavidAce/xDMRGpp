@@ -346,7 +346,7 @@ void LOBPCG<Scalar>::build() {
     // eig::log->warn("Q before DGKS: \n{}\n", linalg::matrix::to_string(Q, 8));
 
     // pick a relative breakdown tolerance:
-    auto       breakdownTol      = eps * 10 * std::max({status.H_norm_est()});
+    auto       breakdownTol      = eps * 10 * std::max({status.op_norm_est()});
     VectorIdxT active_block_mask = VectorIdxT::Ones(qBlocks + wBlocks + mBlocks + sBlocks + rBlocks);
 
     assert(active_block_mask.size() * b == Q.cols());

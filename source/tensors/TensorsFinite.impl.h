@@ -1,10 +1,10 @@
 #pragma once
-#include "TensorsFinite.h"
 #include "config/debug.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/sfinae.h"
 #include "math/cast.h"
+#include "math/linalg.h"
 #include "math/num.h"
 #include "math/tenx.h"
 #include "qm/spin.h"
@@ -13,9 +13,11 @@
 #include "tensors/site/mpo/MpoSite.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
+#include "TensorsFinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
 #include "tools/finite/env.h"
+#include "tools/finite/env/BondExpansionConfig.h"
 #include "tools/finite/env/BondExpansionResult.h"
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/measure/norm.h"
@@ -24,12 +26,7 @@
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
 #include "tools/finite/ops.h"
-
-//
-#include "math/linalg.h"
-#include <tools/finite/opt_meta.h>
-
-
+#include "tools/finite/opt_meta.h"
 
 template<typename T>
 Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &envL, const Eigen::Tensor<T, 3> &envR) {
@@ -57,7 +54,6 @@ Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen
         envL.contract(mpo, tenx::idx({2}, {0})).contract(envR, tenx::idx({2}, {2})).shuffle(tenx::array6{3, 1, 5, 2, 0, 4}).reshape(dims);
     return ham;
 }
-
 
 template<typename Scalar>
 TensorsFinite<Scalar>::TensorsFinite()
@@ -572,33 +568,32 @@ void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &
 }
 
 template<typename Scalar>
-BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(const OptMeta &opt_meta) {
+BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(BondExpansionConfig bcfg) {
     // if(active_sites.empty()) throw except::runtime_error("No active sites for subspace expansion");
-    auto t_exp     = tid::tic_scope("bondexp");
-    auto expresult = BondExpansionResult<Scalar>();
+    auto res = BondExpansionResult<Scalar>();
     if(get_position<long>() < 0) {
-        expresult.msg = "Negative position";
-        return expresult;
+        res.msg = "Negative position";
+        return res;
     }
-    if(!opt_meta.svd_cfg.has_value()) {
-        expresult.msg = "svd not configured";
-        return expresult;
-    }
+    auto t_exp = tid::tic_scope("bondexp");
+
     if(active_sites.empty()) activate_sites({get_position<size_t>()});
     rebuild_edges(); // Use fresh edges
     if constexpr(settings::debug) assert_validity();
-    if(has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::POSTOPT_1SITE) and opt_meta.optExit != OptExit::NONE) {
-        expresult = tools::finite::env::rexpand_bond_postopt_1site(get_state(), get_model(), get_edges(), opt_meta);
-    } else if(has_any_flags(opt_meta.bondexp_policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE)) {
-        expresult = tools::finite::env::expand_bond_preopt_nsite(get_state(), get_model(), get_edges(), opt_meta);
-    } else {
-        expresult.msg =
-            fmt::format("The policy does not allow bond expansion: {} | OptExit: {}", flag2str(opt_meta.bondexp_policy), flag2str(opt_meta.optExit));
-        return expresult;
+    if(has_flag(bcfg.policy, BondExpansionPolicy::POSTOPT_1SITE) and bcfg.order == BondExpansionOrder::POSTOPT) {
+        res = tools::finite::env::rexpand_bond_postopt_1site(get_state(), get_model(), get_edges(), bcfg);
+    } else if(has_flag(bcfg.policy, BondExpansionPolicy::PREOPT_1SITE) and bcfg.order == BondExpansionOrder::PREOPT) {
+        res = tools::finite::env::rexpand_bond_preopt_1site(get_state(), get_model(), get_edges(), bcfg);
+    } else if(has_any_flags(bcfg.policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE) and
+              bcfg.order == BondExpansionOrder::PREOPT) {
+        res = tools::finite::env::expand_bond_preopt_nsite(get_state(), get_model(), get_edges(), bcfg);
+        tools::log->debug("Expanded environment {} block [{}-{}] | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f}",
+                          flag2str(bcfg.policy), res.posL, res.posR, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, fp(res.var_old), fp(res.var_new),
+                          fp(res.ene_old), fp(res.ene_new));
     }
-    if(expresult.ok) clear_measurements();
+    if(res.ok) clear_measurements();
     if constexpr(settings::debug) assert_validity();
-    return expresult;
+    return res;
 }
 
 template<typename Scalar>
@@ -783,11 +778,11 @@ void TensorsFinite<Scalar>::clear_measurements(LogPolicy logPolicy) const {
 template<typename Scalar>
 void TensorsFinite<Scalar>::clear_cache(LogPolicy logPolicy) const {
     if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) tools::log->trace("Clearing tensors cache");
-    cache_fp32 = Cache<fp32>();
-    cache_fp64 = Cache<fp64>();
+    cache_fp32  = Cache<fp32>();
+    cache_fp64  = Cache<fp64>();
     cache_fp128 = Cache<fp128>();
-    cache_cx32 = Cache<cx32>();
-    cache_cx64 = Cache<cx64>();
+    cache_cx32  = Cache<cx32>();
+    cache_cx64  = Cache<cx64>();
     cache_cx128 = Cache<cx128>();
     model->clear_cache(logPolicy);
     state->clear_cache(logPolicy);

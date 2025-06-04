@@ -12,7 +12,6 @@
 #include "tid/tid.h"
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
-#include "tools/finite/env.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/print.h"

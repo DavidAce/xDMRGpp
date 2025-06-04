@@ -19,7 +19,7 @@
 #include "tid/tid.h"
 #include "tools/common/h5/storage_info.h"
 #include "tools/common/log.h"
-#include "tools/finite/env.h"
+#include "tools/finite/env/BondExpansionConfig.h"
 #include "tools/finite/env/BondExpansionResult.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/dimensions.h"
@@ -35,7 +35,6 @@
 #include "tools/finite/ops.h"
 #include "tools/finite/print.h"
 #include <h5pp/h5pp.h>
-
 template<typename Scalar>
 AlgorithmFinite<Scalar>::AlgorithmFinite(OptRitz opt_ritz, AlgorithmType algo_type) : AlgorithmBase(opt_ritz, algo_type) {
     tools::log->trace("Constructing class_algorithm_finite");
@@ -274,8 +273,8 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
         if(status.iter < settings::strategy::iter_max_warmup /* or std::abs(h2) > 1e-3 */) {
             m1.optAlgo          = settings::xdmrg::algo_warmup;
             m1.optRitz          = settings::xdmrg::ritz_warmup;
-            m1.bondexp_maxalpha = std::max(settings::strategy::dmrg_bond_expansion::postopt::maxalpha, 1e1);
-            m1.bondexp_minalpha = std::max(settings::strategy::dmrg_bond_expansion::postopt::minalpha, 1e1);
+            m1.bondexp_maxalpha = std::max<float>(settings::strategy::dmrg_bond_expansion::postopt::maxalpha, 1e1f);
+            m1.bondexp_minalpha = std::max<float>(settings::strategy::dmrg_bond_expansion::postopt::minalpha, 1e1f);
         }
     }
 
@@ -303,7 +302,8 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     m1.bondexp_maxalpha  = settings::strategy::dmrg_bond_expansion::postopt::maxalpha;
     m1.bondexp_minalpha  = settings::strategy::dmrg_bond_expansion::postopt::minalpha;
     m1.bondexp_blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
-    m1.bondexp_factor    = std::clamp(std::pow(10.0, static_cast<double>(status.algorithm_has_stuck_for)), 1e0, 1e3);
+    m1.bondexp_factor    = settings::strategy::dmrg_bond_expansion::bond_factor;
+    m1.bondexp_bondlim   = static_cast<long>(std::ceil(settings::strategy::dmrg_bond_expansion::bond_factor * status.bond_lim));
     m1.subspace_tol      = settings::precision::target_subspace_error; // Used in Hybrid DMRG-X
 
     // m1.primme_method = "PRIMME_GD_Olsen_plusK"; // PRIMME_GD_Olsen_plusK is fastest when using a large jcb preconditioner, since it uses the least matvecs
@@ -330,10 +330,10 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
         target_tol  = std::clamp(target_tol, settings::precision::eigs_tol_min, settings::precision::eigs_tol_max);
         m1.eigs_tol = target_tol;
     }
-    if(m1.optAlgo == OptAlgo::GDMRG) {
-    m1.eigs_tol = std::sqrt(m1.eigs_tol.value_or(settings::precision::eigs_tol_min)); // GDMRG seems happy with higher tol
+    // if(m1.optAlgo == OptAlgo::GDMRG) {
+    // m1.eigs_tol = std::sqrt(m1.eigs_tol.value_or(settings::precision::eigs_tol_min)); // GDMRG seems happy with higher tol
     // m1.eigs_tol = settings::precision::eigs_tol_max;
-    }
+    // }
 
     m1.eigs_jcbMaxBlockSize = settings::precision::eigs_jcb_min_blocksize;
     if(status.algorithm_saturated_for + status.algorithm_has_stuck_for > 0) {
@@ -358,76 +358,29 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
 }
 
 template<typename Scalar>
-void AlgorithmFinite<Scalar>::expand_bonds_postopt() {
-    OptMeta opt_meta;
-    switch(settings::precision::optScalar) {
-        case ScalarType::FP32: opt_meta.optType = OptType::FP32; break;
-        case ScalarType::FP64: opt_meta.optType = OptType::FP64; break;
-        case ScalarType::FP128: opt_meta.optType = OptType::FP128; break;
-        case ScalarType::CX32: opt_meta.optType = OptType::CX32; break;
-        case ScalarType::CX64: opt_meta.optType = OptType::CX64; break;
-        case ScalarType::CX128: opt_meta.optType = OptType::CX128; break;
-    }
-    opt_meta.bondexp_policy    = settings::strategy::dmrg_bond_expansion_policy;
-    opt_meta.bondexp_maxiter   = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
-    opt_meta.bondexp_nkrylov   = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
-    opt_meta.bondexp_maxalpha  = settings::strategy::dmrg_bond_expansion::postopt::maxalpha;
-    opt_meta.bondexp_minalpha  = settings::strategy::dmrg_bond_expansion::postopt::minalpha;
-    opt_meta.bondexp_blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
-    opt_meta.bondexp_factor    = std::clamp(std::pow(10.0, static_cast<double>(status.algorithm_has_stuck_for)), 1e0, 1e3);
-    opt_meta.optAlgo           = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
+void AlgorithmFinite<Scalar>::expand_bonds(BondExpansionOrder order) {
+    BondExpansionConfig bcfg;
+    bcfg.order     = order;
+    bcfg.policy    = settings::strategy::dmrg_bond_expansion_policy;
+    bcfg.maxiter   = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
+    bcfg.nkrylov   = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
+    bcfg.maxalpha  = settings::strategy::dmrg_bond_expansion::postopt::maxalpha;
+    bcfg.minalpha  = settings::strategy::dmrg_bond_expansion::postopt::minalpha;
+    bcfg.factor    = settings::strategy::dmrg_bond_expansion::bond_factor;
+    bcfg.bondlim   = static_cast<long>(std::ceil(settings::strategy::dmrg_bond_expansion::bond_factor * status.bond_lim));
+    bcfg.trnclim   = status.trnc_lim;
+    bcfg.blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
+    bcfg.optAlgo   = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
+    bcfg.optRitz   = status.opt_ritz;
 
-    opt_meta.optRitz = status.opt_ritz;
-    opt_meta.optExit = OptExit::SUCCESS;
-    opt_meta.svd_cfg = svd::config(status.bond_lim, status.trnc_lim);
-    expand_bonds(opt_meta);
-}
+    if(bcfg.policy == BondExpansionPolicy::NONE) return;
 
-template<typename Scalar>
-void AlgorithmFinite<Scalar>::expand_bonds(OptMeta &opt_meta) {
-    // Set a good initial value to start with
-    if(opt_meta.bondexp_policy == BondExpansionPolicy::NONE) return;
-    bool has_preopt       = has_any_flags(opt_meta.bondexp_policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE);
-    bool has_postopt      = has_flag(opt_meta.bondexp_policy, BondExpansionPolicy::POSTOPT_1SITE);
-    bool has_postopt_only = has_postopt and !has_preopt;
-    bool has_preopt_only  = has_preopt and !has_postopt;
-    if(has_postopt_only and opt_meta.optExit == OptExit::NONE) return; // Optimization hasn't been done yet.
-    if(has_preopt_only and opt_meta.optExit != OptExit::NONE) return;  // Optimization has been done, but we only want to expand before optimization
-
-    opt_meta.svd_cfg = opt_meta.svd_cfg.value_or(svd::config(status.bond_lim, status.trnc_lim));
-    // opt_meta.svd_cfg->truncation_limit.value() *= 1e-2;
-    // opt_meta.svd_cfg->rank_max.value() +=10;
-    auto res = tensors.expand_bonds(opt_meta);
+    auto res = tensors.expand_bonds(bcfg);
     if(not res.ok) {
         tools::log->debug("Expansion canceled: {}", res.msg);
         return;
     }
-    tools::log->debug("Expanded environment {} block [{}-{}] | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f}",
-                      flag2str(opt_meta.bondexp_policy), res.posL, res.posR, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, fp(res.var_old), fp(res.var_new),
-                      fp(res.ene_old), fp(res.ene_new));
-    using namespace settings::strategy;
     status.bond_expansion_alpha = !std::isnan(res.alpha_h1v) ? res.alpha_h1v : res.alpha_h2v;
-    opt_meta.problem_dims       = tools::finite::multisite::get_dimensions(tensors.get_state());
-    opt_meta.problem_size       = tools::finite::multisite::get_problem_size(tensors.get_state());
-    opt_meta.optSolver          = opt_meta.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
-}
-
-template<typename Scalar>
-void AlgorithmFinite<Scalar>::expand_bonds(BondExpansionPolicy bep, OptAlgo algo, OptRitz ritz, std::optional<svd::config> svd_cfg) {
-    OptMeta opt_meta;
-    opt_meta.bondexp_policy    = bep;
-    opt_meta.bondexp_maxiter   = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
-    opt_meta.bondexp_nkrylov   = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
-    opt_meta.bondexp_maxalpha  = settings::strategy::dmrg_bond_expansion::postopt::maxalpha;
-    opt_meta.bondexp_minalpha  = settings::strategy::dmrg_bond_expansion::postopt::minalpha;
-    opt_meta.bondexp_blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
-    opt_meta.bondexp_factor    = std::clamp(std::pow(10.0, static_cast<double>(status.algorithm_has_stuck_for)), 1e0, 1e3);
-    opt_meta.optAlgo           = algo;
-    opt_meta.optRitz           = ritz;
-    opt_meta.optExit           = OptExit::NONE;
-    opt_meta.svd_cfg           = svd_cfg.value_or(svd::config(status.bond_lim, status.trnc_lim));
-
-    expand_bonds(opt_meta);
 }
 
 template<typename Scalar>
@@ -488,15 +441,7 @@ void AlgorithmFinite<Scalar>::move_center_point(std::optional<long> num_moves) {
             tools::log->trace("Moving center position | step {} | pos {} | dir {} ", status.step, tensors.template get_position<long>(),
                               tensors.state->get_direction());
 
-            auto pos_bef_exp = tensors.template get_position<long>();
-            expand_bonds_postopt();
-            auto pos_aft_exp = tensors.template get_position<long>();
-
-            if(pos_bef_exp != pos_aft_exp) {
-                status.step += std::abs(pos_aft_exp - pos_bef_exp); // The expansion took care of moving moving the state position
-            } else {
-                status.step += tensors.move_center_point(svd::config(status.bond_lim, status.trnc_lim));
-            }
+            status.step += tensors.move_center_point(svd::config(status.bond_lim, status.trnc_lim));
 
             // Do not go past the edge if you aren't there already!
             // It's important to stay at the inward edge, so we can do convergence checks and so on
@@ -1011,7 +956,8 @@ void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     auto etol_new = std::max(eigs_tol_min, dmrg_eigs_tol * rate);
     if(etol_new < eigs_tol_min / rate) etol_new = eigs_tol_min; // If the tolerance is close enough to reaching min, just set min.
 
-    tools::log->info("Updated eigs tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_tol, etol_new, fmt::join(reason, " | "));
+    if(dmrg_eigs_tol != etol_new)
+        tools::log->info("Updated eigs tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_tol, etol_new, fmt::join(reason, " | "));
     dmrg_eigs_tol = etol_new;
     // status.algorithm_has_stuck_for = 0;
     // status.algorithm_saturated_for = 0;
@@ -1395,7 +1341,7 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
     if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::variance_saturation_sensitivity);
     if(saturation_sensitivity <= 0) return;
     if(not threshold) {
-        if(status.variance_mpo_saturated_for > 0)
+        if(status.algorithm_has_stuck_for * 2 > settings::strategy::iter_max_stuck)
             threshold = std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
         else
             threshold = std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
@@ -1810,16 +1756,26 @@ void AlgorithmFinite<Scalar>::print_status_full() {
     tools::log->info("Spin components (global X,Y,Z)     = {::.16f}", fv(tools::finite::measure::spin_components(tensors.get_state())));
 
     if(status.algo_type == AlgorithmType::xDMRG) {
-        auto expectation_values_xyz = tools::finite::measure::spin_expectation_values_xyz(tensors.get_state());
-        auto structure_factor_xyz   = tools::finite::measure::spin_structure_factor_xyz(tensors.get_state());
-        auto opdm_spectrum          = tools::finite::measure::opdm_spectrum(tensors.get_state());
-        tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", fv(expectation_values_xyz[0]));
-        tools::log->info("Expectation values ⟨σy⟩            = {::+9.6f}", fv(expectation_values_xyz[1]));
-        tools::log->info("Expectation values ⟨σz⟩            = {::+9.6f}", fv(expectation_values_xyz[2]));
-        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σx_i σx_j⟩² = {:+.16f}", fp(structure_factor_xyz[0]));
-        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σy_i σy_j⟩² = {:+.16f}", fp(structure_factor_xyz[1]));
-        tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σz_i σz_j⟩² = {:+.16f}", fp(structure_factor_xyz[2]));
-        tools::log->info("OPDM spectrum ⟨σ+..σz..σ-⟩         = {::.8f}", fv(opdm_spectrum));
+        if(tensors.get_state().measurements.expectation_values_sx.has_value()) {
+            tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", fv(tensors.get_state().measurements.expectation_values_sx.value()));
+        }
+        if(tensors.get_state().measurements.expectation_values_sy.has_value()) {
+            tools::log->info("Expectation values ⟨σy⟩            = {::+9.6f}", fv(tensors.get_state().measurements.expectation_values_sy.value()));
+        }
+        if(tensors.get_state().measurements.expectation_values_sz.has_value()) {
+            tools::log->info("Expectation values ⟨σz⟩            = {::+9.6f}", fv(tensors.get_state().measurements.expectation_values_sz.value()));
+        }
+        if(tensors.get_state().measurements.structure_factor_x.has_value()) {
+            tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σx_i σx_j⟩² = {:+.16f}", fp(tensors.get_state().measurements.structure_factor_x.value()));
+        }
+        if(tensors.get_state().measurements.structure_factor_y.has_value()) {
+            tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σy_i σy_j⟩² = {:+.16f}", fp(tensors.get_state().measurements.structure_factor_y.value()));
+        }
+        if(tensors.get_state().measurements.structure_factor_z.has_value()) {
+            tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σz_i σz_j⟩² = {:+.16f}", fp(tensors.get_state().measurements.structure_factor_z.value()));
+        }
+        if(tensors.get_state().measurements.opdm_spectrum.has_value())
+            tools::log->info("OPDM spectrum ⟨σ+..σz..σ-⟩         = {::.8f}", fv(tensors.get_state().measurements.opdm_spectrum.value()));
     }
 
     tools::log->info("Truncation Error limit             = {:8.2e}", status.trnc_lim);
