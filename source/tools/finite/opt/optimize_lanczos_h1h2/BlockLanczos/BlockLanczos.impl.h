@@ -29,25 +29,23 @@ void BlockLanczos<Scalar>::write_Q_next_B_DGKS(Eigen::Index i) {
             auto Qj = Q.middleCols(j * b, b);
             QjW     = (Qj.adjoint() * W);
             W.noalias() -= Qj * QjW;
-            eig::log->info("DGKS W({1}) -= Q({0}) * (Q({0}).adjoint() * W({1})) norm {2:.16f}", j, i, QjW.norm());
             // if(QjW.norm() < orthTolQ) break;
         }
     }
 
-    if constexpr(settings::debug_lanczos) {
-        // W should not have overlap with Q_cur or Q_prev
-        for(Eigen::Index j = 0; j <= i; ++j) {
-            // if(i - j > 1) continue;
-            auto Qj      = Q.middleCols(j * b, b); // Q_prev and Q_cur
-            auto QjWnorm = (Qj.adjoint() * W).norm();
-            if(QjWnorm >= orthTolQ) eig::log->warn("overlap Q({}).adjoint() * W({}) = {:.16f} ", j, i, QjWnorm);
-            // assert(QjWnorm < orthTolQ);
-        }
-    }
+    // if constexpr(settings::debug_lanczos) {
+    //     // W should not have overlap with Q_cur or Q_prev
+    //     for(Eigen::Index j = 0; j <= i; ++j) {
+    //         // if(i - j > 1) continue;
+    //         auto Qj      = Q.middleCols(j * b, b); // Q_prev and Q_cur
+    //         auto QjWnorm = (Qj.adjoint() * W).norm();
+    //         // assert(QjWnorm < orthTolQ);
+    //     }
+    // }
 
     // Run QR(W) = Q_next * B.
     hhqr.compute(W); // Gives us Q_next * B,  B = Q_next.adjoint() * W, where W = (H*Q_cur - projections)
-    Q.middleCols((i + 1) * b, b) = hhqr.householderQ().setLength(W.cols()) * MatrixType::Identity(N, b);                            // Q_next
+    Q.middleCols((i + 1) * b, b) = hhqr.householderQ().setLength(W.cols()) * MatrixType::Identity(N, b);        // Q_next
     B                            = hhqr.matrixQR().topLeftCorner(b, b).template triangularView<Eigen::Upper>(); // B
 }
 
@@ -161,7 +159,7 @@ void BlockLanczos<Scalar>::build() {
                         // if(i - j > 1) continue;
                         auto Qj           = Q.middleCols(j * b, b); // Q_prev and Q_cur
                         auto QjQnext_norm = (Qj.adjoint() * Q_next).norm();
-                        eig::log->info("overlap Q({}).adjoint() * Q({}) = {:.16f} ", j, i + 1, QjQnext_norm);
+                        // eig::log->info("overlap Q({}).adjoint() * Q({}) = {:.16f} ", j, i + 1, QjQnext_norm);
                         assert(QjQnext_norm < orthTolQ * 10000);
                     }
                 }
@@ -185,7 +183,7 @@ void BlockLanczos<Scalar>::build() {
                 eig::log->info("G = Q.adjoint()*Q = \n{}\n", linalg::matrix::to_string(G, 8));
                 for(long j = 0; j < diff.cols(); ++j) {
                     for(long i = 0; i < diff.rows(); ++i) {
-                        if(std::abs(diff(i, j)) > RealScalar{1e-6f}) { eig::log->info("diff({},{}) = {:.16f}", i, j, diff(i, j)); }
+                        if(std::abs(diff(i, j)) > RealScalar{1e-6f}) { eig::log->info("diff({},{}) = {:.16f}", i, j, fp(diff(i, j))); }
                     }
                 }
             }
@@ -194,4 +192,3 @@ void BlockLanczos<Scalar>::build() {
         }
     }
 }
-

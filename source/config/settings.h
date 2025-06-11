@@ -222,18 +222,18 @@ namespace settings {
         inline size_t              iter_max_stuck              = 5;                                      /*!< If status.algorithm_saturated_for > 0 then status.algorithm_has_stuck_for +=1. If stuck for this many iterations, we stop. */
         inline size_t              iter_max_saturated          = 5;                                      /*!< Saturation means that both variance and entanglement saturated. But if either saturates for this many iterations, then status.algorithm_saturated_for += 1 */
         inline size_t              iter_min_converged          = 1;                                      /*!< Require convergence at least this many iterations before success */
-        inline BlockSizePolicy     dmrg_blocksize_policy       = BlockSizePolicy::MIN;                   /*!< Bitflag to control the adaptive dmrg blocksize {MIN,MAX,ICOM,ICOMPLUS1,SATURATED,STUCK,FIN_BOND,FIN_TRNC} */
+        inline BlockSizePolicy     dmrg_blocksize_policy       = BlockSizePolicy::MIN;                   /*!< Bitflag to control the adaptive dmrg blocksize {MIN,MAX,INFO,INFOPLUS1,SATURATED,STUCK,FIN_BOND,FIN_TRNC} */
         inline size_t              dmrg_min_blocksize          = 1;                                      /*!< Minimum number of sites in a dmrg optimization step. */
         inline size_t              dmrg_max_blocksize          = 4;                                      /*!< Maximum number of sites in a dmrg optimization step. */
         inline long                dmrg_max_prob_size          = 1024*2*1024;                            /*!< Restricts the dmrg blocksize to keep the problem size below this limit. Problem size = chiL * (spindim ** blocksize) * chiR */
         inline BondExpansionPolicy dmrg_bond_expansion_policy  = BondExpansionPolicy::DEFAULT;           /*!< Select options for bond expansion (aka subspace expansion)  [NONE, POSTOPT_1SITE, PREOPT_NSITE_REAR, PREOPT_NSITE_FORE, H1, H2, DEFAULT=POSTOPT_1SITE | H1 | H2] */
         namespace dmrg_bond_expansion {
-           inline float               bond_factor              = 1.1f;                                    /*!< Expand the bond dimension by this factor above the current bond dimension limit (value  < 1.0 = disabled) */
-            namespace postopt {
-                inline float               maxalpha            = 1e-3f;                                   /*!< Upper limit for mixing factors derived from the local residual norms */
-                inline float               minalpha            = 1e-15f;                                  /*!< Lower limit for mixing factors derived from the local residual norms */
+            namespace dmrg3s {
+                inline double               maxalpha            = 1e-2;                                   /*!< Upper limit for mixing factors derived from the local residual norms */
+                inline double               minalpha            = 1e-15;                                  /*!< Lower limit for mixing factors derived from the local residual norms */
             }
             namespace preopt {
+                inline float               bond_factor         = 1.05f;                                  /*!< Expand the bond dimension by this factor above the current bond dimension limit (value  <= 1.0 = disabled) */
                 inline size_t              maxiter             = 1;                                      /*!< How many Lanczos iterations to use in the nsite bond expansion */
                 inline size_t              nkrylov             = 3;                                      /*!< The krylov subspace size to use in nsite bond expansion */
             }
@@ -256,41 +256,42 @@ namespace settings {
 
     /*! \namespace settings::precision Settings for the convergence threshold and precision of MPS, SVD and eigensolvers */
     namespace precision {
-        inline ScalarType         algoScalar                      = ScalarType::CX64;            /*!< Scalar type for tensor storage (state, model, edges)  */
-        inline ScalarType         optScalar                       = ScalarType::CX64;            /*!< Scalar type for computations (eig, eigs, svd) */
-        inline long               eig_max_size                    = 4096  ;                      /*!< Maximum problem size before switching from eig to eigs. */
-        inline size_t             eigs_iter_min                   = 1000;                        /*!< Minimum number of iterations for eigenvalue solver. */
-        inline size_t             eigs_iter_max                   = 100000;                      /*!< Maximum number of iterations for eigenvalue solver. */
-        inline double             eigs_iter_gain                  = 2     ;                      /*!< Increase number of iterations on OptSolver::EIGS by gain^(iters without progress) */
-        inline GainPolicy         eigs_iter_gain_policy           = GainPolicy::SAT_EVAR;         /*!< Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC] */
-        inline double             eigs_tol_min                    = 1e-14 ;                      /*!< Precision tolerance for halting the eigenvalue solver. */
-        inline double             eigs_tol_max                    = 1e-8 ;                       /*!< Precision tolerance for halting the eigenvalue solver. */
-        inline int                eigs_ncv                        = 0     ;                      /*!< Basis size (krylov space) in the eigensolver. Set ncv <= 0 for automatic selection */
-        inline int                eigs_nev_min                    = 1     ;                      /*!< The minimum number of eigenpairs to request on OptSolver::EIGS */
-        inline int                eigs_nev_max                    = 8     ;                      /*!< The maximum number of eigenpairs to request on OptSolver::EIGS when stuck (increases slowly) (ncv may have to increase accordingly) */
-        inline long               eigs_max_size_shift_invert      = 4096  ;                      /*!< Maximum problem size allowed for shift-invert of the local (effective) hamiltonian matrix. */
+        inline ScalarType         algoScalar                      = ScalarType::CX64;       /*!< Scalar type for tensor storage (state, model, edges)  */
+        inline ScalarType         optScalar                       = ScalarType::CX64;       /*!< Scalar type for computations (eig, eigs, svd) */
+        inline long               eig_max_size                    = 4096  ;                 /*!< Maximum problem size before switching from eig to eigs. */
+        inline long               eigs_max_size_shift_invert      = 4096  ;                 /*!< Maximum problem size allowed for shift-invert of the local (effective) hamiltonian matrix. */
+        inline size_t             eigs_iter_min                   = 1000;                   /*!< Minimum number of iterations for eigenvalue solver. */
+        inline size_t             eigs_iter_max                   = 100000;                 /*!< Maximum number of iterations for eigenvalue solver. */
+        inline double             eigs_iter_gain                  = 2     ;                 /*!< Increase number of iterations on OptSolver::EIGS by gain^(iters without progress) */
+        inline GainPolicy         eigs_iter_gain_policy           = GainPolicy::SAT_ALGO;   /*!< Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC] */
+        inline double             eigs_tol_min                    = 1e-14 ;                 /*!< Precision tolerance for halting the eigenvalue solver. */
+        inline double             eigs_tol_max                    = 1e-8 ;                  /*!< Precision tolerance for halting the eigenvalue solver. */
+        inline int                eigs_ncv_min                    = 0     ;                 /*!< Minimum krylov subspace size in the eigensolver. Set ncv <= 0 for automatic selection */
+        inline int                eigs_ncv_max                    = 0     ;                 /*!< Minimum krylov subspace size in the eigensolver. Set ncv <= 0 for automatic selection */
+        inline int                eigs_nev_min                    = 1     ;                 /*!< The minimum number of eigenpairs to request on OptSolver::EIGS */
+        inline int                eigs_nev_max                    = 8     ;                 /*!< The maximum number of eigenpairs to request on OptSolver::EIGS when stuck (increases slowly) (ncv may have to increase accordingly) */
+        inline long               eigs_blk_min                    = 1;                      /*!< Minimum block size in the eigenvalue solver (ritz vectors and residuals in block size chunks) */
+        inline long               eigs_blk_max                    = 2;                      /*!< Maximum block size in the eigenvalue solver (ritz vectors and residuals in block size chunks) */
+        inline long               eigs_jcb_blocksize_min          = 128   ;                 /*!< Minimum block size used in the block-jacobi preconditioner */
+        inline long               eigs_jcb_blocksize_max          = 4096  ;                 /*!< Maximum block size used in the block-jacobi preconditioner (increases up to max when stuck) */
 
-        inline long               eigs_jcb_min_blocksize          = 128   ;                      /*!< Minimum block size used in the block-jacobi preconditioner */
-        inline long               eigs_jcb_max_blocksize          = 4096  ;                      /*!< Maximum block size used in the block-jacobi preconditioner (increases up to max when stuck) */
+        inline double             svd_truncation_min              = 1e-14 ;                 /*!< Truncation error limit, i.e. discard singular values while the truncation error is lower than this */
+        inline double             svd_truncation_max              = 1e-6  ;                 /*!< If truncation error limit is updated (trnc_decrease_when != NEVER), start from this value */
+        inline size_t             svd_switchsize_bdc              = 16    ;                 /*!< Linear size of a matrix, below which SVD will use slower but more precise JacobiSVD instead of BDC (default is 16 , good could be ~64) */
+        inline bool               svd_save_fail                   = false ;                 /*!< Save failed SVD calculations to file */
 
-
-        inline double             svd_truncation_min              = 1e-14 ;                      /*!< Truncation error limit, i.e. discard singular values while the truncation error is lower than this */
-        inline double             svd_truncation_max              = 1e-6  ;                      /*!< If truncation error limit is updated (trnc_decrease_when != NEVER), start from this value */
-        inline size_t             svd_switchsize_bdc              = 16    ;                      /*!< Linear size of a matrix, below which SVD will use slower but more precise JacobiSVD instead of BDC (default is 16 , good could be ~64) */
-        inline bool               svd_save_fail                   = false ;                      /*!< Save failed SVD calculations to file */
-
-        inline auto               use_compressed_mpo              = MpoCompress::DPL;            /*!< Select the compression scheme for the virtual bond dimensions of H  mpos. Select {NONE, SVD (high compression), DPL (high precision)} */
-        inline auto               use_compressed_mpo_squared      = MpoCompress::DPL;            /*!< Select the compression scheme for the virtual bond dimensions of H² mpos. Select {NONE, SVD (high compression), DPL (high precision)} */
-        inline bool               use_energy_shifted_mpo          = false ;                      /*!< Prevent catastrophic cancellation in H²-E² by subtracting the current energy from the MPOs: H²-E² -> <H-E>² - <(H-E)²> (second term ~ 0). Recommended for fDMRG. */
-        inline bool               use_parity_shifted_mpo          = true  ;                      /*!< Redefining H --> (H + Q(σ)) where Q(σ) = 0.5(1 - prod(σ)) = P(-σ) is the (flipped sign) projection operator (prevents degeneracy from mixing sectors) */
-        inline bool               use_parity_shifted_mpo_squared  = true  ;                      /*!< Redefining H² --> (H² + Q(σ)) where Q(σ) = 0.5(1 - prod(σ)) = P(-σ) is the (flipped sign) projection operator (prevents degeneracy from mixing sectors) */
-        inline double             variance_convergence_threshold  = 1e-12 ;                      /*!< Desired precision on total energy variance. The MPS state is considered good enough when its energy variance reaches below this value */
-        inline double             variance_saturation_sensitivity = 1e-1  ;                      /*!< Energy variance saturates when its log stops changing below this order of magnitude between sweeps. Good values are 1e-1 to 1e-4   */
-        inline double             entropy_saturation_sensitivity  = 1e-3  ;                      /*!< Entanglement entropy saturates when it stops changing below this order of magnitude between sweeps. Good values are 1e-1 to 1e-4   */
-        inline double             infocom_saturation_sensitivity  = 1e-2  ;                      /*!< Information center of mass saturates when it stops changing below this order of magnitude between sweeps. Good values are 1e-1 to 1e-4   */
-        inline double             target_subspace_error           = 1e-10 ;                      /*!< The target subspace error 1-Σ|<ϕ_i|ψ>|². Eigenvectors are found until reaching this value. Measures whether the incomplete basis of eigenstates spans the current state. */
-        inline size_t             max_subspace_size               = 256   ;                      /*!< Maximum number of candidate eigenstates to keep for a subspace optimization step */
-        inline double             max_norm_error                  = 1e-10 ;                      /*!< Maximum norm deviation from unity during integrity checks */
+        inline auto               use_compressed_mpo                  = MpoCompress::DPL;   /*!< Select the compression scheme for the virtual bond dimensions of H  mpos. Select {NONE, SVD (high compression), DPL (high precision)} */
+        inline auto               use_compressed_mpo_squared          = MpoCompress::DPL;   /*!< Select the compression scheme for the virtual bond dimensions of H² mpos. Select {NONE, SVD (high compression), DPL (high precision)} */
+        inline bool               use_energy_shifted_mpo              = false ;             /*!< Prevent catastrophic cancellation in H²-E² by subtracting the current energy from the MPOs: H²-E² -> <H-E>² - <(H-E)²> (second term ~ 0). Recommended for fDMRG. */
+        inline bool               use_parity_shifted_mpo              = true  ;             /*!< Redefining H --> (H + Q(σ)) where Q(σ) = 0.5(1 - prod(σ)) = P(-σ) is the (flipped sign) projection operator (prevents degeneracy from mixing sectors) */
+        inline bool               use_parity_shifted_mpo_squared      = true  ;             /*!< Redefining H² --> (H² + Q(σ)) where Q(σ) = 0.5(1 - prod(σ)) = P(-σ) is the (flipped sign) projection operator (prevents degeneracy from mixing sectors) */
+        inline double             variance_convergence_threshold      = 1e-12 ;             /*!< Desired precision on total energy variance. The MPS state is considered good enough when its energy variance reaches below this value */
+        inline double             variance_saturation_sensitivity     = 1e-1  ;             /*!< Energy variance saturates when its log stops changing below this order of magnitude between sweeps. Good values are 1e-1 to 1e-4   */
+        inline double             entanglement_saturation_sensitivity = 1e-3  ;             /*!< Entanglement entropy saturates when it stops changing below this order of magnitude between sweeps. Good values are 1e-1 to 1e-4   */
+        inline double             locinfoscale_saturation_sensitivity = 1e-2  ;             /*!< Information center of mass saturates when it stops changing below this order of magnitude between sweeps. Good values are 1e-1 to 1e-4   */
+        inline double             target_subspace_error               = 1e-10 ;             /*!< The target subspace error 1-Σ|<ϕ_i|ψ>|². Eigenvectors are found until reaching this value. Measures whether the incomplete basis of eigenstates spans the current state. */
+        inline size_t             max_subspace_size                   = 256   ;             /*!< Maximum number of candidate eigenstates to keep for a subspace optimization step */
+        inline long               max_norm_slack                      = 1000l;              /*!< Permit norm errors within a tolerance = machine_epsilon * slack */
 
         inline double   max_cache_gbts                  = 2.0   ;                  /*!< Maximum cache size (in GB) for temporary objects, e.g. density and transfer matrices used during subsystem entanglement entropy calculations. Increases the information lattice coverage. */
     }
@@ -438,7 +439,7 @@ namespace settings {
         inline OptRitz    ritz_warmup                   = OptRitz::SM;             /*!< Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)] */
         inline OptAlgo    algo_stuck                    = OptAlgo::GDMRG;          /*!< Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]  */
         inline OptRitz    ritz_stuck                    = OptRitz::LM;             /*!< Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)] */
-        inline double     energy_spectrum_shift         = 1e-10 ;                  /*!< (Used with ritz == OptRitz::SM) Shift the energy eigenvalue spectrum by this amount: H -> H - shift   */
+        inline double     energy_spectrum_shift         = 0.0;                     /*!< (Used with ritz == OptRitz::SM) Shift the energy eigenvalue spectrum by this amount: H -> H - shift   */
         inline double     energy_density_target         = 0.5;                     /*!< (Used with ritz == OptRitz::TE) Target energy in [0-1], Target energy = energy_density_target * (EMAX+EMIN) + EMIN. */
         inline size_t     iter_min                      = 4;                       /*!< Min number of iterations. One iterations moves L steps. */
         inline size_t     iter_max                      = 50;                      /*!< Max number of iterations. One iterations moves L steps. */

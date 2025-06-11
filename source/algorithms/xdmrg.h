@@ -51,6 +51,7 @@ class xdmrg : public AlgorithmFinite<Scalar> {
     using AlgorithmFinite<Scalar>::update_bond_dimension_limit;
     using AlgorithmFinite<Scalar>::update_truncation_error_limit;
     using AlgorithmFinite<Scalar>::update_dmrg_blocksize;
+    using AlgorithmFinite<Scalar>::update_mixing_factor;
     using AlgorithmFinite<Scalar>::initialize_model;
     using AlgorithmFinite<Scalar>::initialize_state;
     using AlgorithmFinite<Scalar>::init_bond_dimension_limits;
@@ -71,7 +72,12 @@ class xdmrg : public AlgorithmFinite<Scalar> {
     using AlgorithmFinite<Scalar>::move_center_point;
     using AlgorithmFinite<Scalar>::var_delta;
     using AlgorithmFinite<Scalar>::ene_delta;
-    using AlgorithmFinite<Scalar>::var_change;
+    using AlgorithmFinite<Scalar>::ene_delta_opt;
+    using AlgorithmFinite<Scalar>::ene_delta_svd;
+    using AlgorithmFinite<Scalar>::var_delta_opt;
+    using AlgorithmFinite<Scalar>::var_delta_svd;
+    using AlgorithmFinite<Scalar>::std_delta_opt;
+    using AlgorithmFinite<Scalar>::std_delta_svd;
     using AlgorithmFinite<Scalar>::var_latest;
     using AlgorithmFinite<Scalar>::ene_latest;
     using AlgorithmFinite<Scalar>::last_optalgo;

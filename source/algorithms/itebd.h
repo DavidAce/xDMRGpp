@@ -31,7 +31,7 @@ class itebd : public AlgorithmInfinite<Scalar> {
     using AlgorithmInfinite<Scalar>::update_state;
     using AlgorithmInfinite<Scalar>::update_truncation_error_limit;
     using AlgorithmInfinite<Scalar>::update_bond_dimension_limit;
-    using AlgorithmInfinite<Scalar>::check_convergence_entg_entropy;
+    using AlgorithmInfinite<Scalar>::check_convergence_entanglement;
     using AlgorithmInfinite<Scalar>::check_convergence_variance_mpo;
     using AlgorithmInfinite<Scalar>::check_convergence_variance_ham;
     using AlgorithmInfinite<Scalar>::check_convergence_variance_mom;

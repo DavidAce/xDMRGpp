@@ -26,20 +26,7 @@ namespace tools::finite::env {
 
     using OptMeta = tools::finite::opt::OptMeta;
     /* clang-format off */
-    namespace internal {
-        template<typename T, typename Scalar> void set_mixing_factors_to_rnorm(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg, BondExpansionResult<Scalar> &res);
-        template<typename T, typename Scalar> void set_mixing_factors_to_stdv_H(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg, BondExpansionResult<Scalar> &res);
-        template<typename T, typename Scalar> void get_optimally_mixed_block(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg, BondExpansionResult<Scalar> &res);
-    }
-    template<typename Scalar>  BondExpansionResult<Scalar> get_mixing_factors_postopt_rnorm(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);
-    template<typename Scalar>  BondExpansionResult<Scalar> get_mixing_factors_preopt_krylov(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);
-
-    template<typename Scalar>  std::array<double, 2>         get_optimal_mixing_factor_ene(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionPolicy bep);
-    template<typename Scalar>  std::array<double, 2>         get_optimal_mixing_factor_var(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionPolicy bep);
-    template<typename Scalar>  double                        get_optimal_mixing_factor_ene_old(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionPolicy bep);
-    template<typename Scalar>  double                        get_optimal_mixing_factor_var_old(const std::vector<size_t> &sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionPolicy bep);
-    template<typename Scalar>  BondExpansionResult<Scalar>   expand_bond_ssite_preopt(StateFinite<Scalar> &state, ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);
-    template<typename Scalar>  BondExpansionResult<Scalar>   expand_bond_postopt_1site(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);
+    template<typename Scalar>  BondExpansionResult<Scalar>   expand_bond_dmrg3s(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);
     template<typename Scalar>  BondExpansionResult<Scalar>   rexpand_bond_postopt_1site(StateFinite<Scalar> &state, ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);
     template<typename Scalar>  BondExpansionResult<Scalar>   rexpand_bond_preopt_1site(StateFinite<Scalar> &state, ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);
     template<typename Scalar>  BondExpansionResult<Scalar>   expand_bond_preopt_nsite(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);

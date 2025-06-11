@@ -260,9 +260,9 @@ void AlgorithmInfinite<Scalar>::check_convergence_variance_mom(std::optional<Rea
 }
 
 template<typename Scalar>
-void AlgorithmInfinite<Scalar>::check_convergence_entg_entropy(std::optional<RealScalar> sensitivity) {
+void AlgorithmInfinite<Scalar>::check_convergence_entanglement(std::optional<RealScalar> sensitivity) {
     tools::log->debug("Checking convergence of entanglement");
-    if(not sensitivity) sensitivity = settings::precision::entropy_saturation_sensitivity;
+    if(not sensitivity) sensitivity = settings::precision::entanglement_saturation_sensitivity;
     entropy_iter.emplace_back(tools::infinite::measure::entanglement_entropy(tensors.get_state()));
     auto report = check_saturation(entropy_iter, sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mov);
     if(report.has_computed) {

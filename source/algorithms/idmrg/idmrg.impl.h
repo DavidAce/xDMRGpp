@@ -82,7 +82,7 @@ template<typename Scalar>
 void idmrg<Scalar>::check_convergence() {
     tools::log->trace("Checking convergence");
     auto t_con = tid::tic_scope("conv");
-    check_convergence_entg_entropy();
+    check_convergence_entanglement();
     check_convergence_variance_mpo();
     check_convergence_variance_ham();
     check_convergence_variance_mom();

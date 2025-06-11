@@ -2,7 +2,7 @@
 #include "../assertions.h"
 #include "../BondExpansionConfig.h"
 #include "../BondExpansionResult.h"
-#include "../orthonormalize_dgks.h"
+#include "../expansion_terms.h"
 #include "config/debug.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
@@ -36,110 +36,110 @@ namespace settings {
     inline constexpr bool debug_rexpansion = false;
 }
 
-template<typename T>
-std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> get_rexpansion_terms_preopt_r2l(const Eigen::Tensor<T, 3>                     &M,   // Gets expanded
-                                                                                    const Eigen::Tensor<T, 3>                     &N,   // Gets padded
-                                                                                    const Eigen::Tensor<T, 3>                     &P1,  //
-                                                                                    const Eigen::Tensor<T, 3>                     &P2,  //
-                                                                                    [[maybe_unused]] const BondExpansionResult<T> &res, //
-                                                                                    [[maybe_unused]] const Eigen::Index            bond_max) {
-    /*
-        We form M_P = [M | P] by concatenating along dimension 2.
-        In matrix-language, the columns of P are added as new columns to M.
-        The columns of M and P are normalized (M is bare).
-
-        We form P by taking P1=H1*M and P2=H2*M, where the effective operators act only to the left of the M.
-        We then subtract from P1 and P2 their projections against M and each other. After stacking P = [P1 | P2],
-        we sort the columns of P with a column-pivoting householder QR.
-      */
-    assert(M.dimension(2) == N.dimension(1));
-    assert(P1.size() == 0 or P1.dimension(1) == M.dimension(1));
-    assert(P1.size() == 0 or P1.dimension(0) == M.dimension(0));
-    assert(P2.size() == 0 or P2.dimension(1) == M.dimension(1));
-    assert(P2.size() == 0 or P2.dimension(0) == M.dimension(0));
-    using MatrixT    = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-    using RealScalar = typename MatrixT::RealScalar;
-    using VectorR    = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
-    assert_orthonormal<2>(M); // "
-    assert_orthonormal<1>(N);
-
-    auto max_cols_keep = std::min<Eigen::Index>({M.dimension(0) * M.dimension(1), N.dimension(0) * N.dimension(2)});
-    max_cols_keep      = std::min(max_cols_keep, bond_max);
-    if(max_cols_keep <= M.dimension(2)) {
-        // We can't add more columns beyond the ones that are already fixed
-        return {M, N};
-    }
-
-    // Now let's start calculating residuals.
-    const auto M_matrix = tenx::MatrixMap(M, M.dimension(0) * M.dimension(1), M.dimension(2));
-    MatrixT    P_matrix;
-    if(P1.size() > 0) {
-        P_matrix              = tenx::MatrixMap(P1, P1.dimension(0) * P1.dimension(1), P1.dimension(2));
-        RealScalar maxcolnorm = P_matrix.colwise().norm().maxCoeff();
-        ;
-        P_matrix /= maxcolnorm;
-    }
-    if(P2.size() > 0) {
-        P_matrix.conservativeResize(M_matrix.rows(), P_matrix.cols() + P2.dimension(2));
-        P_matrix.rightCols(P2.dimension(2)) = tenx::MatrixMap(P2, P2.dimension(0) * P2.dimension(1), P2.dimension(2));
-        RealScalar maxcolnorm               = P_matrix.rightCols(P2.dimension(2)).colwise().norm().maxCoeff();
-        P_matrix.rightCols(P2.dimension(2)) /= maxcolnorm;
-    }
-    VectorR P_norms = P_matrix.colwise().norm();
-    // tools::log->info("P norms: {::.3e}", fv(P_norms));
-    orthonormalize_dgks(M_matrix, P_matrix);
-    RealScalar maxPnorm = std::max<RealScalar>(RealScalar{1}, P_matrix.colwise().norm().maxCoeff());
-
-    Eigen::ColPivHouseholderQR<MatrixT> cpqr(P_matrix);
-    auto                                max_cols_keep_P = std::min<Eigen::Index>(cpqr.rank(), std::max<Eigen::Index>(0, max_cols_keep - M.dimension(2)));
-    P_matrix                                            = cpqr.householderQ().setLength(cpqr.rank()) * MatrixT::Identity(P_matrix.rows(), max_cols_keep_P);
-
-    Eigen::Index dim0 = M.dimension(0);
-    Eigen::Index dim1 = M.dimension(1);
-    Eigen::Index dim2 = M_matrix.cols() + P_matrix.cols();
-
-    auto extM = std::array<long, 3>{M.dimension(0), M.dimension(1), M_matrix.cols()};
-    auto extP = std::array<long, 3>{M.dimension(0), M.dimension(1), P_matrix.cols()};
-    auto offM = std::array<long, 3>{0, 0, 0};
-    auto offP = std::array<long, 3>{0, 0, M_matrix.cols()};
-
-    auto M_P = Eigen::Tensor<T, 3>(dim0, dim1, dim2);
-
-    if(extM[2] > 0) M_P.slice(offM, extM) = M;
-    if(extP[2] > 0) M_P.slice(offP, extP) = tenx::TensorMap(P_matrix, extP);
-
-    auto N_0 = Eigen::Tensor<T, 3>(N.dimension(0), M_P.dimension(2), N.dimension(2));
-    N_0.setZero();
-    auto extN_0                              = std::array<long, 3>{N.dimension(0), std::min(N.dimension(1), M_P.dimension(2)), N.dimension(2)};
-    N_0.slice(tenx::array3{0, 0, 0}, extN_0) = N.slice(tenx::array3{0, 0, 0}, extN_0); // Copy N into N_0
-
-    // Sanity checks
-    auto M_P_matrix = tenx::MatrixMap(M_P, M_P.dimension(0) * M_P.dimension(1), M_P.dimension(2));
-
-    assert_allfinite(M_P_matrix);
-    assert_orthonormal<2>(M_P, std::numeric_limits<RealScalar>::epsilon() * maxPnorm);
-
-    return {M_P, N_0};
-}
-
-template<typename T>
-std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> get_rexpansion_terms_preopt_l2r(const Eigen::Tensor<T, 3> &N, // Gets padded
-                                                                                    const Eigen::Tensor<T, 3> &M, // Gets expanded
-                                                                                    const Eigen::Tensor<T, 3> &P1, const Eigen::Tensor<T, 3> &P2,
-                                                                                    const BondExpansionResult<T> &res, const Eigen::Index bond_max) {
-    constexpr auto shf = std::array<long, 3>{0, 2, 1};
-    assert(N.dimension(2) == M.dimension(1));
-    assert_orthonormal<2>(N); // N is an "A"
-    assert_orthonormal<1>(M); // M is a "B"
-
-    auto N_           = Eigen::Tensor<T, 3>(N.shuffle(shf));
-    auto M_           = Eigen::Tensor<T, 3>(M.shuffle(shf));
-    auto P1_          = Eigen::Tensor<T, 3>(P1.shuffle(shf));
-    auto P2_          = Eigen::Tensor<T, 3>(P2.shuffle(shf));
-    auto [M_P_, N_0_] = get_rexpansion_terms_preopt_r2l(M_, N_, P1_, P2_, res, bond_max);
-    return {N_0_.shuffle(shf), M_P_.shuffle(shf)};
-}
-
+// template<typename T>
+// std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> get_rexpansion_terms_preopt_r2l(const Eigen::Tensor<T, 3>                     &M,   // Gets expanded
+//                                                                                     const Eigen::Tensor<T, 3>                     &N,   // Gets padded
+//                                                                                     const Eigen::Tensor<T, 3>                     &P1,  //
+//                                                                                     const Eigen::Tensor<T, 3>                     &P2,  //
+//                                                                                     [[maybe_unused]] const BondExpansionResult<T> &res, //
+//                                                                                     [[maybe_unused]] const Eigen::Index            bond_max) {
+//     /*
+//         We form M_P = [M | P] by concatenating along dimension 2.
+//         In matrix-language, the columns of P are added as new columns to M.
+//         The columns of M and P are normalized (M is bare).
+//
+//         We form P by taking P1=H1*M and P2=H2*M, where the effective operators act only to the left of the M.
+//         We then subtract from P1 and P2 their projections against M and each other. After stacking P = [P1 | P2],
+//         we sort the columns of P with a column-pivoting householder QR.
+//       */
+//     assert(M.dimension(2) == N.dimension(1));
+//     assert(P1.size() == 0 or P1.dimension(1) == M.dimension(1));
+//     assert(P1.size() == 0 or P1.dimension(0) == M.dimension(0));
+//     assert(P2.size() == 0 or P2.dimension(1) == M.dimension(1));
+//     assert(P2.size() == 0 or P2.dimension(0) == M.dimension(0));
+//     using MatrixT    = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+//     using RealScalar = typename MatrixT::RealScalar;
+//     using VectorR    = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
+//     assert_orthonormal<2>(M); // "
+//     assert_orthonormal<1>(N);
+//
+//     auto max_cols_keep = std::min<Eigen::Index>({M.dimension(0) * M.dimension(1), N.dimension(0) * N.dimension(2)});
+//     max_cols_keep      = std::min(max_cols_keep, bond_max);
+//     if(max_cols_keep <= M.dimension(2)) {
+//         // We can't add more columns beyond the ones that are already fixed
+//         return {M, N};
+//     }
+//
+//     // Now let's start calculating residuals.
+//     const auto M_matrix = tenx::MatrixMap(M, M.dimension(0) * M.dimension(1), M.dimension(2));
+//     MatrixT    P_matrix;
+//     if(P1.size() > 0) {
+//         P_matrix              = tenx::MatrixMap(P1, P1.dimension(0) * P1.dimension(1), P1.dimension(2));
+//         RealScalar maxcolnorm = P_matrix.colwise().norm().maxCoeff();
+//         ;
+//         P_matrix /= maxcolnorm;
+//     }
+//     if(P2.size() > 0) {
+//         P_matrix.conservativeResize(M_matrix.rows(), P_matrix.cols() + P2.dimension(2));
+//         P_matrix.rightCols(P2.dimension(2)) = tenx::MatrixMap(P2, P2.dimension(0) * P2.dimension(1), P2.dimension(2));
+//         RealScalar maxcolnorm               = P_matrix.rightCols(P2.dimension(2)).colwise().norm().maxCoeff();
+//         P_matrix.rightCols(P2.dimension(2)) /= maxcolnorm;
+//     }
+//     VectorR P_norms = P_matrix.colwise().norm();
+//     // tools::log->info("P norms: {::.3e}", fv(P_norms));
+//     orthonormalize_dgks(M_matrix, P_matrix);
+//     RealScalar maxPnorm = std::max<RealScalar>(RealScalar{1}, P_matrix.colwise().norm().maxCoeff());
+//
+//     Eigen::ColPivHouseholderQR<MatrixT> cpqr(P_matrix);
+//     auto                                max_cols_keep_P = std::min<Eigen::Index>(cpqr.rank(), std::max<Eigen::Index>(0, max_cols_keep - M.dimension(2)));
+//     P_matrix                                            = cpqr.householderQ().setLength(cpqr.rank()) * MatrixT::Identity(P_matrix.rows(), max_cols_keep_P);
+//
+//     Eigen::Index dim0 = M.dimension(0);
+//     Eigen::Index dim1 = M.dimension(1);
+//     Eigen::Index dim2 = M_matrix.cols() + P_matrix.cols();
+//
+//     auto extM = std::array<long, 3>{M.dimension(0), M.dimension(1), M_matrix.cols()};
+//     auto extP = std::array<long, 3>{M.dimension(0), M.dimension(1), P_matrix.cols()};
+//     auto offM = std::array<long, 3>{0, 0, 0};
+//     auto offP = std::array<long, 3>{0, 0, M_matrix.cols()};
+//
+//     auto M_P = Eigen::Tensor<T, 3>(dim0, dim1, dim2);
+//
+//     if(extM[2] > 0) M_P.slice(offM, extM) = M;
+//     if(extP[2] > 0) M_P.slice(offP, extP) = tenx::TensorMap(P_matrix, extP);
+//
+//     auto N_0 = Eigen::Tensor<T, 3>(N.dimension(0), M_P.dimension(2), N.dimension(2));
+//     N_0.setZero();
+//     auto extN_0                              = std::array<long, 3>{N.dimension(0), std::min(N.dimension(1), M_P.dimension(2)), N.dimension(2)};
+//     N_0.slice(tenx::array3{0, 0, 0}, extN_0) = N.slice(tenx::array3{0, 0, 0}, extN_0); // Copy N into N_0
+//
+//     // Sanity checks
+//     auto M_P_matrix = tenx::MatrixMap(M_P, M_P.dimension(0) * M_P.dimension(1), M_P.dimension(2));
+//
+//     assert_allfinite(M_P_matrix);
+//     assert_orthonormal<2>(M_P, std::numeric_limits<RealScalar>::epsilon() * maxPnorm);
+//
+//     return {M_P, N_0};
+// }
+//
+// template<typename T>
+// std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> get_rexpansion_terms_preopt_l2r(const Eigen::Tensor<T, 3> &N, // Gets padded
+//                                                                                     const Eigen::Tensor<T, 3> &M, // Gets expanded
+//                                                                                     const Eigen::Tensor<T, 3> &P1, const Eigen::Tensor<T, 3> &P2,
+//                                                                                     const BondExpansionResult<T> &res, const Eigen::Index bond_max) {
+//     constexpr auto shf = std::array<long, 3>{0, 2, 1};
+//     assert(N.dimension(2) == M.dimension(1));
+//     assert_orthonormal<2>(N); // N is an "A"
+//     assert_orthonormal<1>(M); // M is a "B"
+//
+//     auto N_           = Eigen::Tensor<T, 3>(N.shuffle(shf));
+//     auto M_           = Eigen::Tensor<T, 3>(M.shuffle(shf));
+//     auto P1_          = Eigen::Tensor<T, 3>(P1.shuffle(shf));
+//     auto P2_          = Eigen::Tensor<T, 3>(P2.shuffle(shf));
+//     auto [M_P_, N_0_] = get_rexpansion_terms_preopt_r2l(M_, N_, P1_, P2_, res, bond_max);
+//     return {N_0_.shuffle(shf), M_P_.shuffle(shf)};
+// }
+//
 template<typename Scalar>
 void merge_rexpansion_terms_preopt_l2r(MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &N_0, MpsSite<Scalar> &mpsR, const Eigen::Tensor<Scalar, 3> &M_P) {
     // The expanded bond sits between mpsL and mpsR.
@@ -206,8 +206,6 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
     // where C gets zero-padded
     std::vector<size_t> pos_expanded;
     auto                pos = state.template get_position<size_t>();
-    // if(state.get_direction() > 0 and pos == std::clamp<size_t>(pos, 0, state.template get_length<size_t>() - 2)) pos_expanded = {pos, pos + 1};
-    // if(state.get_direction() < 0 and pos == std::clamp<size_t>(pos, 1, state.template get_length<size_t>() - 1)) pos_expanded = {pos - 1, pos};
     if(pos == std::clamp<size_t>(pos, 0, state.template get_length<size_t>() - 2)) pos_expanded = {pos, pos + 1};
 
     if(pos_expanded.empty()) {
@@ -233,10 +231,6 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
     auto  &mpsP = state.get_mps_site(posP);
     auto  &mps0 = state.get_mps_site(pos0);
 
-    // Check that the enriched site is active, otherwise measurements will be off
-    if(state.get_direction() > 0) assert(pos0 == state.active_sites.front());
-    if(state.get_direction() < 0) assert(pos0 == state.active_sites.back());
-
     auto dimL_old = mpsL.dimensions();
     auto dimR_old = mpsR.dimensions();
     auto dimP_old = mpsP.dimensions();
@@ -257,27 +251,29 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
 
     // Set up the SVD
     // Bond dimension can't grow faster than x spin_dim.
-    if(bcfg.bondlim < 1) throw except::logic_error("Invalid bondexp_bondlim: {} < 1", bcfg.bondlim);
+    if(bcfg.bond_limit < 1) throw except::logic_error("Invalid bondexp_bondlim: {} < 1", bcfg.bond_limit);
     auto bondL_max = mpsL.spin_dim() * mpsL.get_chiL();
     auto bondR_max = mpsR.spin_dim() * mpsR.get_chiR();
-    auto bond_max  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bondlim});
+    auto bond_max  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bond_limit});
 
     tools::log->debug("Expanding {}{} - {}{} | ene {:.8f} var {:.5e} | χmax {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(),
-                      res.ene_old, res.var_old, bond_max);
+                      fp(res.ene_old), fp(res.var_old), bond_max);
+
+    bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
+    bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
 
     const auto    &mpoP  = model.get_mpo(posP);
     const auto    &envP1 = state.get_direction() > 0 ? edges.get_env_eneR(posP) : edges.get_env_eneL(posP);
     const auto    &envP2 = state.get_direction() > 0 ? edges.get_env_varR(posP) : edges.get_env_varL(posP);
-    const auto     P1    = res.alpha_h1v == 0 ? Eigen::Tensor<Scalar, 3>() : envP1.template get_expansion_term<Scalar>(mpsP, mpoP);
-    const auto     P2    = res.alpha_h2v == 0 ? Eigen::Tensor<Scalar, 3>() : envP2.template get_expansion_term<Scalar>(mpsP, mpoP);
+    const auto     P1    = use_P1 ? envP1.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
+    const auto     P2    = use_P2 ? envP2.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
     decltype(auto) M     = mpsP.template get_M_bare_as<Scalar>();
     decltype(auto) N     = mps0.template get_M_bare_as<Scalar>();
     if(state.get_direction() > 0) {
         // [N Λc, M] are [A(i)Λc, B(i+1)]
         assert_orthonormal<2>(N); // A(i) should be left-orthonormal
         assert_orthonormal<1>(M); // B(i+1) should be right-orthonormal
-
-        auto [N_0, M_P] = get_rexpansion_terms_preopt_l2r(N, M, P1, P2, res, bond_max);
+        auto [N_0, M_P] = internal::get_expansion_terms_N0_MP(N, M, P1, P2, res, bond_max);
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
         merge_rexpansion_terms_preopt_l2r(mps0, N_0, mpsP, M_P);
@@ -290,7 +286,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
         assert_orthonormal<2>(M); // A(i) should be left-orthonormal
         assert_orthonormal<1>(N); // B(i+1) should be right-orthonormal
 
-        auto [M_P, N_0] = get_rexpansion_terms_preopt_r2l(M, N, P1, P2, res, bond_max);
+        auto [M_P, N_0] = internal::get_expansion_terms_MP_N0(M, N, P1, P2, res, bond_max);
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
         merge_rexpansion_terms_preopt_r2l(mpsP, M_P, mps0, N_0);
@@ -323,8 +319,10 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
     }
     res.dimL_new = mpsL.dimensions();
     res.dimR_new = mpsR.dimensions();
-    res.ene_new  = tools::finite::measure::energy(state, model, edges);
-    res.var_new  = tools::finite::measure::energy_variance(state, model, edges);
-    res.ok       = true;
+    res.dimMP    = mpsP.dimensions();
+    res.dimN0    = mps0.dimensions();
+    res.ene_new = tools::finite::measure::energy(state, model, edges);
+    res.var_new = tools::finite::measure::energy_variance(state, model, edges);
+    res.ok      = true;
     return res;
 }

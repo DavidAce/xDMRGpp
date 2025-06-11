@@ -67,43 +67,44 @@ class AlgorithmFinite : public AlgorithmBase {
     std::optional<OptSolver> last_optsolver = std::nullopt;
 
     public:
-    virtual void resume()                = 0;
-    virtual void run_default_task_list() = 0;
-    void         try_projection(std::optional<std::string> target_axis = std::nullopt);
-    void         set_parity_shift_mpo(std::optional<std::string> target_axis = std::nullopt);
-    void         set_parity_shift_mpo_squared(std::optional<std::string> target_axis = std::nullopt);
-    void         try_moving_sites();
-    void         expand_bonds(BondExpansionOrder order);
-    void         move_center_point(std::optional<long> num_moves = std::nullopt);
-    virtual void set_energy_shift_mpo(); // We override this in xdmrg
-    void         rebuild_tensors();
-    void         update_precision_limit(std::optional<double> energy_upper_bound = std::nullopt) final;
-    void         update_bond_dimension_limit() final;
-    void         reduce_bond_dimension_limit(double rate, UpdatePolicy when, StorageEvent storage_event);
-    void         update_truncation_error_limit() final;
-    // void         update_environment_expansion_alpha();
-    void                  update_dmrg_blocksize();
-    void                  update_eigs_tolerance();
-    void                  initialize_model();
-    void                  run() final;
-    void                  run_rbds_analysis();
-    void                  run_rtes_analysis();
-    void                  run_postprocessing() override;
-    [[nodiscard]] OptMeta get_opt_meta();
-    void                  clear_convergence_status() override;
-    void                  initialize_state(ResetReason reason, StateInit state_init, std::optional<StateInitType> state_type = std::nullopt,
-                                           std::optional<std::string> axis = std::nullopt, std::optional<bool> use_eigenspinors = std::nullopt,
-                                           std::optional<std::string> pattern = std::nullopt, std::optional<long> bond_lim = std::nullopt,
-                                           std::optional<double> trnc_lim = std::nullopt);
+    virtual void                resume()                = 0;
+    virtual void                run_default_task_list() = 0;
+    void                        try_projection(std::optional<std::string> target_axis = std::nullopt);
+    void                        set_parity_shift_mpo(std::optional<std::string> target_axis = std::nullopt);
+    void                        set_parity_shift_mpo_squared(std::optional<std::string> target_axis = std::nullopt);
+    void                        try_moving_sites();
+    BondExpansionResult<Scalar> expand_bonds(BondExpansionOrder order);
+    void                        move_center_point(std::optional<long> num_moves = std::nullopt);
+    virtual void                set_energy_shift_mpo(); // We override this in xdmrg
+    void                        rebuild_tensors();
+    void                        update_precision_limit(std::optional<double> energy_upper_bound = std::nullopt) final;
+    void                        update_bond_dimension_limit() final;
+    void                        reduce_bond_dimension_limit(double rate, UpdatePolicy when, StorageEvent storage_event);
+    void                        update_truncation_error_limit() final;
+    void                        update_mixing_factor();
+    void                        update_dmrg_blocksize();
+    void                        update_eigs_tolerance();
+    void                        initialize_model();
+    void                        run() final;
+    void                        run_rbds_analysis();
+    void                        run_rtes_analysis();
+    void                        run_postprocessing() override;
+    [[nodiscard]] OptMeta       get_opt_meta();
+    void                        clear_convergence_status() override;
+    void                        initialize_state(ResetReason reason, StateInit state_init, std::optional<StateInitType> state_type = std::nullopt,
+                                                 std::optional<std::string> axis = std::nullopt, std::optional<bool> use_eigenspinors = std::nullopt,
+                                                 std::optional<std::string> pattern = std::nullopt, std::optional<long> bond_lim = std::nullopt,
+                                                 std::optional<double> trnc_lim = std::nullopt);
 
     void write_to_file(StorageEvent storage_event = StorageEvent::ITERATION, CopyPolicy copy_policy = CopyPolicy::TRY) override;
     void print_status() override;
     void print_status_full() final;
     void check_convergence() override;
     void check_convergence_variance(std::optional<RealScalar> threshold = std::nullopt, std::optional<RealScalar> saturation_sensitivity = std::nullopt);
-    void check_convergence_icom(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
-    void check_convergence_entg_entropy(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
+    void check_convergence_locinfoscale(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
+    void check_convergence_entanglement(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
     void check_convergence_spin_parity_sector(std::string_view target_axis, double threshold = 1e-8);
+    void check_convergence_truncation_error();
     // template<typename T>
     // void write_to_file(const StateFinite<T> &state, const ModelFinite<T> &model, const EdgesFinite<T> &edges, StorageEvent storage_event,
     // CopyPolicy copy_policy = CopyPolicy::TRY);
@@ -144,21 +145,25 @@ class AlgorithmFinite : public AlgorithmBase {
         AlgorithmStatus         status;
         RealScalar              energy;
         RealScalar              variance;
-        RealScalar              icom;
+        RealScalar              locinfoscale;
         double                  time;
-        std::vector<RealScalar> entropies;
+        std::vector<RealScalar> entanglement_entropies;
         log_entry(const AlgorithmStatus &s, const TensorsFinite<Scalar> &t);
     };
     std::vector<log_entry> algorithm_history;
-    RealScalar             ene_latest = 0.0;
-    RealScalar             var_latest = 1.0;
-    RealScalar             ene_bondex = 1.0;
-    RealScalar             var_bondex = 1.0;
-    RealScalar             ene_delta  = 0.0;
-    RealScalar             var_delta  = 0.0;
-    RealScalar             var_change = 0.0; // Variance change from normal optimization
+    RealScalar             ene_latest    = 0.0;
+    RealScalar             var_latest    = 1.0;
+    RealScalar             ene_bondex    = 1.0;
+    RealScalar             var_bondex    = 1.0;
+    RealScalar             ene_delta     = 0.0;
+    RealScalar             var_delta     = 0.0;
+    RealScalar             ene_delta_opt = 0.0;
+    RealScalar             ene_delta_svd = 0.0;
+    RealScalar             var_delta_opt = 0.0; // Variance change from optimization
+    RealScalar             var_delta_svd = 0.0; // Variance change from truncation
+    RealScalar             std_delta_opt = 0.0; // Standard deviation of energy change from optimization
+    RealScalar             std_delta_svd = 0.0; // Standard deviation of energy change from truncation
 
-    size_t             infocom_saturated_for = 0;
     std::deque<double> qexp_history;
     // std::vector<double> alphas;
 };

@@ -146,9 +146,16 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     auto           envv     = edges.get_multisite_env_var(sites);
     auto           size     = initial.get_tensor().size();
     constexpr auto eps      = std::numeric_limits<RealScalar>::epsilon();
-    Eigen::Index   nev      = opt_meta.eigs_nev.value_or(1);
-    Eigen::Index   ncv      = opt_meta.eigs_ncv.value_or(2 * nev);
-    if(ncv <= 0) ncv = std::max<Eigen::Index>(2 * nev, safe_cast<Eigen::Index>(std::ceil(std::log2(size))));
+    Eigen::Index   nev      = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
+    Eigen::Index   ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    if(ncv <= 0) {
+        // Automatic selection
+        Eigen::Index ncv_by_size = safe_cast<Eigen::Index>(std::ceil(std::log2(size)));
+        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::precision::eigs_ncv_min);
+        Eigen::Index ncv_max     = settings::precision::eigs_ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::precision::eigs_ncv_max);
+        ncv                      = std::clamp(ncv_by_size, ncv_min, ncv_max);
+        tools::log->trace("ncv automatic selection: {} (min {}, max {})", ncv, ncv_min, ncv_max);
+    }
 
     auto H1 = MatVecMPOS<CalcType>(mpos, enve);
     auto H2 = MatVecMPOS<CalcType>(mpos, envv);
@@ -160,21 +167,22 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.b              = 2;
+    solver.b              = opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
-    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
-    solver.max_matvecs    = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
+    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.max_matvecs    = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
     // solver.set_jcbMaxBlockSize(512);
     solver.set_chebyshevFilterDegree(0);
     solver.set_chebyshevFilterLambdaCutBias(0.1f);
     solver.set_chebyshevFilterRelGapThreshold(1e-3f);
-    solver.set_maxBasisBlocks(ncv);
-    solver.set_maxRetainBlocks((2 * ncv) / 5);
+    solver.set_maxBasisBlocks(ncv / solver.b);
+    solver.set_maxRetainBlocks(3 * ncv / solver.b / 8);
     solver.set_maxLanczosResidualHistory(0);
     solver.set_maxRitzResidualHistory(1);
     solver.set_maxExtraRitzHistory(1);
 
     solver.use_refined_rayleigh_ritz = true;
+    solver.residual_correction_type  = ResidualCorrectionType::JACOBI_DAVIDSON;
     solver.inject_randomness         = false;
 
     solver.run();
@@ -204,7 +212,7 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     res.set_time_mv(solver.H1.t_multAx->get_time() + solver.H2.t_multAx->get_time());
     res.set_time_pc(solver.H1.t_multPc->get_time() + solver.H2.t_multPc->get_time());
     res.set_op(solver.H1.num_op + solver.H2.num_op);
-    res.set_mv(solver.status.num_matvecs                                            //
+    res.set_mv(solver.status.num_matvecs                                          //
                + solver.H1.get_iterativeLinearSolverConfig().result.total_matvecs //
                + solver.H2.get_iterativeLinearSolverConfig().result.total_matvecs);
     res.set_pc(solver.status.num_precond);

@@ -33,7 +33,7 @@ auto moment_generating_function(const StateInfinite<Scalar> &state_original, std
         tools::common::views<CplxScalar>::get_transfer_matrix_theta_evn(state_evolved).reshape(tenx::array2{sizeLB, sizeLB});
     eig::solver solver;
     auto        nev = 1;
-    auto        ncv = settings::precision::eigs_ncv;
+    auto        ncv = settings::precision::eigs_ncv_min;
 
     solver.eigs(transfer_matrix_theta_evn.data(), sizeLB, nev, ncv, eig::Ritz::LM, eig::Form::NSYM, eig::Side::R, std::nullopt, eig::Shinv::OFF, eig::Vecs::OFF,
                 eig::Dephase::OFF);

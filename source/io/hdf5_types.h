@@ -65,10 +65,11 @@ class h5_enum_algo_stop {
 template<typename Scalar>
 class h5pp_table_measurements_finite {
     private:
-    using RealScalar                 = decltype(std::real(std::declval<Scalar>()));
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     static inline h5pp::hid::h5t h5_type;
     static void                  register_table_type();
-    static constexpr auto        nan = std::numeric_limits<RealScalar>::quiet_NaN();
+    static constexpr auto        nan      = std::numeric_limits<RealScalar>::quiet_NaN();
+    static constexpr auto        nan_fp64 = std::numeric_limits<fp64>::quiet_NaN();
 
     public:
     struct table {
@@ -81,7 +82,7 @@ class h5pp_table_measurements_finite {
         RealScalar                energy_variance        = nan;
         RealScalar                energy_variance_lowest = nan;
         RealScalar                norm                   = nan;
-        double                    truncation_error       = nan;
+        double                    truncation_error       = nan_fp64;
         long                      bond_mid               = -1;
         long                      bond_lim               = -1;
         long                      bond_max               = -1;

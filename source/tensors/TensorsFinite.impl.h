@@ -276,7 +276,7 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
     measurements = MeasurementsTensorsFinite<Scalar>(); // Resets model-related measurements but not state measurements, which can remain
     model->clear_cache();
 
-    tools::log->info("Shifting MPO energy: {:.16f} {:+.16f}i", fp(std::real(energy_shift)), fp(std::imag(energy_shift)));
+    tools::log->info("Shifting MPO energy: {:.16f}", fp(energy_shift));
     model->set_energy_shift_mpo(energy_shift);
     model->assert_validity();
 
@@ -580,18 +580,24 @@ BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(BondExpansionCon
     if(active_sites.empty()) activate_sites({get_position<size_t>()});
     rebuild_edges(); // Use fresh edges
     if constexpr(settings::debug) assert_validity();
-    if(has_flag(bcfg.policy, BondExpansionPolicy::POSTOPT_1SITE) and bcfg.order == BondExpansionOrder::POSTOPT) {
+    if(has_flag(bcfg.policy, BondExpansionPolicy::DMRG3S) and bcfg.order == BondExpansionOrder::POSTOPT) {
+        res = tools::finite::env::expand_bond_dmrg3s(get_state(), get_model(), get_edges(), bcfg);
+    } else if(has_flag(bcfg.policy, BondExpansionPolicy::POSTOPT_1SITE) and bcfg.order == BondExpansionOrder::POSTOPT) {
         res = tools::finite::env::rexpand_bond_postopt_1site(get_state(), get_model(), get_edges(), bcfg);
     } else if(has_flag(bcfg.policy, BondExpansionPolicy::PREOPT_1SITE) and bcfg.order == BondExpansionOrder::PREOPT) {
         res = tools::finite::env::rexpand_bond_preopt_1site(get_state(), get_model(), get_edges(), bcfg);
     } else if(has_any_flags(bcfg.policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE) and
               bcfg.order == BondExpansionOrder::PREOPT) {
         res = tools::finite::env::expand_bond_preopt_nsite(get_state(), get_model(), get_edges(), bcfg);
-        tools::log->debug("Expanded environment {} block [{}-{}] | α₀:{:.2e} αₑ:{:.2e} αᵥ:{:.2e} | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f}",
-                          flag2str(bcfg.policy), res.posL, res.posR, res.alpha_mps, res.alpha_h1v, res.alpha_h2v, fp(res.var_old), fp(res.var_new),
-                          fp(res.ene_old), fp(res.ene_new));
     }
-    if(res.ok) clear_measurements();
+
+    if(res.ok) {
+        tools::log->debug("Expanded environment {} block [{}-{}] | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f}", flag2str(bcfg.policy), res.posL, res.posR,
+                          fp(res.var_old), fp(res.var_new), fp(res.ene_old), fp(res.ene_new));
+        clear_measurements();
+    } else {
+        tools::log->debug("Expansion canceled: {}", res.msg);
+    }
     if constexpr(settings::debug) assert_validity();
     return res;
 }

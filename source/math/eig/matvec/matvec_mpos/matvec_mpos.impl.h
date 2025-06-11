@@ -946,12 +946,11 @@ void MatVecMPOS<Scalar>::MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long
     auto mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
     auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
     if(invJcbDiagB.size() == 0) invJcbDiagB = get_diagonal_new(0, mpos_B, envL_B, envR_B).array().cwiseInverse();
-    auto invCfg = IterativeLinearSolverConfig<Scalar>{.maxiters      = maxiters,
-                                       .tolerance     = tolerance,
-                                       .invdiag       = invJcbDiagB.data(),
-                                       .lltJcbBlocks  = nullptr,
-                                       .ldltJcbBlocks = nullptr,
-                                       .luJcbBlocks   = nullptr};
+    auto invCfg           = IterativeLinearSolverConfig<Scalar>();
+    invCfg.maxiters       = maxiters;
+    invCfg.tolerance      = tolerance;
+    invCfg.jacobi.invdiag = invJcbDiagB.data();
+
     if(mpos_B.size() == 1) {
         tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos_B.front(), envL_B, envR_B, invCfg);
     } else if(!mpos_B_shf.empty()) {
@@ -1342,6 +1341,16 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                         "sparsity {:.3e} | mem +{:.3e} MB",
                         fname, size_mps, jcbBlockSize, nblocks, t_jcb.get_last_interval(), spavg, debug::mem_hwm_in_mb() - m_rss);
     }
+
+    if(jcbMaxBlockSize == 1) {
+        invJcbDiagonal             = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+        iLinSolvCfg.jacobi.invdiag = invJcbDiagonal.data();
+    } else if(jcbMaxBlockSize > 1) {
+        iLinSolvCfg.jacobi.lltJcbBlocks  = &lltJcbBlocks;
+        iLinSolvCfg.jacobi.ldltJcbBlocks = &ldltJcbBlocks;
+        iLinSolvCfg.jacobi.luJcbBlocks   = &luJcbBlocks;
+    }
+
     readyCalcPc = true;
 }
 
@@ -1386,11 +1395,8 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
         const auto &envL    = mpos_B.empty() ? envL_A : envL_B;
         const auto &envR    = mpos_B.empty() ? envR_A : envR_B;
         if(jcbMaxBlockSize == 1) {
-            iLinSolvCfg.invdiag = invJcbDiagonal.data();
-        } else if(jcbMaxBlockSize > 1) {
-            iLinSolvCfg.lltJcbBlocks  = &lltJcbBlocks;
-            iLinSolvCfg.ldltJcbBlocks = &ldltJcbBlocks;
-            iLinSolvCfg.luJcbBlocks   = &luJcbBlocks;
+            invJcbDiagonal             = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+            iLinSolvCfg.jacobi.invdiag = invJcbDiagonal.data();
         }
         if(mpos.size() == 1) {
             tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos.front(), envL, envR, iLinSolvCfg);
@@ -1406,8 +1412,8 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
         if(jcbMaxBlockSize == 1) {
             auto token = t_multPc->tic_token();
             // Diagonal jacobi preconditioner
-            invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).matrix();
-            mps_out        = invJcbDiagonal.array().cwiseInverse().cwiseProduct(mps_in.array());
+            invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+            mps_out        = invJcbDiagonal.array().cwiseProduct(mps_in.array());
         } else if(jcbMaxBlockSize > 1) {
             auto token = t_multPc->tic_token();
 // eig::log->info("-- MultPc");
@@ -1429,7 +1435,10 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
                 long extent                  = solver->rows();
                 auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
                 auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()    = solver->solve(mps_in_segment);
+                // Symmetric solve (split L and L^T)
+                VectorType temp           = solver->matrixL().solve(mps_in_segment);
+                mps_out_segment.noalias() = solver->matrixU().solve(temp);
+                // mps_out_segment.noalias() = solver->solve(mps_in_segment);
             }
 #pragma omp parallel for
             for(size_t idx = 0; idx < ldltJcbBlocks.size(); ++idx) {
@@ -1528,26 +1537,72 @@ template<typename Scalar>
 void MatVecMPOS<Scalar>::set_side(const eig::Side side_) {
     side = side_;
 }
+
+/**
+ * Finds the optimal block size for splitting N elements into blocks,
+ * such that the block sizes are as even as possible (minimizing the
+ * difference between the largest and smallest block).
+ *
+ * Preference order:
+ * 1. Minimize the "unevenness" (difference between last and regular block size)
+ * 2. Among equally even splits, minimize the distance to bs_requested
+ *
+ * @param N            Total number of elements to split
+ * @param bs_requested The block size you would like (preference)
+ * @return             The optimal block size according to above criteria
+ */
+inline long find_optimal_block_size(long N, long bs_requested) {
+    long best_bs        = bs_requested; // Best block size found so far
+    long min_unevenness = N;            // Smallest unevenness found
+    long best_dist      = N;            // Closest to requested block size
+
+    for(long bs_candidate = bs_requested / 2; bs_candidate <= std::min(N, bs_requested * 5 / 4); ++bs_candidate) {
+        // Number of full-size blocks
+        long num_full_blocks = N / bs_candidate;
+        // Size of the last (possibly smaller) block
+        long remainder = N - num_full_blocks * bs_candidate;
+        // Unevenness = difference between full and remainder block
+        long unevenness = (remainder == 0) ? 0 : std::abs(bs_candidate - remainder);
+        // How close candidate is to requested block size
+        long dist = std::abs(bs_candidate - bs_requested);
+
+        // Preference logic:
+        // 1. Minimize unevenness,
+        // 2. Then minimize distance to requested size,
+        if(unevenness < min_unevenness || (unevenness == min_unevenness && dist < best_dist)) {
+            best_bs        = bs_candidate;
+            min_unevenness = unevenness;
+            best_dist      = dist;
+        }
+    }
+    return best_bs;
+}
+
 template<typename Scalar>
 void MatVecMPOS<Scalar>::set_jcbMaxBlockSize(std::optional<long> size) {
     if(size.has_value()) {
         // We want the block sizes to be roughly equal, so we reduce the block size until the remainder is zero or larger than 80% of the block size
         // This ensures that the last block isn't too much smaller than the other ones
+
+        // long newsize    = jcbMaxBlockSize;
+        // long rem        = num::mod(size_mps, newsize);
+        // auto bestsize   = std::pair<long, long>{rem, newsize};
+        // while(newsize >= jcbMaxBlockSize / 2) {
+        //     rem = num::mod(size_mps, newsize);
+        //     if(rem > bestsize.first or rem == 0) { bestsize = std::pair<long, long>{rem, newsize}; }
+        //     if(rem == 0) break;              // All equal size
+        //     if(rem > 4 * newsize / 5) break; // The last is at least 80% the size of the others
+        //     newsize -= 2;
+        // }
         jcbMaxBlockSize = std::clamp(size.value(), 1l, size_mps);
-        long newsize    = jcbMaxBlockSize;
-        long rem        = num::mod(size_mps, newsize);
-        auto bestsize   = std::pair<long, long>{rem, newsize};
-        while(newsize >= jcbMaxBlockSize / 2) {
-            rem = num::mod(size_mps, newsize);
-            if(rem > bestsize.first or rem == 0) { bestsize = std::pair<long, long>{rem, newsize}; }
-            if(rem == 0) break;              // All equal size
-            if(rem > 4 * newsize / 5) break; // The last is at least 80% the size of the others
-            newsize -= 2;
+        if(num::mod(size_mps, jcbMaxBlockSize) != 0) {
+            auto jcbMaxBlockSize_optimal = find_optimal_block_size(size_mps, jcbMaxBlockSize);
+            if(jcbMaxBlockSize_optimal != jcbMaxBlockSize) {
+                eig::log->trace("Aligned block size to {}", jcbMaxBlockSize_optimal);
+                jcbMaxBlockSize = jcbMaxBlockSize_optimal;
+            }
         }
-        if(bestsize.second != jcbMaxBlockSize) {
-            eig::log->trace("Adjusted block size to {}", bestsize.second);
-            jcbMaxBlockSize = std::clamp(bestsize.second, jcbMaxBlockSize / 2, size_mps);
-        }
+
         // jcbMaxBlockSize = std::clamp(size.value(), 1l, size_mps);
     }
 }
@@ -1729,4 +1784,22 @@ bool MatVecMPOS<Scalar>::isReadyFactorOp() const {
 template<typename Scalar>
 bool MatVecMPOS<Scalar>::isReadyShift() const {
     return readyShift;
+}
+
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters) {
+    if(!std::isnan(op_norm) and max_op_norm_iters <= op_norm_iters) return op_norm;
+    VectorType v = VectorType::Random(size_mps).normalized();
+    VectorType w(size_mps);
+
+    for(Eigen::Index i = 0; i < max_op_norm_iters; ++i) {
+        w       = MultAx(v); // w = H * v
+        op_norm = w.norm();
+        v       = w / op_norm;
+    }
+    // Rayleigh quotient for improved accuracy:
+    w             = MultAx(v);
+    op_norm       = std::abs(v.dot(w)) / v.squaredNorm();
+    op_norm_iters = max_op_norm_iters;
+    return op_norm;
 }

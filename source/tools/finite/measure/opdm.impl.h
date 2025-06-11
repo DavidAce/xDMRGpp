@@ -141,7 +141,7 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::opdm_general(const StateFinite<
     if(state.measurements.opdm) return state.measurements.opdm.value();
     tools::log->trace("Measuring the general one-particle density matrix (OPDM)");
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-    using RealT      = decltype(std::real(std::declval<Scalar>()));
+    // using RealT      = decltype(std::real(std::declval<Scalar>()));
 
     long L   = state.template get_length<long>();
     auto R   = MatrixType(L, L);      // Allocate the full rho matrix "R"
@@ -182,7 +182,7 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::opdm_general(const StateFinite<
         }
     }
 
-    assert(rpp.isApprox(rpp.adjoint(), RealT{1e-12f}));
+    assert(rpp.isApprox(rpp.adjoint()));
     if(not R.isApprox(R.adjoint())) throw except::logic_error("R is not hermitian");
     state.measurements.opdm = tenx::TensorMap(R);
     return state.measurements.opdm.value();
@@ -208,7 +208,7 @@ Eigen::Tensor<RealScalar<Scalar>, 1> tools::finite::measure::opdm_spectrum(const
         RealT                   maxEval           = opdm_spectrum_vec.maxCoeff();
         auto                    eps               = std::numeric_limits<RealT>::epsilon();
         if(maxEval > RealT{1} + 10 * eps or minEval < RealT{0} - 10 * eps)
-            tools::log->warn("opdm_spectrum has eigenvalues outside [0,1]: {::.16f}", opdm_spectrum_vec);
+            tools::log->warn("opdm_spectrum has eigenvalues outside [0,1]: {::.16f}", fv<RealT>(opdm_spectrum_vec));
         state.measurements.opdm_spectrum = opdm_spectrum;
     }
     return state.measurements.opdm_spectrum.value();

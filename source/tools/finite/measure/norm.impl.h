@@ -47,7 +47,10 @@ RealScalar<Scalar> tools::finite::measure::norm(const StateFinite<Scalar> &state
         }
         norm = tenx::MatrixMap(chain).trace();
     }
-    if(num::gt(std::abs(norm - Scalar{1}), settings::precision::max_norm_error)) tools::log->debug("norm: far from unity: {:.16f}", fp(norm));
+    auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
+    auto normErr = std::abs(norm - RealScalar<Scalar>{1});
+
+    if(normErr > normTol) tools::log->debug("norm: far from unity: {:.5e}", fp(normErr));
     state.measurements.norm = std::abs(norm);
     return state.measurements.norm.value();
 }

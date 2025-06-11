@@ -72,11 +72,11 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
                                         sites, center_position, current_position, linalg::tensor::to_string(multisite_mps, 3, 6));
 
         // We have to allow non-normalized multisite mps! Otherwise, we won't be able to make them normalized
-        auto norm = tenx::VectorCast(multisite_mps).norm();
-        auto eps  = std::numeric_limits<RealScalar<Scalar>>::epsilon() * 100;
-        auto tol  = std::max(static_cast<RealScalar<Scalar>>(settings::precision::max_norm_error), eps);
-        if(num::gt(std::abs(norm - Scalar{1}), tol))
-            tools::log->debug("merge_multisite_mps: Multisite mps for positions {} has norm far from unity: {:.16f}", sites, fp(norm));
+        auto norm      = tenx::norm(multisite_mps);
+        auto normError = std::abs(norm - Scalar{1});
+        auto normTol   = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
+        if(normError > normTol)
+            tools::log->debug("merge_multisite_mps: Multisite mps for positions {} has norm far from unity. Norm error: {:.5e}", sites, fp(normError));
     }
 
     // Can't set center on one of sites if the current center is too far away: we would end up with interleaved A's and B sites
@@ -212,12 +212,11 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
     // When a state needs to be normalized it's enough to "move" the center position around the whole chain.
     // Each move performs an SVD decomposition which leaves unitaries behind, effectively normalizing the state.
     // NOTE! It IS important to start with the current position.
-
+    auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
     if(norm_policy == NormPolicy::IFNEEDED) {
         // We may only go ahead with a normalization if it's really needed.
         tools::log->trace("normalize_state: checking if needed");
-        if(state.is_normalized_on_all_sites(static_cast<RealScalar<Scalar>>(settings::precision::max_norm_error)))
-            return false; // Return false, i.e. did "not" perform a normalization.
+        if(state.is_normalized_on_all_sites(normTol)) return false; // Return false, i.e. did "not" perform a normalization.
         // Otherwise, we just do the normalization
     }
 
@@ -244,8 +243,7 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
     state.assert_validity();
     state.clear_measurements();
     state.clear_cache();
-    auto prec = std::max(static_cast<RealScalar<Scalar>>(settings::precision::max_norm_error), 100 * std::numeric_limits<RealScalar<Scalar>>::epsilon());
-    if(not state.is_normalized_on_all_sites(prec)) {
+    if(not state.is_normalized_on_all_sites(normTol)) {
         for(const auto &mps : state.mps_sites) {
             bool normalized_tag = state.get_normalization_tags()[mps->template get_position<size_t>()];
             tools::log->warn("{} | is_normalized {:<7} | L norm {:.16f} | norm tag {}", mps->get_tag(), mps->is_normalized(),
@@ -254,7 +252,7 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
         }
         auto norm_error = std::abs(tools::finite::measure::norm(state) - RealScalar<Scalar>{1});
         throw except::runtime_error("normalize_state: normalization failed. state norm error {:.3e} | max allowed norm error {:.3e} | norm tags {}",
-                                    fp(norm_error), fp(prec), state.get_normalization_tags());
+                                    fp(norm_error), fp(normTol), state.get_normalization_tags());
     }
 
     if(svd_cfg and svd_cfg->rank_max and state.get_largest_bond() > svd_cfg->rank_max.value())

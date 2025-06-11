@@ -16,6 +16,8 @@
 #include <Eigen/Eigenvalues>
 #include <source_location>
 
+template<typename Scalar> class JacobiDavidsonOperator;
+enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON };
 template<typename Scalar>
 class SolverBase {
     public:
@@ -33,24 +35,35 @@ class SolverBase {
 
     private:
     struct Status {
-        VectorReal                optVal;
-        VectorReal                oldVal;
-        VectorReal                absDiff;
-        VectorReal                relDiff;
-        RealScalar                initVal  = std::numeric_limits<RealScalar>::quiet_NaN();
-        RealScalar                max_eval = RealScalar{1};
-        RealScalar                min_eval = RealScalar{1};
-        std::deque<RealScalar>    max_eval_history;
-        size_t                    max_eval_history_max_size = 5;
-        RealScalar                op_norm_est() const;
-        void                      commit_max_eval();
-        RealScalar                condition = RealScalar{1};
+        VectorReal optVal;
+        VectorReal oldVal;
+        VectorReal absDiff;
+        VectorReal relDiff;
+        RealScalar initVal = std::numeric_limits<RealScalar>::quiet_NaN();
+        // RealScalar                max_eval = RealScalar{1};
+        private:
+        size_t                 eval_history_max_size = 5;
+        std::deque<RealScalar> min_eval_history;
+        std::deque<RealScalar> max_eval_history;
+
+        public:
+        void                      commit_evals(RealScalar min_eval, RealScalar max_eval);
+        RealScalar                max_eval_estimate() const;
+        RealScalar                min_eval_estimate() const;
+        RealScalar                condition   = RealScalar{1};
+        RealScalar                H1_max_eval = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
+        RealScalar                H2_max_eval = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
+        RealScalar                H1_min_eval = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
+        RealScalar                H2_min_eval = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
         std::vector<Eigen::Index> optIdx;
-        Eigen::Index              iter              = 0;
-        Eigen::Index              iter_last_restart = 0;
-        Eigen::Index              num_matvecs       = 0;
-        Eigen::Index              num_precond       = 0;
-        Eigen::Index              numMGS            = 0;
+        Eigen::Index              iter                                          = 0;
+        Eigen::Index              iter_last_restart                             = 0;
+        Eigen::Index              iter_last_preconditioner_tolerance_adjustment = 0;
+        Eigen::Index              iter_last_preconditioner_H1_limit_adjustment  = 0;
+        Eigen::Index              iter_last_preconditioner_H2_limit_adjustment  = 0;
+        Eigen::Index              num_matvecs                                   = 0;
+        Eigen::Index              num_precond                                   = 0;
+        Eigen::Index              numMGS                                        = 0;
         VectorReal                rNorms;
         std::deque<VectorReal>    rNorms_history;
         size_t                    rNorms_history_max_size = 5;
@@ -72,6 +85,8 @@ class SolverBase {
     bool              rNorm_has_saturated();
     bool              optVal_has_saturated(RealScalar threshold = 0);
     void              adjust_preconditioner_tolerance();
+    void              adjust_preconditioner_H1_limits();
+    void              adjust_preconditioner_H2_limits();
 
     protected:
     Eigen::Index qBlocks = 0;
@@ -84,6 +99,14 @@ class SolverBase {
     const MatrixType &get_HQ_cur();
     void              unset_HQ();
     void              unset_HQ_cur();
+
+    [[nodiscard]] MatrixType cheap_Olsen_correction();
+    [[nodiscard]] MatrixType full_Olsen_correction();
+    [[nodiscard]] MatrixType jacobi_davidson_correction();
+
+    VectorType JacobiDavidsonSolver(JacobiDavidsonOperator<Scalar>      &matRepl, //
+                                    const VectorType                    &rhs,     //
+                                    IterativeLinearSolverConfig<Scalar> &cfg);
 
     [[nodiscard]] MatrixType chebyshevFilter(const Eigen::Ref<const MatrixType> &Qref,       /*!< input Q (orthonormal) */
                                              RealScalar                          lambda_min, /*!< estimated smallest eigenvalue */
@@ -122,24 +145,26 @@ class SolverBase {
     Eigen::Index                ncv                       = 8;     /*!< Krylov dimension, i.e. {V, H1V..., H2V...} ( minimum 2, recommend 3 or more) */
     Eigen::Index                b                         = 2;     /*!< The block size */
     bool                        use_refined_rayleigh_ritz = false; /*!< Refined ritz extraction uses 1 matvec per nev */
+    ResidualCorrectionType      residual_correction_type  = ResidualCorrectionType::NONE;
 
-    OptAlgo                          algo;    /*!< Selects the current DMRG algorithm */
-    OptRitz                          ritz;    /*!< Selects the target eigenvalues */
-    MatVecMPOS<Scalar>              &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
-    MatrixType                       T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
-    MatrixType                       A, B, W, Q;
-    MatrixType                       HQ;              /*!< Save H*Q when preconditioning */
-    MatrixType                       HQ_cur;          /*!< Save H*Q_cur when preconditioning */
-    MatrixType                       H1Q, H2Q;        /*!< H1 or H2 times the basis blocks Q used for GDMRG */
-    MatrixType                       V;               /*!< Holds the current top ritz eigenvectors. Use this to pass initial guesses */
-    MatrixType                       HV;              /*!< Holds the current top ritz eigenvectors multiplied by H. */
-    MatrixType                       H1V;             /*!< Holds the current top ritz eigenvectors multiplied by H1 (for GDMRG). */
-    MatrixType                       H2V;             /*!< Holds the current top ritz eigenvectors multiplied by H2 (for GDMRG). */
-    MatrixType                       V_prev;          /*!< Holds the previous top ritz eigenvectors */
-    MatrixType                       S;               /*!< The residual vectors for the top b ritz vectors*/
-    MatrixType                       M, HM, H1M, H2M; /*!< The b next best residual vectors M, and with the applied operators */
-    VectorReal                       T_evals;
-    MatrixType                       T_evecs;
+    OptAlgo             algo;    /*!< Selects the current DMRG algorithm */
+    OptRitz             ritz;    /*!< Selects the target eigenvalues */
+    MatVecMPOS<Scalar> &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
+    MatrixType          T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
+    MatrixType          A, B, W, Q;
+    MatrixType          HQ;              /*!< Save H*Q when preconditioning */
+    MatrixType          HQ_cur;          /*!< Save H*Q_cur when preconditioning */
+    MatrixType          H1Q, H2Q;        /*!< H1 or H2 times the basis blocks Q used for GDMRG */
+    MatrixType          V;               /*!< Holds the current top ritz eigenvectors. Use this to pass initial guesses */
+    MatrixType          HV;              /*!< Holds the current top ritz eigenvectors multiplied by H. */
+    MatrixType          H1V;             /*!< Holds the current top ritz eigenvectors multiplied by H1 (for GDMRG). */
+    MatrixType          H2V;             /*!< Holds the current top ritz eigenvectors multiplied by H2 (for GDMRG). */
+    MatrixType          V_prev;          /*!< Holds the previous top ritz eigenvectors */
+    MatrixType          S;               /*!< The residual vectors for the top b ritz vectors*/
+    MatrixType          M, HM, H1M, H2M; /*!< The b next best residual vectors M, and with the applied operators */
+    VectorReal          T_evals;
+    MatrixType          T_evecs;
+
     Eigen::HouseholderQR<MatrixType> hhqr;
 
     const RealScalar eps = std::numeric_limits<RealScalar>::epsilon();
@@ -152,12 +177,12 @@ class SolverBase {
 
     /*! Norm tolerance of ritz-vector residuals.
      * Lanczos converges if rnorm < normTolR * H_norm. */
-    RealScalar rnormTol() const { return tol * status.op_norm_est(); }
+    RealScalar rnormTol() const { return tol * status.max_eval_estimate(); }
 
     /*! Norm tolerance of B-matrices.
      * Triggers the Lanczos recurrence breakdown. */
     [[nodiscard]] RealScalar bNormTol(const RealScalar B_norm) const noexcept {
-        auto scale = std::max({status.op_norm_est(), B_norm, RealScalar{1}}); //  H_norm tracks A norms already
+        auto scale = std::max({status.max_eval_estimate(), B_norm, RealScalar{1}}); //  H_norm tracks A norms already
         return N * eps * scale;
     }
     /*! Norm tolerance of B-matrices.

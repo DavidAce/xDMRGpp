@@ -3,9 +3,10 @@
 // Eigen goes first
 #include "debug/exceptions.h"
 #include "IterativeLinearSolverConfig.h"
-#include "JacobiPreconditioner.h"
+#include "IterativeLinearSolverPreconditioner.h"
 #include "math/cast.h"
 #include "math/tenx.h"
+#include "PreconditionerChebyshev.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
@@ -149,13 +150,13 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
     // Define the "matrix-free" matrix replacement.
     MatrixReplacement<Scalar> matRepl;
     matRepl.attachTensors(envL_ptr, envR_ptr, mpo_ptr, mps_dims, mpo_dims);
-    auto res = Eigen::Map<tenx::VectorType<Scalar>>(res_ptr, matRepl.rows());
-    auto mps = Eigen::Map<const tenx::VectorType<Scalar>>(mps_ptr, matRepl.rows());
-
-    using DefSolverType = Eigen::ConjugateGradient<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, JacobiPreconditioner<Scalar>>;
-    using IndSolverType = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                         //
-                                             Eigen::BiCGSTAB<MatrixReplacement<Scalar>, JacobiPreconditioner<Scalar>>, //
-                                             Eigen::MINRES<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, JacobiPreconditioner<Scalar>>>;
+    auto res                 = Eigen::Map<tenx::VectorType<Scalar>>(res_ptr, matRepl.rows());
+    auto mps                 = Eigen::Map<const tenx::VectorType<Scalar>>(mps_ptr, matRepl.rows());
+    using PreconditionerType = IterativeLinearSolverPreconditioner<MatrixReplacement<Scalar>>;
+    using DefSolverType      = Eigen::ConjugateGradient<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>;
+    using IndSolverType      = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                               //
+                                                  Eigen::BiCGSTAB<MatrixReplacement<Scalar>, PreconditionerType>, //
+                                                  Eigen::MINRES<MatrixReplacement<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>>;
     std::variant<IndSolverType, DefSolverType> solverVariant;
     if(cfg.matdef == MatDef::IND)
         solverVariant.template emplace<0>();
@@ -186,12 +187,7 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
             guess.resize(mps.size());
             guess.setRandom();
         }
-
-        solver.preconditioner().set_size(matRepl.rows());
-        solver.preconditioner().set_invdiag(cfg.invdiag);
-        solver.preconditioner().set_lltJcbBlocks(cfg.lltJcbBlocks);
-        solver.preconditioner().set_ldltJcbBlocks(cfg.ldltJcbBlocks);
-        solver.preconditioner().set_luJcbBlocks(cfg.luJcbBlocks);
+        solver.preconditioner().attach(&matRepl, &cfg);
 
         solver.compute(matRepl);
         res = solver.solveWithGuess(mps, guess);
@@ -203,10 +199,12 @@ void tools::common::contraction::matrix_inverse_vector_product(Scalar           
         cfg.result.matvecs = matRepl.counter;
         cfg.result.precond = solver.preconditioner().iterations();
         cfg.result.time    = t_mativec->get_last_interval();
+
         cfg.result.total_iters += solver.iterations();
         cfg.result.total_matvecs += matRepl.counter;
         cfg.result.total_precond += solver.preconditioner().iterations();
         cfg.result.total_time += t_mativec->get_last_interval();
+
         cfg.result.error = solver.error();
         cfg.result.info  = solver.info();
         if(std::isnan(solver.error())) throw except::runtime_error("NaN in solver");

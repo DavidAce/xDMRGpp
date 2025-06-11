@@ -81,8 +81,8 @@ class EnvBase {
     std::optional<std::size_t> get_unique_id_mps() const;
     std::optional<std::size_t> get_unique_id_mpo() const;
 
-    // template<typename T>
-    // Eigen::Tensor<T, 3> get_expansion_term(const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo) const;
     template<typename T>
     Eigen::Tensor<T, 3> get_expansion_term(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) const;
+    template<typename T>
+    Eigen::Tensor<T, 3> get_expansion_term(const Eigen::Tensor<Scalar, 3> &mps, const MpoSite<Scalar> &mpo) const;
 };

@@ -87,9 +87,9 @@ void assert_orthonormal(const Eigen::TensorBase<Derived, Eigen::ReadOnlyAccessor
             auto Xm = MapType(X.data(), X.dimension(0) * X.dimension(oxis), X.dimension(axis));
             // tools::log->warn("X: \n{}\n", linalg::matrix::to_string(Xm, 8));
             tools::log->warn("G: \n{}\n", linalg::matrix::to_string(Gm, 8));
-            tools::log->warn("orthError: {:.5e}", orthError);
+            tools::log->warn("orthError: {:.5e}", fp(orthError));
             throw except::runtime_error("{}:{}: {}: matrix is non-orthonormal along axis [{}]: error = {:.5e} > threshold = {:.5e}", location.file_name(),
-                                        location.line(), location.function_name(), axis, orthError, threshold);
+                                        location.line(), location.function_name(), axis, fp(orthError), fp(threshold));
         }
     }
 }

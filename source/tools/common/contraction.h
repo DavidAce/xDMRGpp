@@ -6,7 +6,6 @@
 #include "math/tenx/eval.h"
 #include "math/tenx/threads.h"
 #include <complex>
-#include "contraction/IterativeLinearSolverConfig.h"
 
 template<typename Scalar> struct IterativeLinearSolverConfig;
 

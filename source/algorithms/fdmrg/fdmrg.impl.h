@@ -3,21 +3,22 @@
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "io/fmt_custom.h"
+#include "math/cast.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
+#include "tools/finite/env/BondExpansionConfig.h"
+#include "tools/finite/env/BondExpansionResult.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/mps.h"
+#include "tools/finite/multisite.h"
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
 #include "tools/finite/print.h"
-#include <math/cast.h>
-#include <tools/finite/env/BondExpansionConfig.h>
-#include <tools/finite/multisite.h>
 
 template<typename Scalar>
 fdmrg<Scalar>::fdmrg() : AlgorithmFinite<Scalar>(settings::xdmrg::ritz, AlgorithmType::fDMRG) {
@@ -215,89 +216,12 @@ void fdmrg<Scalar>::run_algorithm() {
     }
 }
 
-// fdmrg::OptMeta fdmrg::get_opt_meta() {
-// tools::log->trace("Configuring fDMRG optimization trial");
-// OptMeta m1;
-// m1.label = "opt_meta1";
-//
-// // The first decision is easy. Real or complex optimization
-// if(tensors.is_real()) m1.optType = OptType::FP64;
-// // Set the target eigenvalue
-// m1.optRitz = status.opt_ritz;
-//
-// // Set the default svd limits
-// m1.svd_cfg = svd::config(status.bond_lim, status.trnc_lim);
-//
-// // Set up a multiplier for number of iterations
-// size_t iter_stuck_multiplier = std::max(1ul, safe_cast<size_t>(std::pow(settings::precision::eigs_iter_gain, status.algorithm_has_stuck_for)));
-// // size_t iter_stuck_multiplier = status.algorithm_has_stuck_for > 0 ? settings::precision::eigs_iter_gain : 1;
-//
-// // Copy settings
-// m1.min_sites     = settings::strategy::dmrg_min_blocksize;
-// m1.max_sites     = settings::strategy::dmrg_min_blocksize;
-// m1.subspace_tol  = settings::precision::target_subspace_error;
-// m1.eigs_nev      = 1;
-// m1.eigs_ncv      = settings::precision::eigs_ncv;
-// m1.eigs_iter_max = status.variance_mpo_converged_for > 0 or status.energy_variance_lowest < settings::precision::variance_convergence_threshold
-//                        ? std::min(settings::precision::eigs_iter_max, 10000ul)       // Avoid running too many iterations when already converged
-//                        : settings::precision::eigs_iter_max * iter_stuck_multiplier; // Run as much as it takes before convergence
-//
-// m1.eigs_tol = std::clamp(status.energy_variance_lowest,                              // Increase precision as variance decreases
-//                          settings::precision::eigs_tol_min,                             // From min
-//                          settings::precision::eigs_tol_max);                            // to max
-// if(status.algorithm_has_stuck_for > 0) m1.eigs_tol = settings::precision::eigs_tol_min; // Set to high precision when stuck
-//
-// m1.optCost   = OptCost::ENERGY;
-// m1.optAlgo   = OptAlgo::DIRECT;
-// m1.optSolver = OptSolver::EIGS;
-//
-// if(status.iter < settings::strategy::iter_max_warmup) {
-//     // If early in the simulation we can use more sites with lower bond dimension o find a good starting point
-//     m1.max_sites        = settings::strategy::dmrg_max_blocksize;
-//     m1.max_problem_size = settings::precision::eig_max_size; // Try to use full diagonalization instead
-//     if(settings::fdmrg::bond_min > 0 and m1.svd_cfg->rank_max > settings::fdmrg::bond_min) {
-//         tools::log->debug("Bond dimension limit is kept back during warmup {} -> {}", m1.svd_cfg->rank_max, settings::fdmrg::bond_min);
-//         m1.svd_cfg->rank_max = settings::fdmrg::bond_min;
-//     }
-// } else {
-//     using namespace settings::strategy;
-//     m1.max_problem_size   = settings::precision::max_size_multisite;
-//     size_t has_stuck_for  = status.algorithm_has_stuck_for;
-//     size_t saturated_for  = status.algorithm_saturated_for * (status.algorithm_converged_for == 0); // Turn on only if non-converged
-//     double has_stuck_frac = multisite_opt_grow == MultisiteGrow::OFF ? 1.0 : safe_cast<double>(has_stuck_for) / safe_cast<double>(iter_max_stuck);
-//     double saturated_frac = multisite_opt_grow == MultisiteGrow::OFF ? 1.0 : safe_cast<double>(saturated_for) / safe_cast<double>(iter_max_saturated);
-//     switch(dmrg_blocksize_policy) {
-//         case BlockSizePolicy::STATIC: break;
-//         case BlockSizePolicy::STUCK: m1.max_sites = safe_cast<size_t>(std::lerp(dmrg_min_blocksize, dmrg_max_blocksize, has_stuck_frac)); break;
-//         case BlockSizePolicy::SATURATED: m1.max_sites = safe_cast<size_t>(std::lerp(dmrg_min_blocksize, dmrg_max_blocksize, saturated_frac)); break;
-//         case BlockSizePolicy::ALWAYS: m1.max_sites = dmrg_max_blocksize; break;
-//     }
-// }
-// if(status.algorithm_has_succeeded) m1.max_sites = m1.min_sites; // No need to do expensive operations -- just finish
-//
-// // Set up the problem size here
-// m1.chosen_sites = tools::finite::multisite::generate_site_list(*tensors.state, m1.max_problem_size, m1.max_sites, m1.min_sites, m1.label);
-// m1.problem_dims = tools::finite::multisite::get_dimensions(*tensors.state, m1.chosen_sites);
-// m1.problem_size = tools::finite::multisite::get_problem_size(*tensors.state, m1.chosen_sites);
-//
-// // Do eig instead of eigs when it's cheap (e.g. near the edges or early in the simulation)
-// if(m1.problem_size <= settings::precision::eig_max_size) m1.optSolver = OptSolver::EIG;
-//
-// // if(status.bond_expansion_alpha > 0) {
-// //     // If we are doing 1-site dmrg, then we better use subspace expansion
-// //     if(m1.chosen_sites.size() == 1) m1.alpha_expansion = status.bond_expansion_alpha;
-// // }
-//
-// m1.validate();
-// return m1;
-// }
-
 template<typename Scalar>
 void fdmrg<Scalar>::update_state() {
-    auto t_step          = tid::tic_scope("step");
-    expand_bonds(BondExpansionOrder::PREOPT);
-    auto opt_meta        = get_opt_meta();
-    variance_before_step = std::nullopt;
+    auto t_step                = tid::tic_scope("step");
+    auto bondexp_preopt_result = expand_bonds(BondExpansionOrder::PREOPT);
+    auto opt_meta              = get_opt_meta();
+    variance_before_step       = std::nullopt;
 
     tools::log->debug("Starting {} iter {} | step {} | pos {} | dir {} | ritz {} | type {}", status.algo_type_sv(), status.iter, status.step, status.position,
                       status.direction, enum2sv(opt_meta.optRitz), enum2sv(opt_meta.optType));
@@ -312,10 +236,8 @@ void fdmrg<Scalar>::update_state() {
     // Hold the variance before the optimization step for comparison
     if(not variance_before_step) variance_before_step = tools::finite::measure::energy_variance(tensors); // Should just take value from cache
 
-
-
-    auto initial_mps = tools::finite::opt::get_opt_initial_mps(tensors, opt_meta);
-    auto opt_state   = tools::finite::opt::find_ground_state(tensors, initial_mps, status, opt_meta);
+    auto initial_state = tools::finite::opt::get_opt_initial_mps(tensors, opt_meta);
+    auto opt_state     = tools::finite::opt::find_ground_state(tensors, initial_state, status, opt_meta);
 
     // Determine the quality of the optimized state.
     opt_state.set_relchange(opt_state.get_variance() / variance_before_step.value());
@@ -367,18 +289,44 @@ void fdmrg<Scalar>::update_state() {
     }
 
     tools::log->trace("Updating variance record holder");
-    auto var                      = tools::finite::measure::energy_variance(tensors);
-    auto ene                      = tools::finite::measure::energy(tensors);
-    status.energy_variance_lowest = std::min(static_cast<double>(var), status.energy_variance_lowest);
-    var_delta                     = var - var_latest;
-    ene_delta                     = ene - ene_latest;
-    var_change                    = var / var_latest;
-    var_latest                    = var;
-    ene_latest                    = ene;
+    auto ene_mrg                  = tools::finite::measure::energy(tensors);
+    auto var_mrg                  = tools::finite::measure::energy_variance(tensors);
+    status.energy_variance_lowest = std::min(static_cast<double>(var_mrg), status.energy_variance_lowest);
+    var_delta                     = var_mrg - var_latest;
+    ene_delta                     = ene_mrg - ene_latest;
+    var_latest                    = var_mrg;
+    ene_latest                    = ene_mrg;
+
+    auto bondexp_postopt_result = expand_bonds(BondExpansionOrder::POSTOPT);
+
+    auto ene_ini = initial_state.get_energy();
+    auto ene_opt = opt_state.get_energy();
+    auto ene_exp = bondexp_postopt_result.ene_new;
+    auto var_ini = std::abs(initial_state.get_variance());
+    auto var_opt = std::abs(opt_state.get_variance());
+    auto var_exp = bondexp_postopt_result.var_new;
+    ;
+    var_delta_opt = ene_opt - ene_ini;
+    var_delta_svd = ene_exp - ene_opt;
+    var_delta_opt = var_opt - var_ini;
+    var_delta_svd = var_exp - var_opt;
+    std_delta_opt = std::sqrt(var_opt) - std::sqrt(var_ini);
+    std_delta_svd = std::sqrt(var_exp) - std::sqrt(var_opt);
+    tools::log->trace("Energy   change Δsvd/Δopt: {:.16f}", fp(ene_delta_svd / ene_delta_opt));
+    tools::log->trace("Variance change Δsvd/Δopt: {:.16f}", fp(var_delta_svd / var_delta_opt));
+    tools::log->trace("Std.dev. change Δsvd/Δopt: {:.16f}", fp(std_delta_svd / std_delta_opt));
 
     last_optsolver = opt_state.get_optsolver();
     last_optalgo   = opt_state.get_optalgo();
 
-    expand_bonds(BondExpansionOrder::POSTOPT);
+    if constexpr(settings::debug) {
+        if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
+        tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", fp(initial_state.get_variance()),
+                          initial_state.get_tensor().dimensions());
+        tools::log->debug("After  optimization      : variance {:8.2e} | mps dims {}", fp(opt_state.get_variance()), opt_state.get_tensor().dimensions());
+        tools::log->debug("After  merge             : variance {:8.2e} | mps dims {}", fp(var_mrg), tensors.get_state().get_bond_dims_active());
+        tools::log->debug("After  bond expansion    : variance {:8.2e} | mps dims {}", fp(var_exp), bondexp_postopt_result.dimMP);
+    }
+
     if constexpr(settings::debug) tensors.assert_validity();
 }

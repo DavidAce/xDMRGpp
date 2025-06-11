@@ -100,24 +100,40 @@ auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchs
     using RealScalar  = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>::RealScalar;
     using VectorCalcT = Eigen::Matrix<CalcType, Eigen::Dynamic, 1>;
     VectorCalcT eigenvalues;
-    if(size > switchsize_svd) {
-        auto config             = svd::config();
-        config.svd_rtn          = svd::rtn::gersvd; // Randomized svd
-        config.svd_lib          = svd::lib::eigen;
-        config.rank_max         = svd_rank_max;
-        config.truncation_limit = 1e-12;
-        auto svd_solver         = svd::solver(config);
-        auto [U, S, V]          = svd_solver.do_svd_ptr(matrix_ptr, size, size, config);
-        S                       = S.reverse().eval();
-        eigenvalues             = tenx::asScalarType<CalcType>(S);
-    } else {
+    auto        fraclist = std::array{0.0001, 0.001, 0.01, 0.1, 0.2, 1.0};
+    if(size <= switchsize_svd) {
         auto eig_solver = eig::solver();
         eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
         eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result)); // Eigenvalues
+    } else {
+        for(auto frac : fraclist) {
+            Eigen::Index rank_max = static_cast<Eigen::Index>(size * frac);
+            if(rank_max <= 1) continue;
+            if(rank_max < size) {
+                auto eps                = std::numeric_limits<CalcType>::epsilon();
+                auto tol                = eps * 10000;
+                auto config             = svd::config();
+                config.svd_rtn          = svd::rtn::gersvd; // Randomized svd
+                config.svd_lib          = svd::lib::eigen;
+                config.rank_max         = svd_rank_max;
+                config.truncation_limit = static_cast<double>(eps);
+                auto svd_solver         = svd::solver(config);
+                auto [U, S, V]          = svd_solver.do_svd_ptr(matrix_ptr, size, size, config);
+                S                       = S.reverse().eval();
+                eigenvalues             = tenx::asScalarType<CalcType>(S);
+                if(eigenvalues.minCoeff() < tol) break; // Good enough
+            } else if(rank_max == size and size <= settings::precision::eig_max_size) {
+                auto eig_solver = eig::solver();
+                eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
+                eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result)); // Eigenvalues
+            } else {
+                tools::log->warn("get_eigenvalues: matrix size {} is too big for diagonalization. "
+                                 "Kept the top 20% of singular values (smallest value is {:.3e}), but this may give incorrect entropies",
+                                 size, fp(eigenvalues.minCoeff()));
+            }
+        }
     }
 
-    // tools::log->info("eigenvalues eig: {}", eigenvalues_eig.transpose());
-    // tools::log->info("eigenvalues svd: {}", eigenvalues_svd.transpose());
     return eigenvalues;
 }
 
@@ -316,7 +332,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     // if(eig_time > 1.0)
     if constexpr(settings::debug_subsystem_entropy)
         tools::log->trace("mode {} side {} | eig {} (max {}) | mat {} | chi {} {} | S {:.8f} | cch {::.2e} GB | mat {:.3e} s | eig {:.3e} s | sites {}",
-                          min_cost_idx, side, eig_sizes, eig_max_size, mat_costs, chiL, chiR, entanglement_entropy_log2, state.get_cache_sizes(), mat_time,
+                          min_cost_idx, side, eig_sizes, eig_max_size, mat_costs, chiL, chiR, fp(entanglement_entropy_log2), state.get_cache_sizes(), mat_time,
                           eig_time, sites);
     // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after eig");
 

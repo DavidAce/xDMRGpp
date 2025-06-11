@@ -125,15 +125,15 @@ Eigen::Tensor<T, 3> StateFinite<Scalar>::get_multisite_mps(const std::vector<siz
     }
     if constexpr(settings::debug) {
         // Check the norm of the tensor on debug builds
-        auto t_dbg = tid::tic_scope("debug");
-        auto norm  = std::abs(tools::common::contraction::contract_mps_norm(multisite_mps));
+        auto t_dbg    = tid::tic_scope("debug");
+        using RealT   = decltype(std::real(std::declval<T>()));
+        RealT norm    = tenx::norm(multisite_mps);
+        RealT normErr = std::abs(norm - RealT{1});
+        RealT normTol = std::numeric_limits<RealT>::epsilon() * settings::precision::max_norm_slack;
         if constexpr(debug_state) tools::log->trace("get_multisite_mps<{}>({}): norm ⟨ψ|ψ⟩ = {:.16f}", sfinae::type_name<T>(), sites, fp(norm));
-        if(static_cast<fp64>(std::abs(norm - 1)) > settings::precision::max_norm_error) {
-            tools::log->warn("get_multisite_mps<{}>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > max_norm_error {:.2e}", sfinae::type_name<T>(), sites,
-                             fp(std::abs(norm - 1)), settings::precision::max_norm_error);
-            //                throw except::runtime_error("get_multisite_mps<fp64>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > max_norm_error {:.2e}", sites,
-            //                std::abs(norm - 1),
-            //                                            settings::precision::max_norm_error);
+        if(normErr > normTol) {
+            tools::log->warn("get_multisite_mps<{}>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > normTol {:.2e}", sfinae::type_name<T>(), sites, fp(normErr),
+                             fp(normTol));
         }
     }
     return multisite_mps;

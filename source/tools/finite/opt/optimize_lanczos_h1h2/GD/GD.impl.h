@@ -154,13 +154,18 @@ typename GD<Scalar>::MatrixType GD<Scalar>::get_Q_res(std::function<MatrixType(c
     if(use_preconditioner) {
         // Precondition the latest W, S and R,
         /* clang-format off */
-        if(wBlocks > 0) {Q_res.middleCols(wOffset * b, b) = -MultPX(Q_res.middleCols(wOffset * b, b));}
-        if(sBlocks > 0) {Q_res.middleCols(sOffset * b, b) = -MultPX(Q_res.middleCols(sOffset * b, b));}
+        if(wBlocks > 0) {Q_res.middleCols(wOffset * b, b) = MultPX(Q_res.middleCols(wOffset * b, b));}
+        if(sBlocks > 0) {
+            if(residual_correction_type == ResidualCorrectionType::NONE or residual_correction_type == ResidualCorrectionType::CHEAP_OLSEN ) {
+                Q_res.middleCols(sOffset * b, b) = MultPX(Q_res.middleCols(sOffset * b, b));
+            }
+        }
+
         /* clang-format on */
     }
 
     // pick a relative breakdown tolerance:
-    auto       breakdownTol      = eps * 10 * std::max({RealScalar{1}, status.op_norm_est()});
+    auto       breakdownTol      = eps * 10 * std::max({RealScalar{1}, status.max_eval_estimate()});
     VectorIdxT active_block_mask = VectorIdxT::Ones(wBlocks + sBlocks);
     // eig::log->warn("Q_res before compression: \n{}\n", linalg::matrix::to_string(Q_res, 8));
     // orthonormalize(Q_enr, Q_enr_i, breakdownTol, 10000 * breakdownTol, active_block_mask);
@@ -283,7 +288,7 @@ void GD<Scalar>::build(MatrixType &Q1_res, MatrixType &Q2_res, MatrixType &Q, Ma
     assert(Q1_res.rows() == N);
     assert(Q2_res.rows() == N);
 
-    auto       breakdownTol = eps * 100 * std::max({RealScalar{1}, status.op_norm_est()});
+    auto       breakdownTol = eps * 100 * std::max({RealScalar{1}, status.max_eval_estimate()});
     VectorIdxT mask         = VectorIdxT::Ones(Q2_res.cols() / b);
     orthonormalize(Q1_res, Q2_res, breakdownTol * 1000, breakdownTol, mask);
     compress_cols(Q2_res, mask);
@@ -305,10 +310,10 @@ void GD<Scalar>::build(MatrixType &Q1_res, MatrixType &Q2_res, MatrixType &Q, Ma
         }
 
         status.iter_last_restart = status.iter;
-        Eigen::Index vBlocks = V.cols() / b;
-        Eigen::Index mBlocks = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
-        Eigen::Index rBlocks = inject_randomness ? 1 : 0;
-        Eigen::Index kBlocks = std::max<Eigen::Index>(
+        Eigen::Index vBlocks     = V.cols() / b;
+        Eigen::Index mBlocks     = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
+        Eigen::Index rBlocks     = inject_randomness ? 1 : 0;
+        Eigen::Index kBlocks     = std::max<Eigen::Index>(
             0, std::min<Eigen::Index>(Q.cols() / b - (vBlocks + mBlocks + rBlocks) - Q1_res.cols() / b - Q2_res.cols() / b, maxRetainBlocks));
         Eigen::Index qBlocks  = (Q1_res.cols() + Q2_res.cols()) / b;
         MatrixType   Q_keep   = Q.rightCols(kBlocks * b);
@@ -414,9 +419,9 @@ void GD<Scalar>::build(MatrixType &Q_res, MatrixType &Q, MatrixType &H1Q, Matrix
         }
 
         status.iter_last_restart = status.iter;
-        Eigen::Index vBlocks = V.cols() / b;
-        Eigen::Index mBlocks = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
-        Eigen::Index rBlocks = inject_randomness ? 1 : 0;
+        Eigen::Index vBlocks     = V.cols() / b;
+        Eigen::Index mBlocks     = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
+        Eigen::Index rBlocks     = inject_randomness ? 1 : 0;
         Eigen::Index kBlocks =
             std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() / b - (vBlocks + mBlocks + rBlocks) - Q_res.cols() / b, maxRetainBlocks));
         Eigen::Index qBlocks  = (Q_res.cols()) / b;

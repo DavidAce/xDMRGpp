@@ -1,5 +1,4 @@
 #pragma once
-#include "tools/infinite/measure.h"
 #include "math/tenx.h"
 #include "tensors/edges/EdgesInfinite.h"
 #include "tensors/model/ModelInfinite.h"
@@ -8,29 +7,28 @@
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
+#include "tools/infinite/measure.h"
 using tools::infinite::measure::RealScalar;
 template<typename Scalar>
 size_t tools::infinite::measure::length(const TensorsInfinite<Scalar> &tensors) {
     return tensors.edges->get_length();
 }
 
-
 template<typename Scalar>
 size_t tools::infinite::measure::length(const EdgesInfinite<Scalar> &edges) {
     return edges.get_length();
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::norm(const StateInfinite<Scalar> &state) {
     if(state.measurements.norm) return state.measurements.norm.value();
-    Scalar norm = tools::common::contraction::contract_mps_norm(state.get_2site_mps());
-    if(std::abs(norm - RealScalar<Scalar>{1}) > static_cast<RealScalar<Scalar>>(settings::precision::max_norm_error))
-        tools::log->debug("norm: far from unity: {:.16f}", fp(norm));
+    auto norm    = tenx::norm(state.get_2site_mps());
+    auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
+    auto normErr = std::abs(norm - RealScalar<Scalar>{1});
+    if(normErr > normTol) tools::log->debug("norm: far from unity: {:.5e}", fp(normErr));
     state.measurements.norm = std::abs(norm);
     return state.measurements.norm.value();
 }
-
 
 template<typename Scalar>
 long tools::infinite::measure::bond_dimension(const StateInfinite<Scalar> &state) {
@@ -38,7 +36,6 @@ long tools::infinite::measure::bond_dimension(const StateInfinite<Scalar> &state
     state.measurements.bond_dim = state.chiC();
     return state.measurements.bond_dim.value();
 }
-
 
 template<typename Scalar>
 double tools::infinite::measure::truncation_error(const StateInfinite<Scalar> &state) {

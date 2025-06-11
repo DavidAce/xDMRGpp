@@ -42,11 +42,11 @@ bool AlgorithmStatus::operator==(const AlgorithmStatus &s) const {
         this->algo_type                     == s.algo_type and
         this->algo_stop                     == s.algo_stop and
         this->min_iters                     == s.min_iters and
+        this->bond_min                      == s.bond_min and
         this->bond_max                      == s.bond_max and
-        this->bond_min                     == s.bond_min and
         this->bond_lim                      == s.bond_lim and
         this->trnc_min                      == s.trnc_min and
-        this->trnc_max                     == s.trnc_max and
+        this->trnc_max                      == s.trnc_max and
         this->trnc_lim                      == s.trnc_lim and
         this->energy_min                    == s.energy_min and
         this->energy_max                    == s.energy_max and
@@ -56,7 +56,7 @@ bool AlgorithmStatus::operator==(const AlgorithmStatus &s) const {
         this->energy_variance_lowest        == s.energy_variance_lowest and
         this->energy_variance_max_digits    == s.energy_variance_max_digits and
         this->energy_variance_prec_limit    == s.energy_variance_prec_limit and
-        this->bond_expansion_alpha           == s.bond_expansion_alpha and
+        this->mixing_factor          == s.mixing_factor and
         this->phys_time                     == s.phys_time and
         this->wall_time                     == s.wall_time and
         this->algo_time                     == s.algo_time and
@@ -69,16 +69,17 @@ bool AlgorithmStatus::operator==(const AlgorithmStatus &s) const {
         this->algorithm_converged_for       == s.algorithm_converged_for and
         this->entanglement_converged_for    == s.entanglement_converged_for and
         this->entanglement_saturated_for    == s.entanglement_saturated_for and
+        this->locinfoscale_saturated_for    == s.locinfoscale_saturated_for and
         this->variance_mpo_converged_for    == s.variance_mpo_converged_for and
         this->variance_mpo_saturated_for    == s.variance_mpo_saturated_for and
         this->variance_ham_converged_for    == s.variance_ham_converged_for and
         this->variance_ham_saturated_for    == s.variance_ham_saturated_for and
         this->variance_mom_converged_for    == s.variance_mom_converged_for and
         this->variance_mom_saturated_for    == s.variance_mom_saturated_for and
-        // this->infocom_saturated_for         == s.infocom_saturated_for and
         this->bond_limit_has_reached_max    == s.bond_limit_has_reached_max and
         this->trnc_limit_has_reached_min    == s.trnc_limit_has_reached_min and
         this->spin_parity_has_converged     == s.spin_parity_has_converged and
+        this->trnc_error_has_converged      == s.trnc_error_has_converged and
         this->time_step_has_converged       == s.time_step_has_converged;
     /* clang-format on */
 }

@@ -28,7 +28,7 @@ Eigen::Tensor<Scalar, 3> tools::infinite::opt::find_ground_state(const TensorsIn
     MatVecMPO<cx64> matrix(tenx::asScalarType<cx64>(env.L), tenx::asScalarType<cx64>(env.R), tenx::asScalarType<cx64>(mpo));
     eig::solver     solver;
     solver.config.maxNev  = 1;
-    solver.config.maxNcv  = settings::precision::eigs_ncv;
+    solver.config.maxNcv  = settings::precision::eigs_ncv_min;
     solver.config.tol     = settings::precision::eigs_tol_min;
     solver.config.maxIter = 10000;
     solver.eigs(matrix, -1, -1, ritz, eig::Form::SYMM, eig::Side::R, cx64{1.0, 0.0}, eig::Shinv::OFF, eig::Vecs::ON, eig::Dephase::OFF);

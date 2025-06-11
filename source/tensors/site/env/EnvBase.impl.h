@@ -1,7 +1,7 @@
 #pragma once
-#include "EnvBase.h"
 #include "config/debug.h"
 #include "debug/exceptions.h"
+#include "EnvBase.h"
 #include "general/sfinae.h"
 #include "math/hash.h"
 #include "math/num.h"
@@ -422,4 +422,20 @@ Eigen::Tensor<T, 3> EnvBase<Scalar>::get_expansion_term(const MpsSite<Scalar> &m
     return get_expansion_term_exec<T>(mps_tensor, mpo_tensor, blk_tensor, side);
 }
 
+template<typename Scalar>
+template<typename T>
+Eigen::Tensor<T, 3> EnvBase<Scalar>::get_expansion_term(const Eigen::Tensor<Scalar, 3> &mps_tensor, const MpoSite<Scalar> &mpo) const {
+    if constexpr(sfinae::is_std_complex_v<T> and sfinae::is_std_complex_v<Scalar>) {
+        if(is_real() and tenx::isReal(mps_tensor) and mpo.is_real()) {
+            using RealT = typename T::value_type;
+            return get_expansion_term<RealT>(mps_tensor, mpo).template cast<T>();
+        }
+    }
 
+    assert(tag == "ene" or tag == "var");
+    assert(side == "L" or side == "R");
+    assert(get_position() == mpo.get_position());
+    decltype(auto) mpo_tensor = tag == "ene" ? mpo.template MPO_as<T>() : mpo.template MPO2_as<T>();
+    decltype(auto) blk_tensor = get_block_as<T>();
+    return get_expansion_term_exec<T>(tenx::asScalarType<T>(mps_tensor), mpo_tensor, blk_tensor, side);
+}

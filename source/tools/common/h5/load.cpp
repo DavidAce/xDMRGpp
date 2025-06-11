@@ -37,7 +37,7 @@ namespace tools::common::h5 {
         status.energy_variance_lowest       = h5file.readTableField<std::optional<double>>               (status_path, "energy_variance_lowest",     offset).value_or(1.0);
         status.energy_variance_max_digits   = h5file.readTableField<std::optional<size_t>>               (status_path, "energy_variance_max_digits", offset).value_or(0);
         status.energy_variance_prec_limit   = h5file.readTableField<std::optional<double>>               (status_path, "energy_variance_prec_limit", offset).value_or(0);
-        status.bond_expansion_alpha          = h5file.readTableField<std::optional<double>>               (status_path, "bond_expansion_alpha",        offset).value_or(0.0);
+        status.mixing_factor          = h5file.readTableField<std::optional<double>>               (status_path, "mixing_factor",        offset).value_or(0.0);
         status.phys_time                    = h5file.readTableField<std::optional<h5pp::fstr_t<64>>>     (status_path, "phys_time",                  offset).value_or(h5pp::fstr_t<64>{});
         status.wall_time                    = h5file.readTableField<std::optional<double>>               (status_path, "wall_time",                  offset).value_or(0);
         status.algo_time                    = h5file.readTableField<std::optional<double>>               (status_path, "algo_time",                  offset).value_or(0);
@@ -50,16 +50,17 @@ namespace tools::common::h5 {
         status.algorithm_converged_for      = h5file.readTableField<std::optional<size_t>>               (status_path, "algorithm_converged_for",    offset).value_or(0);
         status.entanglement_converged_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "entanglement_converged_for", offset).value_or(0);
         status.entanglement_saturated_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "entanglement_saturated_for", offset).value_or(0);
+        status.locinfoscale_saturated_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "locinfoscale_saturated_for", offset).value_or(0);
         status.variance_mpo_converged_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "variance_mpo_converged_for", offset).value_or(0);
         status.variance_mpo_saturated_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "variance_mpo_saturated_for", offset).value_or(0);
         status.variance_ham_converged_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "variance_ham_converged_for", offset).value_or(0);
         status.variance_ham_saturated_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "variance_ham_saturated_for", offset).value_or(0);
         status.variance_mom_converged_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "variance_mom_converged_for", offset).value_or(0);
         status.variance_mom_saturated_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "variance_mom_saturated_for", offset).value_or(0);
-        // status.infocom_saturated_for        = h5file.readTableField<std::optional<size_t>>               (status_path, "infocom_saturated_for"     , offset).value_or(0);
         status.bond_limit_has_reached_max   = h5file.readTableField<std::optional<bool>>                 (status_path, "bond_limit_has_reached_max", offset).value_or(false);
         status.trnc_limit_has_reached_min   = h5file.readTableField<std::optional<bool>>                 (status_path, "trnc_limit_has_reached_min", offset).value_or(false);
         status.spin_parity_has_converged    = h5file.readTableField<std::optional<bool>>                 (status_path, "spin_parity_has_converged",  offset).value_or(false);
+        status.trnc_error_has_converged     = h5file.readTableField<std::optional<bool>>                 (status_path, "trnc_error_has_converged",   offset).value_or(false);
         status.time_step_has_converged      = h5file.readTableField<std::optional<bool>>                 (status_path, "time_step_has_converged",    offset).value_or(false);
         /* clang-format on*/
         return status;

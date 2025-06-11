@@ -39,7 +39,7 @@ class AlgorithmInfinite : public AlgorithmBase {
     void check_convergence_variance_mpo(std::optional<RealScalar> threshold = std::nullopt, std::optional<RealScalar> sensitivity = std::nullopt);
     void check_convergence_variance_ham(std::optional<RealScalar> threshold = std::nullopt, std::optional<RealScalar> sensitivity = std::nullopt);
     void check_convergence_variance_mom(std::optional<RealScalar> threshold = std::nullopt, std::optional<RealScalar> sensitivity = std::nullopt);
-    void check_convergence_entg_entropy(std::optional<RealScalar> sensitivity = std::nullopt);
+    void check_convergence_entanglement(std::optional<RealScalar> sensitivity = std::nullopt);
 
     std::vector<RealScalar> var_mpo_iter; // History of energy variances (from mpo) at each iteration
     std::vector<RealScalar> var_ham_iter;

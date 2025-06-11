@@ -9,7 +9,6 @@
 #include "tid/tid.h"
 #include "tools/common/log.h"
 
-
 using tools::finite::mps::RealScalar;
 
 template<typename CalcType, typename Scalar>
@@ -45,11 +44,11 @@ Eigen::Tensor<Scalar, 1> tools::finite::mps::mps2tensor(const std::vector<std::u
         statev.slice(off1, ext1).device(*threads->dev) = temp.contract(mps->template get_M_as<CalcType>(), tenx::idx({1}, {1})).reshape(ext1);
     }
     // Finally, we view a slice of known size 2^L
-    statev = statev.slice(off1, ext1);
-    R norm = tenx::norm(statev);
-    if(num::gt(std::abs(norm - R{1}), settings::precision::max_norm_error)) {
-        tools::log->warn("mps2tensor [{}]: Norm far from unity: {:.16f}", name, fp(norm));
-    }
+    statev    = statev.slice(off1, ext1);
+    R norm    = tenx::norm(statev);
+    R normTol = std::numeric_limits<R>::epsilon() * settings::precision::max_norm_slack;
+    R normErr = std::abs(norm - R{1});
+    if(normErr > normTol) { tools::log->warn("mps2tensor [{}]: Norm far from unity: {:.5e}", name, fp(normErr)); }
     return tenx::asScalarType<Scalar>(statev);
 }
 
@@ -57,4 +56,3 @@ template<typename CalcType, typename Scalar>
 Eigen::Tensor<Scalar, 1> tools::finite::mps::mps2tensor(const StateFinite<Scalar> &state) {
     return mps2tensor<CalcType>(state.mps_sites, state.get_name());
 }
-

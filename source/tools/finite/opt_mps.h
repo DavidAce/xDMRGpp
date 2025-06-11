@@ -230,7 +230,7 @@ namespace tools::finite::opt {
         template<typename T> void set_eigs_idx(T eigs_idx_) { eigs_idx = eigs_idx_; }
         template<typename T> void set_eigs_nev(T eigs_nev_) { eigs_nev = eigs_nev_; }
         template<typename T> void set_eigs_ncv(T eigs_ncv_) { eigs_ncv = eigs_ncv_; }
-        template<typename T> void set_eigs_tol(T eigs_tol_) { eigs_tol = eigs_tol_; }
+        template<typename T> void set_eigs_tol(T eigs_tol_) { eigs_tol = static_cast<double>(eigs_tol_); }
         template<typename T> void set_eigs_rnorm(T eigs_rnorm_) { eigs_rnorm = static_cast<RealScalar<Scalar>>(eigs_rnorm_); }
         template<typename T> void set_eigs_eigval(T eigs_eigval_) { eigs_eigval = eigs_eigval_; }
         template<typename T> void set_eigs_ritz(T eigs_ritz_) { eigs_ritz = eigs_ritz_; }

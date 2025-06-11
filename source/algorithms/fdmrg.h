@@ -63,7 +63,12 @@ class fdmrg : public AlgorithmFinite<Scalar> {
     using AlgorithmFinite<Scalar>::move_center_point;
     using AlgorithmFinite<Scalar>::var_delta;
     using AlgorithmFinite<Scalar>::ene_delta;
-    using AlgorithmFinite<Scalar>::var_change;
+    using AlgorithmFinite<Scalar>::ene_delta_opt;
+    using AlgorithmFinite<Scalar>::ene_delta_svd;
+    using AlgorithmFinite<Scalar>::var_delta_opt;
+    using AlgorithmFinite<Scalar>::var_delta_svd;
+    using AlgorithmFinite<Scalar>::std_delta_opt;
+    using AlgorithmFinite<Scalar>::std_delta_svd;
     using AlgorithmFinite<Scalar>::var_latest;
     using AlgorithmFinite<Scalar>::ene_latest;
     using AlgorithmFinite<Scalar>::last_optalgo;

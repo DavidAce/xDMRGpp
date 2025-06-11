@@ -18,12 +18,12 @@ class AlgorithmStatus {
     AlgorithmType     algo_type                  = AlgorithmType::ANY;
     AlgorithmStop     algo_stop                  = AlgorithmStop::NONE;
     size_t            min_iters                  = 0;
-    long              bond_lim                   = 0; /*!< Current limit on bond dimension, can be increased dynamically */
-    long              bond_max                   = 0; /*!< Maximum allowable bond dimension during an algorithm run */
     long              bond_min                   = 0; /*!< Minimum bond dimension. Used during init/warmup */
-    double            trnc_lim                   = 0; /*!< Current truncation error limit */
+    long              bond_max                   = 0; /*!< Maximum allowable bond dimension during an algorithm run */
+    long              bond_lim                   = 0; /*!< Current limit on bond dimension, can be increased dynamically */
     double            trnc_min                   = 0; /*!< Minimum truncation error limit for this simulation */
     double            trnc_max                   = 0; /*!< Maximum truncation error limit. Used during init/warmup */
+    double            trnc_lim                   = 0; /*!< Current truncation error limit */
     double            energy_min                 = std::numeric_limits<double>::quiet_NaN();
     double            energy_max                 = std::numeric_limits<double>::quiet_NaN();
     double            energy_tgt                 = std::numeric_limits<double>::quiet_NaN();
@@ -32,7 +32,7 @@ class AlgorithmStatus {
     double            energy_variance_lowest     = 1.0;
     size_t            energy_variance_max_digits = 0;
     double            energy_variance_prec_limit = 0;
-    double            bond_expansion_alpha        = 0.0; /*!< subspace expansion factor alpha */
+    double            mixing_factor              = std::numeric_limits<double>::quiet_NaN(); /*!< subspace expansion factor alpha */
     h5pp::fstr_t<64>  phys_time                  = {};
     double            wall_time                  = 0;
     double            algo_time                  = 0;
@@ -45,16 +45,17 @@ class AlgorithmStatus {
     size_t            algorithm_converged_for    = 0;
     size_t            entanglement_converged_for = 0;
     size_t            entanglement_saturated_for = 0;
+    size_t            locinfoscale_saturated_for = 0;
     size_t            variance_mpo_converged_for = 0;
     size_t            variance_mpo_saturated_for = 0;
     size_t            variance_ham_converged_for = 0;
     size_t            variance_ham_saturated_for = 0;
     size_t            variance_mom_converged_for = 0;
     size_t            variance_mom_saturated_for = 0;
-    // size_t            infocom_saturated_for      = 0; /*!< Information center of mass (information scale expectation value) */
     bool              bond_limit_has_reached_max = false;
     bool              trnc_limit_has_reached_min = false;
     bool              spin_parity_has_converged  = false;
+    bool              trnc_error_has_converged   = false;
     bool              time_step_has_converged    = false;
 
     void                           clear();

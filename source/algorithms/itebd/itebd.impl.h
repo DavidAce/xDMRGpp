@@ -68,7 +68,7 @@ template<typename Scalar> void itebd<Scalar>::update_state() {
 
 template<typename Scalar> void itebd<Scalar>::check_convergence() {
     auto t_con = tid::tic_scope("conv");
-    check_convergence_entg_entropy();
+    check_convergence_entanglement();
     check_convergence_variance_ham();
     check_convergence_variance_mom();
     update_bond_dimension_limit();

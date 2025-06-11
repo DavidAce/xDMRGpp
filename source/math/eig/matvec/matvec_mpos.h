@@ -84,10 +84,10 @@ class MatVecMPOS {
     // using CGType = Eigen::ConjugateGradient<SparseType, Eigen::Lower | Eigen::Upper, Eigen::IncompleteCholesky<Scalar, Eigen::Lower | Eigen::Upper>>;
     // std::vector<std::tuple<long, std::unique_ptr<SparseType>, std::unique_ptr<CGType>>> cgJcbBlocks; // Solvers for the block Jacobi preconditioner
 
-    Eigen::LLT<MatrixType>          llt;  // Stores the llt matrix factorization on shift-invert
-    Eigen::PartialPivLU<MatrixType> lu;   // Stores the lu matrix factorization on shift-invert
-    Eigen::LDLT<MatrixType>         ldlt; // Stores the ldlt matrix factorization on shift-invert
-    IterativeLinearSolverConfig<Scalar>            iLinSolvCfg;
+    Eigen::LLT<MatrixType>              llt;  // Stores the llt matrix factorization on shift-invert
+    Eigen::PartialPivLU<MatrixType>     lu;   // Stores the lu matrix factorization on shift-invert
+    Eigen::LDLT<MatrixType>             ldlt; // Stores the ldlt matrix factorization on shift-invert
+    IterativeLinearSolverConfig<Scalar> iLinSolvCfg;
 
     SparseType                      sparseMatrix;
     VectorType                      solverGuess;
@@ -226,8 +226,8 @@ class MatVecMPOS {
     [[nodiscard]] double                                       get_sparsity() const;
     [[nodiscard]] long                                         get_non_zeros() const;
     [[nodiscard]] long                                         get_jcbMaxBlockSize() const;
-    [[nodiscard]] const IterativeLinearSolverConfig<Scalar>                  &get_iterativeLinearSolverConfig() const;
-    [[nodiscard]] IterativeLinearSolverConfig<Scalar>                        &get_iterativeLinearSolverConfig();
+    [[nodiscard]] const IterativeLinearSolverConfig<Scalar>   &get_iterativeLinearSolverConfig() const;
+    [[nodiscard]] IterativeLinearSolverConfig<Scalar>         &get_iterativeLinearSolverConfig();
     [[nodiscard]] bool                                         isReadyShift() const;
     [[nodiscard]] bool                                         isReadyFactorOp() const;
 
@@ -237,4 +237,10 @@ class MatVecMPOS {
     std::unique_ptr<tid::ur> t_multOPv;
     std::unique_ptr<tid::ur> t_multPc; // Preconditioner time
     std::unique_ptr<tid::ur> t_multAx; // Matvec time
+
+    RealScalar get_op_norm(Eigen::Index max_op_norm_iters);
+
+    private:
+    mutable Eigen::Index op_norm_iters;
+    mutable RealScalar   op_norm = std::numeric_limits<double>::quiet_NaN();
 };

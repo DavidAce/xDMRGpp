@@ -511,7 +511,6 @@ template<typename Scalar>
 void flbit<Scalar>::check_convergence() {
     if(not tensors.position_is_inward_edge()) return;
     auto t_con = tid::tic_scope("check_conv");
-    //    check_convergence_entg_entropy();
     if(status.entanglement_saturated_for > 0)
         status.algorithm_saturated_for++;
     else

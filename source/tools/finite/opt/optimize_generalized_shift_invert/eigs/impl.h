@@ -38,6 +38,17 @@ namespace gsi {
         H_ptr->preconditioner = eig::Preconditioner::JACOBI;
         H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
     }
+    template<typename CalcType>
+    void preconditioner_linearsolver(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *ierr) {
+        if(x == nullptr) return;
+        if(y == nullptr) return;
+        if(primme == nullptr) return;
+        const auto H_ptr      = static_cast<MatVecMPOS<CalcType> *>(primme->matrix);
+        H_ptr->preconditioner = eig::Preconditioner::SOLVE;
+        H_ptr->factorization  = eig::Factorization::LLT;
+        H_ptr->set_iterativeLinearSolverConfig(10000, 0.1, MatDef::DEF);
+        H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
+    }
     template<typename Scalar>
     struct opt_mps_init_t {
         Eigen::Tensor<Scalar, 3> mps = {};
@@ -119,15 +130,15 @@ template<typename CalcType, typename Scalar>
 void eigs_manager_generalized_shift_invert(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results,
                                            const OptMeta &meta) {
     eig::solver solver;
-    auto       &cfg     = solver.config;
-    cfg.loglevel        = 2;
-    cfg.compute_eigvecs = eig::Vecs::ON;
-    cfg.tol             = meta.eigs_tol.value_or(settings::precision::eigs_tol_min); // 1e-12 is good. This Sets "eps" in primme, see link above.
-    cfg.maxIter         = meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
-    cfg.maxNev          = meta.eigs_nev.value_or(1);
-    cfg.maxNcv          = meta.eigs_ncv.value_or(settings::precision::eigs_ncv);
-    cfg.maxTime         = meta.eigs_time_max.value_or(2 * 60 * 60); // Two hours default
-    cfg.lib             = meta.eigs_lib.empty() ? eig::Lib::PRIMME : eig::StringToLib(meta.eigs_lib);
+    auto       &cfg           = solver.config;
+    cfg.loglevel              = 2;
+    cfg.compute_eigvecs       = eig::Vecs::ON;
+    cfg.tol                   = meta.eigs_tol.value_or(settings::precision::eigs_tol_min); // 1e-12 is good. This Sets "eps" in primme, see link above.
+    cfg.maxIter               = meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
+    cfg.maxNev                = meta.eigs_nev.value_or(1);
+    cfg.maxNcv                = meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    cfg.maxTime               = meta.eigs_time_max.value_or(2 * 60 * 60); // Two hours default
+    cfg.lib                   = meta.eigs_lib.empty() ? eig::Lib::PRIMME : eig::StringToLib(meta.eigs_lib);
     cfg.primme_minRestartSize = meta.primme_minRestartSize;
     cfg.primme_maxBlockSize   = meta.primme_maxBlockSize;
     cfg.primme_locking        = 0;

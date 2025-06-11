@@ -246,12 +246,6 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     OptMeta m1;
 
     // The first decision is easy. Real or complex optimization
-    // if(std::is_same_v<Scalar, fp32>) m1.optType = OptType::FP32;
-    // if(std::is_same_v<Scalar, fp64>) m1.optType = OptType::FP64;
-    // if(std::is_same_v<Scalar, fp128>) m1.optType = OptType::FP128;
-    // if(std::is_same_v<Scalar, cx32>) m1.optType = tensors.is_real() ? OptType::FP32 : OptType::CX32;
-    // if(std::is_same_v<Scalar, cx64>) m1.optType = tensors.is_real() ? OptType::FP64 : OptType::CX64;
-    // if(std::is_same_v<Scalar, cx128>) m1.optType = tensors.is_real() ? OptType::FP128 : OptType::CX128;
     switch(settings::precision::optScalar) {
         case ScalarType::FP32: m1.optType = OptType::FP32; break;
         case ScalarType::FP64: m1.optType = OptType::FP64; break;
@@ -260,6 +254,11 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
         case ScalarType::CX64: m1.optType = OptType::CX64; break;
         case ScalarType::CX128: m1.optType = OptType::CX128; break;
     }
+
+    // if(var_latest < 1e-14) {
+    //     if(m1.optType == OptType::FP64) m1.optType = OptType::FP128;
+    //     if(m1.optType == OptType::CX64) m1.optType = OptType::CX128;
+    // }
 
     // Set the target eigenvalue
     m1.optRitz = status.opt_ritz;
@@ -271,10 +270,8 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
             m1.optRitz = settings::xdmrg::ritz_stuck;
         }
         if(status.iter < settings::strategy::iter_max_warmup /* or std::abs(h2) > 1e-3 */) {
-            m1.optAlgo          = settings::xdmrg::algo_warmup;
-            m1.optRitz          = settings::xdmrg::ritz_warmup;
-            m1.bondexp_maxalpha = std::max<float>(settings::strategy::dmrg_bond_expansion::postopt::maxalpha, 1e1f);
-            m1.bondexp_minalpha = std::max<float>(settings::strategy::dmrg_bond_expansion::postopt::minalpha, 1e1f);
+            m1.optAlgo = settings::xdmrg::algo_warmup;
+            m1.optRitz = settings::xdmrg::ritz_warmup;
         }
     }
 
@@ -296,30 +293,23 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     m1.problem_size     = tools::finite::multisite::get_problem_size(tensors.get_state(), m1.chosen_sites);
 
     // Set up the bond expansion (aka subspace expansion)
-    m1.bondexp_policy    = settings::strategy::dmrg_bond_expansion_policy;
-    m1.bondexp_maxiter   = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
-    m1.bondexp_nkrylov   = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
-    m1.bondexp_maxalpha  = settings::strategy::dmrg_bond_expansion::postopt::maxalpha;
-    m1.bondexp_minalpha  = settings::strategy::dmrg_bond_expansion::postopt::minalpha;
-    m1.bondexp_blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
-    m1.bondexp_factor    = settings::strategy::dmrg_bond_expansion::bond_factor;
-    m1.bondexp_bondlim   = static_cast<long>(std::ceil(settings::strategy::dmrg_bond_expansion::bond_factor * status.bond_lim));
-    m1.subspace_tol      = settings::precision::target_subspace_error; // Used in Hybrid DMRG-X
+    m1.subspace_tol = settings::precision::target_subspace_error; // Used in Hybrid DMRG-X
 
     // m1.primme_method = "PRIMME_GD_Olsen_plusK"; // PRIMME_GD_Olsen_plusK is fastest when using a large jcb preconditioner, since it uses the least matvecs
     m1.primme_method = "PRIMME_DYNAMIC"; // PRIMME_GD_Olsen_plusK is fastest when using a large jcb preconditioner, since it uses the least matvecs
 
-    m1.eigs_nev = settings::precision::eigs_nev_min;
+    m1.eigv_target = 0.0; // We always target 0 when OptCost::VARIANCE
+    m1.eigs_nev    = settings::precision::eigs_nev_min;
+    m1.eigs_ncv    = settings::precision::eigs_ncv_min; // Sets to log2(problem_size) if a nonpositive value is given
+    m1.eigs_blk    = settings::precision::eigs_blk_min;
     if(status.algorithm_has_stuck_for > 0) {
-        m1.eigs_nev = std::clamp(static_cast<int>(1 + status.algorithm_has_stuck_for), settings::precision::eigs_nev_min, settings::precision::eigs_nev_max);
+        m1.eigs_nev = settings::precision::eigs_nev_max;
+        m1.eigs_ncv = settings::precision::eigs_ncv_max; // Sets to log2(problem_size) if a nonpositive value is given
+        m1.eigs_blk = settings::precision::eigs_blk_max;
     }
-    m1.eigv_target = 0.0;                           // We always target 0 when OptCost::VARIANCE
-    m1.eigs_ncv    = settings::precision::eigs_ncv; // Sets to log2(problem_size) if a nonpositive value is given here
-    // if(status.algo_type == AlgorithmType::xDMRG and status.algorithm_has_stuck_for > 0) { m1.bondexp_policy = BondExpansionPolicy::ENE |
-    // BondExpansionPolicy::VAR; } Set up a multiplier for number of iterations
     m1.eigs_iter_max = get_eigs_iter_max() * m1.eigs_nev.value();
     m1.eigs_tol      = dmrg_eigs_tol;
-    // m1.eigs_tol      = settings::precision::eigs_tol_min;
+
     if(settings::strategy::etol_decrease_when == UpdatePolicy::NEVER) {
         // Increase the precision of the eigenvalue solver as variance decreases, and when stuck
         double matrix_norm = std::max<double>(1.0, static_cast<double>(eigval_upper_bound));
@@ -335,16 +325,16 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     // m1.eigs_tol = settings::precision::eigs_tol_max;
     // }
 
-    m1.eigs_jcbMaxBlockSize = settings::precision::eigs_jcb_min_blocksize;
+    m1.eigs_jcbMaxBlockSize = settings::precision::eigs_jcb_blocksize_min;
     if(status.algorithm_saturated_for + status.algorithm_has_stuck_for > 0) {
         using namespace settings::precision;
-        double jcbBlockSizeLog2_20pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_min_blocksize), std::log2(eigs_jcb_max_blocksize), 0.20));
-        double jcbBlockSizeLog2_50pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_min_blocksize), std::log2(eigs_jcb_max_blocksize), 0.50));
-        double jcbBlockSizeLog2_80pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_min_blocksize), std::log2(eigs_jcb_max_blocksize), 0.80));
+        double jcbBlockSizeLog2_20pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_blocksize_min), std::log2(eigs_jcb_blocksize_max), 0.20));
+        double jcbBlockSizeLog2_50pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_blocksize_min), std::log2(eigs_jcb_blocksize_max), 0.50));
+        double jcbBlockSizeLog2_80pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_blocksize_min), std::log2(eigs_jcb_blocksize_max), 0.80));
         if(status.algorithm_saturated_for > 0) { m1.eigs_jcbMaxBlockSize = static_cast<long>(std::pow(2, jcbBlockSizeLog2_20pcnt)); }
         if(status.algorithm_has_stuck_for > 0) { m1.eigs_jcbMaxBlockSize = static_cast<long>(std::pow(2, jcbBlockSizeLog2_50pcnt)); }
         if(status.algorithm_has_stuck_for > 2) { m1.eigs_jcbMaxBlockSize = static_cast<long>(std::pow(2, jcbBlockSizeLog2_80pcnt)); }
-        if(status.algorithm_has_stuck_for > 4) { m1.eigs_jcbMaxBlockSize = eigs_jcb_max_blocksize; }
+        if(status.algorithm_has_stuck_for > 4) { m1.eigs_jcbMaxBlockSize = eigs_jcb_blocksize_max; }
     }
 
     // Do eig instead of eigs when it's cheap (e.g. near the edges or early in the simulation)
@@ -358,29 +348,21 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
 }
 
 template<typename Scalar>
-void AlgorithmFinite<Scalar>::expand_bonds(BondExpansionOrder order) {
+BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionOrder order) {
     BondExpansionConfig bcfg;
-    bcfg.order     = order;
-    bcfg.policy    = settings::strategy::dmrg_bond_expansion_policy;
-    bcfg.maxiter   = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
-    bcfg.nkrylov   = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
-    bcfg.maxalpha  = settings::strategy::dmrg_bond_expansion::postopt::maxalpha;
-    bcfg.minalpha  = settings::strategy::dmrg_bond_expansion::postopt::minalpha;
-    bcfg.factor    = settings::strategy::dmrg_bond_expansion::bond_factor;
-    bcfg.bondlim   = static_cast<long>(std::ceil(settings::strategy::dmrg_bond_expansion::bond_factor * status.bond_lim));
-    bcfg.trnclim   = status.trnc_lim;
-    bcfg.blocksize = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
-    bcfg.optAlgo   = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
-    bcfg.optRitz   = status.opt_ritz;
+    bcfg.order         = order;
+    bcfg.policy        = settings::strategy::dmrg_bond_expansion_policy;
+    bcfg.maxiter       = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
+    bcfg.nkrylov       = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
+    bcfg.bond_factor   = order == BondExpansionOrder::PREOPT ? settings::strategy::dmrg_bond_expansion::preopt::bond_factor : 1.0f;
+    bcfg.bond_limit    = static_cast<long>(std::ceil(bcfg.bond_factor * status.bond_lim));
+    bcfg.trnc_limit    = status.trnc_lim;
+    bcfg.blocksize     = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
+    bcfg.mixing_factor = status.mixing_factor;
+    bcfg.optAlgo       = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
+    bcfg.optRitz       = status.opt_ritz;
 
-    if(bcfg.policy == BondExpansionPolicy::NONE) return;
-
-    auto res = tensors.expand_bonds(bcfg);
-    if(not res.ok) {
-        tools::log->debug("Expansion canceled: {}", res.msg);
-        return;
-    }
-    status.bond_expansion_alpha = !std::isnan(res.alpha_h1v) ? res.alpha_h1v : res.alpha_h2v;
+    return tensors.expand_bonds(bcfg);
 }
 
 template<typename Scalar>
@@ -512,13 +494,16 @@ void AlgorithmFinite<Scalar>::try_moving_sites() {
     //  pos : the index of a slot on the lattice, which can not be moved. (long)
     //  site: the index of a particle on the lattice, which can be moved. (size_t)
     //  dir : Direction on which to move the position: +1l = right, -1l = left.
-    auto eigs_iter_max_backup          = settings::precision::eigs_iter_max;
-    auto eigs_tol_min_backup           = settings::precision::eigs_tol_min;
-    auto eigs_ncv_backup               = settings::precision::eigs_ncv;
+    auto eigs_iter_max_backup = settings::precision::eigs_iter_max;
+    auto eigs_tol_min_backup  = settings::precision::eigs_tol_min;
+    auto eigs_ncv_min_backup  = settings::precision::eigs_ncv_min;
+    auto eigs_ncv_max_backup  = settings::precision::eigs_ncv_max;
+
     auto dmrg_blocksize_backup         = dmrg_blocksize;
     settings::precision::eigs_iter_max = 100;
     settings::precision::eigs_tol_min  = std::min(1e-14, settings::precision::eigs_tol_min);
-    settings::precision::eigs_ncv      = std::max(35, settings::precision::eigs_ncv);
+    settings::precision::eigs_ncv_min  = std::max(35, settings::precision::eigs_ncv_min);
+    settings::precision::eigs_ncv_max  = std::max(35, settings::precision::eigs_ncv_max);
 
     auto len      = tensors.template get_length<long>();
     auto pos      = tensors.template get_position<long>();
@@ -571,7 +556,8 @@ void AlgorithmFinite<Scalar>::try_moving_sites() {
         throw except::logic_error("Position {} and direction {} is not an inward edge", tensors.get_position(), tensors.state->get_direction());
     settings::precision::eigs_iter_max = eigs_iter_max_backup;
     settings::precision::eigs_tol_min  = eigs_tol_min_backup;
-    settings::precision::eigs_ncv      = eigs_ncv_backup;
+    settings::precision::eigs_ncv_min  = eigs_ncv_min_backup;
+    settings::precision::eigs_ncv_max  = eigs_ncv_max_backup;
     dmrg_blocksize                     = dmrg_blocksize_backup;
 }
 
@@ -582,17 +568,7 @@ void AlgorithmFinite<Scalar>::update_precision_limit(std::optional<double> energ
     // We can get a rough order of magnitude estimate of the largest eigenvalue by adding the absolute value of all the
     // Hamiltonian couplings and fields.
     if(not energy_upper_bound) energy_upper_bound = tensors.model->get_energy_upper_bound();
-    double max_eigval = std::abs(energy_upper_bound.value());
-    switch(settings::xdmrg::algo) {
-        case OptAlgo::DMRG: // TODO: Should this one be here?
-        case OptAlgo::HYBRID_DMRGX:
-        case OptAlgo::XDMRG:
-        case OptAlgo::GDMRG: {
-            // Estimate the largest eigenvalue of H²
-            max_eigval = std::pow(energy_upper_bound.value(), 2);
-        }
-        default: break;
-    }
+    double max_eigval                 = std::abs(energy_upper_bound.value());
     double digits10                   = std::numeric_limits<double>::digits10;
     double eigval_exp                 = std::max(0.0, std::log10(max_eigval));
     double max_digits                 = std::max(0.0, digits10 - eigval_exp);
@@ -649,12 +625,14 @@ void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
     bool is_has_stuck = status.algorithm_has_stuck_for > 0;
     bool is_next_iter = true; // Should be checked
     bool is_even_iter = status.iter % 2 == 0;
-    // bool                          grow_if_on_warmup = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::WARMUP);
-    bool                          grow_if_next_iter = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::HALFSWEEP);
-    bool                          grow_if_even_iter = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::FULLSWEEP);
-    bool                          grow_if_truncated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::TRUNCATED);
-    bool                          grow_if_saturated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::SAT_ALGO);
-    bool                          grow_if_has_stuck = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::STK_ALGO);
+
+    // bool grow_if_on_warmup = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::WARMUP);
+    bool grow_if_next_iter = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::HALFSWEEP);
+    bool grow_if_even_iter = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::FULLSWEEP);
+    bool grow_if_truncated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::TRUNCATED);
+    bool grow_if_saturated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::SAT_ALGO);
+    bool grow_if_has_stuck = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::STK_ALGO);
+
     std::vector<std::string_view> reason;
     if(grow_if_truncated and is_truncated) reason.emplace_back("truncated");
     if(grow_if_saturated and is_saturated) reason.emplace_back("saturated");
@@ -799,6 +777,38 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if(status.trnc_lim < status.trnc_min) throw except::logic_error("trnc_lim is smaller than trnc_min ! {:8.2e} > {:8.2e}", status.trnc_lim, status.trnc_min);
 }
 
+template<typename Scalar> void AlgorithmFinite<Scalar>::update_mixing_factor() {
+    /*! Update the mixing factor  depending on qexp: the quotient of Exp(H)/Var(H)/Std(H) caused by optimization/expansion
+     */
+    using namespace settings::strategy::dmrg_bond_expansion;
+    if(status.iter == 0 or std::isnan(status.mixing_factor)) {
+        status.mixing_factor = dmrg3s::maxalpha;
+        tools::log->debug("Initialized the mixing factor to {:8.2e}", status.mixing_factor);
+        return;
+    }
+    RealScalar qexp = 1.0;
+    switch(status.algo_type) {
+        case AlgorithmType::fDMRG: qexp = ene_delta_svd / ene_delta_opt; break;
+        case AlgorithmType::xDMRG: qexp = var_delta_svd / var_delta_opt; break;
+        case AlgorithmType::fLBIT: return;
+        case AlgorithmType::iTEBD: return;
+        case AlgorithmType::ANY: return;
+        default: return;
+    }
+
+    if(!std::isfinite(qexp)) return;
+    if(std::isfinite(qexp)) {
+        double old_mixing_factor = status.mixing_factor;
+        double new_mixing_factor = status.mixing_factor;
+
+        if(qexp < RealScalar{-0.4f}) new_mixing_factor *= 0.5;
+        if(qexp > RealScalar{-0.2f}) new_mixing_factor *= 2.0;
+        status.mixing_factor = std::clamp(new_mixing_factor, dmrg3s::minalpha, dmrg3s::maxalpha);
+        if(old_mixing_factor != status.mixing_factor)
+            tools::log->debug("Updated mixing factor {:8.2e} -> {:8.2e} | qexp {:.5e}", old_mixing_factor, status.mixing_factor, fp(qexp));
+    }
+}
+
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
     auto old_bsize = dmrg_blocksize;
@@ -836,7 +846,7 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
     tools::log->trace("Updating blocksize | policy: {}", flag2str(dmrg_blocksize_policy));
     bool has_converged = status.algorithm_converged_for > 0 or var_latest <= static_cast<RealScalar>(settings::precision::variance_convergence_threshold);
     bool has_sat_ent   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_ENTR) and status.entanglement_saturated_for > 0 and not has_converged;
-    bool has_sat_icom  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_INFO) and infocom_saturated_for > 0 and not has_converged;
+    bool has_sat_info  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_INFO) and status.locinfoscale_saturated_for > 0 and not has_converged;
     bool has_sat_var   = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_EVAR) and status.variance_mpo_saturated_for > 0 and not has_converged;
     bool has_sat_algo  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_ALGO) and status.algorithm_saturated_for > 0 and not has_converged;
     bool has_stk_algo  = has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_STK_ALGO) and status.algorithm_has_stuck_for > 0 and not has_converged;
@@ -847,15 +857,15 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
                          !has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_EVAR) and //
                          !has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_SAT_ALGO) and //
                          !has_flag(dmrg_blocksize_policy, BlockSizePolicy::IF_STK_ALGO);
-    bool has_to_adjust = has_sat_ent or has_sat_icom or has_sat_var or has_sat_algo or has_stk_algo or has_no_status;
+    bool has_to_adjust = has_sat_ent or has_sat_info or has_sat_var or has_sat_algo or has_stk_algo or has_no_status;
 
     BlockSizePolicy choice = BlockSizePolicy::MIN;
     if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::MAX)) choice = BlockSizePolicy::MAX;
-    if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM)) choice = BlockSizePolicy::ICOM;
+    if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::INFO)) choice = BlockSizePolicy::INFO;
 
     BlockSizePolicy reasons = BlockSizePolicy::MIN;
     if(has_sat_ent) reasons |= BlockSizePolicy::IF_SAT_ENTR;
-    if(has_sat_icom) reasons |= BlockSizePolicy::IF_SAT_INFO;
+    if(has_sat_info) reasons |= BlockSizePolicy::IF_SAT_INFO;
     if(has_sat_var) reasons |= BlockSizePolicy::IF_SAT_EVAR;
     if(has_sat_algo) reasons |= BlockSizePolicy::IF_SAT_ALGO;
     if(has_stk_algo) reasons |= BlockSizePolicy::IF_STK_ALGO;
@@ -868,7 +878,7 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
     }
 
     bool needs_info =
-        has_any_flags(dmrg_blocksize_policy, BlockSizePolicy::ICOM, BlockSizePolicy::ICOMPLUS1, BlockSizePolicy::ICOM150, BlockSizePolicy::ICOM200,
+        has_any_flags(dmrg_blocksize_policy, BlockSizePolicy::INFO, BlockSizePolicy::INFOPLUS1, BlockSizePolicy::INFO150, BlockSizePolicy::INFO200,
                       BlockSizePolicy::BIT_ONE, BlockSizePolicy::BIT_TWO, BlockSizePolicy::BIT_MID, BlockSizePolicy::BIT_PEN, BlockSizePolicy::BIT_ALL
 
         );
@@ -883,14 +893,14 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
                                            .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
                                            .precision      = Precision::SINGLE};
         auto        ia        = tools::finite::measure::information_lattice_analysis(tensors.get_state(), ip);
-        double      icom      = ia.icom;
-        double      blocksize = std::max(1.0, icom);
+        double      info      = ia.icom;
+        double      blocksize = std::max(1.0, info);
         std::string tag;
         /* clang-format off */
-        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM)) { blocksize = std::max(1.0, icom); tag = "";}
-        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOMPLUS1)) { blocksize = std::max(1.0, icom+1); tag = "+1";}
-        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM150)) { blocksize = std::max(1.0, icom*1.50); tag =" x 1.5";}
-        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::ICOM200)) { blocksize = std::max(1.0, icom*2.00) ; tag =" x 2.0";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::INFO)) { blocksize = std::max(1.0, info); tag = "";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::INFOPLUS1)) { blocksize = std::max(1.0, info+1); tag = "+1";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::INFO150)) { blocksize = std::max(1.0, info*1.50); tag =" x 1.5";}
+        if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::INFO200)) { blocksize = std::max(1.0, info*2.00) ; tag =" x 2.0";}
         if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::BIT_ONE)) { blocksize = std::max(1.0, ia.scale_bit_one + 1.0); tag = "(BIT_ONE)";}
         if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::BIT_TWO)) { blocksize = std::max(1.0, ia.scale_bit_two + 1.0); tag = "(BIT_TWO)";}
         if(has_flag(dmrg_blocksize_policy, BlockSizePolicy::BIT_MID)) { blocksize = std::max(1.0, ia.scale_bit_mid + 1.0); tag = "(BIT_MID)";}
@@ -902,7 +912,7 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
         blocksize = std::ceil(blocksize);
 
         dmrg_blocksize = std::clamp<size_t>(static_cast<size_t>(blocksize), dmrg_min_blocksize, dmrg_max_blocksize);
-        tools::log->info("Set ICOM{} blocksize {} -> {}: icom = {:.3f}: {}", tag, old_bsize, dmrg_blocksize, icom, has_no_status ? "" : flag2str(reasons));
+        tools::log->info("Set INFO{} blocksize {} -> {}: icom = {:.3f}: {}", tag, old_bsize, dmrg_blocksize, info, has_no_status ? "" : flag2str(reasons));
     } else {
         dmrg_blocksize = dmrg_min_blocksize;
         if(old_bsize != dmrg_blocksize) { tools::log->info("Set MIN blocksize {} -> {} (default)", old_bsize, dmrg_blocksize); }
@@ -928,19 +938,24 @@ void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     auto tic = tid::tic_scope("etol_down", tid::level::higher);
 
     // If we got here we want to decrease the eigs tolerance progressively during the simulation
-    bool                          is_saturated      = status.algorithm_saturated_for > 0; // Allow one round while saturated so that extra efforts get a chance.
-    bool                          is_has_stuck      = status.algorithm_has_stuck_for > 0;
-    bool                          is_next_iter      = true; // Should be checked
-    bool                          is_even_iter      = status.iter % 2 == 0;
-    bool                          drop_if_saturated = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::SAT_ALGO);
-    bool                          drop_if_has_stuck = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::STK_ALGO);
+    bool                          is_sat_evar  = status.variance_mpo_saturated_for > 0; // Allow one round while saturated so that extra efforts get a chance.
+    bool                          is_sat_algo  = status.algorithm_saturated_for > 0;    // Allow one round while saturated so that extra efforts get a chance.
+    bool                          is_stk_algo  = status.algorithm_has_stuck_for > 0;
+    bool                          is_next_iter = true; // Should be checked
+    bool                          is_even_iter = status.iter % 2 == 0;
+    bool                          drop_if_sat_evar  = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::SAT_EVAR);
+    bool                          drop_if_sat_algo  = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::SAT_ALGO);
+    bool                          drop_if_stk_algo  = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::STK_ALGO);
     bool                          drop_if_next_iter = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::HALFSWEEP);
     bool                          drop_if_even_iter = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::FULLSWEEP);
+    bool                          vary_dynamically  = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::DYNAMIC);
     std::vector<std::string_view> reason;
-    if(drop_if_saturated and is_saturated) reason.emplace_back("saturated");
-    if(drop_if_has_stuck and is_has_stuck) reason.emplace_back("stuck");
+    if(drop_if_sat_evar and is_sat_evar) reason.emplace_back("variance saturated");
+    if(drop_if_sat_algo and is_sat_algo) reason.emplace_back("algo saturated");
+    if(drop_if_stk_algo and is_stk_algo) reason.emplace_back("stuck");
     if(drop_if_next_iter and is_next_iter) reason.emplace_back("next iter");
     if(drop_if_even_iter and is_even_iter) reason.emplace_back("even iter");
+    if(vary_dynamically and is_sat_evar) reason.emplace_back("variance saturated (dynamic)");
     if(reason.empty()) {
         tools::log->trace("Kept eigs tolerance:  {:8.2e} | no reason to update", dmrg_eigs_tol);
         return;
@@ -950,11 +965,25 @@ void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     // write_to_file(StorageEvent::ETOL_UPDATE);
 
     // If we got to this point we will update by a factor
-    auto rate = settings::strategy::etol_decrease_rate;
-    if(rate > 1.0 or rate < 0) throw except::runtime_error("Error: etol_decrease_rate == {:8.2e} | must be in [0, 1]");
+    auto etol_new = dmrg_eigs_tol;
+    auto rate     = settings::strategy::etol_decrease_rate;
 
-    auto etol_new = std::max(eigs_tol_min, dmrg_eigs_tol * rate);
-    if(etol_new < eigs_tol_min / rate) etol_new = eigs_tol_min; // If the tolerance is close enough to reaching min, just set min.
+    if(vary_dynamically) {
+        auto eps = std::numeric_limits<double>::epsilon();
+        if(rate != std::clamp(rate, eps, 1.0 - eps)) throw except::runtime_error("Expected rate in [0,1]. Got: {:.3e}", rate);
+        if(is_sat_evar) {
+            etol_new *= rate;
+        } else {
+            etol_new /= rate;
+        }
+
+    } else {
+        if(rate > 1.0 or rate < 0) throw except::runtime_error("Error: etol_decrease_rate == {:8.2e} | must be in [0, 1]");
+
+        etol_new = std::max(eigs_tol_min, dmrg_eigs_tol * rate);
+        if(etol_new < eigs_tol_min / rate) etol_new = eigs_tol_min; // If the tolerance is close enough to reaching min, just set min.
+    }
+    etol_new = std::clamp(etol_new, eigs_tol_min, eigs_tol_max);
 
     if(dmrg_eigs_tol != etol_new)
         tools::log->info("Updated eigs tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_tol, etol_new, fmt::join(reason, " | "));
@@ -1238,29 +1267,30 @@ void AlgorithmFinite<Scalar>::check_convergence() {
     auto t_con = tid::tic_scope("conv");
 
     check_convergence_variance();
-    check_convergence_entg_entropy();
+    check_convergence_entanglement();
     check_convergence_spin_parity_sector(settings::strategy::target_axis);
-    check_convergence_icom();
+    check_convergence_locinfoscale();
+    check_convergence_truncation_error();
 
     // Determine if the algorithm has saturated
-    size_t sum_saturated_for = status.variance_mpo_saturated_for + status.entanglement_saturated_for + infocom_saturated_for;
-    int    num_enabled       = 0;
-    bool   variance_enabled  = settings::precision::variance_saturation_sensitivity > 0;
-    bool   entropy_enabled   = settings::precision::entropy_saturation_sensitivity > 0;
-    bool   infocom_enabled   = settings::precision::infocom_saturation_sensitivity > 0;
+    size_t sum_saturated_for    = status.variance_mpo_saturated_for + status.entanglement_saturated_for + status.locinfoscale_saturated_for;
+    int    num_enabled          = 0;
+    bool   variance_enabled     = settings::precision::variance_saturation_sensitivity > 0;
+    bool   entanglement_enabled = settings::precision::entanglement_saturation_sensitivity > 0;
+    bool   locinfoscale_enabled = settings::precision::locinfoscale_saturation_sensitivity > 0;
     if(variance_enabled) num_enabled++;
-    if(entropy_enabled) num_enabled++;
-    if(infocom_enabled) num_enabled++;
-    int    variance_saturated = variance_enabled and status.variance_mpo_saturated_for > 1;
-    int    entropy_saturated  = entropy_enabled and status.entanglement_saturated_for > 1;
-    int    infocom_saturated  = infocom_enabled and infocom_saturated_for > 1;
-    int    all_saturated      = variance_saturated + entropy_saturated + infocom_saturated >= num_enabled;
-    bool   max_saturated      = sum_saturated_for > settings::strategy::iter_max_saturated * safe_cast<size_t>(num_enabled);
-    size_t min_saturated_for  = std::min<size_t>({
+    if(entanglement_enabled) num_enabled++;
+    if(locinfoscale_enabled) num_enabled++;
+    int    variance_saturated     = variance_enabled and status.variance_mpo_saturated_for > 1;
+    int    entanglement_saturated = entanglement_enabled and status.entanglement_saturated_for > 1;
+    int    locinfoscale_saturated = locinfoscale_enabled and status.locinfoscale_saturated_for > 1;
+    int    all_saturated          = variance_saturated + entanglement_saturated + locinfoscale_saturated >= num_enabled;
+    bool   max_saturated          = sum_saturated_for > settings::strategy::iter_max_saturated * safe_cast<size_t>(num_enabled);
+    size_t min_saturated_for      = std::min<size_t>({
         variance_enabled ? status.variance_mpo_saturated_for : sum_saturated_for,
-        entropy_enabled ? status.entanglement_saturated_for : sum_saturated_for,
-        infocom_enabled ? infocom_saturated_for : sum_saturated_for,
-     });
+        entanglement_enabled ? status.entanglement_saturated_for : sum_saturated_for,
+        locinfoscale_enabled ? status.locinfoscale_saturated_for : sum_saturated_for,
+         });
 
     if(all_saturated or max_saturated) {
         if(status.algorithm_saturated_for > min_saturated_for) {
@@ -1275,8 +1305,8 @@ void AlgorithmFinite<Scalar>::check_convergence() {
     // Determine if the algorithm has converged
 
     bool variance_mpo_converged = settings::precision::variance_saturation_sensitivity > 0 ? status.variance_mpo_converged_for > 0 : true;
-    bool entanglement_converged = settings::precision::entropy_saturation_sensitivity > 0 ? status.entanglement_converged_for > 0 : true;
-    if(variance_mpo_converged and entanglement_converged and status.spin_parity_has_converged)
+    bool entanglement_converged = settings::precision::entanglement_saturation_sensitivity > 0 ? status.entanglement_converged_for > 0 : true;
+    if(variance_mpo_converged and entanglement_converged and status.spin_parity_has_converged and status.trnc_error_has_converged)
         status.algorithm_converged_for++;
     else
         status.algorithm_converged_for = 0;
@@ -1304,7 +1334,7 @@ void AlgorithmFinite<Scalar>::check_convergence() {
     tools::log->info("Algorithm report: converged {} (σ² {} Sₑ {} spin {}) | saturated {} (σ² {} Sₑ {} iₗ {}) | stuck {} | succeeded {} | has to stop {} | var "
                      "prec limit {:8.2e}",
                      status.algorithm_converged_for, status.variance_mpo_converged_for, status.entanglement_converged_for, status.spin_parity_has_converged,
-                     status.algorithm_saturated_for, status.variance_mpo_saturated_for, status.entanglement_saturated_for, infocom_saturated_for,
+                     status.algorithm_saturated_for, status.variance_mpo_saturated_for, status.entanglement_saturated_for, status.locinfoscale_saturated_for,
                      status.algorithm_has_stuck_for, status.algorithm_has_succeeded, status.algorithm_has_to_stop, status.energy_variance_prec_limit);
     tools::log->info("Truncation errors: {::.3e}", tensors.state->get_truncation_errors());
     tools::log->info("Bond dimensions  : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
@@ -1318,20 +1348,20 @@ void AlgorithmFinite<Scalar>::check_convergence() {
 
 template<typename Scalar>
 AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const TensorsFinite<Scalar> &t)
-    : entropies(tools::finite::measure::entanglement_entropies(t.get_state())) {
-    status    = s;
-    energy    = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy(t);
-    variance  = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy_variance(t);
-    entropies = tools::finite::measure::entanglement_entropies(*t.state);
-    time      = status.wall_time;
-    auto ip   = InfoPolicy{.bits_max_error = -0.5,
-                           .eig_max_size   = 3200,
-                           .svd_max_size   = 1024,
-                           .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
-                           .precision      = Precision::SINGLE};
-    icom      = 0.0;
-    if(settings::precision::infocom_saturation_sensitivity > 0.0 and status.algo_type != AlgorithmType::fLBIT) {
-        icom = tools::finite::measure::information_center_of_mass(t.get_state(), ip);
+    : entanglement_entropies(tools::finite::measure::entanglement_entropies(t.get_state())) {
+    status                 = s;
+    energy                 = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy(t);
+    variance               = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy_variance(t);
+    entanglement_entropies = tools::finite::measure::entanglement_entropies(*t.state);
+    time                   = status.wall_time;
+    auto ip                = InfoPolicy{.bits_max_error = -0.5,
+                                        .eig_max_size   = 3200,
+                                        .svd_max_size   = 1024,
+                                        .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
+                                        .precision      = Precision::SINGLE};
+    locinfoscale           = 0.0;
+    if(settings::precision::locinfoscale_saturation_sensitivity > 0.0 and status.algo_type != AlgorithmType::fLBIT) {
+        locinfoscale = tools::finite::measure::information_center_of_mass(t.get_state(), ip);
     }
 }
 
@@ -1341,7 +1371,7 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
     if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::variance_saturation_sensitivity);
     if(saturation_sensitivity <= 0) return;
     if(not threshold) {
-        if(status.algorithm_has_stuck_for * 2 > settings::strategy::iter_max_stuck)
+        if(status.algorithm_has_stuck_for > 1)
             threshold = std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
         else
             threshold = std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
@@ -1410,11 +1440,11 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
 }
 
 template<typename Scalar>
-void AlgorithmFinite<Scalar>::check_convergence_icom(std::optional<RealScalar> saturation_sensitivity) {
+void AlgorithmFinite<Scalar>::check_convergence_locinfoscale(std::optional<RealScalar> saturation_sensitivity) {
     if(not tensors.position_is_inward_edge()) return;
-    if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::infocom_saturation_sensitivity);
+    if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::locinfoscale_saturation_sensitivity);
     if(saturation_sensitivity <= 0) return;
-    tools::log->trace("Checking convergence of icom | sensitivity {:.2e}", fp(saturation_sensitivity.value()));
+    tools::log->trace("Checking convergence of the local info scale | sensitivity {:.2e}", fp(saturation_sensitivity.value()));
 
     if(algorithm_history.empty() or algorithm_history.back().status.step < status.step)
         algorithm_history.emplace_back(status, tensors);
@@ -1422,21 +1452,22 @@ void AlgorithmFinite<Scalar>::check_convergence_icom(std::optional<RealScalar> s
         algorithm_history.back() = log_entry(status, tensors);
 
     // Gather the information center of mass history
-    std::vector<RealScalar> infocom_iter;
-    std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(infocom_iter),
-                   [](const log_entry &h) -> RealScalar { return h.icom; });
+    std::vector<RealScalar> locinfoscale_iter;
+    std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(locinfoscale_iter),
+                   [](const log_entry &h) -> RealScalar { return h.locinfoscale; });
 
     //    var_mpo_iter.emplace_back(tools::finite::measure::energy_variance(tensors));
-    auto report = check_saturation(infocom_iter, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::mov);
+    auto report = check_saturation(locinfoscale_iter, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::mov);
     if(report.has_computed) {
-        infocom_saturated_for = report.saturated_count;
+        status.locinfoscale_saturated_for = report.saturated_count;
 
         if(tools::log->level() >= spdlog::level::debug)
-            tools::log->debug("icom saturation: saturated {} (since {})", infocom_saturated_for, report.saturated_count, report.saturated_point);
+            tools::log->debug("local information scale saturation: saturated {} (since {})", status.locinfoscale_saturated_for, report.saturated_count,
+                              report.saturated_point);
         if(tools::log->level() <= spdlog::level::trace) {
             std::vector<double> times;
             std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
-            tools::log->trace("ICOM saturation details:");
+            tools::log->trace("Local information scale saturation details:");
             tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
             tools::log->trace(" -- saturated point = {} ", report.saturated_point);
             tools::log->trace(" -- saturated count = {} ", report.saturated_count);
@@ -1457,9 +1488,9 @@ void AlgorithmFinite<Scalar>::check_convergence_icom(std::optional<RealScalar> s
 }
 
 template<typename Scalar>
-void AlgorithmFinite<Scalar>::check_convergence_entg_entropy(std::optional<RealScalar> saturation_sensitivity) {
+void AlgorithmFinite<Scalar>::check_convergence_entanglement(std::optional<RealScalar> saturation_sensitivity) {
     if(not tensors.position_is_inward_edge()) return;
-    if(not saturation_sensitivity) saturation_sensitivity = settings::precision::entropy_saturation_sensitivity;
+    if(not saturation_sensitivity) saturation_sensitivity = settings::precision::entanglement_saturation_sensitivity;
     if(saturation_sensitivity <= 0) return;
     tools::log->trace("Checking convergence of entanglement");
     if(algorithm_history.empty() or algorithm_history.back().status.step < status.step)
@@ -1483,10 +1514,11 @@ void AlgorithmFinite<Scalar>::check_convergence_entg_entropy(std::optional<RealS
     for(size_t site = 0; site < entropies_size; site++) {
         std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(entropy_iter[site]),
                        [entropies_size, site](const log_entry &h) -> RealScalar {
-                           if(h.entropies.empty()) throw except::runtime_error("Entanglement entropies are missing from algorithm history entry");
-                           if(h.entropies.size() != entropies_size)
-                               throw except::runtime_error("Entanglement entropies have the wrong size {} != {}", h.entropies.size(), entropies_size);
-                           return h.entropies[site];
+                           if(h.entanglement_entropies.empty()) throw except::runtime_error("Entanglement entropies are missing from algorithm history entry");
+                           if(h.entanglement_entropies.size() != entropies_size)
+                               throw except::runtime_error("Entanglement entropies have the wrong size {} != {}", h.entanglement_entropies.size(),
+                                                           entropies_size);
+                           return h.entanglement_entropies[site];
                        });
         reports[site] =
             check_saturation(entropy_iter[site], static_cast<RealScalar>(saturation_sensitivity.value()), SaturationPolicy::val | SaturationPolicy::mov);
@@ -1596,6 +1628,15 @@ void AlgorithmFinite<Scalar>::check_convergence_spin_parity_sector(std::string_v
 }
 
 template<typename Scalar>
+void AlgorithmFinite<Scalar>::check_convergence_truncation_error() {
+    auto trnc_err    = tensors.get_state().get_truncation_errors();
+    auto trnc_max_it = std::max_element(trnc_err.begin(), trnc_err.end());
+    auto trnc_max    = trnc_max_it != trnc_err.end() ? *trnc_max_it : 1;
+    tools::log->debug("truncation error max: {:.5e}", fp(*trnc_max_it));
+    status.trnc_error_has_converged = trnc_max < settings::precision::svd_truncation_min or status.trnc_limit_has_reached_min;
+}
+
+template<typename Scalar>
 void AlgorithmFinite<Scalar>::clear_convergence_status() {
     tools::log->trace("Clearing convergence status");
     algorithm_history.clear();
@@ -1610,13 +1651,12 @@ void AlgorithmFinite<Scalar>::clear_convergence_status() {
     status.entanglement_saturated_for = 0;
     status.variance_mpo_converged_for = 0;
     status.variance_mpo_saturated_for = 0;
-    infocom_saturated_for             = 0;
+    status.locinfoscale_saturated_for = 0;
     status.bond_limit_has_reached_max = false;
     status.trnc_limit_has_reached_min = false;
     status.spin_parity_has_converged  = false;
+    status.trnc_error_has_converged   = false;
     projected_iter                    = 0;
-    // status.energy_variance_lowest     = 1.0;
-    // status.bond_expansion_alpha        = 0.0;
 }
 
 template<typename Scalar>
@@ -1674,7 +1714,7 @@ void AlgorithmFinite<Scalar>::print_status() {
                           fp(tools::finite::measure::entanglement_entropy_current(tensors.get_state())));
 
     report += fmt::format("ε:{:<8.2e} ", tensors.state->get_truncation_error_active_max());
-    // report += fmt::format("α:{:<8.2e} ", status.bond_expansion_alpha);
+    report += fmt::format("α:{:<8.2e} ", status.mixing_factor);
     if(status.bond_max == status.bond_lim) {
         report += fmt::format("χ:{:<3}|", status.bond_max);
     } else {
@@ -1703,11 +1743,11 @@ void AlgorithmFinite<Scalar>::print_status() {
     if(status.algorithm_has_stuck_for > 0) { stat = fmt::format("stk:{:<1} ", status.algorithm_has_stuck_for); }
     if(status.algorithm_converged_for > 0) { stat = fmt::format("con:{:<1} ", status.algorithm_converged_for); }
     report += stat;
-    if(settings::precision::variance_saturation_sensitivity > 0 or settings::precision::entropy_saturation_sensitivity > 0) {
+    if(settings::precision::variance_saturation_sensitivity > 0 or settings::precision::entanglement_saturation_sensitivity > 0) {
         std::vector<std::string> satstr;
         if(settings::precision::variance_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("σ²H:{:<}", status.variance_mpo_saturated_for));
-        if(settings::precision::entropy_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("Sₑ:{:<1}", status.entanglement_saturated_for));
-        if(settings::precision::infocom_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("iₗ:{:<1}", infocom_saturated_for));
+        if(settings::precision::entanglement_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("Sₑ:{:<1}", status.entanglement_saturated_for));
+        if(settings::precision::locinfoscale_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("iₗ:{:<1}", status.locinfoscale_saturated_for));
         report += fmt::format("[{}]", fmt::join(satstr, " "));
     } else {
         report += " ";

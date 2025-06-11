@@ -53,8 +53,9 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
     state.assert_validity();
     state.clear_measurements();
     state.clear_cache();
-    auto prec = std::max(static_cast<RealScalar<Scalar>>(settings::precision::max_norm_error), 100 * std::numeric_limits<RealScalar<Scalar>>::epsilon());
-    if(not state.is_normalized_on_all_sites(prec)) {
+
+    auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
+    if(not state.is_normalized_on_all_sites(normTol)) {
         for(const auto &mps : state.mps_sites) {
             bool normalized_tag = state.get_normalization_tags()[mps->template get_position<size_t>()];
             tools::log->warn("{} | is_normalized {:<7} | L norm {:.16f} | norm tag {}", mps->get_tag(), mps->is_normalized(),
@@ -63,7 +64,7 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
         }
         auto norm_error = std::abs(tools::finite::measure::norm(state) - RealScalar<Scalar>{1});
         throw except::runtime_error("normalize_state: normalization failed. state norm error {:.3e} | max allowed norm error {:.3e} | norm tags {}",
-                                    fp(norm_error), fp(prec), state.get_normalization_tags());
+                                    fp(norm_error), fp(normTol), state.get_normalization_tags());
     }
 
     if(svd_cfg and svd_cfg->rank_max and state.get_largest_bond() > svd_cfg->rank_max.value())
@@ -74,4 +75,3 @@ bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::option
                           tools::finite::measure::bond_dimensions(state));
     return true;
 }
-

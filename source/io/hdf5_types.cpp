@@ -236,7 +236,7 @@ void h5pp_table_algorithm_status::register_table_type() {
     H5Tinsert(h5_type, "energy_variance_lowest",      HOFFSET(table, energy_variance_lowest),     H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "energy_variance_max_digits",  HOFFSET(table, energy_variance_max_digits), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "energy_variance_prec_limit",  HOFFSET(table, energy_variance_prec_limit), H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "bond_expansion_alpha",        HOFFSET(table, bond_expansion_alpha),       H5T_NATIVE_DOUBLE);
+    H5Tinsert(h5_type, "mixing_factor",        HOFFSET(table, mixing_factor),       H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "phys_time",                   HOFFSET(table, phys_time),                  decltype(table::phys_time)::get_h5type());
     H5Tinsert(h5_type, "wall_time",                   HOFFSET(table, wall_time),                  H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "algo_time",                   HOFFSET(table, algo_time),                  H5T_NATIVE_DOUBLE);
@@ -249,16 +249,17 @@ void h5pp_table_algorithm_status::register_table_type() {
     H5Tinsert(h5_type, "algorithm_converged_for",     HOFFSET(table, algorithm_converged_for),    H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "entanglement_converged_for",  HOFFSET(table, entanglement_converged_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "entanglement_saturated_for",  HOFFSET(table, entanglement_saturated_for), H5T_NATIVE_ULONG);
+    H5Tinsert(h5_type, "locinfoscale_saturated_for",  HOFFSET(table, locinfoscale_saturated_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "variance_mpo_converged_for",  HOFFSET(table, variance_mpo_converged_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "variance_mpo_saturated_for",  HOFFSET(table, variance_mpo_saturated_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "variance_ham_converged_for",  HOFFSET(table, variance_ham_converged_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "variance_ham_saturated_for",  HOFFSET(table, variance_ham_saturated_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "variance_mom_converged_for",  HOFFSET(table, variance_mom_converged_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "variance_mom_saturated_for",  HOFFSET(table, variance_mom_saturated_for), H5T_NATIVE_ULONG);
-    // H5Tinsert(h5_type, "infocom_saturated_for",       HOFFSET(table, infocom_saturated_for),      H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "bond_limit_has_reached_max",  HOFFSET(table, bond_limit_has_reached_max), H5T_NATIVE_UINT8);
     H5Tinsert(h5_type, "trnc_limit_has_reached_min",  HOFFSET(table, trnc_limit_has_reached_min), H5T_NATIVE_UINT8);
     H5Tinsert(h5_type, "spin_parity_has_converged",   HOFFSET(table, spin_parity_has_converged),  H5T_NATIVE_UINT8);
+    H5Tinsert(h5_type, "trnc_error_has_converged",    HOFFSET(table, trnc_error_has_converged),   H5T_NATIVE_UINT8);
     H5Tinsert(h5_type, "time_step_has_converged",     HOFFSET(table, time_step_has_converged),    H5T_NATIVE_UINT8);
     /* clang-format on */
 }

@@ -61,7 +61,7 @@ std::vector<opt_mps<Scalar>> optimize_energy_eigs_executor(const TensorsFinite<S
     solver.config.maxIter               = meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
     solver.config.maxTime               = 2 * 60 * 60;
     solver.config.maxNev                = meta.eigs_nev.value_or(1);
-    solver.config.maxNcv                = meta.eigs_ncv.value_or(settings::precision::eigs_ncv); // arpack needs ncv ~512. Primme seems happy with 4-32.
+    solver.config.maxNcv                = meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min); // arpack needs ncv ~512. Primme seems happy with 4-32.
     solver.config.primme_minRestartSize = meta.primme_minRestartSize;
     solver.config.primme_maxBlockSize   = meta.primme_maxBlockSize;
     solver.config.primme_locking        = true;
