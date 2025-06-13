@@ -34,6 +34,10 @@ namespace Eigen::internal {
 // For the sake of simplicity, this example simply wrap a Eigen::Matrix.
 template<typename Scalar_>
 class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Scalar_>> {
+    private:
+    mutable Eigen::Index m_opcounter = 0;
+    mutable double       m_optimer   = 0.0;
+
     public:
     // Required typedefs, constants, and method:
     using Scalar     = Scalar_;
@@ -49,15 +53,19 @@ class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Sc
     RealScalar                                                      vH_v = 1;
 
     // Timers
-    mutable Eigen::Index        counter = 0;
-    mutable std::vector<Scalar> tmp;
 
     [[nodiscard]] Eigen::Index rows() const { return safe_cast<Eigen::Index>(v.size()); };
     [[nodiscard]] Eigen::Index cols() const { return safe_cast<Eigen::Index>(v.size()); };
-
+    Eigen::Index               iterations() const { return m_opcounter; }
+    double                     elapsed_time() const { return m_optimer; }
     template<typename Rhs>
     Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs> &x) const {
-        return Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
+        auto t_start = std::chrono::high_resolution_clock::now();
+        auto result  = Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
+        auto t_end   = std::chrono::high_resolution_clock::now();
+        m_optimer += std::chrono::duration<double>(t_end - t_start).count();
+        m_opcounter++;
+        return result;
     }
     void _check_template_params() {};
     // Custom API:
@@ -107,7 +115,6 @@ namespace Eigen::internal {
                 assert(std::isfinite(std::abs(beta)));
                 dst.noalias() = y - v * beta;
             }
-            mat.counter++;
         }
     };
 
@@ -128,8 +135,6 @@ typename SolverBase<Scalar>::VectorType SolverBase<Scalar>::JacobiDavidsonSolver
     else
         solverVariant.template emplace<1>();
 
-    auto t_jdop = tid::tic_token("jdop", tid::level::higher);
-
     auto get_solver_name = [&]() -> std::string {
         if(std::holds_alternative<DefSolverType>(solverVariant)) return "Eigen::ConjugateGradient";
         if(std::holds_alternative<IndSolverType>(solverVariant)) {
@@ -143,24 +148,30 @@ typename SolverBase<Scalar>::VectorType SolverBase<Scalar>::JacobiDavidsonSolver
     };
     VectorType res;
     auto       run = [&](auto &solver) {
+        auto t_jdop = tid::tic_token("jdop", tid::level::higher);
         solver.setMaxIterations(cfg.maxiters);
         solver.setTolerance(cfg.tolerance);
         solver.preconditioner().attach(&matRepl, &cfg);
         solver.compute(matRepl);
         res = solver.solve(rhs);
+        t_jdop.toc();
         if constexpr(settings::debug_jdop)
-            tools::log->trace("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | counter {} | time {:.2e}", get_solver_name(), matRepl.rows(),
-                                    static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.counter,
+            tools::log->trace("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | m_opcounter {} | time {:.2e}", get_solver_name(), matRepl.rows(),
+                                    static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.m_opcounter,
                                     t_jdop->get_last_interval());
-        cfg.result.iters   = solver.iterations();
-        cfg.result.matvecs = matRepl.counter;
-        cfg.result.precond = solver.preconditioner().iterations();
-        cfg.result.time    = t_jdop->get_last_interval();
+        cfg.result.iters        = solver.iterations();
+        cfg.result.matvecs      = matRepl.iterations();
+        cfg.result.precond      = solver.preconditioner().iterations();
+        cfg.result.time         = t_jdop->get_last_interval();
+        cfg.result.time_matvecs = matRepl.elapsed_time();
+        cfg.result.time_precond = solver.preconditioner().elapsed_time();
 
         cfg.result.total_iters += solver.iterations();
-        cfg.result.total_matvecs += matRepl.counter;
+        cfg.result.total_matvecs += matRepl.iterations();
         cfg.result.total_precond += solver.preconditioner().iterations();
         cfg.result.total_time += t_jdop->get_last_interval();
+        cfg.result.total_time_matvecs += matRepl.elapsed_time();
+        cfg.result.total_time_precond += solver.preconditioner().elapsed_time();
 
         cfg.result.error = solver.error();
         cfg.result.info  = solver.info();

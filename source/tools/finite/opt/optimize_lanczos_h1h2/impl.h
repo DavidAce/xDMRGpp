@@ -135,7 +135,10 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
                                   const ModelFinite<Scalar>                  &model,    //
                                   const EdgesFinite<Scalar>                  &edges,    //
                                   OptMeta                                    &opt_meta, //
-                                  reports::eigs_log<Scalar>                  &elog) {
+                                  reports::eigs_log<Scalar>                  &elog,     //
+                                  Eigen::Index                                jcb,      //
+                                  ResidualCorrectionType                      rct,      //
+                                  std::string_view                            tag) {
     using RealScalar = tools::finite::opt::RealScalar<CalcType>;
     // using MatrixCT          = Eigen::Matrix<CalcType, Eigen::Dynamic, Eigen::Dynamic>;
     // using VectorCR          = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
@@ -170,8 +173,8 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     solver.b              = opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.max_matvecs    = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    // solver.set_jcbMaxBlockSize(512);
+    solver.max_matvecs    = -1ul; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.set_jcbMaxBlockSize(jcb);
     solver.set_chebyshevFilterDegree(0);
     solver.set_chebyshevFilterLambdaCutBias(0.1f);
     solver.set_chebyshevFilterRelGapThreshold(1e-3f);
@@ -181,17 +184,19 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     solver.set_maxRitzResidualHistory(1);
     solver.set_maxExtraRitzHistory(1);
 
-    solver.use_refined_rayleigh_ritz = true;
-    solver.residual_correction_type  = ResidualCorrectionType::JACOBI_DAVIDSON;
-    solver.inject_randomness         = false;
+    solver.use_refined_rayleigh_ritz    = true;
+    solver.use_relative_rnorm_tolerance = true;
+    solver.use_adaptive_inner_tolerance = true;
+    solver.residual_correction_type     = rct;
+    solver.inject_randomness            = false;
 
     solver.run();
 
-    tools::log->debug("KrylovDualOp: status.stopReason = {}", solver.status.stopMessage);
+    tools::log->debug("GD+k: status.stopReason = {}", solver.status.stopMessage);
     // Extract solution
     opt_mps<Scalar> res;
     res.is_basis_vector = false;
-    res.set_name(fmt::format("eigenvector 0 [{} H1H2]", enum2sv(opt_meta.optAlgo)));
+    res.set_name(fmt::format("eigenvector 0 [{} H1H2 {}]", enum2sv(opt_meta.optAlgo), tag));
     res.set_tensor(Eigen::TensorMap<Eigen::Tensor<CalcType, 3>>(solver.V.col(0).data(), solver.mps_shape));
     res.set_overlap(std::abs(initial.get_vector().dot(res.get_vector())));
     res.set_sites(initial.get_sites());
@@ -200,6 +205,7 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     res.set_eigs_nev(1);
     res.set_eigs_ncv(ncv);
     res.set_eigs_tol(solver.tol);
+    res.set_eigs_jcb(solver.get_jcbMaxBlockSize());
     res.set_eigs_ritz(enum2sv(opt_meta.optRitz));
     res.set_eigs_type(enum2sv(opt_meta.optType));
     res.set_optalgo(opt_meta.optAlgo);
@@ -209,13 +215,11 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
 
     res.set_length(initial.get_length());
     res.set_time(t_mixblk->get_last_interval());
-    res.set_time_mv(solver.H1.t_multAx->get_time() + solver.H2.t_multAx->get_time());
-    res.set_time_pc(solver.H1.t_multPc->get_time() + solver.H2.t_multPc->get_time());
+    res.set_time_mv(solver.status.time_matvecs_total.get_time());
+    res.set_time_pc(solver.status.time_precond_total.get_time());
     res.set_op(solver.H1.num_op + solver.H2.num_op);
-    res.set_mv(solver.status.num_matvecs                                          //
-               + solver.H1.get_iterativeLinearSolverConfig().result.total_matvecs //
-               + solver.H2.get_iterativeLinearSolverConfig().result.total_matvecs);
-    res.set_pc(solver.status.num_precond);
+    res.set_mv(solver.status.num_matvecs_total);
+    res.set_pc(solver.status.num_precond_total);
     res.set_iter(solver.status.iter);
     res.set_eigs_rnorm(solver.status.rNorms(0));
     res.set_eigs_eigval(static_cast<fp64>(solver.status.optVal[0]));
@@ -231,26 +235,37 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     res.set_energy_shifted(std::real(vh1v));
     res.set_hsquared(std::real(vh2v));
 
-    // tools::log->info("lancsoz {}: {:.34f} [{}] | ⟨H⟩ {:.16f} | ⟨H²⟩ {:.16f} | ⟨H²⟩-⟨H⟩² {:.4e} | sites {} (size {}) | rnorm {:.3e} | ngs {} | iters "
-    // "{} | {:.3e} s | {} | var {:.4e}",
-    // sfinae::type_name<CalcType>(), fp(optVal), optIdx, fp(res.get_energy()), fp(res.get_hsquared()), fp(res.get_variance()), sites,
-    // mps_size, fp(rnorm), ngs, iter, t_mixblk->get_last_interval(), exit_msg, fp(vh2v - vh1v * vh1v));
     elog.eigs_add_entry(res, spdlog::level::debug);
-
-    // auto absdiff = std::abs(res.get_hsquared() - res.get_eigs_eigval());
-    // auto reldiff = absdiff / (0.5 * std::abs(res.get_hsquared() + res.get_eigs_eigval()));
-    // if(reldiff > RealScalar{1e-2f}) {
-    //     elog.print_eigs_report();
-    //     Eigen::Matrix<CalcType, Eigen::Dynamic, 1> Vcol0_vector = solver.V.col(0);
-    //     Eigen::Tensor<CalcType, 3> Vcol0 = tenx::TensorCast(Vcol0_vector, solver.mps_shape);
-    //     auto VH2V = tools::finite::measure::expval_hamiltonian_squared(tenx::asScalarType<Scalar>(Vcol0), mpos, envv);
-    //     MatrixType<CalcType> overlap = res.template get_vector_as<CalcType>().adjoint() * solver.V.col(0);
-    //     tools::log->info("overlap: {}", linalg::matrix::to_string(overlap, 16));
-    //     tools::log->info("VH2V   : {:.16f}", VH2V);
-    //     throw except::logic_error("Eigs solver eigenvalue mismatch: eigs {:.16f} != hsq {:.16f} | diff: abs {:.5e} rel {:.5e}", res.get_eigs_eigval(),
-    //                               res.get_hsquared(), absdiff, reldiff);
-    // }
     return res;
+}
+
+template<typename CalcType, typename Scalar>
+opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &initial,  //
+                                  [[maybe_unused]] const StateFinite<Scalar> &state,    //
+                                  const ModelFinite<Scalar>                  &model,    //
+                                  const EdgesFinite<Scalar>                  &edges,    //
+                                  OptMeta                                    &opt_meta, //
+                                  reports::eigs_log<Scalar>                  &elog) {
+    auto jcb = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::precision::eigs_jcb_blocksize_max);
+
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 0, ResidualCorrectionType::NONE, "NO 0");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, ResidualCorrectionType::NONE, "NO 1");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 256, ResidualCorrectionType::NONE, "NO 256");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 512, ResidualCorrectionType::NONE, "NO 512");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1024, ResidualCorrectionType::NONE, "NO 1024");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 0, ResidualCorrectionType::CHEAP_OLSEN, "CO 0");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, ResidualCorrectionType::CHEAP_OLSEN, "CO 1");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 256, ResidualCorrectionType::CHEAP_OLSEN, "CO 256");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 512, ResidualCorrectionType::CHEAP_OLSEN, "CO 512");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1024, ResidualCorrectionType::CHEAP_OLSEN, "CO 1024");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 0, ResidualCorrectionType::FULL_OLSEN, "FO 0");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, ResidualCorrectionType::FULL_OLSEN, "FO 1");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 256, ResidualCorrectionType::FULL_OLSEN, "FO 256");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 512, ResidualCorrectionType::FULL_OLSEN, "FO 512");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1024, ResidualCorrectionType::FULL_OLSEN, "FO 1024");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 0, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 0");
+    eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 1");
+    return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, ResidualCorrectionType::JACOBI_DAVIDSON, "JD ?");
 }
 
 template<typename Scalar>

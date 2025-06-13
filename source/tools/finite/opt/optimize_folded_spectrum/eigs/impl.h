@@ -306,7 +306,7 @@ void eigs_manager_folded_spectrum(const TensorsFinite<Scalar> &tensors, const op
         default: throw except::logic_error("undhandled ritz: {}", enum2sv(meta.optRitz));
     }
     if(meta.eigs_jcbMaxBlockSize.has_value() and meta.eigs_jcbMaxBlockSize.value() > 0) {
-        cfg.primme_preconditioner = folded_spectrum::preconditioner_jacobi<CalcType>;
+        cfg.primme_preconditioner = folded_spectrum::preconditioner_linearsolver<CalcType>;
         cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
     }
 

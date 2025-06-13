@@ -33,30 +33,58 @@ struct IterativeLinearSolverConfig {
         Eigen::Index degree     = 0;
     };
     struct Result {
-        Eigen::Index           iters         = 0; /*! For the last run */
-        Eigen::Index           matvecs       = 0; /*! For the last run */
-        Eigen::Index           precond       = 0; /*! For the last run */
-        double                 time          = 0;
-        Eigen::Index           total_iters   = 0; /*! For all runs */
-        Eigen::Index           total_matvecs = 0; /*! For all runs */
-        Eigen::Index           total_precond = 0; /*! For all runs */
-        double                 total_time    = 0;
-        Real                   error         = 0;
-        Eigen::ComputationInfo info          = Eigen::ComputationInfo::NoConvergence;
+        Eigen::Index           iters              = 0; /*! For the last run */
+        Eigen::Index           matvecs            = 0; /*! For the last run */
+        Eigen::Index           precond            = 0; /*! For the last run */
+        double                 time               = 0; /*! For the last run */
+        double                 time_matvecs       = 0; /*! For the last run */
+        double                 time_precond       = 0; /*! For the last run */
+        Eigen::Index           total_iters        = 0; /*! For all runs */
+        Eigen::Index           total_matvecs      = 0; /*! For all runs */
+        Eigen::Index           total_precond      = 0; /*! For all runs */
+        double                 total_time         = 0; /*! For all runs */
+        double                 total_time_matvecs = 0; /*! For all runs */
+        double                 total_time_precond = 0; /*! For all runs */
+        Real                   error              = 0;
+        Eigen::ComputationInfo info               = Eigen::ComputationInfo::NoConvergence;
 
-        Result & operator+=(const Result &other) {
-            this->iters      = other.iters;
-            this->matvecs    = other.matvecs;
-            this->precond    = other.precond;
-            this->time       = other.time;
-            this->error      = other.error;
-            this->info       = other.info;
+        Result &operator+=(const Result &other) {
+            this->iters += other.iters;
+            this->matvecs += other.matvecs;
+            this->precond += other.precond;
+            this->time += other.time;
+            this->error = std::max(this->error, other.error);
+            this->info  = std::max(this->info, other.info);
+            this->total_iters += other.iters;
+            this->total_matvecs += other.matvecs;
+            this->total_precond += other.precond;
+            this->total_time += other.time;
+            this->total_time_matvecs += other.time_matvecs;
+            this->total_time_precond += other.time_precond;
 
-            this->total_time += other.total_time;
-            this->total_iters += other.total_iters;
-            this->total_matvecs += other.total_matvecs;
-            this->total_precond += other.total_precond;
             return *this;
+        }
+        void add_latest(const Result &other) {
+            this->iters += other.iters;
+            this->matvecs += other.matvecs;
+            this->precond += other.precond;
+            this->time += other.time;
+            this->error = std::max(this->error, other.error);
+            this->info  = std::max(this->info, other.info);
+        }
+        void copy_latest(const Result &other) {
+            this->iters   = other.iters;
+            this->matvecs = other.matvecs;
+            this->precond = other.precond;
+            this->time    = other.time;
+            this->error   = std::max(this->error, other.error);
+            this->info    = std::max(this->info, other.info);
+            this->total_iters += other.iters;
+            this->total_matvecs += other.matvecs;
+            this->total_precond += other.precond;
+            this->total_time += other.time;
+            this->total_time_matvecs += other.time_matvecs;
+            this->total_time_precond += other.time_precond;
         }
     };
 

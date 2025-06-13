@@ -46,20 +46,58 @@ SolverBase<Scalar>::SolverBase(Eigen::Index nev, Eigen::Index ncv, OptAlgo algo,
 
     assert(mps_size == H1.rows());
     assert(mps_size == H2.rows());
+    set_preconditioner_params();
 }
 
 template<typename Scalar>
 void SolverBase<Scalar>::set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize) {
-    use_preconditioner = jcbMaxBlockSize > 0;
+    if(jcbMaxBlockSize >= 0) {
+        H1.set_jcbMaxBlockSize(jcbMaxBlockSize);
+        H2.set_jcbMaxBlockSize(jcbMaxBlockSize);
+        H1.factorization = eig::Factorization::LU;
+        H2.factorization = eig::Factorization::LLT;
+    }
+}
+
+template<typename Scalar>
+Eigen::Index SolverBase<Scalar>::get_jcbMaxBlockSize() const {
+    assert(H1.get_jcbMaxBlockSize() == H2.get_jcbMaxBlockSize());
+    return H1.get_jcbMaxBlockSize();
+}
+
+template<typename Scalar>
+void SolverBase<Scalar>::set_preconditioner_params(Eigen::Index maxiters, RealScalar initialTol, Eigen::Index jcbMaxBlockSize) {
+    assert(initialTol > 0);
+    use_preconditioner = maxiters > 0;
     if(use_preconditioner) {
         H1.preconditioner = eig::Preconditioner::SOLVE;
         H2.preconditioner = eig::Preconditioner::SOLVE;
-        H1.factorization  = eig::Factorization::LU;
-        H2.factorization  = eig::Factorization::LLT;
-        H1.set_iterativeLinearSolverConfig(20000, RealScalar{0.1f}, MatDef::IND);
-        H2.set_iterativeLinearSolverConfig(20000, RealScalar{0.1f}, MatDef::DEF);
+        H1.set_iterativeLinearSolverConfig(maxiters, initialTol, MatDef::IND);
+        H2.set_iterativeLinearSolverConfig(maxiters, initialTol, MatDef::DEF);
+    } else {
+        H1.preconditioner = eig::Preconditioner::NONE;
+        H2.preconditioner = eig::Preconditioner::NONE;
+        H1.set_iterativeLinearSolverConfig(0, initialTol, MatDef::IND);
+        H2.set_iterativeLinearSolverConfig(0, initialTol, MatDef::DEF);
+    }
+
+    if(jcbMaxBlockSize >= 0) {
         H1.set_jcbMaxBlockSize(jcbMaxBlockSize);
         H2.set_jcbMaxBlockSize(jcbMaxBlockSize);
+        H1.factorization = eig::Factorization::LU;
+        H2.factorization = eig::Factorization::LLT;
+    }
+}
+
+template<typename Scalar>
+typename SolverBase<Scalar>::RealScalar SolverBase<Scalar>::Status::op_norm_estimate(OptAlgo algo) const {
+    switch(algo) {
+        case OptAlgo::DMRG: return H1_max_eval;
+        case OptAlgo::DMRGX: return H1_max_eval;
+        case OptAlgo::HYBRID_DMRGX: return H1_max_eval;
+        case OptAlgo::XDMRG: return H2_max_eval;
+        case OptAlgo::GDMRG: return H1_max_eval / H2_min_eval;
+        default: throw except::runtime_error("unrecognized algo");
     }
 }
 
@@ -81,8 +119,8 @@ template<typename Scalar>
 void SolverBase<Scalar>::Status::commit_evals(RealScalar min_eval, RealScalar max_eval) {
     max_eval_history.push_back(max_eval);
     min_eval_history.push_back(min_eval);
-    while(max_eval_history.size() > eval_history_max_size) { max_eval_history.pop_front(); }
-    while(min_eval_history.size() > eval_history_max_size) { min_eval_history.pop_front(); }
+    while(max_eval_history.size() > max_history_size) { max_eval_history.pop_front(); }
+    while(min_eval_history.size() > max_history_size) { min_eval_history.pop_front(); }
 }
 
 template<typename Scalar>
@@ -213,15 +251,22 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::qr_and_chebyshevFilt
 
 template<typename Scalar>
 typename SolverBase<Scalar>::RealScalar SolverBase<Scalar>::get_rNorms_log10_change_per_iteration() {
-    VectorReal rNormMeanDiffs_log10 = VectorReal::Zero(nev);
-    for(size_t idx = 0; idx + 1 < status.rNorms_history.size(); ++idx) {
-        const auto &rNorms_curr      = status.rNorms_history[idx + 0];
-        const auto &rNorms_next      = status.rNorms_history[idx + 1];
-        VectorReal  rNormDiffs_log10 = rNorms_next.array().log10() - rNorms_curr.array().log10();
-        rNormMeanDiffs_log10         = (rNormMeanDiffs_log10 * static_cast<RealScalar>(idx) + rNormDiffs_log10) / static_cast<RealScalar>(idx + 1);
-    }
+    if(status.rNorms_history.size() < 2ul) return RealScalar{0};
+    // If the residual norm is decreasing, this function returns a negative value, otherwise positive
+    auto rNorm_change = status.rNorms_history.back().array() / status.rNorms_history.front().array();
+    return std::log10(rNorm_change.minCoeff()) / static_cast<RealScalar>(status.rNorms_history.size());
+}
 
-    return rNormMeanDiffs_log10.minCoeff();
+template<typename Scalar>
+typename SolverBase<Scalar>::RealScalar SolverBase<Scalar>::get_rNorms_log10_change_per_matvec() {
+    if(status.rNorms_history.size() < 2ul) return RealScalar{0};
+    // If the residual norm is decreasing, this function returns a negative value, otherwise positive
+    auto size = status.rNorms_history.size();
+    assert(size == status.matvecs_history.size());
+    auto rNorm_change = status.rNorms_history[size - 1].array() / status.rNorms_history[size - 2].array();
+    auto sum_matvecs  = status.matvecs_history[size - 1] + status.matvecs_history[size - 2];
+    // auto sum_matvecs  = std::accumulate(status.matvecs_history.begin(), status.matvecs_history.end(), Eigen::Index{0});
+    return std::log10(rNorm_change.minCoeff()) / static_cast<RealScalar>(sum_matvecs);
 }
 
 template<typename Scalar>
@@ -248,7 +293,7 @@ typename SolverBase<Scalar>::RealScalar SolverBase<Scalar>::get_max_standard_dev
 template<typename Scalar>
 bool SolverBase<Scalar>::rNorm_has_saturated() {
     // Check if there is less than 1% fluctuation in the (order of magnitude of) latest residual norms.
-    Eigen::Index min_history_size = std::min<Eigen::Index>(status.rNorms_history_max_size, 2);
+    Eigen::Index min_history_size = std::min<Eigen::Index>(status.max_history_size, 2);
     return status.iter >= min_history_size and status.rNorms_history.size() >= static_cast<size_t>(min_history_size) and
            get_max_standard_deviation(status.rNorms_history, true) < RealScalar{0.01f};
 }
@@ -256,7 +301,7 @@ bool SolverBase<Scalar>::rNorm_has_saturated() {
 template<typename Scalar>
 bool SolverBase<Scalar>::optVal_has_saturated(RealScalar threshold) {
     // Check if there is less than 1% fluctuation in the latest optVals.
-    Eigen::Index min_history_size = std::min<Eigen::Index>(status.optVals_history_max_size, 2);
+    Eigen::Index min_history_size = std::min<Eigen::Index>(status.max_history_size, 2);
     if(status.optVals_history.size() < static_cast<size_t>(min_history_size)) return false;
     auto optVal_avg     = status.optVal.cwiseAbs().mean();
     auto optVal_std     = get_max_standard_deviation(status.optVals_history, false);
@@ -268,6 +313,7 @@ bool SolverBase<Scalar>::optVal_has_saturated(RealScalar threshold) {
 template<typename Scalar>
 void SolverBase<Scalar>::adjust_preconditioner_tolerance() {
     if(status.iter_last_preconditioner_tolerance_adjustment == status.iter) return;
+    if(!use_adaptive_inner_tolerance) return;
     auto rNorm_log10_decrease = get_rNorms_log10_change_per_iteration();
     if(rNorm_log10_decrease == RealScalar{0}) return;
     if(rNorm_log10_decrease > RealScalar{-0.9f}) {
@@ -292,9 +338,6 @@ void SolverBase<Scalar>::adjust_preconditioner_tolerance() {
     H1.get_iterativeLinearSolverConfig().tolerance = std::clamp<RealScalar>(H1.get_iterativeLinearSolverConfig().tolerance, RealScalar{5e-12f}, RealScalar{0.25f});
     H2.get_iterativeLinearSolverConfig().tolerance = std::clamp<RealScalar>(H2.get_iterativeLinearSolverConfig().tolerance, RealScalar{5e-12f}, RealScalar{0.25f});
     /* clang-format on */
-    auto mintol = std::min(H1.get_iterativeLinearSolverConfig().tolerance, H2.get_iterativeLinearSolverConfig().tolerance);
-    if(mintol < 1e-2 and residual_correction_type == ResidualCorrectionType::NONE) { residual_correction_type = ResidualCorrectionType::CHEAP_OLSEN; }
-
     status.iter_last_preconditioner_tolerance_adjustment = status.iter;
 }
 
@@ -314,12 +357,23 @@ void SolverBase<Scalar>::adjust_preconditioner_H1_limits() {
 }
 
 template<typename Scalar>
+void SolverBase<Scalar>::adjust_residual_correction_type() {
+    auto mintol                       = std::min(H1.get_iterativeLinearSolverConfig().tolerance, H2.get_iterativeLinearSolverConfig().tolerance);
+    residual_correction_type_internal = residual_correction_type;
+    if(residual_correction_type_internal == ResidualCorrectionType::AUTO) {
+        residual_correction_type_internal = ResidualCorrectionType::NONE;
+        if(mintol < RealScalar{1e-1f} or status.num_matvecs_inner > 300) { residual_correction_type_internal = ResidualCorrectionType::CHEAP_OLSEN; }
+        if(mintol < RealScalar{1e-3f} or status.num_matvecs_inner > 1000) { residual_correction_type_internal = ResidualCorrectionType::FULL_OLSEN; }
+        if(mintol < RealScalar{1e-5f} or status.num_matvecs_inner > 2000) { residual_correction_type_internal = ResidualCorrectionType::JACOBI_DAVIDSON; }
+    }
+}
+
+template<typename Scalar>
 void SolverBase<Scalar>::adjust_preconditioner_H2_limits() {
     if(status.iter_last_preconditioner_H2_limit_adjustment == status.iter) return;
     H2.get_iterativeLinearSolverConfig().precondType = PreconditionerType::JACOBI;
 
     if(H2.get_iterativeLinearSolverConfig().precondType == PreconditionerType::CHEBYSHEV) {
-        status.H2_max_eval                                        = H2.get_op_norm(20);
         RealScalar lambda_min                                     = RealScalar{0}; // status.H2_min_eval * RealScalar{0.9f};
         RealScalar lambda_max                                     = status.H2_max_eval * RealScalar{1.01f};
         H2.get_iterativeLinearSolverConfig().chebyshev.lambda_min = lambda_min;
@@ -331,24 +385,35 @@ void SolverBase<Scalar>::adjust_preconditioner_H2_limits() {
 
 template<typename Scalar>
 typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultHX(const Eigen::Ref<const MatrixType> &X) {
-    status.num_matvecs += X.cols();
+    auto       token_matvecs = status.time_matvecs.tic_token();
+    MatrixType HX;
     switch(algo) {
-        case OptAlgo::DMRG: return H1.MultAX(X);
+        case OptAlgo::DMRG:
+            HX = H1.MultAX(X);
+            status.num_matvecs += X.cols();
+            break;
         case OptAlgo::DMRGX: [[fallthrough]];
         case OptAlgo::HYBRID_DMRGX: {
             MatrixType H2X = H2.MultAX(X);
             MatrixType H1X = H1.MultAX(X);
-            return H2X - H1.MultAX(H1X);
+            HX             = H2X - H1.MultAX(H1X);
+            status.num_matvecs += 3 * X.cols(); // two more matvecs
+            break;
         }
-        case OptAlgo::XDMRG: return H2.MultAX(X);
-        case OptAlgo::GDMRG: return H1.MultAX(X);
+        case OptAlgo::XDMRG:
+            HX = H2.MultAX(X);
+            status.num_matvecs += X.cols();
+            break;
+        case OptAlgo::GDMRG: throw except::runtime_error("MultHX: GDMRG is not suitable, use MultH1X or MultH2X instead");
         default: throw except::runtime_error("unknown algorithm {}", enum2sv(algo));
     }
+    return HX;
 }
 
 template<typename Scalar>
 typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultH1X(const Eigen::Ref<const MatrixType> &X) {
     if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultH1X: should only be called by GDMRG");
+    auto token_matvecs = status.time_matvecs.tic_token();
     status.num_matvecs += X.cols();
     return H1.MultAX(X);
 }
@@ -356,6 +421,7 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultH1X(const Eigen:
 template<typename Scalar>
 typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultH2X(const Eigen::Ref<const MatrixType> &X) {
     if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultH2X: should only be called by GDMRG");
+    auto token_matvecs = status.time_matvecs.tic_token();
     status.num_matvecs += X.cols();
     return H2.MultAX(X);
 }
@@ -363,60 +429,56 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultH2X(const Eigen:
 template<typename Scalar>
 typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultPX(const Eigen::Ref<const MatrixType> &X) {
     // Preconditioning
-    status.num_precond += X.cols();
-    adjust_preconditioner_tolerance();
-
+    auto       token_precond = status.time_precond.tic_token();
+    MatrixType HPX;
     switch(algo) {
-        case OptAlgo::DMRG: {
-            adjust_preconditioner_H1_limits();
-            return H1.MultPX(X);
-        }
+        case OptAlgo::DMRG: HPX = H1.MultPX(X); break;
         case OptAlgo::DMRGX: [[fallthrough]];
-        case OptAlgo::HYBRID_DMRGX: {
-            adjust_preconditioner_H1_limits();
-            return H2.MultPX(X);
-        }
-        case OptAlgo::XDMRG: {
-            adjust_preconditioner_H2_limits();
-            return H2.MultPX(X);
-        }
-        case OptAlgo::GDMRG: throw except::runtime_error("LOBPCG: GDMRG is not suitable, use GeneralizedLanczos instead");
-        default: throw except::runtime_error("LOBPCG: unknown algorithm {}", enum2sv(algo));
+        case OptAlgo::HYBRID_DMRGX: HPX = H2.MultPX(X); break;
+        case OptAlgo::XDMRG: HPX = H2.MultPX(X); break;
+        case OptAlgo::GDMRG: throw except::runtime_error("MultPX: GDMRG is not suitable, use MultP1X or MultP2X instead");
+        default: throw except::runtime_error("MultPX: unknown algorithm {}", enum2sv(algo));
     }
+
+    auto &H1ir = H1.get_iterativeLinearSolverConfig().result;
+    auto &H2ir = H2.get_iterativeLinearSolverConfig().result;
+    status.num_precond += X.cols();
+    status.num_matvecs_inner += H1ir.matvecs + H2ir.matvecs;
+    status.num_precond_inner += H1ir.precond + H2ir.precond;
+    status.time_matvecs_inner += H1ir.time_matvecs + H2ir.time_matvecs;
+    status.time_precond_inner += H1ir.time_precond + H2ir.time_precond;
+    return HPX;
 }
 template<typename Scalar>
 typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultP1X(const Eigen::Ref<const MatrixType> &X) {
     // Preconditioning
     if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultP1X: should only be called by GDMRG");
+    auto token_precond = status.time_precond.tic_token();
+
+    MatrixType HPX  = H1.MultPX(X);
+    auto      &H1ir = H1.get_iterativeLinearSolverConfig().result;
     status.num_precond += X.cols();
-    adjust_preconditioner_tolerance();
-    adjust_preconditioner_H1_limits();
-    return H1.MultPX(X);
+    status.num_matvecs_inner += H1ir.matvecs;
+    status.num_precond_inner += H1ir.precond;
+    status.time_matvecs_inner += H1ir.time_matvecs;
+    status.time_precond_inner += H1ir.time_precond;
+    return HPX;
 }
 
 template<typename Scalar>
 typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::MultP2X(const Eigen::Ref<const MatrixType> &X) {
     // Preconditioning
     if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultP2X: should only be called by GDMRG");
+    auto token_precond = status.time_precond.tic_token();
+
+    MatrixType HPX  = H2.MultPX(X);
+    auto      &H2ir = H2.get_iterativeLinearSolverConfig().result;
     status.num_precond += X.cols();
-    adjust_preconditioner_tolerance();
-    adjust_preconditioner_H2_limits();
-    return H2.MultPX(X);
-}
-
-template<typename Scalar> typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::get_wBlock() {
-    // We add Lanczos-style residual blocks
-    W = (algo == OptAlgo::GDMRG) ? H2V : HV;
-    A = V.adjoint() * W;
-
-    // 3) Subtract projections to A and B once
-    W.noalias() -= V * A; // Qi * Qi.adjoint()*H*Qi
-    if(V_prev.rows() == N and V_prev.cols() == b) {
-        B = V_prev.adjoint() * W;
-        W.noalias() -= V_prev * B.adjoint();
-    }
-    assert_allfinite(W);
-    return W;
+    status.num_matvecs_inner += H2ir.matvecs;
+    status.num_precond_inner += H2ir.precond;
+    status.time_matvecs_inner += H2ir.time_matvecs;
+    status.time_precond_inner += H2ir.time_precond;
+    return HPX;
 }
 
 template<typename Scalar> typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::get_mBlock() {
@@ -460,8 +522,8 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::cheap_Olsen_correcti
             denominator = v.dot(v); // v^H * v
         }
 
-        auto delta = std::abs(denominator) > eps * 100 ? numerator / denominator : RealScalar{0};
-        D.col(i)   = s - delta * v; // Gets preconditioned later
+        auto delta         = std::abs(denominator) > eps * 100 ? numerator / denominator : RealScalar{0};
+        D.col(i).noalias() = s - delta * v; // Gets preconditioned later
     }
     return D;
 }
@@ -473,8 +535,8 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::full_Olsen_correctio
     MatrixType MS;     // N x b
     MatrixType coeffs; // b x b
     if(algo == OptAlgo::GDMRG) {
-        MV = MultP2X(V);
-        MS = MultP2X(S);
+        MV.noalias() = use_preconditioner ? MultP2X(V) : V;
+        MS.noalias() = use_preconditioner ? MultP2X(S) : S;
         // Gram matrix in H2-inner product: G = V^H * B * MV (b x b)
         MatrixType B_MV = MultH2X(MV);
         MatrixType G    = V.adjoint() * B_MV;
@@ -484,8 +546,9 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::full_Olsen_correctio
         MatrixType VT_H2_MS = V.adjoint() * H2_MS;
         coeffs              = G.ldlt().solve(VT_H2_MS);
     } else {
-        MV = MultPX(V);
-        MS = MultPX(S);
+        MV.noalias() = use_preconditioner ? MultPX(V) : V;
+        MS.noalias() = use_preconditioner ? MultPX(S) : S;
+
         // Gram matrix in preconditioned metric: G = V^T * MV (b x b)
         MatrixType G = V.adjoint() * MV; // symmetric if M is HPD
 
@@ -493,14 +556,14 @@ typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::full_Olsen_correctio
         MatrixType VT_MS = V.adjoint() * MS;
         coeffs           = G.ldlt().solve(VT_MS); // robust inversion
     }
-
     // Olsen correction
     return MS - MV * coeffs; // N x b
 }
 
 template<typename Scalar> typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::jacobi_davidson_correction() {
-    const Eigen::Index b = V.cols();
-    const Eigen::Index N = V.rows();
+    auto               token_precond = status.time_precond.tic_token();
+    const Eigen::Index b             = V.cols();
+    const Eigen::Index N             = V.rows();
     MatrixType         D(N, b);
     auto               Y = T_evals(status.optIdx);
 
@@ -521,49 +584,92 @@ template<typename Scalar> typename SolverBase<Scalar>::MatrixType SolverBase<Sca
         VectorType rhs = -s;
         rhs            = rhs - v * (v.adjoint() * rhs).value();
         auto Hop       = [this, th](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+            MatrixType HX;
             switch(algo) {
-                case OptAlgo::DMRG: return H1.MultAX(X) - th * X;
+                case OptAlgo::DMRG:
+                    HX.noalias() = H1.MultAX(X) - th * X;
+                    status.num_matvecs_inner += X.cols();
+                    break;
                 case OptAlgo::DMRGX: [[fallthrough]];
-                case OptAlgo::HYBRID_DMRGX: return H2.MultAX(X) - th * X;
-                case OptAlgo::XDMRG: return H2.MultAX(X) - th * X;
-                case OptAlgo::GDMRG: return H1.MultAX(X) - th * H2.MultAX(X);
+                case OptAlgo::HYBRID_DMRGX:
+                    HX.noalias() = H2.MultAX(X) - th * X;
+                    status.num_matvecs_inner += X.cols();
+                    break;
+                case OptAlgo::XDMRG:
+                    HX.noalias() = H2.MultAX(X) - th * X;
+                    status.num_matvecs_inner += X.cols();
+                    break;
+                case OptAlgo::GDMRG:
+                    HX.noalias() = H1.MultAX(X) - th * H2.MultAX(X);
+                    status.num_matvecs_inner += 2 * X.cols();
+                    break;
                 default: throw except::runtime_error("unknown algorithm {}", enum2sv(algo));
             }
+            return HX;
         };
-        auto JDop = JacobiDavidsonOperator<Scalar>(v, s, Hop);
-        D.col(i)  = JacobiDavidsonSolver(JDop, rhs, cfg);
-        H.get_iterativeLinearSolverConfig().result += cfg.result;
-        if(algo == OptAlgo::GDMRG) {
-            // We used both H1 and H2, but H is only H2 in this case,
-            // so we add the matvecs for H1 manually
-            H1.get_iterativeLinearSolverConfig().result += cfg.result;
-        }
+        auto JDop          = JacobiDavidsonOperator<Scalar>(v, s, Hop);
+        D.col(i).noalias() = JacobiDavidsonSolver(JDop, rhs, cfg);
+        status.num_precond_inner += cfg.result.precond;
+        status.time_matvecs_inner += cfg.result.time_matvecs;
+        status.time_precond_inner += cfg.result.time_precond;
+        H.get_iterativeLinearSolverConfig().result.copy_latest(cfg.result);
     }
-
-    return D; // N x b, enrichment directions
+    status.num_precond += b; // This routine is a preconditioner
+    return D;                // N x b, enrichment directions
 }
 
-template<typename Scalar> typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::get_sBlock() {
+template<typename Scalar> typename SolverBase<Scalar>::MatrixType
+    SolverBase<Scalar>::get_sBlock(std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultPX) {
     // Make a residual block "S = (HQ-λQ)"
     if(S.cols() != b) {
         auto Y = T_evals(status.optIdx);
         if(algo == OptAlgo::GDMRG) {
-            S = H1V - H2V * Y.asDiagonal();
+            S.noalias() = H1V - H2V * Y.asDiagonal();
         } else {
-            S = HV - V * Y.asDiagonal();
+            S.noalias() = HV - V * Y.asDiagonal();
         }
     }
-    if(use_preconditioner) {
-        switch(residual_correction_type) {
-            case ResidualCorrectionType::NONE: break;
-            case ResidualCorrectionType::CHEAP_OLSEN: S = cheap_Olsen_correction(); break;
-            case ResidualCorrectionType::FULL_OLSEN: S = full_Olsen_correction(); break;
-            case ResidualCorrectionType::JACOBI_DAVIDSON: S = jacobi_davidson_correction(); break;
-        }
+
+    if(chebyshev_filter_degree >= 1) S = qr_and_chebyshevFilter(S);
+    switch(residual_correction_type_internal) {
+        case ResidualCorrectionType::NONE:
+            if(use_preconditioner) S = MultPX(S);
+            break;
+        case ResidualCorrectionType::AUTO: [[fallthrough]];
+        case ResidualCorrectionType::CHEAP_OLSEN:
+            if(use_preconditioner) S = MultPX(S);
+            S.noalias() = cheap_Olsen_correction();
+            break;
+        case ResidualCorrectionType::FULL_OLSEN:
+            // This has an internal preconditioner
+            S.noalias() = full_Olsen_correction();
+            break;
+        case ResidualCorrectionType::JACOBI_DAVIDSON:
+            // This is an internal preconditioner
+            assert(use_preconditioner && " Jacobi Davidson correction needs use_preconditioner == true");
+            S.noalias() = jacobi_davidson_correction();
+            break;
     }
 
     assert_allfinite(S);
     return S;
+}
+
+template<typename Scalar>
+typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::get_wBlock(std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultPX) {
+    // We add Lanczos-style residual blocks
+    W = (algo == OptAlgo::GDMRG) ? H2V : HV;
+    A = V.adjoint() * W;
+
+    // 3) Subtract projections to A and B once
+    W.noalias() -= V * A; // Qi * Qi.adjoint()*H*Qi
+    if(V_prev.rows() == N and V_prev.cols() == b) {
+        B = V_prev.adjoint() * W;
+        W.noalias() -= V_prev * B.adjoint();
+    }
+    assert_allfinite(W);
+    if(use_preconditioner) W = MultPX(W);
+    return W;
 }
 
 template<typename Scalar> typename SolverBase<Scalar>::MatrixType SolverBase<Scalar>::get_rBlock() {
@@ -936,14 +1042,15 @@ void SolverBase<Scalar>::init() {
             Eigen::SelfAdjointEigenSolver<MatrixType> es2(T2);
 
             status.H1_min_eval = es1.eigenvalues().minCoeff();
+            status.H1_max_eval = es1.eigenvalues().maxCoeff();
             status.H2_min_eval = es2.eigenvalues().minCoeff();
-
-            RealScalar T1_max_eval = es1.eigenvalues().cwiseAbs().maxCoeff();
-            RealScalar T2_max_eval = es2.eigenvalues().cwiseAbs().maxCoeff();
+            status.H2_max_eval = es2.eigenvalues().maxCoeff();
             RealScalar min_sep =
                 T_evals.size() <= 1 ? RealScalar{1} : (T_evals.bottomRows(T_evals.size() - 1) - T_evals.topRows(T_evals.size() - 1)).cwiseAbs().minCoeff();
             auto select1     = get_ritz_indices(ritz, 0, 1, T_evals);
-            status.condition = (T1_max_eval + T_evals(select1).cwiseAbs().coeff(0) * T2_max_eval) / min_sep;
+            auto H1_max_abs  = std::max(std::abs(status.H1_min_eval), std::abs(status.H1_max_eval));
+            auto H2_max_abs  = std::max(std::abs(status.H2_min_eval), std::abs(status.H2_max_eval));
+            status.condition = (H1_max_abs + T_evals(select1).cwiseAbs().coeff(0) * H2_max_abs) / min_sep;
 
         } else {
             Q  = V;
@@ -964,6 +1071,8 @@ void SolverBase<Scalar>::init() {
 
             status.H1_min_eval = T_evals.minCoeff();
             status.H2_min_eval = T_evals.minCoeff();
+            status.H1_max_eval = T_evals.maxCoeff();
+            status.H2_max_eval = T_evals.maxCoeff();
             status.commit_evals(T_evals.minCoeff(), T_evals.maxCoeff());
             status.condition = T_evals.cwiseAbs().maxCoeff() / T_evals.cwiseAbs().minCoeff();
         }
@@ -972,7 +1081,10 @@ void SolverBase<Scalar>::init() {
     assert(V.cols() == b);
     assert_allfinite(V);
     assert_orthonormal(V, orthTolQ);
-
+    adjust_preconditioner_tolerance();
+    adjust_residual_correction_type();
+    adjust_preconditioner_H1_limits();
+    adjust_preconditioner_H2_limits();
     eig::log->info("iter -1| mv {:5} | optVal {::.16f} | blk {:2} | b {} | ritz {} | rNormTol {:.3e} | tol {:.2e} | rNorms = {::.8e}", status.num_matvecs,
                    fv(status.optVal), Q.cols() / b, b, enum2sv(ritz), fp(rnormTol()), fp(tol), fv(VectorReal(status.rNorms.topRows(nev))));
 
@@ -996,8 +1108,11 @@ void SolverBase<Scalar>::diagonalizeT() {
     T_evals = es.eigenvalues();
     T_evecs = es.eigenvectors();
 
-    status.H1_min_eval = T_evals.minCoeff();
-    status.H2_min_eval = T_evals.minCoeff();
+    status.H1_min_eval = std::min(status.H1_min_eval, T_evals.minCoeff());
+    status.H1_max_eval = std::max(status.H1_max_eval, T_evals.maxCoeff());
+    status.H2_min_eval = std::min(status.H2_min_eval, T_evals.minCoeff());
+    status.H2_max_eval = std::max(status.H2_max_eval, T_evals.maxCoeff());
+
     status.commit_evals(T_evals.minCoeff(), T_evals.maxCoeff());
     status.condition = T_evals.cwiseAbs().maxCoeff() / T_evals.cwiseAbs().minCoeff();
 }
@@ -1034,16 +1149,17 @@ void SolverBase<Scalar>::diagonalizeT1T2() {
     Eigen::SelfAdjointEigenSolver<MatrixType> es1(T1);
     Eigen::SelfAdjointEigenSolver<MatrixType> es2(T2);
 
-    status.H1_min_eval = es1.eigenvalues().minCoeff();
-    status.H2_min_eval = es2.eigenvalues().minCoeff();
-
-    RealScalar T1_max_eval = es1.eigenvalues().cwiseAbs().maxCoeff();
-    RealScalar T2_max_eval = es2.eigenvalues().cwiseAbs().maxCoeff();
+    status.H1_min_eval = std::min(status.H1_min_eval, es1.eigenvalues().minCoeff());
+    status.H1_max_eval = std::max(status.H1_max_eval, es1.eigenvalues().maxCoeff());
+    status.H2_min_eval = std::min(status.H2_min_eval, es2.eigenvalues().minCoeff());
+    status.H2_max_eval = std::max(status.H2_max_eval, es2.eigenvalues().maxCoeff());
 
     RealScalar min_sep =
         T_evals.size() <= 1 ? RealScalar{1} : (T_evals.bottomRows(T_evals.size() - 1) - T_evals.topRows(T_evals.size() - 1)).cwiseAbs().minCoeff();
     auto select1     = get_ritz_indices(ritz, 0, 1, T_evals);
-    status.condition = (T1_max_eval + T_evals(select1).cwiseAbs().coeff(0) * T2_max_eval) / min_sep;
+    auto H1_max_abs  = std::max(std::abs(status.H1_min_eval), std::abs(status.H1_max_eval));
+    auto H2_max_abs  = std::max(std::abs(status.H2_min_eval), std::abs(status.H2_max_eval));
+    status.condition = (H1_max_abs + T_evals(select1).cwiseAbs().coeff(0) * H2_max_abs) / min_sep;
 }
 
 template<typename Scalar>
@@ -1213,27 +1329,42 @@ void SolverBase<Scalar>::refinedRitzVectors() {
 
 template<typename Scalar>
 void SolverBase<Scalar>::updateStatus() {
-    if(status.stopReason != StopReason::none) return;
+    auto H1ir = H1.get_iterativeLinearSolverConfig();
+    auto H2ir = H2.get_iterativeLinearSolverConfig();
+
+    // Accumulate counters from the inner solvre
+    status.num_matvecs_total += status.num_matvecs + status.num_matvecs_inner;
+    status.num_precond_total += status.num_precond + status.num_precond_inner;
+    status.time_matvecs_total += status.time_matvecs.get_time() + status.time_matvecs_inner.get_time();
+    status.time_precond_total += status.time_precond.get_time() + status.time_precond_inner.get_time();
+
     // Eigenvalues are sorted in ascending order.
     status.oldVal  = status.optVal;
     status.optVal  = T_evals(status.optIdx).topRows(nev); // Make sure we only take nev values here. In general, nev <= b
     status.absDiff = (status.optVal - status.oldVal).cwiseAbs();
     status.relDiff = status.absDiff.array() / (RealScalar{0.5} * (status.optVal + status.oldVal).array());
 
+    status.rNorms_history.push_back(status.rNorms.topRows(nev));
+    status.optVals_history.push_back(status.optVal.topRows(nev));
+    status.matvecs_history.push_back(status.num_matvecs + status.num_matvecs_inner);
+    while(status.rNorms_history.size() > status.max_history_size) status.rNorms_history.pop_front();
+    while(status.optVals_history.size() > status.max_history_size) status.optVals_history.pop_front();
+    while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
+
     if(status.rNorms.topRows(nev).maxCoeff() < rnormTol()) {
         status.stopMessage.emplace_back(fmt::format("converged rNorm {::.3e} < tol {:.3e}", fv(VectorReal(status.rNorms.topRows(nev))), fp(rnormTol())));
         status.stopReason |= StopReason::converged_rNorm;
     }
-    if(optVal_has_saturated() and rNorm_has_saturated()) {
+    if(use_adaptive_inner_tolerance and optVal_has_saturated() and rNorm_has_saturated()) {
         status.stopMessage.emplace_back(fmt::format("saturated rNorm {::.3e} (tol {:.3e})", fv(VectorReal(status.rNorms.topRows(nev))), fp(rnormTol())));
         status.stopReason |= StopReason::saturated_rNorm;
     }
-    if(status.iter >= std::max(1l, max_iters)) {
+    if(max_iters >= 0l and status.iter >= max_iters) {
         status.stopMessage.emplace_back(fmt::format("iter ({}) >= maxiter ({})", status.iter, max_iters));
         status.stopReason |= StopReason::max_iterations;
     }
-    if(status.num_matvecs >= std::max(1l, max_matvecs)) {
-        status.stopMessage.emplace_back(fmt::format("num_matvecs ({}) >= max_matvecs ({})", status.num_matvecs, max_matvecs));
+    if(max_matvecs >= 0l and status.num_matvecs_total >= max_matvecs) {
+        status.stopMessage.emplace_back(fmt::format("num_matvecs_total ({}) >= max_matvecs ({})", status.num_matvecs_total, max_matvecs));
         status.stopReason |= StopReason::max_matvecs;
     }
 
@@ -1246,37 +1377,60 @@ void SolverBase<Scalar>::updateStatus() {
         absgap              = std::abs(evals(1) - evals(0));
         relgap              = absgap / status.max_eval_estimate();
     }
-    status.rNorms_history.push_back(status.rNorms.topRows(nev));
-    status.optVals_history.push_back(status.optVal.topRows(nev));
-    while(status.rNorms_historysize() > status.rNorms_history_max_size) status.rNorms_history.pop_front();
-    while(status.optVals_history.size() > status.optVals_history_max_size) status.optVals_history.pop_front();
-    auto        H1ir      = H1.get_iterativeLinearSolverConfig();
-    auto        H2ir      = H2.get_iterativeLinearSolverConfig();
+
     std::string optValMsg = optVal_has_saturated() ? "SAT" : "";
     std::string rNormMsg  = rNorm_has_saturated() ? "SAT" : "";
-    eig::log->info("it {:3} mv {:3} pc {:3} [inner: it {:4} mv {:5} err {:.2e} tol {:.2e} t {:.1e}s] optVal {::.16f}{} rNorms {::.8e}{} col {:2} x {} ritz {} "
-                   "rNormTol {:.3e} tol "
-                   "{:.2e} H² norm {:.2e} cond {:.2e} agap {:.3e} rgap {:.3e}",
-                   status.iter,                                        //
-                   status.num_matvecs,                                 //
-                   status.num_precond,                                 //
-                   std::max(H1ir.result.iters, H2ir.result.iters),     //
-                   H1ir.result.matvecs + H2ir.result.matvecs,          //
+    std::string rCorrMsg;
+    switch(residual_correction_type_internal) {
+        case ResidualCorrectionType::NONE: rCorrMsg = "NO"; break;
+        case ResidualCorrectionType::CHEAP_OLSEN: rCorrMsg = "CO"; break;
+        case ResidualCorrectionType::FULL_OLSEN: rCorrMsg = "FO"; break;
+        case ResidualCorrectionType::JACOBI_DAVIDSON: rCorrMsg = "JD"; break;
+        case ResidualCorrectionType::AUTO: rCorrMsg = "AU"; break;
+    }
+    eig::log->info("it {:3} mv {:3} pc {:3} t {:.1e}s [inner: ({}) mv {:5} err {:.2e} tol {:.2e} t {:.1e}s] "
+                   "optVal {::.16f}{} rNorms {::.8e}{} ({:9.2e}/mv) col {:2} x {} ritz {} rNormTol {:.3e} tol {:.2e} "
+                   "op norm {:.2e} cond {:.2e} agap {:.3e} rgap {:.3e}",
+                   status.iter,        //
+                   status.num_matvecs, //
+                   status.num_precond, //
+                   status.time_elapsed.restart_lap(),
+                   rCorrMsg,                                           //
+                   status.num_matvecs_inner,                           //
                    fp(std::max(H1ir.result.error, H2ir.result.error)), //
                    fp(std::max(H1ir.tolerance, H2ir.tolerance)),       //
-                   fp(std::max(H1ir.result.time, H2ir.result.time)),   //
+                   fp(H1ir.result.time + H2ir.result.time),            //
                    fv(status.optVal),                                  //
                    optValMsg,                                          //
                    fv(VectorReal(status.rNorms.topRows(nev))),         //
                    rNormMsg,                                           //
+                   fp(get_rNorms_log10_change_per_matvec()),           //
                    Q.cols() / b,                                       //
                    b,                                                  //
                    enum2sv(ritz),                                      //
                    fp(rnormTol()),                                     //
                    fp(tol),                                            //
-                   fp(status.H2_max_eval),                             //
+                   fp(status.op_norm_estimate(algo)),                 //
                    fp(status.condition),                               //
                    fp(absgap),                                         //
                    fp(relgap)                                          //
     );
+
+    if(status.stopReason != StopReason::none) return;
+
+    // Prepare for the next iteration
+    status.num_matvecs       = 0;
+    status.num_precond       = 0;
+    status.num_matvecs_inner = 0;
+    status.num_precond_inner = 0;
+
+    status.time_matvecs.reset();
+    status.time_precond.reset();
+    status.time_matvecs_inner.reset();
+    status.time_precond_inner.reset();
+
+    adjust_preconditioner_tolerance();
+    adjust_residual_correction_type();
+    adjust_preconditioner_H1_limits();
+    adjust_preconditioner_H2_limits();
 }

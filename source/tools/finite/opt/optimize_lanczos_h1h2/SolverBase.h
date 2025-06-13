@@ -13,11 +13,12 @@
 // #include "tensors/site/env/EnvEne.h"
 // #include "tensors/site/env/EnvPair.h"
 // #include "tensors/site/env/EnvVar.h"
+#include "tid/tid.h"
 #include <Eigen/Eigenvalues>
 #include <source_location>
 
 template<typename Scalar> class JacobiDavidsonOperator;
-enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON };
+enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON, AUTO };
 template<typename Scalar>
 class SolverBase {
     public:
@@ -42,12 +43,12 @@ class SolverBase {
         RealScalar initVal = std::numeric_limits<RealScalar>::quiet_NaN();
         // RealScalar                max_eval = RealScalar{1};
         private:
-        size_t                 eval_history_max_size = 5;
         std::deque<RealScalar> min_eval_history;
         std::deque<RealScalar> max_eval_history;
 
         public:
         void                      commit_evals(RealScalar min_eval, RealScalar max_eval);
+        RealScalar                op_norm_estimate(OptAlgo algo) const;
         RealScalar                max_eval_estimate() const;
         RealScalar                min_eval_estimate() const;
         RealScalar                condition   = RealScalar{1};
@@ -61,14 +62,25 @@ class SolverBase {
         Eigen::Index              iter_last_preconditioner_tolerance_adjustment = 0;
         Eigen::Index              iter_last_preconditioner_H1_limit_adjustment  = 0;
         Eigen::Index              iter_last_preconditioner_H2_limit_adjustment  = 0;
-        Eigen::Index              num_matvecs                                   = 0;
+        Eigen::Index              num_matvecs                                   = 0; /*!< Number of matvecs this iteration */
+        Eigen::Index              num_matvecs_inner                             = 0; /*!< Number of matvecs over all iterations */
+        Eigen::Index              num_matvecs_total                             = 0; /*!< Number of matvecs over all iterations */
         Eigen::Index              num_precond                                   = 0;
+        Eigen::Index              num_precond_inner                             = 0;
+        Eigen::Index              num_precond_total                             = 0;
         Eigen::Index              numMGS                                        = 0;
+        tid::ur                   time_elapsed;
+        tid::ur                   time_matvecs;
+        tid::ur                   time_precond;
+        tid::ur                   time_matvecs_inner;
+        tid::ur                   time_precond_inner;
+        tid::ur                   time_matvecs_total;
+        tid::ur                   time_precond_total;
         VectorReal                rNorms;
         std::deque<VectorReal>    rNorms_history;
-        size_t                    rNorms_history_max_size = 5;
         std::deque<VectorReal>    optVals_history;
-        size_t                    optVals_history_max_size = 5;
+        std::deque<Eigen::Index>  matvecs_history;
+        size_t                    max_history_size = 5;
         std::vector<Eigen::Index> nonZeroCols; // Nonzero Gram Schmidt columns
         Eigen::Index              numZeroRows   = 0;
         std::vector<std::string>  stopMessage   = {};
@@ -80,6 +92,7 @@ class SolverBase {
     Eigen::Index      i_HQ     = -1;
     Eigen::Index      i_HQ_cur = -1;
     RealScalar        get_rNorms_log10_change_per_iteration();
+    RealScalar        get_rNorms_log10_change_per_matvec();
     RealScalar        get_rNorms_log10_standard_deviation();
     static RealScalar get_max_standard_deviation(const std::deque<VectorReal> &v, bool apply_log10);
     bool              rNorm_has_saturated();
@@ -87,13 +100,14 @@ class SolverBase {
     void              adjust_preconditioner_tolerance();
     void              adjust_preconditioner_H1_limits();
     void              adjust_preconditioner_H2_limits();
+    void              adjust_residual_correction_type();
 
     protected:
     Eigen::Index qBlocks = 0;
 
-    MatrixType        get_wBlock();
+    MatrixType        get_wBlock(std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultPX);
     MatrixType        get_mBlock();
-    MatrixType        get_sBlock();
+    MatrixType        get_sBlock(std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MultPX);
     MatrixType        get_rBlock();
     const MatrixType &get_HQ();
     const MatrixType &get_HQ_cur();
@@ -133,19 +147,22 @@ class SolverBase {
     int        chebyshev_filter_degree                 = 0;                 /*!< The chebyshev polynomial degree to use when filtering */
     RealScalar chebyshev_filter_relative_gap_threshold = RealScalar{1e-2f}; /*!< Enable chebyshev filtering if the relative spectral gap is smaller than this */
     RealScalar chebyshev_filter_lambda_cut_bias =
-        RealScalar{1e-1f};                                 /*!< A percentage between 0 and 1. Value 0.1 puts lambda_cut 10% towards evals(1) from evals(0) */
-    bool use_extra_ritz_vectors_in_the_next_basis = false; /*!< Add the b next-best ritz vector block M to form the next basis (LOBPCG only) */
+        RealScalar{1e-1f}; /*!< A percentage between 0 and 1. Value 0.1 puts lambda_cut 10% towards evals(1) from evals(0) */
+    bool use_extra_ritz_vectors_in_the_next_basis            = false; /*!< Add the b next-best ritz vector block M to form the next basis (LOBPCG only) */
+    ResidualCorrectionType residual_correction_type_internal = ResidualCorrectionType::NONE;
 
     public:
     Status                      status = {};
-    Eigen::Index                N;                                 /*!< The size of the underlying state tensor */
-    Eigen::Index                mps_size;                          /*!< The size of the underlying state tensor in mps representation (equal to N!) */
-    std::array<Eigen::Index, 3> mps_shape;                         /*!< The shape of the underlying state tensor in mps representation */
-    Eigen::Index                nev                       = 1;     /*!< Number of eigenvalues to find */
-    Eigen::Index                ncv                       = 8;     /*!< Krylov dimension, i.e. {V, H1V..., H2V...} ( minimum 2, recommend 3 or more) */
-    Eigen::Index                b                         = 2;     /*!< The block size */
-    bool                        use_refined_rayleigh_ritz = false; /*!< Refined ritz extraction uses 1 matvec per nev */
-    ResidualCorrectionType      residual_correction_type  = ResidualCorrectionType::NONE;
+    Eigen::Index                N;                                    /*!< The size of the underlying state tensor */
+    Eigen::Index                mps_size;                             /*!< The size of the underlying state tensor in mps representation (equal to N!) */
+    std::array<Eigen::Index, 3> mps_shape;                            /*!< The shape of the underlying state tensor in mps representation */
+    Eigen::Index                nev                          = 1;     /*!< Number of eigenvalues to find */
+    Eigen::Index                ncv                          = 8;     /*!< Krylov dimension, i.e. {V, H1V..., H2V...} ( minimum 2, recommend 3 or more) */
+    Eigen::Index                b                            = 2;     /*!< The block size */
+    bool                        use_refined_rayleigh_ritz    = false; /*!< Refined ritz extraction uses 1 matvec per nev */
+    bool                        use_relative_rnorm_tolerance = true;
+    bool                        use_adaptive_inner_tolerance = true;
+    ResidualCorrectionType      residual_correction_type     = ResidualCorrectionType::NONE;
 
     OptAlgo             algo;    /*!< Selects the current DMRG algorithm */
     OptRitz             ritz;    /*!< Selects the target eigenvalues */
@@ -177,7 +194,12 @@ class SolverBase {
 
     /*! Norm tolerance of ritz-vector residuals.
      * Lanczos converges if rnorm < normTolR * H_norm. */
-    RealScalar rnormTol() const { return tol * status.max_eval_estimate(); }
+    RealScalar rnormTol() const {
+        if(use_relative_rnorm_tolerance)
+            return tol * status.max_eval_estimate();
+        else
+            return tol;
+    }
 
     /*! Norm tolerance of B-matrices.
      * Triggers the Lanczos recurrence breakdown. */
@@ -209,16 +231,18 @@ class SolverBase {
     }
 
     Eigen::Index max_iters   = 100;
-    Eigen::Index max_matvecs = 1000;
+    Eigen::Index max_matvecs = -1ul;
 
     RealScalar rnormRelDiffTol = std::numeric_limits<RealScalar>::epsilon();
     RealScalar absDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000;
     RealScalar relDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000;
 
-    void set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize);
-    void set_chebyshevFilterRelGapThreshold(RealScalar threshold);
-    void set_chebyshevFilterLambdaCutBias(RealScalar bias);
-    void set_chebyshevFilterDegree(Eigen::Index degree);
+    Eigen::Index get_jcbMaxBlockSize() const;
+    void         set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize);
+    void         set_preconditioner_params(Eigen::Index maxiters = 20000, RealScalar initialTol = RealScalar{1e-1f}, Eigen::Index jcbMaxBlockSize = -1ul);
+    void         set_chebyshevFilterRelGapThreshold(RealScalar threshold);
+    void         set_chebyshevFilterLambdaCutBias(RealScalar bias);
+    void         set_chebyshevFilterDegree(Eigen::Index degree);
 
     MatrixType MultHX(const Eigen::Ref<const MatrixType> &X);
     MatrixType MultH1X(const Eigen::Ref<const MatrixType> &X);
@@ -265,6 +289,7 @@ class SolverBase {
     }
 
     void run() {
+        auto token_elapsed = status.time_elapsed.tic_token();
         init();
         while(true) {
             step();

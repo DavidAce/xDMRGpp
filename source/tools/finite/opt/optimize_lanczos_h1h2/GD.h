@@ -25,7 +25,7 @@ class GD : public SolverBase<Scalar> {
 
     using SolverBase<Scalar>::use_preconditioner;
     using SolverBase<Scalar>::use_refined_rayleigh_ritz;
-    using SolverBase<Scalar>::residual_correction_type;
+    using SolverBase<Scalar>::residual_correction_type_internal;
     using SolverBase<Scalar>::chebyshev_filter_degree;
     using SolverBase<Scalar>::status;
     using SolverBase<Scalar>::N;

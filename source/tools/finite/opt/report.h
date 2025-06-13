@@ -40,7 +40,7 @@ namespace tools::finite::opt::reports {
             std::string               description;
             std::string               ritz;
             std::string               type;
-            long                      size, idx, nev, ncv;
+            long                      size, idx, nev, ncv, jcb;
             Real                      energy, hsquared, variance, eigval, overlap, norm, rnorm, rnorm_H1, rnorm_H2, grad;
             double                    tol;
             size_t                    iter, mv, pc;
@@ -62,6 +62,7 @@ namespace tools::finite::opt::reports {
                                          .idx         = mps.get_eigs_idx(),
                                          .nev         = mps.get_eigs_nev(),
                                          .ncv         = mps.get_eigs_ncv(),
+                                         .jcb         = mps.get_eigs_jcb(),
                                          .energy      = mps.get_energy(),
                                          .hsquared    = mps.get_hsquared(),
                                          .variance    = mps.get_variance(),

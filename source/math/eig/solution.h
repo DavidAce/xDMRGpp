@@ -73,6 +73,7 @@ namespace eig {
             int            nev_converged  = 0; // Converged eigenvectors
             eig::size_type n              = 0; // Linear dimension of the input matrix to diagonalize, aka rows.
             int            ncv            = 0;
+            long           jcb            = -1l; // Size of jacobi blocks
             double         tol            = 0;
             long           num_mv         = 0; // Number of matrix-vector multiplications counted
             long           num_pc         = 0; // Number of preconditioner operations y = A⁻¹x counted

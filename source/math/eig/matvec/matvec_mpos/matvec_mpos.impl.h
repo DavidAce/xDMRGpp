@@ -1086,7 +1086,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
     if(jcbShift.has_value()) {
         RealScalar relchange = std::abs(shift - jcbShift.value()) / (std::abs(shift + jcbShift.value()) / 2);
         if(relchange < static_cast<RealScalar>(1e-1)) return; // Keep the preconditioner if the shifts haven't changed by more than 1%
-        eig::log->info("{}: Recomputing the preconditioner with shift {:.16f}", fname, fp(jcbShift.value()));
+        eig::log->trace("{}: Recomputing the preconditioner with shift {:.16f}", fname, fp(jcbShift.value()));
     }
     jcbShift = shift;
 
@@ -1376,7 +1376,7 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] void *x, [[maybe_unused]] int *
 
 template<typename Scalar>
 typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultPX(const Eigen::Ref<const MatrixType> &X) {
-    if(jcbMaxBlockSize == 0 or preconditioner == eig::Preconditioner::NONE) return X;
+    if(preconditioner == eig::Preconditioner::NONE) return X;
     assert(X.rows() == get_size());
     MatrixType Y(X.rows(), X.cols());
     for(Eigen::Index i = 0; i < X.cols(); ++i) { MultPc(X.col(i).data(), Y.col(i).data()); }
@@ -1580,30 +1580,26 @@ inline long find_optimal_block_size(long N, long bs_requested) {
 
 template<typename Scalar>
 void MatVecMPOS<Scalar>::set_jcbMaxBlockSize(std::optional<long> size) {
-    if(size.has_value()) {
-        // We want the block sizes to be roughly equal, so we reduce the block size until the remainder is zero or larger than 80% of the block size
-        // This ensures that the last block isn't too much smaller than the other ones
+    if(size.has_value() and size.value() == 0) {
+        jcbMaxBlockSize = 0;
+    } else if(size.has_value() and size.value() > 0) {
+        auto dim2 = shape_mps[0] * shape_mps[1];
+        if(size.value() >= dim2)
+            jcbMaxBlockSize = dim2;
+        else
+            jcbMaxBlockSize = 1;
 
-        // long newsize    = jcbMaxBlockSize;
-        // long rem        = num::mod(size_mps, newsize);
-        // auto bestsize   = std::pair<long, long>{rem, newsize};
-        // while(newsize >= jcbMaxBlockSize / 2) {
-        //     rem = num::mod(size_mps, newsize);
-        //     if(rem > bestsize.first or rem == 0) { bestsize = std::pair<long, long>{rem, newsize}; }
-        //     if(rem == 0) break;              // All equal size
-        //     if(rem > 4 * newsize / 5) break; // The last is at least 80% the size of the others
-        //     newsize -= 2;
+        // auto multiple = shape_mps[0] * shape_mps[1];
+
+        // auto maxsize = std::clamp(size.value(), 1l, size_mps);
+        // if(maxsize >= multiple) {
+        //     jcbMaxBlockSize = (maxsize / multiple) * multiple;
+        // }else {
+        //     // We can't select a block size commensurate with the mps shape.
+        //     // This usually implies worse performance compared to simple diagonal scaling
+        //     jcbMaxBlockSize = 1;
+        //
         // }
-        jcbMaxBlockSize = std::clamp(size.value(), 1l, size_mps);
-        if(num::mod(size_mps, jcbMaxBlockSize) != 0) {
-            auto jcbMaxBlockSize_optimal = find_optimal_block_size(size_mps, jcbMaxBlockSize);
-            if(jcbMaxBlockSize_optimal != jcbMaxBlockSize) {
-                eig::log->trace("Aligned block size to {}", jcbMaxBlockSize_optimal);
-                jcbMaxBlockSize = jcbMaxBlockSize_optimal;
-            }
-        }
-
-        // jcbMaxBlockSize = std::clamp(size.value(), 1l, size_mps);
     }
 }
 

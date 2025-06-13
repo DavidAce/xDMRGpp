@@ -46,7 +46,7 @@ namespace gsi {
         const auto H_ptr      = static_cast<MatVecMPOS<CalcType> *>(primme->matrix);
         H_ptr->preconditioner = eig::Preconditioner::SOLVE;
         H_ptr->factorization  = eig::Factorization::LLT;
-        H_ptr->set_iterativeLinearSolverConfig(10000, 0.1, MatDef::DEF);
+        H_ptr->set_iterativeLinearSolverConfig(10000, 0.05, MatDef::DEF);
         H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
     }
     template<typename Scalar>
@@ -164,7 +164,7 @@ void eigs_manager_generalized_shift_invert(const TensorsFinite<Scalar> &tensors,
     // cfg.primme_method           = eig::PrimmeMethod::PRIMME_DYNAMIC;
     // cfg.primme_targetShifts.clear();
     cfg.primme_targetShifts   = {meta.eigv_target.value_or(0.0)};
-    cfg.primme_preconditioner = gsi::preconditioner_jacobi<CalcType>;
+    cfg.primme_preconditioner = gsi::preconditioner_linearsolver<CalcType>;
     cfg.jcbMaxBlockSize       = meta.eigs_jcbMaxBlockSize;
 
     // Overrides from default
