@@ -295,8 +295,8 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     // Set up the bond expansion (aka subspace expansion)
     m1.subspace_tol = settings::precision::target_subspace_error; // Used in Hybrid DMRG-X
 
-    // m1.primme_method = "PRIMME_GD_Olsen_plusK"; // PRIMME_GD_Olsen_plusK is fastest when using a large jcb preconditioner, since it uses the least matvecs
-    m1.primme_method = "PRIMME_DYNAMIC"; // PRIMME_GD_Olsen_plusK is fastest when using a large jcb preconditioner, since it uses the least matvecs
+    // m1.primme_method = "PRIMME_GD_Olsen_plusK";
+    m1.primme_method = "PRIMME_DYNAMIC";
 
     m1.eigv_target = 0.0; // We always target 0 when OptCost::VARIANCE
     m1.eigs_nev    = settings::precision::eigs_nev_min;

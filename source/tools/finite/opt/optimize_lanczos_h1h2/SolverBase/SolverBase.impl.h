@@ -64,29 +64,23 @@ Eigen::Index SolverBase<Scalar>::get_jcbMaxBlockSize() const {
     assert(H1.get_jcbMaxBlockSize() == H2.get_jcbMaxBlockSize());
     return H1.get_jcbMaxBlockSize();
 }
-
+template<typename Scalar>
+void SolverBase<Scalar>::set_preconditioner_type(eig::Preconditioner preconditioner_type_) {
+    preconditioner_type = preconditioner_type_;
+    H1.preconditioner   = preconditioner_type;
+    H2.preconditioner   = preconditioner_type;
+    use_preconditioner  = preconditioner_type != eig::Preconditioner::NONE;
+}
 template<typename Scalar>
 void SolverBase<Scalar>::set_preconditioner_params(Eigen::Index maxiters, RealScalar initialTol, Eigen::Index jcbMaxBlockSize) {
     assert(initialTol > 0);
-    use_preconditioner = maxiters > 0;
-    if(use_preconditioner) {
-        H1.preconditioner = eig::Preconditioner::SOLVE;
-        H2.preconditioner = eig::Preconditioner::SOLVE;
-        H1.set_iterativeLinearSolverConfig(maxiters, initialTol, MatDef::IND);
-        H2.set_iterativeLinearSolverConfig(maxiters, initialTol, MatDef::DEF);
-    } else {
-        H1.preconditioner = eig::Preconditioner::NONE;
-        H2.preconditioner = eig::Preconditioner::NONE;
-        H1.set_iterativeLinearSolverConfig(0, initialTol, MatDef::IND);
-        H2.set_iterativeLinearSolverConfig(0, initialTol, MatDef::DEF);
-    }
-
-    if(jcbMaxBlockSize >= 0) {
-        H1.set_jcbMaxBlockSize(jcbMaxBlockSize);
-        H2.set_jcbMaxBlockSize(jcbMaxBlockSize);
-        H1.factorization = eig::Factorization::LU;
-        H2.factorization = eig::Factorization::LLT;
-    }
+    use_preconditioner = preconditioner_type != eig::Preconditioner::NONE;
+    H1.set_iterativeLinearSolverConfig(maxiters, initialTol, MatDef::IND);
+    H2.set_iterativeLinearSolverConfig(maxiters, initialTol, MatDef::DEF);
+    H1.set_jcbMaxBlockSize(jcbMaxBlockSize);
+    H2.set_jcbMaxBlockSize(jcbMaxBlockSize);
+    H1.factorization = eig::Factorization::LU;
+    H2.factorization = eig::Factorization::LLT;
 }
 
 template<typename Scalar>
@@ -96,7 +90,7 @@ typename SolverBase<Scalar>::RealScalar SolverBase<Scalar>::Status::op_norm_esti
         case OptAlgo::DMRGX: return H1_max_eval;
         case OptAlgo::HYBRID_DMRGX: return H1_max_eval;
         case OptAlgo::XDMRG: return H2_max_eval;
-        case OptAlgo::GDMRG: return H1_max_eval / H2_min_eval;
+        case OptAlgo::GDMRG: return std::max(std::abs(H1_max_eval), std::abs(H1_min_eval)) / std::abs(H2_min_eval);
         default: throw except::runtime_error("unrecognized algo");
     }
 }
@@ -313,6 +307,11 @@ bool SolverBase<Scalar>::optVal_has_saturated(RealScalar threshold) {
 template<typename Scalar>
 void SolverBase<Scalar>::adjust_preconditioner_tolerance() {
     if(status.iter_last_preconditioner_tolerance_adjustment == status.iter) return;
+    H1.get_iterativeLinearSolverConfig().jacobi.cond =
+        std::max(std::abs(status.H1_max_eval), std::abs(status.H1_min_eval)) / std::min(std::abs(status.H1_max_eval), std::abs(status.H1_min_eval));
+    H2.get_iterativeLinearSolverConfig().jacobi.cond =
+        std::max(std::abs(status.H2_max_eval), std::abs(status.H2_min_eval)) / std::min(std::abs(status.H2_max_eval), std::abs(status.H2_min_eval));
+
     if(!use_adaptive_inner_tolerance) return;
     auto rNorm_log10_decrease = get_rNorms_log10_change_per_iteration();
     if(rNorm_log10_decrease == RealScalar{0}) return;
@@ -346,7 +345,6 @@ void SolverBase<Scalar>::adjust_preconditioner_H1_limits() {
     if(status.iter_last_preconditioner_H1_limit_adjustment == status.iter) return;
     H1.get_iterativeLinearSolverConfig().precondType = PreconditionerType::JACOBI;
     if(H1.get_iterativeLinearSolverConfig().precondType == PreconditionerType::CHEBYSHEV) {
-        status.H1_max_eval                                        = H1.get_op_norm(20);
         RealScalar lambda_min                                     = status.H1_min_eval * RealScalar{0.9f};
         RealScalar lambda_max                                     = status.H1_max_eval * RealScalar{1.1f};
         H1.get_iterativeLinearSolverConfig().chebyshev.lambda_min = lambda_min;
@@ -575,15 +573,17 @@ template<typename Scalar> typename SolverBase<Scalar>::MatrixType SolverBase<Sca
     cfg.precondType                         = PreconditionerType::JACOBI;
 
     for(Eigen::Index i = 0; i < b; ++i) {
-        // v: current Ritz vector, s: current residual
-        VectorType v  = V.col(i);
-        VectorType s  = S.col(i);
+        // v: current Ritz vector, s: current residual, Bv: either I*v (standard) or H2*v (generalized)
+        const VectorType v  = V.col(i);
+        const VectorType & Bv = v; // V.col(i); //algo == OptAlgo::GDMRG ? H2V.col(i) : V.col(i);
+        const VectorType s  = S.col(i);
         auto       th = Y(i);
 
         // Right-hand side (projected)
         VectorType rhs = -s;
-        rhs            = rhs - v * (v.adjoint() * rhs).value();
-        auto Hop       = [this, th](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+        rhs            = rhs - Bv * v.dot(rhs);
+
+        auto Hop = [this, th](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
             MatrixType HX;
             switch(algo) {
                 case OptAlgo::DMRG:
@@ -607,7 +607,7 @@ template<typename Scalar> typename SolverBase<Scalar>::MatrixType SolverBase<Sca
             }
             return HX;
         };
-        auto JDop          = JacobiDavidsonOperator<Scalar>(v, s, Hop);
+        auto JDop          = JacobiDavidsonOperator<Scalar>(v, Bv, s, Hop);
         D.col(i).noalias() = JacobiDavidsonSolver(JDop, rhs, cfg);
         status.num_precond_inner += cfg.result.precond;
         status.time_matvecs_inner += cfg.result.time_matvecs;
@@ -1355,10 +1355,10 @@ void SolverBase<Scalar>::updateStatus() {
         status.stopMessage.emplace_back(fmt::format("converged rNorm {::.3e} < tol {:.3e}", fv(VectorReal(status.rNorms.topRows(nev))), fp(rnormTol())));
         status.stopReason |= StopReason::converged_rNorm;
     }
-    if(use_adaptive_inner_tolerance and optVal_has_saturated() and rNorm_has_saturated()) {
-        status.stopMessage.emplace_back(fmt::format("saturated rNorm {::.3e} (tol {:.3e})", fv(VectorReal(status.rNorms.topRows(nev))), fp(rnormTol())));
-        status.stopReason |= StopReason::saturated_rNorm;
-    }
+    // if(use_adaptive_inner_tolerance and optVal_has_saturated() and rNorm_has_saturated()) {
+    // status.stopMessage.emplace_back(fmt::format("saturated rNorm {::.3e} (tol {:.3e})", fv(VectorReal(status.rNorms.topRows(nev))), fp(rnormTol())));
+    // status.stopReason |= StopReason::saturated_rNorm;
+    // }
     if(max_iters >= 0l and status.iter >= max_iters) {
         status.stopMessage.emplace_back(fmt::format("iter ({}) >= maxiter ({})", status.iter, max_iters));
         status.stopReason |= StopReason::max_iterations;
@@ -1388,33 +1388,34 @@ void SolverBase<Scalar>::updateStatus() {
         case ResidualCorrectionType::JACOBI_DAVIDSON: rCorrMsg = "JD"; break;
         case ResidualCorrectionType::AUTO: rCorrMsg = "AU"; break;
     }
-    eig::log->info("it {:3} mv {:3} pc {:3} t {:.1e}s [inner: ({}) mv {:5} err {:.2e} tol {:.2e} t {:.1e}s] "
-                   "optVal {::.16f}{} rNorms {::.8e}{} ({:9.2e}/mv) col {:2} x {} ritz {} rNormTol {:.3e} tol {:.2e} "
-                   "op norm {:.2e} cond {:.2e} agap {:.3e} rgap {:.3e}",
-                   status.iter,        //
-                   status.num_matvecs, //
-                   status.num_precond, //
-                   status.time_elapsed.restart_lap(),
-                   rCorrMsg,                                           //
-                   status.num_matvecs_inner,                           //
-                   fp(std::max(H1ir.result.error, H2ir.result.error)), //
-                   fp(std::max(H1ir.tolerance, H2ir.tolerance)),       //
-                   fp(H1ir.result.time + H2ir.result.time),            //
-                   fv(status.optVal),                                  //
-                   optValMsg,                                          //
-                   fv(VectorReal(status.rNorms.topRows(nev))),         //
-                   rNormMsg,                                           //
-                   fp(get_rNorms_log10_change_per_matvec()),           //
-                   Q.cols() / b,                                       //
-                   b,                                                  //
-                   enum2sv(ritz),                                      //
-                   fp(rnormTol()),                                     //
-                   fp(tol),                                            //
-                   fp(status.op_norm_estimate(algo)),                 //
-                   fp(status.condition),                               //
-                   fp(absgap),                                         //
-                   fp(relgap)                                          //
-    );
+    if((preconditioner_type == eig::Preconditioner::JACOBI and status.iter % 100 == 0) or preconditioner_type == eig::Preconditioner::SOLVE)
+        eig::log->info("it {:3} mv {:3} pc {:3} t {:.1e}s [inner: ({}) mv {:5} err {:.2e} tol {:.2e} t {:.1e}s] "
+                       "optVal {::.16f}{} rNorms {::.8e}{} ({:9.2e}/mv) col {:2} x {} ritz {} rNormTol {:.3e} tol {:.2e} "
+                       "op norm {:.2e} cond {:.2e} agap {:.3e} rgap {:.3e}",
+                       status.iter,        //
+                       status.num_matvecs, //
+                       status.num_precond, //
+                       status.time_elapsed.restart_lap(),
+                       rCorrMsg,                                           //
+                       status.num_matvecs_inner,                           //
+                       fp(std::max(H1ir.result.error, H2ir.result.error)), //
+                       fp(std::max(H1ir.tolerance, H2ir.tolerance)),       //
+                       fp(H1ir.result.time + H2ir.result.time),            //
+                       fv(status.optVal),                                  //
+                       optValMsg,                                          //
+                       fv(VectorReal(status.rNorms.topRows(nev))),         //
+                       rNormMsg,                                           //
+                       fp(get_rNorms_log10_change_per_matvec()),           //
+                       Q.cols() / b,                                       //
+                       b,                                                  //
+                       enum2sv(ritz),                                      //
+                       fp(rnormTol()),                                     //
+                       fp(tol),                                            //
+                       fp(status.op_norm_estimate(algo)),                  //
+                       fp(status.condition),                               //
+                       fp(absgap),                                         //
+                       fp(relgap)                                          //
+        );
 
     if(status.stopReason != StopReason::none) return;
 

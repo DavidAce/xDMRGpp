@@ -11,6 +11,7 @@ enum class PreconditionerType { JACOBI, CHEBYSHEV };
 template<typename Scalar>
 struct IterativeLinearSolverConfig {
     using Real       = decltype(std::real(std::declval<Scalar>()));
+    using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
     private:
@@ -18,13 +19,14 @@ struct IterativeLinearSolverConfig {
         using LLTType                          = Eigen::LLT<MatrixType, Eigen::Lower>;
         using LDLTType                         = Eigen::LDLT<MatrixType, Eigen::Lower>;
         using LUType                           = Eigen::PartialPivLU<MatrixType>;
-        using LLTJcbBlocksType                 = std::vector<std::tuple<long, std::unique_ptr<LLTType>>>;
-        using LDLTJcbBlocksType                = std::vector<std::tuple<long, std::unique_ptr<LDLTType>>>;
-        using LUJcbBlocksType                  = std::vector<std::tuple<long, std::unique_ptr<LUType>>>;
+        using LLTJcbBlocksType                 = std::vector<std::tuple<long, VectorType, std::unique_ptr<LLTType>>>;
+        using LDLTJcbBlocksType                = std::vector<std::tuple<long, VectorType, std::unique_ptr<LDLTType>>>;
+        using LUJcbBlocksType                  = std::vector<std::tuple<long, VectorType, std::unique_ptr<LUType>>>;
         const Scalar            *invdiag       = nullptr;
         const LLTJcbBlocksType  *lltJcbBlocks  = nullptr;
         const LDLTJcbBlocksType *ldltJcbBlocks = nullptr;
         const LUJcbBlocksType   *luJcbBlocks   = nullptr;
+        Real                     cond          = std::numeric_limits<Real>::quiet_NaN();
     };
 
     struct ChebyshevPreconditionerConfig {

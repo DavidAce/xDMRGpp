@@ -150,6 +150,7 @@ class SolverBase {
         RealScalar{1e-1f}; /*!< A percentage between 0 and 1. Value 0.1 puts lambda_cut 10% towards evals(1) from evals(0) */
     bool use_extra_ritz_vectors_in_the_next_basis            = false; /*!< Add the b next-best ritz vector block M to form the next basis (LOBPCG only) */
     ResidualCorrectionType residual_correction_type_internal = ResidualCorrectionType::NONE;
+    eig::Preconditioner    preconditioner_type               = eig::Preconditioner::NONE;
 
     public:
     Status                      status = {};
@@ -163,24 +164,23 @@ class SolverBase {
     bool                        use_relative_rnorm_tolerance = true;
     bool                        use_adaptive_inner_tolerance = true;
     ResidualCorrectionType      residual_correction_type     = ResidualCorrectionType::NONE;
-
-    OptAlgo             algo;    /*!< Selects the current DMRG algorithm */
-    OptRitz             ritz;    /*!< Selects the target eigenvalues */
-    MatVecMPOS<Scalar> &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
-    MatrixType          T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
-    MatrixType          A, B, W, Q;
-    MatrixType          HQ;              /*!< Save H*Q when preconditioning */
-    MatrixType          HQ_cur;          /*!< Save H*Q_cur when preconditioning */
-    MatrixType          H1Q, H2Q;        /*!< H1 or H2 times the basis blocks Q used for GDMRG */
-    MatrixType          V;               /*!< Holds the current top ritz eigenvectors. Use this to pass initial guesses */
-    MatrixType          HV;              /*!< Holds the current top ritz eigenvectors multiplied by H. */
-    MatrixType          H1V;             /*!< Holds the current top ritz eigenvectors multiplied by H1 (for GDMRG). */
-    MatrixType          H2V;             /*!< Holds the current top ritz eigenvectors multiplied by H2 (for GDMRG). */
-    MatrixType          V_prev;          /*!< Holds the previous top ritz eigenvectors */
-    MatrixType          S;               /*!< The residual vectors for the top b ritz vectors*/
-    MatrixType          M, HM, H1M, H2M; /*!< The b next best residual vectors M, and with the applied operators */
-    VectorReal          T_evals;
-    MatrixType          T_evecs;
+    OptAlgo                     algo;    /*!< Selects the current DMRG algorithm */
+    OptRitz                     ritz;    /*!< Selects the target eigenvalues */
+    MatVecMPOS<Scalar>         &H1, &H2; /*!< The Hamiltonian and Hamiltonian squared operators */
+    MatrixType                  T;       /*!< The projections of H1 H2 to the tridiagonal Lanczos basis */
+    MatrixType                  A, B, W, Q;
+    MatrixType                  HQ;              /*!< Save H*Q when preconditioning */
+    MatrixType                  HQ_cur;          /*!< Save H*Q_cur when preconditioning */
+    MatrixType                  H1Q, H2Q;        /*!< H1 or H2 times the basis blocks Q used for GDMRG */
+    MatrixType                  V;               /*!< Holds the current top ritz eigenvectors. Use this to pass initial guesses */
+    MatrixType                  HV;              /*!< Holds the current top ritz eigenvectors multiplied by H. */
+    MatrixType                  H1V;             /*!< Holds the current top ritz eigenvectors multiplied by H1 (for GDMRG). */
+    MatrixType                  H2V;             /*!< Holds the current top ritz eigenvectors multiplied by H2 (for GDMRG). */
+    MatrixType                  V_prev;          /*!< Holds the previous top ritz eigenvectors */
+    MatrixType                  S;               /*!< The residual vectors for the top b ritz vectors*/
+    MatrixType                  M, HM, H1M, H2M; /*!< The b next best residual vectors M, and with the applied operators */
+    VectorReal                  T_evals;
+    MatrixType                  T_evecs;
 
     Eigen::HouseholderQR<MatrixType> hhqr;
 
@@ -192,11 +192,11 @@ class SolverBase {
     RealScalar       quotTolB   = RealScalar{1e-10f};                                 /*!< Quotient tolerance for |B|/|A|. Triggers the Lanczos recurrence breakdown. */
     /* clang-format on */
 
-    /*! Norm tolerance of ritz-vector residuals.
-     * Lanczos converges if rnorm < normTolR * H_norm. */
+    /*! Convergence tolerance of ritz-vector residuals.
+     * Converged if rnorm < tol * opNorm. */
     RealScalar rnormTol() const {
         if(use_relative_rnorm_tolerance)
-            return tol * status.max_eval_estimate();
+            return tol * status.op_norm_estimate(algo);
         else
             return tol;
     }
@@ -239,6 +239,7 @@ class SolverBase {
 
     Eigen::Index get_jcbMaxBlockSize() const;
     void         set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize);
+    void         set_preconditioner_type(eig::Preconditioner preconditioner_type_);
     void         set_preconditioner_params(Eigen::Index maxiters = 20000, RealScalar initialTol = RealScalar{1e-1f}, Eigen::Index jcbMaxBlockSize = -1ul);
     void         set_chebyshevFilterRelGapThreshold(RealScalar threshold);
     void         set_chebyshevFilterLambdaCutBias(RealScalar bias);

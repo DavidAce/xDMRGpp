@@ -43,11 +43,13 @@ namespace folded_spectrum {
         if(x == nullptr) return;
         if(y == nullptr) return;
         if(primme == nullptr) return;
+        using RealScalar      = typename MatVecMPOS<CalcType>::RealScalar;
         const auto H_ptr      = static_cast<MatVecMPOS<CalcType> *>(primme->matrix);
         H_ptr->preconditioner = eig::Preconditioner::SOLVE;
-        H_ptr->factorization = eig::Factorization::LLT;
-        H_ptr->set_iterativeLinearSolverConfig(10000, 0.1, MatDef::DEF);
+        H_ptr->factorization  = eig::Factorization::LLT;
+        H_ptr->set_iterativeLinearSolverConfig(10000, RealScalar{0.1f}, MatDef::DEF);
         H_ptr->MultPc(x, ldx, y, ldy, blockSize, primme, ierr);
+        // primme->stats.numMatvecs += H_ptr->get_iterativeLinearSolverConfig().result.matvecs;
     }
     template<typename CalcType>
     void convTestFun([[maybe_unused]] double *eval, [[maybe_unused]] void *evec, double *rNorm, int *isconv, struct primme_params *primme, int *ierr) {

@@ -59,23 +59,19 @@ class MatVecMPOS {
     eig::Form             form            = eig::Form::SYMM;
     eig::Side             side            = eig::Side::R;
     std::optional<Scalar> jcbShift        = std::nullopt;
-    long                  jcbMaxBlockSize = 1l;             // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
-    VectorType            jcbDiagA, jcbDiagB;               // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
-    VectorType            invJcbDiagonal;                   // The inverted diagonals used when jcBMaxBlockSize == 1
-    mutable VectorType    invJcbDiagB;                      // Userd with spectra
-    std::vector<std::pair<long, SparseType>> sInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as sparse matrices
-    std::vector<std::pair<long, MatrixType>> dInvJcbBlocks; // inverted blocks for the block Jacobi preconditioner stored as dense matrices
-    // std::vector<std::pair<long, MatrixType>> dJcbBlocksA;   // the blocks for the Jacobi preconditioner stored as dense matrices
-    // std::vector<std::pair<long, MatrixType>> dJcbBlocksB;   // the blocks for the Jacobi preconditioner stored as dense matrices
+    long                  jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
+    VectorType            jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
+    VectorType            invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
+    mutable VectorType    invJcbDiagB;          // Used with spectra
 
     using LLTType = Eigen::LLT<MatrixType, Eigen::Lower>;
-    std::vector<std::tuple<long, std::unique_ptr<LLTType>>> lltJcbBlocks; // Solvers for the block Jacobi preconditioner
+    std::vector<std::tuple<long, VectorType, std::unique_ptr<LLTType>>> lltJcbBlocks; // Solvers for the block Jacobi preconditioner
 
     using LUType = Eigen::PartialPivLU<MatrixType>;
-    std::vector<std::tuple<long, std::unique_ptr<LUType>>> luJcbBlocks; // Solvers for the block Jacobi preconditioner
+    std::vector<std::tuple<long, VectorType, std::unique_ptr<LUType>>> luJcbBlocks; // Solvers for the block Jacobi preconditioner
 
     using LDLTType = Eigen::LDLT<MatrixType, Eigen::Lower>;
-    std::vector<std::tuple<long, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
+    std::vector<std::tuple<long, VectorType, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
 
     // using BICGType = Eigen::BiCGSTAB<SparseRowM, Eigen::IncompleteLUT<Scalar>>;
     // std::vector<std::tuple<long, std::unique_ptr<SparseRowM>, std::unique_ptr<BICGType>>> bicgstabJcbBlocks; // Solvers for the block Jacobi preconditioner

@@ -48,9 +48,11 @@ class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Sc
     enum { ColsAtCompileTime = Eigen::Dynamic, MaxColsAtCompileTime = Eigen::Dynamic, IsRowMajor = false };
 
     const VectorType                                               &v;
+    const VectorType                                               &Bv;
     const VectorType                                               &s;
     std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ResidualOp;
-    RealScalar                                                      vH_v = 1;
+    RealScalar                                                      vH_Bv = RealScalar{1};
+    static constexpr auto                                           eps   = std::numeric_limits<RealScalar>::epsilon();
 
     // Timers
 
@@ -71,13 +73,15 @@ class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Sc
     // Custom API:
     JacobiDavidsonOperator() = default;
 
-    JacobiDavidsonOperator(const VectorType                                               &v_, //
-                           const VectorType                                               &s_, //
+    JacobiDavidsonOperator(const VectorType                                               &v_,  //
+                           const VectorType                                               &Bv_, //
+                           const VectorType                                               &s_,  //
                            std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ResidualOp_)
         :
 
-          v(v_), s(s_), ResidualOp(ResidualOp_) {
-        vH_v = std::real(v.adjoint().dot(v));
+          v(v_), Bv(Bv_), s(s_), ResidualOp(ResidualOp_) {
+        vH_Bv = std::real(v.dot(Bv));
+        assert(vH_Bv > eps); // B ≻ 0 ⇒ v†Bv strictly positive
     }
 };
 
@@ -98,22 +102,38 @@ namespace Eigen::internal {
             EIGEN_ONLY_USED_FOR_DEBUG(alpha);
 
             {
-                auto &v          = mat.v;
-                auto &vH_v       = mat.vH_v;
-                auto &ResidualOp = mat.ResidualOp;
+                // auto &v          = mat.v;
+                // auto &Bv          = mat.Bv;
+                // auto &vH_Bv       = mat.vH_Bv;
+                // auto &ResidualOp = mat.ResidualOp;
                 using VectorType = JacobiDavidsonOperator<ReplScalar>::VectorType;
-                // Project x to orthogonal complement of v
-                Scalar delta = vH_v > 0 ? (v.adjoint().dot(rhs)) / vH_v : Scalar(0);
-                assert(std::isfinite(std::abs(delta)));
-                VectorType x_perp = rhs - v * delta;
-                VectorType y      = ResidualOp(x_perp);
+                // // Project x to orthogonal complement of v
+                // Scalar delta = vH_Bv > 0 ? (v.dot(rhs)) / vH_Bv : Scalar(0);
+                // assert(std::isfinite(std::abs(delta)));
+                // VectorType x_perp = rhs - Bv * delta;
+                // VectorType y      = ResidualOp(x_perp);
+                //
+                // assert(std::isfinite(y.norm()));
+                // assert(y.size() == v.size());
+                // // Project output again (for numerical stability)
+                // Scalar beta = vH_Bv > 0 ? (v.dot(y)) / vH_Bv : Scalar(0);
+                // assert(std::isfinite(std::abs(beta)));
+                // dst.noalias() = y - Bv * beta;
+                const auto      &v          = mat.v;                     // Ritz vector
+                const auto      &Bv         = mat.Bv;                    // B * v    (cached)
+                const auto      &ResidualOp = mat.ResidualOp;            // (A - θB)
+                const ReplScalar inv_vHvB   = ReplScalar(1) / mat.vH_Bv; // 1 / (v† B v)
 
-                assert(std::isfinite(y.norm()));
-                assert(y.size() == v.size());
-                // Project output again (for numerical stability)
-                Scalar beta = vH_v > 0 ? (v.adjoint().dot(y)) / vH_v : Scalar(0);
-                assert(std::isfinite(std::abs(beta)));
-                dst.noalias() = y - v * beta;
+                // B-orthogonal projector
+                auto project_B = [&](const VectorType &z) -> VectorType {
+                    Scalar delta = inv_vHvB * v.dot(z); // (v† z)/(v† B v)
+                    return z - Bv * delta;              // P_B z
+                };
+
+                // ---- build x_perp and apply JD operator ----
+                VectorType x_perp = project_B(rhs);
+                VectorType y      = ResidualOp(x_perp);
+                dst.noalias()     = project_B(y); // final JD-op result
             }
         }
     };
@@ -152,7 +172,11 @@ typename SolverBase<Scalar>::VectorType SolverBase<Scalar>::JacobiDavidsonSolver
         solver.setMaxIterations(cfg.maxiters);
         solver.setTolerance(cfg.tolerance);
         solver.preconditioner().attach(&matRepl, &cfg);
+        // VectorType initial_guess(rhs.size());
+        // solver.preconditioner().solve_jacobi(matRepl.s, initial_guess);
+
         solver.compute(matRepl);
+        // res = solver.solveWithGuess(rhs, initial_guess);
         res = solver.solve(rhs);
         t_jdop.toc();
         if constexpr(settings::debug_jdop)

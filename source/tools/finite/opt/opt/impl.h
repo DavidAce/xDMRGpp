@@ -108,18 +108,18 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
         // meta2.optAlgo   = OptAlgo::XDMRG;
         // meta2.optRitz   = OptRitz::SM;
         // auto result2    = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta2, elog);
-        auto meta3      = meta;
-        meta3.optSolver = meta.optSolver == OptSolver::EIGS ? OptSolver::H1H2 : OptSolver::EIGS;
-        meta3.optType   = OptType::FP64;
-        meta3.optAlgo   = OptAlgo::GDMRG;
-        meta3.optRitz   = OptRitz::LM;
-        if(meta.optSolver != meta3.optSolver or meta.optType != meta3.optType or meta.optAlgo != meta3.optAlgo or meta.optRitz != meta3.optRitz) {
-            if(meta3.optSolver == OptSolver::EIGS) {
-                auto result3 = internal::optimize_generalized_shift_invert(tensors, initial_mps, status, meta3, elog);
-            } else {
-                auto result3 = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta3, elog);
-            }
-        }
+        // auto meta3      = meta;
+        // meta3.optSolver = meta.optSolver == OptSolver::EIGS ? OptSolver::H1H2 : OptSolver::EIGS;
+        // meta3.optType   = OptType::FP64;
+        // meta3.optAlgo   = OptAlgo::GDMRG;
+        // meta3.optRitz   = OptRitz::LM;
+        // if(meta.optSolver != meta3.optSolver or meta.optType != meta3.optType or meta.optAlgo != meta3.optAlgo or meta.optRitz != meta3.optRitz) {
+        //     if(meta3.optSolver == OptSolver::EIGS) {
+        //         auto result3 = internal::optimize_generalized_shift_invert(tensors, initial_mps, status, meta3, elog);
+        //     } else {
+        //         auto result3 = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta3, elog);
+        //     }
+        // }
     } else {
         switch(meta.optAlgo) {
             case OptAlgo::DMRG: {

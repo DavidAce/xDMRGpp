@@ -1108,8 +1108,6 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
         auto              t_jcb = tid::ur("jcb");
         t_jcb.tic();
 
-        dInvJcbBlocks.clear();
-        sInvJcbBlocks.clear();
         lltJcbBlocks.clear();
         luJcbBlocks.clear();
         ldltJcbBlocks.clear();
@@ -1154,15 +1152,14 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
             auto ldlt     = std::make_unique<LDLTType>();
             auto lu       = std::make_unique<LUType>();
             auto sparseRM = std::make_unique<SparseRowM>();
-            // auto sparseCM      = std::make_unique<SparseType>();
             auto blockPtr    = std::make_unique<MatrixType>();
             bool lltSuccess  = false;
             bool ldltSuccess = false;
             bool luSuccess   = false;
             bool qrSuccess   = false;
-            // bool bicgSuccess   = false;
-            // bool cgSuccess     = false;
-            bool invertSuccess = false;
+             VectorType blockInvDiag; //    = block.diagonal().cwiseInverse();
+            // auto blockInvDiag = blockDiag.cwiseAbs().cwiseSqrt().cwiseInverse();
+            // block             = (blockInvDiag.asDiagonal() * block * blockInvDiag.asDiagonal()).eval();
             switch(factorization) {
                 case eig::Factorization::NONE: {
                     eig::log->warn("{}: No factorization has been set for the preconditioner", fname);
@@ -1172,8 +1169,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     auto t_llt = tid::ur("t_llt");
                     if constexpr(eig::debug_matvec_mpos) eig::log->trace("llt factorizing block {}/{}", blkidx, nblocks);
                     t_llt.tic();
-                    VectorType D = block.diagonal().cwiseAbs().cwiseSqrt().cwiseInverse();
-                    block        = (D.asDiagonal() * block * D.asDiagonal()).eval();
+                    blockInvDiag = block.diagonal().cwiseInverse();
                     if(std::real(block(0, 0)) > RealScalar{0.0} /* Checks if the matrix is positive definite */) {
                         llt->compute(block);
                     } else {
@@ -1188,10 +1184,6 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     // eig::log->info("-- llt time: {:.3e}", t_llt.get_last_interval());
 
                     if(lltSuccess) break;
-                    // auto solver = Eigen::SelfAdjointEigenSolver<MatrixType>(blockI, Eigen::EigenvaluesOnly);
-                    // eig::log->info("blockI evals  : \n{}\n", linalg::matrix::to_string(solver.eigenvalues(), 16));
-                    // eig::log->info("shift: {:.16f} {:+.16f}i", std::real(shift), std::imag(shift));
-                    // eig::log->info("blockI diagonal: \n{}\n", linalg::matrix::to_string(blockI.diagonal(), 16));
                     eig::log->info("llt factorization failed on block {}/{}: time {:.3e} info {}", blkidx, nblocks, t_llt.get_last_interval(),
                                    static_cast<int>(llt->info()));
                     [[fallthrough]];
@@ -1200,8 +1192,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     if constexpr(eig::debug_matvec_mpos) eig::log->trace("lu factorizing block {}/{}", blkidx, nblocks);
                     auto t_lu = tid::ur("t_lu");
                     t_lu.tic();
-                    VectorType D = block.diagonal().cwiseAbs().cwiseSqrt().cwiseInverse();
-                    block        = (D.asDiagonal() * block * D.asDiagonal()).eval();
+                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10}).cwiseInverse();
                     lu->compute(block);
                     t_lu.toc();
                     luSuccess = true;
@@ -1214,6 +1205,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                 case eig::Factorization::LDLT: {
                     eig::log->info("-- ldlt");
                     if constexpr(eig::debug_matvec_mpos) eig::log->trace("ldlt factorizing block {}/{}", blkidx, nblocks);
+                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10}).cwiseInverse();
                     ldlt->compute(block);
                     ldltSuccess = ldlt->info() == Eigen::Success;
                     if(ldltSuccess) break;
@@ -1221,88 +1213,12 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     [[fallthrough]];
                 }
                 case eig::Factorization::QR: {
-                    auto qr   = Eigen::HouseholderQR<MatrixType>(block);
-                    block     = qr.solve(MatrixType::Identity(extent, extent));
-                    qrSuccess = true;
+                    auto qr      = Eigen::HouseholderQR<MatrixType>(block);
+                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10}).cwiseInverse();
+                    block        = qr.solve(MatrixType::Identity(extent, extent));
+                    qrSuccess    = true;
                     break;
                 }
-                // case eig::Factorization::ILUT: {
-                //     auto t_sparse = tid::ur("sparse");
-                //     t_sparse.tic();
-                //     RealScalar mean = block.cwiseAbs().mean();
-                //     RealScalar stdv = std::sqrt((block.cwiseAbs().array() - mean).square().sum() / static_cast<RealScalar>(block.size() - 1));
-                //     // sparseI = blockI.sparseView(mean, 1e-6);
-                //     *sparseRM = block.sparseView(static_cast<RealScalar>(1e-1), stdv);
-                //     sparseRM->makeCompressed();
-                //     sp = static_cast<double>(sparseRM->nonZeros()) / static_cast<double>(sparseRM->size());
-                //     // if constexpr(eig::debug_matvec_mpos)
-                //     //     eig::log->trace("bf sparseI block {}/{}: nnz: {:.3e}", blkidx, nblocks,
-                //     //                     static_cast<double>(sparseRM->nonZeros()) / static_cast<double>(sparseRM->size()));
-                //     t_sparse.toc();
-                //     auto t_ilut = tid::ur("ilut");
-                //     t_ilut.tic();
-                //     bicg->setMaxIterations(1000);
-                //     bicg->setTolerance(static_cast<RealScalar>(1e-8));
-                //     bicg->preconditioner().setDroptol(static_cast<RealScalar>(1e-2)); // Drops elements smaller than droptol*rowwise().cwiseAbs().mean()
-                //     bicg->preconditioner().setFillfactor(
-                //         static_cast<RealScalar>(2.0)); // if the original matrix has nnz nonzeros, LU matrix has at most nnz * fillfactor nonseros
-                //     bicg->compute(*sparseRM);
-                //     bicgSuccess = bicg->info() == Eigen::Success;
-                //     t_ilut.toc();
-                //     if constexpr(eig::debug_matvec_mpos)
-                //         eig::log->trace("ILUT factorized block {}/{} sparcity {} : info {} thread {} t_dblk {:.3e} s t_sparse {:.3e} s t_ilut {:.3e} s mean "
-                //                         "{:.3e} stdv {:.3e} iter {} tol {:.3e}",
-                //                         blkidx, nblocks, sp, static_cast<int>(bicg->info()), omp_get_thread_num(), t_dblk.get_time(), t_sparse.get_time(),
-                //                         t_ilut.get_time(), fp(mean), fp(stdv), bicg->iterations(), fp(bicg->tolerance()));
-                //
-                //     if(!bicgSuccess) {
-                //         // Take the diagonal of blockI instead
-                //         sp = static_cast<double>(block.cwiseAbs().count()) / static_cast<double>(block.size());
-                //         sparseRM->resize(0, 0);
-                //         block = MatrixType(block.diagonal().cwiseInverse().asDiagonal());
-                //         break;
-                //     }
-                //     break;
-                // }
-                // case eig::Factorization::ILDLT: {
-                //     auto t_sparse = tid::ur("sparse");
-                //     t_sparse.tic();
-                //     RealScalar mean = block.cwiseAbs().mean();
-                //     RealScalar stdv = std::sqrt((block.cwiseAbs().array() - mean).square().sum() / static_cast<RealScalar>(block.size() - 1));
-                //     // double geom = std::exp((blockI.array() == 0.0).select(0.0, blockI.array().cwiseAbs().log()).mean());
-                //     // double droptol    = 1e-2; // Drops elements smaller than droptol*rowwise().cwiseAbs().mean()
-                //     // int    fillfactor = 10;   // if the original matrix has nnz nonzeros, LDLT matrix has at most nnz * fillfactor nonseros
-                //     *sparseCM = block.sparseView(static_cast<RealScalar>(1e-1), stdv);
-                //     sparseCM->makeCompressed();
-                //     sp = static_cast<double>(sparseCM->nonZeros()) / static_cast<double>(sparseCM->size());
-                //     t_sparse.toc();
-                //     auto t_ildlt = tid::ur("ildlt");
-                //     t_ildlt.tic();
-                //     // eig::log->info("cg compute block {}/{} ", blkidx, nblocks);
-                //
-                //     cg->setMaxIterations(1000);
-                //     cg->setTolerance(static_cast<RealScalar>(1e-8)); // Tolerance on the residual error
-                //
-                //     // Read about the preconditioner parameters here http://eigen.tuxfamily.org/dox/classEigen_1_1IncompleteCholesky.html
-                //     cg->preconditioner().setInitialShift(static_cast<RealScalar>(1e-3)); // default is 1e-3
-                //     cg->compute(*sparseCM);
-                //     cgSuccess = cg->info() == Eigen::Success;
-                //     t_ildlt.toc();
-                //     if constexpr(eig::debug_matvec_mpos)
-                //         eig::log->trace("ILDLT factorized block {}/{} sparcity {} : info {} thread {} t_dblk {:.3e} s t_sparse {:.3e} s t_ildlt {:.3e} s mean
-                //         "
-                //                         "{:.3e} stdv {:.3e} iter {} tol {:.3e}",
-                //                         blkidx, nblocks, sp, static_cast<int>(cg->info()), omp_get_thread_num(), t_dblk.get_time(), t_sparse.get_time(),
-                //                         t_ildlt.get_time(), fp(mean), fp(stdv), cg->iterations(), fp(cg->tolerance()));
-                //     if(!cgSuccess) {
-                //         eig::log->info("ILDLT solve failed on block {}/{}: {}", blkidx, nblocks, static_cast<int>(cg->info()));
-                //         // Take the diagonal of blockI instead
-                //         sparseCM->resize(0, 0);
-                //         block = MatrixType(block.diagonal().cwiseInverse().asDiagonal());
-                //         break;
-                //     }
-                //     break;
-                // }
                 default: throw except::runtime_error("MatvecMPOS::CalcPc(): factorization is not implemented");
             }
 
@@ -1311,26 +1227,16 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                 eig::log->warn("factorization {} (and others) failed on block {}/{} ... resorting to Eigen::ColPivHouseholderQR",
                                eig::FactorizationToString(factorization), blkidx, nblocks);
                 block         = Eigen::ColPivHouseholderQR<MatrixType>(block).inverse(); // Should work on any matrix
-                invertSuccess = true;
             }
 #pragma omp ordered
             {
                 sparsity.emplace_back(sp);
-                if(invertSuccess) {
-                    dInvJcbBlocks.emplace_back(offset, block); //
-                } else if(lltSuccess and llt->rows() > 0) {
-                    lltJcbBlocks.emplace_back(offset, std::move(llt));
+                if(lltSuccess and llt->rows() > 0) {
+                    lltJcbBlocks.emplace_back(offset, std::move(blockInvDiag), std::move(llt));
                 } else if(ldltSuccess and ldlt->rows() > 0) {
-                    ldltJcbBlocks.emplace_back(offset, std::move(ldlt));
+                    ldltJcbBlocks.emplace_back(offset, std::move(blockInvDiag), std::move(ldlt));
                 } else if(luSuccess and lu->rows() > 0) {
-                    luJcbBlocks.emplace_back(offset, std::move(lu));
-                    // }
-                    // else if(bicgSuccess and bicg->rows() > 0) {
-                    //     bicgstabJcbBlocks.emplace_back(offset, std::move(sparseRM), std::move(bicg));
-                    // } else if(cgSuccess and cg->rows() > 0) {
-                    //     cgJcbBlocks.emplace_back(offset, std::move(sparseCM), std::move(cg));
-                } else if(sparseRM->size() > 0) {
-                    sInvJcbBlocks.emplace_back(offset, *sparseRM);
+                    luJcbBlocks.emplace_back(offset, std::move(blockInvDiag), std::move(lu));
                 }
             }
         }
@@ -1350,7 +1256,6 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
         iLinSolvCfg.jacobi.ldltJcbBlocks = &ldltJcbBlocks;
         iLinSolvCfg.jacobi.luJcbBlocks   = &luJcbBlocks;
     }
-
     readyCalcPc = true;
 }
 
@@ -1416,58 +1321,30 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
             mps_out        = invJcbDiagonal.array().cwiseProduct(mps_in.array());
         } else if(jcbMaxBlockSize > 1) {
             auto token = t_multPc->tic_token();
-// eig::log->info("-- MultPc");
-#pragma omp parallel for
-            for(size_t idx = 0; idx < dInvJcbBlocks.size(); ++idx) {
-                const auto &[offset, block]               = dInvJcbBlocks[idx];
-                long extent                               = block.rows();
-                mps_out.segment(offset, extent).noalias() = block.template selfadjointView<Eigen::Lower>() * mps_in.segment(offset, extent);
-            }
-#pragma omp parallel for
-            for(size_t idx = 0; idx < sInvJcbBlocks.size(); ++idx) {
-                const auto &[offset, block]               = sInvJcbBlocks[idx];
-                long extent                               = block.rows();
-                mps_out.segment(offset, extent).noalias() = block.template selfadjointView<Eigen::Lower>() * mps_in.segment(offset, extent);
-            }
 #pragma omp parallel for
             for(size_t idx = 0; idx < lltJcbBlocks.size(); ++idx) {
-                const auto &[offset, solver] = lltJcbBlocks[idx];
-                long extent                  = solver->rows();
-                auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                // Symmetric solve (split L and L^T)
-                VectorType temp           = solver->matrixL().solve(mps_in_segment);
-                mps_out_segment.noalias() = solver->matrixU().solve(temp);
-                // mps_out_segment.noalias() = solver->solve(mps_in_segment);
+                const auto &[offset, invdiag, solver] = lltJcbBlocks[idx];
+                long extent                           = solver->rows();
+                auto mps_out_segment                  = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment                   = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()             = solver->solve(mps_in_segment);
             }
 #pragma omp parallel for
             for(size_t idx = 0; idx < ldltJcbBlocks.size(); ++idx) {
-                const auto &[offset, solver] = ldltJcbBlocks[idx];
-                long extent                  = solver->rows();
-                auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()    = solver->solve(mps_in_segment);
+                const auto &[offset, invdiag, solver] = ldltJcbBlocks[idx];
+                long extent                           = solver->rows();
+                auto mps_out_segment                  = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment                   = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()             = solver->solve(mps_in_segment);
             }
 #pragma omp parallel for
             for(size_t idx = 0; idx < luJcbBlocks.size(); ++idx) {
-                const auto &[offset, solver] = luJcbBlocks[idx];
-                long extent                  = solver->rows();
-                auto mps_out_segment         = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment          = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()    = solver->solve(mps_in_segment);
+                const auto &[offset, invdiag, solver] = luJcbBlocks[idx];
+                long extent                           = solver->rows();
+                auto mps_out_segment                  = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment                   = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()             = solver->solve(mps_in_segment);
             }
-            // // #pragma omp parallel for
-            // for(size_t idx = 0; idx < bicgstabJcbBlocks.size(); ++idx) {
-            //     const auto &[offset, sparseI, solver]     = bicgstabJcbBlocks[idx];
-            //     long extent                               = solver->rows();
-            //     mps_out.segment(offset, extent).noalias() = solver->solveWithGuess(mps_in.segment(offset, extent), mps_out.segment(offset, extent));
-            // }
-            // // #pragma omp parallel for
-            // for(size_t idx = 0; idx < cgJcbBlocks.size(); ++idx) {
-            //     const auto &[offset, sparseI, solver]     = cgJcbBlocks[idx];
-            //     long extent                               = solver->rows();
-            //     mps_out.segment(offset, extent).noalias() = solver->solveWithGuess(mps_in.segment(offset, extent), mps_out.segment(offset, extent));
-            // }
         }
     }
     num_pc++;
@@ -1583,23 +1460,21 @@ void MatVecMPOS<Scalar>::set_jcbMaxBlockSize(std::optional<long> size) {
     if(size.has_value() and size.value() == 0) {
         jcbMaxBlockSize = 0;
     } else if(size.has_value() and size.value() > 0) {
-        auto dim2 = shape_mps[0] * shape_mps[1];
-        if(size.value() >= dim2)
-            jcbMaxBlockSize = dim2;
-        else
-            jcbMaxBlockSize = 1;
-
-        // auto multiple = shape_mps[0] * shape_mps[1];
-
-        // auto maxsize = std::clamp(size.value(), 1l, size_mps);
-        // if(maxsize >= multiple) {
-        //     jcbMaxBlockSize = (maxsize / multiple) * multiple;
-        // }else {
-        //     // We can't select a block size commensurate with the mps shape.
-        //     // This usually implies worse performance compared to simple diagonal scaling
+        // auto dim2 = shape_mps[0] * shape_mps[1];
+        // if(size.value() >= dim2)
+        //     jcbMaxBlockSize = dim2;
+        // else
         //     jcbMaxBlockSize = 1;
-        //
-        // }
+
+        auto multiple = shape_mps[0] * shape_mps[1];
+        auto maxsize = std::clamp(size.value(), 1l, size_mps);
+
+        if(maxsize >= multiple) {
+            jcbMaxBlockSize = (maxsize / multiple) * multiple;
+        }else {
+            // We can't select a block size commensurate with the mps shape.
+            jcbMaxBlockSize = maxsize;
+        }
     }
 }
 

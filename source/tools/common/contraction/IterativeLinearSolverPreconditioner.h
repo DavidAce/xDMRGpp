@@ -24,6 +24,7 @@ class IterativeLinearSolverPreconditioner {
     mutable VectorType y_new;
     mutable VectorType y_next;
     mutable VectorType z_res;
+    mutable VectorType temp;
 
     public:
     using StorageIndex = typename VectorType::StorageIndex;
@@ -104,23 +105,17 @@ class IterativeLinearSolverPreconditioner {
         x = y_new;
         m_iterations++;
     }
-    template<typename Rhs, typename Dest, typename BlocksPtrType>
-    void apply_jacobi_blocks(const Rhs &b, Dest &x, const BlocksPtrType *blocks) const {
+    template<typename Rhs, typename Dest, typename SolverType>
+    void apply_jacobi_blocks(const Rhs &b, Dest &x, const std::vector<std::tuple<long, VectorType, std::unique_ptr<SolverType>>> *blocks) const {
         if(blocks == nullptr) return;
         if(blocks->empty()) return;
 #pragma omp parallel for
         for(size_t idx = 0; idx < blocks->size(); ++idx) {
-            const auto &[offset, solver] = blocks->at(idx);
-            long extent                  = solver->rows();
-            auto x_segment               = Eigen::Map<VectorType>(x.data() + offset, extent);
-            auto b_segment               = Eigen::Map<const VectorType>(b.data() + offset, extent);
-            if constexpr(std::is_same_v<decltype(solver), Eigen::LLT<MatrixType, Eigen::Lower>>) {
-                // Symmetric solve (split L and L^T)
-                VectorType temp     = solver->matrixL().solve(b_segment);
-                x_segment.noalias() = solver->matrixU().solve(temp);
-            } else {
-                x_segment.noalias() = solver->solve(b_segment);
-            }
+            const auto &[offset, invdiag, solver] = blocks->at(idx);
+            long extent                           = solver->rows();
+            auto x_segment                        = Eigen::Map<VectorType>(x.data() + offset, extent);
+            auto b_segment                        = Eigen::Map<const VectorType>(b.data() + offset, extent);
+            x_segment.noalias()                   = solver->solve(b_segment);
         }
         m_iterations++;
     }
@@ -129,6 +124,7 @@ class IterativeLinearSolverPreconditioner {
     void solve_jacobi(const Rhs &b, Dest &x) const {
         auto old_iterations = m_iterations;
         if(config->jacobi.invdiag != nullptr) {
+            // None of the block jacobi preconditioners were applied.
             auto invdiag = Eigen::Map<const VectorType>(config->jacobi.invdiag, rows());
             x.noalias()  = invdiag.array().cwiseProduct(b.array()).matrix();
             m_iterations++;
@@ -136,6 +132,7 @@ class IterativeLinearSolverPreconditioner {
         apply_jacobi_blocks(b, x, config->jacobi.lltJcbBlocks);
         apply_jacobi_blocks(b, x, config->jacobi.ldltJcbBlocks);
         apply_jacobi_blocks(b, x, config->jacobi.luJcbBlocks);
+
         if(m_iterations == old_iterations) {
             // No blocks given (all are nullptr or size 0)
             // Then this should act like an identity preconditioner

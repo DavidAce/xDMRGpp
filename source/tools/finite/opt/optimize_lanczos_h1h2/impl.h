@@ -130,14 +130,15 @@ void do_lanczos_orthonormalization(const MatVecT &H, MatrixT &V, VectorT &alpha,
 }
 
 template<typename CalcType, typename Scalar>
-opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &initial,  //
-                                  [[maybe_unused]] const StateFinite<Scalar> &state,    //
-                                  const ModelFinite<Scalar>                  &model,    //
-                                  const EdgesFinite<Scalar>                  &edges,    //
-                                  OptMeta                                    &opt_meta, //
-                                  reports::eigs_log<Scalar>                  &elog,     //
-                                  Eigen::Index                                jcb,      //
-                                  ResidualCorrectionType                      rct,      //
+opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &initial,             //
+                                  [[maybe_unused]] const StateFinite<Scalar> &state,               //
+                                  const ModelFinite<Scalar>                  &model,               //
+                                  const EdgesFinite<Scalar>                  &edges,               //
+                                  OptMeta                                    &opt_meta,            //
+                                  reports::eigs_log<Scalar>                  &elog,                //
+                                  Eigen::Index                                jcb,                 //
+                                  eig::Preconditioner                         preconditioner_type, //
+                                  ResidualCorrectionType                      rct,                 //
                                   std::string_view                            tag) {
     using RealScalar = tools::finite::opt::RealScalar<CalcType>;
     // using MatrixCT          = Eigen::Matrix<CalcType, Eigen::Dynamic, Eigen::Dynamic>;
@@ -183,7 +184,7 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     solver.set_maxLanczosResidualHistory(0);
     solver.set_maxRitzResidualHistory(1);
     solver.set_maxExtraRitzHistory(1);
-
+    solver.set_preconditioner_type(preconditioner_type);
     solver.use_refined_rayleigh_ritz    = true;
     solver.use_relative_rnorm_tolerance = true;
     solver.use_adaptive_inner_tolerance = true;
@@ -264,8 +265,14 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 512, ResidualCorrectionType::FULL_OLSEN, "FO 512");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1024, ResidualCorrectionType::FULL_OLSEN, "FO 1024");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 0, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 0");
-    eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 1");
-    return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, ResidualCorrectionType::JACOBI_DAVIDSON, "JD ?");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, eig::Preconditioner::SOLVE, ResidualCorrectionType::CHEAP_OLSEN, "CO");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, eig::Preconditioner::JACOBI, ResidualCorrectionType::CHEAP_OLSEN, "CO");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, eig::Preconditioner::SOLVE, ResidualCorrectionType::CHEAP_OLSEN, "CO");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, eig::Preconditioner::JACOBI, ResidualCorrectionType::CHEAP_OLSEN, "CO");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 256, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 256");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 512, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 512");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, eig::Preconditioner::SOLVE, ResidualCorrectionType::JACOBI_DAVIDSON, "JD");
+    return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, eig::Preconditioner::SOLVE, ResidualCorrectionType::JACOBI_DAVIDSON, "JD");
 }
 
 template<typename Scalar>
