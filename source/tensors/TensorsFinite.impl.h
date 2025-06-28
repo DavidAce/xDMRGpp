@@ -110,6 +110,14 @@ template<typename Scalar>
 TensorsFinite<Scalar>::TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position) : TensorsFinite() {
     initialize(algo_type, model_type, model_size, position);
 }
+template<typename Scalar>
+TensorsFinite<Scalar>::TensorsFinite(const StateFinite<Scalar> &state_, const ModelFinite<Scalar> &model_, const EdgesFinite<Scalar> &edges_) {
+    state        = std::make_unique<StateFinite<Scalar>>(state_);
+    model        = std::make_unique<ModelFinite<Scalar>>(model_);
+    edges        = std::make_unique<EdgesFinite<Scalar>>(edges_);
+    active_sites = get_state().active_sites;
+    sync_active_sites();
+}
 
 /* clang-format off */
 template<typename Scalar> StateFinite<Scalar>       &TensorsFinite<Scalar>::get_state() { return *state; }
@@ -586,6 +594,10 @@ BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(BondExpansionCon
         res = tools::finite::env::rexpand_bond_postopt_1site(get_state(), get_model(), get_edges(), bcfg);
     } else if(has_flag(bcfg.policy, BondExpansionPolicy::PREOPT_1SITE) and bcfg.order == BondExpansionOrder::PREOPT) {
         res = tools::finite::env::rexpand_bond_preopt_1site(get_state(), get_model(), get_edges(), bcfg);
+    } else if(has_flag(bcfg.policy, BondExpansionPolicy::POSTOPT_RDMP_1SITE) and bcfg.order == BondExpansionOrder::POSTOPT) {
+        res = tools::finite::env::density_matrix_perturbation_postopt_1site(*this, bcfg);
+    } else if(has_flag(bcfg.policy, BondExpansionPolicy::PREOPT_RDMP_1SITE) and bcfg.order == BondExpansionOrder::PREOPT) {
+        res = tools::finite::env::density_matrix_perturbation_preopt_1site(*this, bcfg);
     } else if(has_any_flags(bcfg.policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE) and
               bcfg.order == BondExpansionOrder::PREOPT) {
         res = tools::finite::env::expand_bond_preopt_nsite(get_state(), get_model(), get_edges(), bcfg);

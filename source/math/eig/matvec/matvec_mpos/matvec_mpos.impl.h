@@ -16,6 +16,7 @@
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/contraction/IterativeLinearSolverConfig.h"
+#include "tools/common/contraction/MatrixLikeOperator.h"
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
 #include <h5pp/h5pp.h>
@@ -942,9 +943,7 @@ void MatVecMPOS<Scalar>::MultBx(Scalar *mps_in_, Scalar *mps_out_) const {
 template<typename Scalar>
 void MatVecMPOS<Scalar>::MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long maxiters, RealScalar tolerance) const {
     if(mpos_B.empty() and mpos_B_shf.empty()) return;
-    auto token   = t_multAx->tic_token();
-    auto mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
-    auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
+    auto token = t_multAx->tic_token();
     if(invJcbDiagB.size() == 0) invJcbDiagB = get_diagonal_new(0, mpos_B, envL_B, envR_B).array().cwiseInverse();
     auto invCfg           = IterativeLinearSolverConfig<Scalar>();
     invCfg.maxiters       = maxiters;
@@ -952,7 +951,12 @@ void MatVecMPOS<Scalar>::MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long
     invCfg.jacobi.invdiag = invJcbDiagB.data();
 
     if(mpos_B.size() == 1) {
-        tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos_B.front(), envL_B, envR_B, invCfg);
+        auto MultOp   = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return MultBX(X); };
+        auto MatrixOp = MatrixLikeOperator<Scalar>(size_mps, MultOp);
+        auto mps_out  = Eigen::Map<VectorType>(mps_out_, size_mps);
+        mps_out       = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, mps_in_, iLinSolvCfg);
+
+        // tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos_B.front(), envL_B, envR_B, invCfg);
     } else if(!mpos_B_shf.empty()) {
         throw except::runtime_error("MatVecMPOS<{}>::MultInvBx(...) not implemented for multiple mpos", sfinae::type_name<Scalar>());
     }
@@ -968,64 +972,6 @@ void MatVecMPOS<Scalar>::MultBx(void *x, int *ldx, void *y, int *ldy, int *block
     }
     *err = 0;
 }
-
-// template<typename Scalar>
-// std::vector<std::pair<Scalar, long>> MatVecMPOS<Scalar>::get_k_smallest(const VectorType &vec, size_t k) const {
-//     using idx_pair = std::pair<Scalar, long>;
-//     std::priority_queue<Scalar> pq;
-//     for(auto d : vec) {
-//         if(pq.size() >= k && pq.top() > d) {
-//             pq.push(d);
-//             pq.pop();
-//         } else if(pq.size() < k) {
-//             pq.push(d);
-//         }
-//     }
-//     Scalar                kth_element = pq.top();
-//     std::vector<idx_pair> result;
-//     for(long i = 0; i < vec.size(); i++)
-//         if(vec[i] <= kth_element) { result.emplace_back(idx_pair{vec[i], i}); }
-//     return result;
-// }
-
-// template<typename Scalar>
-// std::vector<long> MatVecMPOS<Scalar>::get_k_smallest(const VectorType &vec, size_t k) const {
-//     std::priority_queue<Scalar> pq;
-//     for(auto d : vec) {
-//         if(pq.size() >= k && pq.top() > d) {
-//             pq.push(d);
-//             pq.pop();
-//         } else if(pq.size() < k) {
-//             pq.push(d);
-//         }
-//     }
-//     Scalar            kth_element = pq.top();
-//     std::vector<long> result;
-//     for(long i = 0; i < vec.size(); i++)
-//         if(vec[i] <= kth_element) { result.emplace_back(i); }
-//     return result;
-// }
-//
-// template<typename Scalar>
-// std::vector<long> MatVecMPOS<Scalar>::get_k_largest(const VectorType &vec, size_t k) const {
-//     using idx_pair = std::pair<Scalar, long>;
-//     std::priority_queue<idx_pair, std::vector<idx_pair>, std::greater<idx_pair>> q;
-//     for(long i = 0; i < vec.size(); ++i) {
-//         if(q.size() < k)
-//             q.emplace(vec[i], i);
-//         else if(q.top().first < vec[i]) {
-//             q.pop();
-//             q.emplace(vec[i], i);
-//         }
-//     }
-//     k = q.size();
-//     std::vector<long> res(k);
-//     for(size_t i = 0; i < k; ++i) {
-//         res[k - i - 1] = q.top().second;
-//         q.pop();
-//     }
-//     return res;
-// }
 
 template<typename Scalar>
 Eigen::Tensor<Scalar, 3> MatVecMPOS<Scalar>::operator*(const Eigen::Tensor<Scalar, 3> &x) const {
@@ -1060,6 +1006,21 @@ typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx(const Eigen::
     assert(x.rows() == get_size());
     VectorType y(x.rows());
     MultAx(x.data(), y.data());
+    return y;
+}
+
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultBX(const Eigen::Ref<const MatrixType> &X) const {
+    assert(X.rows() == get_size());
+    MatrixType Y(X.rows(), X.cols());
+    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultBx(X.col(i).data(), Y.col(i).data()); }
+    return Y;
+}
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultBx(const Eigen::Ref<const VectorType> &x) const {
+    assert(x.rows() == get_size());
+    VectorType y(x.rows());
+    MultBx(x.data(), y.data());
     return y;
 }
 
@@ -1148,16 +1109,16 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
 
             // auto bicg          = std::make_unique<BICGType>();
             // auto cg            = std::make_unique<CGType>();
-            auto llt      = std::make_unique<LLTType>();
-            auto ldlt     = std::make_unique<LDLTType>();
-            auto lu       = std::make_unique<LUType>();
-            auto sparseRM = std::make_unique<SparseRowM>();
-            auto blockPtr    = std::make_unique<MatrixType>();
-            bool lltSuccess  = false;
-            bool ldltSuccess = false;
-            bool luSuccess   = false;
-            bool qrSuccess   = false;
-             VectorType blockInvDiag; //    = block.diagonal().cwiseInverse();
+            auto       llt         = std::make_unique<LLTType>();
+            auto       ldlt        = std::make_unique<LDLTType>();
+            auto       lu          = std::make_unique<LUType>();
+            auto       sparseRM    = std::make_unique<SparseRowM>();
+            auto       blockPtr    = std::make_unique<MatrixType>();
+            bool       lltSuccess  = false;
+            bool       ldltSuccess = false;
+            bool       luSuccess   = false;
+            bool       qrSuccess   = false;
+            VectorType blockInvDiag; //    = block.diagonal().cwiseInverse();
             // auto blockInvDiag = blockDiag.cwiseAbs().cwiseSqrt().cwiseInverse();
             // block             = (blockInvDiag.asDiagonal() * block * blockInvDiag.asDiagonal()).eval();
             switch(factorization) {
@@ -1192,7 +1153,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     if constexpr(eig::debug_matvec_mpos) eig::log->trace("lu factorizing block {}/{}", blkidx, nblocks);
                     auto t_lu = tid::ur("t_lu");
                     t_lu.tic();
-                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10}).cwiseInverse();
+                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10f}).cwiseInverse();
                     lu->compute(block);
                     t_lu.toc();
                     luSuccess = true;
@@ -1205,7 +1166,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                 case eig::Factorization::LDLT: {
                     eig::log->info("-- ldlt");
                     if constexpr(eig::debug_matvec_mpos) eig::log->trace("ldlt factorizing block {}/{}", blkidx, nblocks);
-                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10}).cwiseInverse();
+                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10f}).cwiseInverse();
                     ldlt->compute(block);
                     ldltSuccess = ldlt->info() == Eigen::Success;
                     if(ldltSuccess) break;
@@ -1214,7 +1175,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                 }
                 case eig::Factorization::QR: {
                     auto qr      = Eigen::HouseholderQR<MatrixType>(block);
-                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10}).cwiseInverse();
+                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10f}).cwiseInverse();
                     block        = qr.solve(MatrixType::Identity(extent, extent));
                     qrSuccess    = true;
                     break;
@@ -1226,7 +1187,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                factorization != eig::Factorization::ILDLT) {
                 eig::log->warn("factorization {} (and others) failed on block {}/{} ... resorting to Eigen::ColPivHouseholderQR",
                                eig::FactorizationToString(factorization), blkidx, nblocks);
-                block         = Eigen::ColPivHouseholderQR<MatrixType>(block).inverse(); // Should work on any matrix
+                block = Eigen::ColPivHouseholderQR<MatrixType>(block).inverse(); // Should work on any matrix
             }
 #pragma omp ordered
             {
@@ -1294,17 +1255,21 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
     CalcPc(shift); // Computes the diagonal jacobi blocks which are useful for both types of preconditioner.
 
     if(preconditioner == eig::Preconditioner::SOLVE) {
-        auto        mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
-        auto        mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
-        const auto &mpos    = mpos_B.empty() ? mpos_A : mpos_B;
-        const auto &envL    = mpos_B.empty() ? envL_A : envL_B;
-        const auto &envR    = mpos_B.empty() ? envR_A : envR_B;
+        // auto        mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
+        // auto        mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
+        const auto &mpos = mpos_B.empty() ? mpos_A : mpos_B;
+        // const auto &envL    = mpos_B.empty() ? envL_A : envL_B;
+        // const auto &envR    = mpos_B.empty() ? envR_A : envR_B;
         if(jcbMaxBlockSize == 1) {
             invJcbDiagonal             = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
             iLinSolvCfg.jacobi.invdiag = invJcbDiagonal.data();
         }
         if(mpos.size() == 1) {
-            tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos.front(), envL, envR, iLinSolvCfg);
+            auto MultOp   = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return mpos_B.empty() ? MultAX(X) : MultBX(X); };
+            auto MatrixOp = MatrixLikeOperator<Scalar>(size_mps, MultOp);
+            auto mps_out  = Eigen::Map<VectorType>(mps_out_, size_mps);
+            mps_out       = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, mps_in_, iLinSolvCfg);
+            // tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos.front(), envL, envR, iLinSolvCfg);
         } else if(!mpos_B_shf.empty()) {
             throw except::runtime_error("MatVecMPOS<{}>::MultInvBx(...) not implemented for multiple mpos", sfinae::type_name<Scalar>());
         }
@@ -1467,11 +1432,11 @@ void MatVecMPOS<Scalar>::set_jcbMaxBlockSize(std::optional<long> size) {
         //     jcbMaxBlockSize = 1;
 
         auto multiple = shape_mps[0] * shape_mps[1];
-        auto maxsize = std::clamp(size.value(), 1l, size_mps);
+        auto maxsize  = std::clamp(size.value(), 1l, size_mps);
 
         if(maxsize >= multiple) {
             jcbMaxBlockSize = (maxsize / multiple) * multiple;
-        }else {
+        } else {
             // We can't select a block size commensurate with the mps shape.
             jcbMaxBlockSize = maxsize;
         }

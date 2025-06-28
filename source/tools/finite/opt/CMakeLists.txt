@@ -109,40 +109,40 @@ add_source_target(xdmrg++-tools-finite-opt
             optimize_subspace_variance/fp64.cpp
             optimize_subspace_variance/fp128.cpp
 
-            optimize_lanczos_h1h2/cx32.cpp
-            optimize_lanczos_h1h2/cx64.cpp
-            optimize_lanczos_h1h2/cx128.cpp
-            optimize_lanczos_h1h2/fp32.cpp
-            optimize_lanczos_h1h2/fp64.cpp
-            optimize_lanczos_h1h2/fp128.cpp
-
-            optimize_lanczos_h1h2/SolverBase/cx32.cpp
-            optimize_lanczos_h1h2/SolverBase/cx64.cpp
-            optimize_lanczos_h1h2/SolverBase/cx128.cpp
-            optimize_lanczos_h1h2/SolverBase/fp32.cpp
-            optimize_lanczos_h1h2/SolverBase/fp64.cpp
-            optimize_lanczos_h1h2/SolverBase/fp128.cpp
-
-            optimize_lanczos_h1h2/LOBPCG/cx32.cpp
-            optimize_lanczos_h1h2/LOBPCG/cx64.cpp
-            optimize_lanczos_h1h2/LOBPCG/cx128.cpp
-            optimize_lanczos_h1h2/LOBPCG/fp32.cpp
-            optimize_lanczos_h1h2/LOBPCG/fp64.cpp
-            optimize_lanczos_h1h2/LOBPCG/fp128.cpp
-
-            optimize_lanczos_h1h2/GD/cx32.cpp
-            optimize_lanczos_h1h2/GD/cx64.cpp
-            optimize_lanczos_h1h2/GD/cx128.cpp
-            optimize_lanczos_h1h2/GD/fp32.cpp
-            optimize_lanczos_h1h2/GD/fp64.cpp
-            optimize_lanczos_h1h2/GD/fp128.cpp
-
-            optimize_lanczos_h1h2/BlockLanczos/cx32.cpp
-            optimize_lanczos_h1h2/BlockLanczos/cx64.cpp
-            optimize_lanczos_h1h2/BlockLanczos/cx128.cpp
-            optimize_lanczos_h1h2/BlockLanczos/fp32.cpp
-            optimize_lanczos_h1h2/BlockLanczos/fp64.cpp
-            optimize_lanczos_h1h2/BlockLanczos/fp128.cpp
+#            ../../../math/eig/solver_eigsmpo/cx32.cpp
+#            ../../../math/eig/solver_eigsmpo/cx64.cpp
+#            ../../../math/eig/solver_eigsmpo/cx128.cpp
+#            ../../../math/eig/solver_eigsmpo/fp32.cpp
+#            ../../../math/eig/solver_eigsmpo/fp64.cpp
+#            ../../../math/eig/solver_eigsmpo/fp128.cpp
+#
+#            ../../../math/eig/solver_eigsmpo/solver_base/cx32.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_base/cx64.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_base/cx128.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_base/fp32.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_base/fp64.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_base/fp128.cpp
+#
+#            ../../../math/eig/solver_eigsmpo/solver_lobpcg/cx32.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lobpcg/cx64.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lobpcg/cx128.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lobpcg/fp32.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lobpcg/fp64.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lobpcg/fp128.cpp
+#
+#            ../../../math/eig/solver_eigsmpo/solver_gdplusk/cx32.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_gdplusk/cx64.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_gdplusk/cx128.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_gdplusk/fp32.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_gdplusk/fp64.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_gdplusk/fp128.cpp
+#
+#            ../../../math/eig/solver_eigsmpo/solver_lanczos/cx32.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lanczos/cx64.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lanczos/cx128.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lanczos/fp32.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lanczos/fp64.cpp
+#            ../../../math/eig/solver_eigsmpo/solver_lanczos/fp128.cpp
 
             opt_mps/cx32.cpp
             opt_mps/cx64.cpp

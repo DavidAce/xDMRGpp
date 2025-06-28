@@ -111,9 +111,9 @@ std::vector<opt_mps<Scalar>> optimize_energy_eigs_executor(const TensorsFinite<S
 
 
 template<typename Scalar>
-opt_mps<Scalar> internal::optimize_energy(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, const AlgorithmStatus &status,
+opt_mps<Scalar> internal::optimize_energy(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
                                           OptMeta &meta, reports::eigs_log<Scalar> &elog) {
-    if(meta.optSolver == OptSolver::EIG) return optimize_energy_eig(tensors, initial_mps, status, meta, elog);
+    if(meta.optSolver == OptSolver::EIG) return optimize_energy_eig(tensors, initial_mps, meta, elog);
     if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_energy_eigs(): not implemented for type {}", enum2sv(meta.optType));
     }

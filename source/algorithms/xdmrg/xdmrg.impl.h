@@ -352,11 +352,10 @@ template<typename Scalar>
 void xdmrg<Scalar>::update_state() {
     using namespace tools::finite;
     using namespace tools::finite::opt;
-    auto t_step = tid::tic_scope("step");
+    auto t_step      = tid::tic_scope("step");
+    auto bexp_result = expand_bonds(BondExpansionOrder::PREOPT);
+    auto opt_meta    = get_opt_meta();
 
-    expand_bonds(BondExpansionOrder::PREOPT);
-
-    auto opt_meta = get_opt_meta();
     tools::log->debug("Starting {} iter {} | step {} | pos {} | dir {} | ritz {} | type {}", status.algo_type_sv(), status.iter, status.step, status.position,
                       status.direction, enum2sv(settings::get_ritz(status.algo_type)), enum2sv(opt_meta.optType));
     // Try activating the sites asked for;
@@ -371,7 +370,7 @@ void xdmrg<Scalar>::update_state() {
 
     // Run the optimization
     auto initial_state = opt::get_opt_initial_mps(tensors, opt_meta);
-    auto opt_state     = opt::get_updated_state(tensors, initial_state, status, opt_meta);
+    auto opt_state     = opt::get_updated_state(tensors, initial_state, opt_meta);
     // Determine the quality of the optimized state.
     opt_state.set_relchange(opt_state.get_variance() / var_latest);
     opt_state.set_bond_limit(opt_meta.svd_cfg->rank_max.value());

@@ -4,9 +4,11 @@
 /*! \brief Environment class with variance MPOs (i.e. double layer of energy MPOs) for environment blocks och type Left or Right corresponding to a single site.
  */
 
-template<typename Scalar>
-class EnvVar final : public EnvBase<Scalar> {
+template<typename Scalar_>
+class EnvVar final : public EnvBase<Scalar_> {
     public:
+    using Scalar     = Scalar_;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
     using EnvBase<Scalar>::enlarge;
     using EnvBase<Scalar>::EnvBase;
     using EnvBase<Scalar>::set_edge_dims;

@@ -2,9 +2,8 @@
 
 using Scalar = fp64;
 
-template void tools::common::contraction::matrix_inverse_vector_product(Scalar             *res_ptr,                                 //
-                                                                        const Scalar *const mps_ptr, std::array<long, 3> mps_dims,   //
-                                                                        const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims,   //
-                                                                        const Scalar *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                                        const Scalar *const envR_ptr, std::array<long, 3> envR_dims, //
-                                                                        IterativeLinearSolverConfig<Scalar> &cfg);
+template tools::common::contraction::VectorType<Scalar>
+    tools::common::contraction::matrix_inverse_vector_product(MatrixLikeOperator<Scalar>                &MatrixOp, //
+                                                              const Scalar                              *rhs_ptr,  //
+                                                              const IterativeLinearSolverConfig<Scalar> &cfg);
+

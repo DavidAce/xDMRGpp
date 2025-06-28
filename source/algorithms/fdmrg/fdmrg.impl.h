@@ -237,7 +237,7 @@ void fdmrg<Scalar>::update_state() {
     if(not variance_before_step) variance_before_step = tools::finite::measure::energy_variance(tensors); // Should just take value from cache
 
     auto initial_state = tools::finite::opt::get_opt_initial_mps(tensors, opt_meta);
-    auto opt_state     = tools::finite::opt::find_ground_state(tensors, initial_state, status, opt_meta);
+    auto opt_state     = tools::finite::opt::find_ground_state(tensors, initial_state, opt_meta);
 
     // Determine the quality of the optimized state.
     opt_state.set_relchange(opt_state.get_variance() / variance_before_step.value());

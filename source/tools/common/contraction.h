@@ -7,9 +7,12 @@
 #include "math/tenx/threads.h"
 #include <complex>
 
+template<typename Scalar> class MatrixLikeOperator;
 template<typename Scalar> struct IterativeLinearSolverConfig;
 
 namespace tools::common::contraction {
+    template<typename T> using VectorType = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+    template<typename T> using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     template<typename T>
     using TensorWrite = Eigen::TensorBase<T, Eigen::WriteAccessors>;
     template<typename T>
@@ -67,12 +70,10 @@ namespace tools::common::contraction {
 
 
     template<typename Scalar>
-    void matrix_inverse_vector_product(      Scalar * res_ptr,
-                                       const Scalar * const mps_ptr, std::array<long,3> mps_dims,
-                                       const Scalar * const mpo_ptr, std::array<long,4> mpo_dims,
-                                       const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                                       const Scalar * const envR_ptr, std::array<long,3> envR_dims,
-                                       IterativeLinearSolverConfig<Scalar> & cfg);
+    VectorType<Scalar> matrix_inverse_vector_product(MatrixLikeOperator<Scalar> &MatrixOp,     //
+                                                     const Scalar *rhs_ptr,                    //
+                                                     const IterativeLinearSolverConfig<Scalar> &cfg);
+
 
     template<typename mps_type, typename mpo_type, typename env_type>
     auto expectation_value(const TensorRead<mps_type> & mps,
@@ -173,33 +174,6 @@ namespace tools::common::contraction {
         Eigen::Tensor<Scalar,3> result(mps.dimensions());
         matrix_vector_product(result, mps, mpo, envL, envR);
         return result;
-    }
-
-
-    template<typename res_type, typename mps_type, typename mpo_type, typename env_type>
-    void matrix_inverse_vector_product(
-        TensorWrite<res_type> &res,
-        const TensorRead<mps_type> & mps,
-        const TensorRead<mpo_type> & mpo,
-        const TensorRead<env_type> & envL,
-        const TensorRead<env_type> & envR,
-        IterativeLinearSolverConfig<typename res_type::Scalar> &cfg){
-        static_assert(res_type::NumIndices == 3 and "Wrong res tensor rank != 3 passed to calculation of matrix_vector_product");
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of matrix_vector_product");
-        static_assert(mpo_type::NumIndices == 4 and "Wrong mpo tensor rank != 4 passed to calculation of matrix_vector_product");
-        static_assert(env_type::NumIndices == 3 and "Wrong env tensor rank != 3 passed to calculation of matrix_vector_product");
-        auto & res_ref = static_cast<res_type&>(res);
-        auto  mps_eval = tenx::asEval(mps);
-        auto  mpo_eval = tenx::asEval(mpo);
-        auto  envL_eval = tenx::asEval(envL);
-        auto  envR_eval = tenx::asEval(envR);
-        matrix_inverse_vector_product(
-            res_ref.data(),
-            mps_eval.data(), mps_eval.dimensions(),
-            mpo_eval.data(), mpo_eval.dimensions(),
-            envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions(),
-            cfg);
     }
 
     /* clang-format on */

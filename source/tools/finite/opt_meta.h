@@ -30,20 +30,23 @@ namespace tools::finite::opt {
         std::vector<size_t>        chosen_sites     = {};
         std::string                label;
         std::string                eigs_lib;
-        std::optional<double>      subspace_tol          = std::nullopt;
-        std::optional<double>      eigv_target           = std::nullopt; // AKA shift
-        std::optional<int>         eigs_iter_max         = std::nullopt;
-        std::optional<double>      eigs_tol              = std::nullopt;
-        std::optional<int>         eigs_nev              = std::nullopt;
-        std::optional<int>         eigs_ncv              = std::nullopt;
-        std::optional<long>        eigs_blk              = std::nullopt;
-        std::optional<double>      eigs_time_max         = std::nullopt;
-        std::optional<long>        eigs_jcbMaxBlockSize  = std::nullopt; // maximum  Jacobi block size (preconditioner)
-        std::optional<svd::config> svd_cfg               = std::nullopt;
-        std::optional<std::string> primme_method         = std::nullopt;
-        std::optional<std::string> primme_projection     = std::nullopt; /*!< Choose primme_proj_<default|RR|harmonic|refined> */
-        std::optional<int>         primme_minRestartSize = std::nullopt;
-        std::optional<int>         primme_maxBlockSize   = std::nullopt;
+        std::optional<double>      subspace_tol                         = std::nullopt;
+        std::optional<double>      eigv_target                          = std::nullopt; // AKA shift
+        std::optional<int>         eigs_iter_max                        = std::nullopt;
+        std::optional<double>      eigs_tol                             = std::nullopt;
+        std::optional<int>         eigs_nev                             = std::nullopt;
+        std::optional<int>         eigs_ncv                             = std::nullopt;
+        std::optional<long>        eigs_blk                             = std::nullopt;
+        std::optional<double>      eigs_time_max                        = std::nullopt;
+        std::optional<long>        eigs_jcbMaxBlockSize                 = std::nullopt; // maximum  Jacobi block size (preconditioner)
+        std::optional<std::string> eigs_preconditioner_type             = std::nullopt;
+        std::optional<std::string> eigs_residual_correction_type        = std::nullopt;
+        std::optional<bool>        eigs_use_coarse_inner_preconditioner = std::nullopt;
+        std::optional<svd::config> svd_cfg                              = std::nullopt;
+        std::optional<std::string> primme_method                        = std::nullopt;
+        std::optional<std::string> primme_projection                    = std::nullopt; /*!< Choose primme_proj_<default|RR|harmonic|refined> */
+        std::optional<int>         primme_minRestartSize                = std::nullopt;
+        std::optional<int>         primme_maxBlockSize                  = std::nullopt;
 
         OptMeta();
         explicit OptMeta(OptAlgo algo, OptRitz ritz);

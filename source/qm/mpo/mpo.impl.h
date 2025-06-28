@@ -23,7 +23,7 @@
  *
  */
 template<typename Scalar>
-std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> qm::mpo::pauli_mpo(const Eigen::Matrix2cd &paulimatrix) {
+std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> qm::mpo::pauli_mpo(const Eigen::MatrixXcd &paulimatrix) {
     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
         if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so the pauli matrix must be real");
     }
@@ -71,13 +71,13 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Sca
  */
 template<typename Scalar>
 std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-    qm::mpo::parity_projector_mpos(const Eigen::Matrix2cd &paulimatrix, size_t sites, int sign) {
+    qm::mpo::parity_projector_mpos(const Eigen::MatrixXcd &paulimatrix, size_t sites, int sign) {
     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
         if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so the pauli matrix must be real");
     }
     using RealScalar                  = decltype(std::real(std::declval<Scalar>()));
     long                     spin_dim = paulimatrix.rows();
-    auto                     I        = Eigen::Matrix2cd::Identity(spin_dim, spin_dim).eval();
+    auto                     I        = Eigen::MatrixXcd::Identity(spin_dim, spin_dim).eval();
     std::array<long, 4>      extent4  = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
     std::array<long, 2>      extent2  = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
     Eigen::Tensor<Scalar, 4> MPO(2, 2, spin_dim, spin_dim);
@@ -97,7 +97,6 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     return {mpos, Ledge, Redge};
 }
 
-
 /*! Builds a string of random pauli matrix MPO's
  *      P = Π  O_i
  * where Π is the product over all sites, and O_i is one of {σ, I} on site i, where σ and I is a pauli matrix or an identity matrix, respectively
@@ -113,7 +112,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
  */
 template<typename Scalar>
 std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-    qm::mpo::random_pauli_mpos(const Eigen::Matrix2cd &paulimatrix, size_t sites) {
+    qm::mpo::random_pauli_mpos(const Eigen::MatrixXcd &paulimatrix, size_t sites) {
     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
         if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so the pauli matrix must be real");
     }
@@ -126,7 +125,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     MPO_S.setZero();
     MPO_I.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(tenx::TensorMap(paulimatrix));
     MPO_S.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) =
-        tenx::asScalarType<Scalar>(tenx::TensorCast(Eigen::Matrix2cd::Identity(spin_dim, spin_dim)));
+        tenx::asScalarType<Scalar>(tenx::TensorCast(Eigen::MatrixXcd::Identity(spin_dim, spin_dim)));
 
     // We have to push in an even number of pauli matrices to retain the parity sector.
     // Choosing randomly
@@ -154,7 +153,6 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     return std::make_tuple(mpos, Ledge, Redge);
 }
 
-
 /*! Builds a string of random pauli matrix MPO's
  *      P = Π  O_i
  * where Π is the product over all sites, and O_i is one of {S, I} on site i.
@@ -175,15 +173,15 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
  */
 template<typename Scalar>
 std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-    qm::mpo::random_pauli_mpos_x2(const Eigen::Matrix2cd &paulimatrix1, const Eigen::Matrix2cd &paulimatrix2, const size_t sites) {
+    qm::mpo::random_pauli_mpos_x2(const Eigen::MatrixXcd &paulimatrix1, const Eigen::MatrixXcd &pauliMatrixX, const size_t sites) {
     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
         if(!tenx::isReal(paulimatrix1)) throw except::logic_error("Scalar is real, so the paulimatrix1 must be real");
-        if(!tenx::isReal(paulimatrix2)) throw except::logic_error("Scalar is real, so the paulimatrix2 must be real");
+        if(!tenx::isReal(pauliMatrixX)) throw except::logic_error("Scalar is real, so the pauliMatrixX must be real");
     }
     using RealScalar = decltype(std::real(std::declval<Scalar>()));
-    if(paulimatrix1.rows() != paulimatrix2.rows()) throw except::logic_error("Pauli matrices must be of equal size");
+    if(paulimatrix1.rows() != pauliMatrixX.rows()) throw except::logic_error("Pauli matrices must be of equal size");
     long                     spin_dim = paulimatrix1.rows();
-    auto                     I        = Eigen::Matrix2cd::Identity(spin_dim, spin_dim).eval();
+    auto                     I        = Eigen::MatrixXcd::Identity(spin_dim, spin_dim).eval();
     std::array<long, 4>      extent4  = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
     std::array<long, 2>      extent2  = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
     Eigen::Tensor<Scalar, 4> MPO_S(2, 2, spin_dim, spin_dim);
@@ -194,7 +192,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     MPO_P.setZero();
 
     MPO_S.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(tenx::TensorMap(paulimatrix1));
-    MPO_S.slice(std::array<long, 4>{1, 1, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(tenx::TensorMap(paulimatrix2));
+    MPO_S.slice(std::array<long, 4>{1, 1, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(tenx::TensorMap(pauliMatrixX));
     MPO_I.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(tenx::TensorMap(I));
     MPO_I.slice(std::array<long, 4>{1, 1, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(tenx::TensorMap(I));
     MPO_P.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(tenx::TensorMap(I));
@@ -228,7 +226,6 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     return std::make_tuple(mpos, Ledge, Redge);
 }
 
-
 /*! Builds a string of random pauli matrix MPO's
  *      P = Π  O_i
  * where Π is the product over all sites, and O_i is one of {S, I} on site i.
@@ -255,7 +252,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
 
 template<typename Scalar>
 std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-    qm::mpo::random_pauli_mpos(const std::vector<Eigen::Matrix2cd> &paulimatrices, size_t sites) {
+    qm::mpo::random_pauli_mpos(const std::vector<Eigen::MatrixXcd> &paulimatrices, size_t sites) {
     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
         for(auto &paulimatrix : paulimatrices)
             if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so all pauli matrices must be real");
@@ -264,7 +261,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     if(paulimatrices.empty()) throw except::runtime_error("List of pauli matrices is empty");
     long                     num_paulis = safe_cast<long>(paulimatrices.size());
     long                     spin_dim   = 2;
-    auto                     I          = Eigen::Matrix2cd::Identity(spin_dim, spin_dim).eval();
+    auto                     I          = Eigen::MatrixXcd::Identity(spin_dim, spin_dim).eval();
     std::array<long, 4>      extent4    = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
     std::array<long, 2>      extent2    = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
     Eigen::Tensor<Scalar, 4> MPO_S(num_paulis, num_paulis, spin_dim, spin_dim);
@@ -310,7 +307,6 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     return std::make_tuple(mpos, Ledge, Redge);
 }
 
-
 /*! Builds a string of MPO's
  *      P = Π  O_i
  * where Π is the product over all sites, and O_i are MPOs with 2x2 (pauli) matrices on the diagonal
@@ -349,7 +345,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
 
 template<typename Scalar>
 std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-    qm::mpo::sum_of_pauli_mpo(const std::vector<Eigen::Matrix2cd> &paulimatrices, size_t sites, RandomizerMode mode) {
+    qm::mpo::sum_of_pauli_mpo(const std::vector<Eigen::MatrixXcd> &paulimatrices, size_t sites, RandomizerMode mode) {
     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
         for(auto &paulimatrix : paulimatrices)
             if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so all pauli matrices must be real");
@@ -417,7 +413,6 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     return std::make_tuple(mpos, Ledge, Redge);
 }
 
-
 /*! Builds a set of MPO's used for randomizing a state  pauli matrix MPO's with random weights picked from a uniform distribution
  *      P = Π  O_i
  * where Π is the product over all sites, and O_i is the MPO sum of pauli matrices with random weights.
@@ -438,7 +433,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
  */
 template<typename Scalar>
 std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-    qm::mpo::random_pauli_mpos(const std::vector<Eigen::Matrix2cd> &paulimatrices, const std::vector<double> &uniform_dist_widths, size_t sites) {
+    qm::mpo::random_pauli_mpos(const std::vector<Eigen::MatrixXcd> &paulimatrices, const std::vector<double> &uniform_dist_widths, size_t sites) {
     if constexpr(!sfinae::is_std_complex_v<Scalar>) {
         for(auto &paulimatrix : paulimatrices)
             if(!tenx::isReal(paulimatrix)) throw except::logic_error("Scalar is real, so all pauli matrices must be real");

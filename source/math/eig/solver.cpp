@@ -675,6 +675,10 @@ void eig::solver::eigs(MatrixProductType &matrix, int nev, int ncv, Ritz ritz, F
             solver.eigs();
             break;
         }
+        case Lib::EIGSMPO: {
+            throw except::runtime_error("You must call the Lib::EIGSMPO solvers directly");
+            break;
+        }
     }
 }
 /* clang-format off */
@@ -746,6 +750,10 @@ void eig::solver::eigs(MatrixProductType &matrix) {
             config.tag = fmt::format("{}{}spectra", config.tag, config.tag.empty() ? "" : " ");
             solver_spectra<MatrixProductType> solver(matrix, config, result);
             solver.eigs();
+            break;
+        }
+        case Lib::EIGSMPO: {
+            throw except::runtime_error("You must call the Lib::EIGSMPO solvers directly");
             break;
         }
     }

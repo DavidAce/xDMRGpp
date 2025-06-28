@@ -43,7 +43,8 @@ void tools::finite::opt::reports::subs_log<Scalar>::print_subs_report() {
 template<typename Scalar>
 void tools::finite::opt::reports::eigs_log<Scalar>::print_eigs_report(std::optional<size_t> max_entries) {
     if(entries.empty()) return;
-    auto level = entries.front().level;
+    auto level = spdlog::level::trace;
+    for(const auto & entry : entries ) level = std::max(level, entry.level);
     if(level < tools::log->level()) {
         entries.clear();
         return;

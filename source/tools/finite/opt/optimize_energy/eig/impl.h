@@ -1,5 +1,4 @@
 #pragma once
-#include "algorithms/AlgorithmStatus.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/cast.h"
@@ -63,7 +62,7 @@ void optimize_energy_eig_executor(const TensorsFinite<Scalar> &tensors, const op
 
 template<typename Scalar>
 opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                    [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+                                   OptMeta &meta, reports::eigs_log<Scalar> &elog) {
     if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_energy_eig(): not implemented for type {}", enum2sv(meta.optType));
     }

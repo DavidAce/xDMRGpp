@@ -216,7 +216,7 @@ class StateFinite {
     std::vector<std::reference_wrapper<MpsSite<Scalar>>>       get_mps_active();
 
     // For multisite
-    std::array<long, 3>              active_dimensions() const;
+    std::array<long, 3>              active_problem_dims() const;
     long                             active_problem_size() const;
     std::vector<long>                get_bond_dims(const std::vector<size_t> &sites) const;
     std::vector<long>                get_bond_dims_active() const;
@@ -259,9 +259,9 @@ class StateFinite {
     std::vector<double> get_truncation_errors_active() const;
     double              get_truncation_error_active_max() const;
 
-    size_t num_sites_truncated(double truncation_threshold) const;
+    size_t num_bonds_truncated(double truncation_threshold) const;
     size_t num_bonds_at_limit(long bond_lim) const;
-    bool   is_at_bond_limit(long bond_lim) const;
+    bool   is_at_bond_limit(long bond_lim, double fraction = -1.0) const;
     size_t num_bonds_at_maximum(const std::vector<size_t> &sites) const;
     bool   is_truncated(double truncation_error_limit) const;
     void   clear_measurements(LogPolicy logPolicy = LogPolicy::SILENT) const;

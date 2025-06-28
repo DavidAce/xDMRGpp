@@ -271,20 +271,20 @@ template bool tools::finite::mps::normalize_state(StateFinite<cx64> &state, std:
 template bool tools::finite::mps::normalize_state(StateFinite<cx128> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy);
 
 template<typename Scalar>
-void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const std::vector<Eigen::Matrix2cd> &paulimatrices) {
+void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices) {
     auto [mpos, L, R] = qm::mpo::sum_of_pauli_mpo<Scalar>(paulimatrices, state.get_length(), RandomizerMode::SELECT1);
     tools::finite::ops::apply_mpos(state, mpos, L, R);
 }
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp32> &state, const std::vector<Eigen::Matrix2cd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp64> &state, const std::vector<Eigen::Matrix2cd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp128> &state, const std::vector<Eigen::Matrix2cd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx32> &state, const std::vector<Eigen::Matrix2cd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx64> &state, const std::vector<Eigen::Matrix2cd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx128> &state, const std::vector<Eigen::Matrix2cd> &paulimatrices);
+template void tools::finite::mps::apply_random_paulis(StateFinite<fp32> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
+template void tools::finite::mps::apply_random_paulis(StateFinite<fp64> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
+template void tools::finite::mps::apply_random_paulis(StateFinite<fp128> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
+template void tools::finite::mps::apply_random_paulis(StateFinite<cx32> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
+template void tools::finite::mps::apply_random_paulis(StateFinite<cx64> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
+template void tools::finite::mps::apply_random_paulis(StateFinite<cx128> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
 
 template<typename Scalar>
 void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const std::vector<std::string> &paulistrings) {
-    std::vector<Eigen::Matrix2cd> paulimatrices;
+    std::vector<Eigen::MatrixXcd> paulimatrices;
     for(const auto &str : paulistrings) paulimatrices.emplace_back(qm::spin::half::get_pauli(str));
     apply_random_paulis(state, paulimatrices);
 }

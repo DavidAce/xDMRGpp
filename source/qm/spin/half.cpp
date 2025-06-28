@@ -68,51 +68,51 @@ namespace qm::spin::half {
 
     }
 
-    const Eigen::Matrix2cd sx(get_sx<Eigen::Matrix2cd>());
-    const Eigen::Matrix2cd sy(get_sy<Eigen::Matrix2cd>());
-    const Eigen::Matrix2cd sz(get_sz<Eigen::Matrix2cd>());
-    const Eigen::Matrix2cd sp(get_sp<Eigen::Matrix2cd>());
-    const Eigen::Matrix2cd sm(get_sm<Eigen::Matrix2cd>());
-    const Eigen::Matrix2cd nu(get_nu<Eigen::Matrix2cd>());
-    const Eigen::Matrix2cd nd(get_nd<Eigen::Matrix2cd>());
-    const Eigen::Matrix2cd id(get_id<Eigen::Matrix2cd>());
+    const Eigen::MatrixXcd sx(get_sx<Eigen::MatrixXcd>());
+    const Eigen::MatrixXcd sy(get_sy<Eigen::MatrixXcd>());
+    const Eigen::MatrixXcd sz(get_sz<Eigen::MatrixXcd>());
+    const Eigen::MatrixXcd sp(get_sp<Eigen::MatrixXcd>());
+    const Eigen::MatrixXcd sm(get_sm<Eigen::MatrixXcd>());
+    const Eigen::MatrixXcd nu(get_nu<Eigen::MatrixXcd>());
+    const Eigen::MatrixXcd nd(get_nd<Eigen::MatrixXcd>());
+    const Eigen::MatrixXcd id(get_id<Eigen::MatrixXcd>());
 
-    // // auto sx2 = Eigen::Matrix2cd({{0.0 + 0.0i, 1.0 + 0.0i},   //
+    // // auto sx2 = Eigen::MatrixXcd({{0.0 + 0.0i, 1.0 + 0.0i},   //
     // // {1.0 + 0.0i, 0.0 + 0.0i}}); //
     // /* clang-format off */
-    // Eigen::Matrix2cd sx = (Eigen::Matrix2cd() <<
+    // Eigen::MatrixXcd sx = (Eigen::MatrixXcd() <<
     //     0.0, 1.0,
     //     1.0, 0.0).finished();
-    // Eigen::Matrix2cd sy = (Eigen::Matrix2cd() <<
+    // Eigen::MatrixXcd sy = (Eigen::MatrixXcd() <<
     //     0.0+0.0i, 0.0-1.0i,
     //     0.0+1.0i, 0.0+0.0i).finished();
-    // Eigen::Matrix2cd sz = (Eigen::Matrix2cd() <<
+    // Eigen::MatrixXcd sz = (Eigen::MatrixXcd() <<
     //     1.0 + 0.0i,  0.0 + 0.0i,
     //     0.0 + 0.0i, -1.0 + 0.0i).finished();
-    // Eigen::Matrix2cd sp = (Eigen::Matrix2cd() <<
+    // Eigen::MatrixXcd sp = (Eigen::MatrixXcd() <<
     //     0.0, 1.0,
     //     0.0, 0.0).finished();
-    // Eigen::Matrix2cd sm = (Eigen::Matrix2cd() <<
+    // Eigen::MatrixXcd sm = (Eigen::MatrixXcd() <<
     //     0.0, 0.0,
     //     1.0, 0.0).finished();
-    // Eigen::Matrix2cd nu  = (Eigen::Matrix2cd() <<
+    // Eigen::MatrixXcd nu  = (Eigen::MatrixXcd() <<
     //     1.0, 0.0,
     //     0.0, 0.0).finished();
-    // Eigen::Matrix2cd nd  = (Eigen::Matrix2cd() <<
+    // Eigen::MatrixXcd nd  = (Eigen::MatrixXcd() <<
     //     0.0, 0.0,
     //     0.0, 1.0).finished();
-    // Eigen::Matrix2cd id  = (Eigen::Matrix2cd() <<
+    // Eigen::MatrixXcd id  = (Eigen::MatrixXcd() <<
     //     1.0, 0.0,
     //     0.0, 1.0).finished();
 
-    std::array<Eigen::Vector2cd, 2> sx_spinors{(Eigen::Vector2cd() << 1.0 + 0.0i, 1.0 + 0.0i).finished() / std::sqrt(2),
-                                               (Eigen::Vector2cd() << 1.0 + 0.0i, -1.0 + 0.0i).finished() / std::sqrt(2)};
+    std::array<Eigen::VectorXcd, 2> sx_spinors{((Eigen::VectorXcd(2) << 1.0 + 0.0i, 1.0 + 0.0i).finished() / std::sqrt(2)).eval(),
+                                               ((Eigen::VectorXcd(2) << 1.0 + 0.0i, -1.0 + 0.0i).finished() / std::sqrt(2)).eval()};
 
-    std::array<Eigen::Vector2cd, 2> sy_spinors{(Eigen::Vector2cd() << 1.0 + 0.0i, 0.0 + 1.0i).finished() / std::sqrt(2),
-                                               (Eigen::Vector2cd() << 1.0 + 0.0i, 0.0 - 1.0i).finished() / std::sqrt(2)};
+    std::array<Eigen::VectorXcd, 2> sy_spinors{((Eigen::VectorXcd(2) << 1.0 + 0.0i, 0.0 + 1.0i).finished() / std::sqrt(2)).eval(),
+                                               ((Eigen::VectorXcd(2) << 1.0 + 0.0i, 0.0 - 1.0i).finished() / std::sqrt(2)).eval()};
 
-    std::array<Eigen::Vector2cd, 2> sz_spinors{(Eigen::Vector2cd() << 1.0 + 0.0i, 0.0 + 0.0i).finished() / std::sqrt(2),
-                                               (Eigen::Vector2cd() << 0.0 + 0.0i, 1.0 + 0.0i).finished() / std::sqrt(2)};
+    std::array<Eigen::VectorXcd, 2> sz_spinors{((Eigen::VectorXcd(2) << 1.0 + 0.0i, 0.0 + 0.0i).finished() / std::sqrt(2)).eval(),
+                                               ((Eigen::VectorXcd(2) << 0.0 + 0.0i, 1.0 + 0.0i).finished() / std::sqrt(2)).eval()};
 
     std::vector<Eigen::MatrixXcd> SX;
     std::vector<Eigen::MatrixXcd> SY;
@@ -120,12 +120,12 @@ namespace qm::spin::half {
     std::vector<Eigen::MatrixXcd> II;
     /* clang-format on */
 
-    Eigen::MatrixXcd gen_embedded_spin_half_operator(const Eigen::Matrix2cd &s, size_t at, size_t sites, bool swap) {
+    Eigen::MatrixXcd gen_embedded_spin_half_operator(const Eigen::MatrixXcd &s, size_t at, size_t sites, bool swap) {
         // Don't forget to set "swap = true" if you intend to use the result as a tensor.
         return gen_embedded_spin_operator(s, at, sites, swap);
     }
 
-    std::vector<Eigen::Matrix4cd> gen_twobody_spins(const Eigen::Matrix2cd &s, bool swap)
+    std::vector<Eigen::Matrix4cd> gen_twobody_spins(const Eigen::MatrixXcd &s, bool swap)
     // Returns a pair of two-body 4x4 spin operators for embedded in a two-site Hilbert space:
     //        (σ ⊗ i, i ⊗ σ)
     // where σ is a 2x2 (pauli) matrix and i is the 2x2 identity matrix.
@@ -159,7 +159,7 @@ namespace qm::spin::half {
         }
     }
 
-    Eigen::Vector2cd get_spinor(std::string_view axis, int sign) {
+    Eigen::VectorXcd get_spinor(std::string_view axis, int sign) {
         auto axus = get_axis_unsigned(axis);
         if(axus == "x" and sign >= 0) return sx_spinors[0];
         if(axus == "x" and sign < 0) return sx_spinors[1];
@@ -170,9 +170,9 @@ namespace qm::spin::half {
         throw except::runtime_error("get_spinor given invalid axis: {}", axis);
     }
 
-    Eigen::Vector2cd get_spinor(std::string_view axis) { return get_spinor(axis, get_sign(axis)); }
+    Eigen::VectorXcd get_spinor(std::string_view axis) { return get_spinor(axis, get_sign(axis)); }
 
-    Eigen::Matrix2cd get_pauli(std::string_view axis) {
+    Eigen::MatrixXcd get_pauli(std::string_view axis) {
         auto axus = get_axis_unsigned(axis);
         if(axus == "x") return sx;
         if(axus == "y") return sy;

@@ -1,7 +1,7 @@
 #pragma once
 #include "math/tenx.h"
 // -- (textra first)
-#include "algorithms/AlgorithmStatus.h"
+
 #include "config/settings.h"
 #include "general/iter.h"
 #include "math/cast.h"
@@ -394,7 +394,7 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const Ten
     // config.primme_projection    = "primme_proj_refined";
     config.compute_eigvecs    = eig::Vecs::ON;
     config.primme_locking     = 1;
-    config.loglevel           = 1;
+    config.loglevel           = 2;
     config.subspace_tol       = meta.optAlgo == OptAlgo::DMRGX ? 1.0 - 1.0 / std::sqrt(2.0) : meta.subspace_tol;
     config.primme_convTestFun = convTestFun<Scalar>;
     config.primme_method      = eig::PrimmeMethod::PRIMME_DEFAULT_MIN_TIME;

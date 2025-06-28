@@ -133,31 +133,31 @@ namespace qm::spin {
             extern Eigen::Tensor<cx64, 1>                      get_spinor(std::string_view axis);
             extern Eigen::Tensor<cx64, 2>                      get_pauli(std::string_view axis);
         }
-        extern const Eigen::Matrix2cd          sx;
-        extern const Eigen::Matrix2cd          sy;
-        extern const Eigen::Matrix2cd          sz;
-        extern const Eigen::Matrix2cd          sp;
-        extern const Eigen::Matrix2cd          sm;
-        extern const Eigen::Matrix2cd          nu;
-        extern const Eigen::Matrix2cd          nd;
-        extern const Eigen::Matrix2cd          id;
-        extern std::array<Eigen::Vector2cd, 2> sx_spinors;
-        extern std::array<Eigen::Vector2cd, 2> sy_spinors;
-        extern std::array<Eigen::Vector2cd, 2> sz_spinors;
+        extern const Eigen::MatrixXcd          sx;
+        extern const Eigen::MatrixXcd          sy;
+        extern const Eigen::MatrixXcd          sz;
+        extern const Eigen::MatrixXcd          sp;
+        extern const Eigen::MatrixXcd          sm;
+        extern const Eigen::MatrixXcd          nu;
+        extern const Eigen::MatrixXcd          nd;
+        extern const Eigen::MatrixXcd          id;
+        extern std::array<Eigen::VectorXcd, 2> sx_spinors;
+        extern std::array<Eigen::VectorXcd, 2> sy_spinors;
+        extern std::array<Eigen::VectorXcd, 2> sz_spinors;
         extern std::vector<Eigen::MatrixXcd>   SX;
         extern std::vector<Eigen::MatrixXcd>   SY;
         extern std::vector<Eigen::MatrixXcd>   SZ;
         extern std::vector<Eigen::MatrixXcd>   II;
-        extern Eigen::MatrixXcd                gen_embedded_spin_half_operator(const Eigen::Matrix2cd &s, size_t at, size_t sites, bool swap = false);
-        extern std::vector<Eigen::Matrix4cd>   gen_twobody_spins(const Eigen::Matrix2cd &s, bool swap = false);
+        extern Eigen::MatrixXcd                gen_embedded_spin_half_operator(const Eigen::MatrixXcd &s, size_t at, size_t sites, bool swap = false);
+        extern std::vector<Eigen::Matrix4cd>   gen_twobody_spins(const Eigen::MatrixXcd &s, bool swap = false);
 
         inline static constexpr std::array valid_axis_str = {"x", "+x", "-x", "y", "+y", "-y", "z", "+z", "-z", "i", "id"};
         extern bool                        is_valid_axis(std::string_view axis);
         extern int                         get_sign(std::string_view axis);
         extern std::string_view            get_axis_unsigned(std::string_view axis);
-        extern Eigen::Vector2cd            get_spinor(std::string_view axis, int sign);
-        extern Eigen::Vector2cd            get_spinor(std::string_view axis);
-        extern Eigen::Matrix2cd            get_pauli(std::string_view axis);
+        extern Eigen::VectorXcd            get_spinor(std::string_view axis, int sign);
+        extern Eigen::VectorXcd            get_spinor(std::string_view axis);
+        extern Eigen::MatrixXcd            get_pauli(std::string_view axis);
     }
 
     namespace one {

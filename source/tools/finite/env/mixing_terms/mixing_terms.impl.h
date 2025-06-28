@@ -21,30 +21,8 @@ void tools::finite::env::internal::merge_mixing_terms_MP_N0(const StateFinite<T>
                                                             const Eigen::Tensor<T, 3> &N0,    //
                                                             const svd::config         &svd_cfg) {
     // The expanded bond sits between mpsL and mpsR.
-    // During forward expansion <--
-    //      * mpsL is A(i-1) always
-    //      * mpsR is AC(i), or A(i) during multisite dmrg
-    // During backward expansion -->
-    //      * mpsL is AC(i) always
-    //      * mpsR is B(i+1) always
-    // Thus, the possible situations are  [A, AC], [A,A] or [AC,B]
-    // After USV = SVD(ML_PL):
-    //      If [A, AC]:
-    //           * ML_PL is [A(i-1), PL]
-    //           * MR_PR is [AC(i),  0]^T                        <--- Note that we use bare A(i)! Not AC(i)
-    //           * mpsL:  A(i-1) = U
-    //           * mpsR:  Λ(i)   = S                             <--- takes stash S
-    //           * mpsR:  A      = S * V * MR_PR * C(i)^-1       <--- takes stash S,V and loses left-right normalization
-    //           * mpsR:  C(i)                                   <--- does not change
-    //      If [A,A]:
-    //           * ML_PL is [A(i-1), PL]^T
-    //           * MR_PR is [AC(i), 0]^T             <--- Note that we use bare A(i)! Not AC(i)
-    //           * mpsL:  A(i-1) = U
-    //           * mpsR:  Λ(i)   = S (takes stash S)
-    //           * mpsR:  A(i) = S * V * MR_PR (takes stash S,SV and loses left normalization)
-    //      If [AC,B]:
-    //           * ML_PL is [AC(i), PL]^T
-    //           * MR_PR is [B(i+1), 0]^T
+    //           * MP is [AC(i), PL]^T
+    //           * N0  is [B(i+1), 0]^T
     //           * mpsL:  A(i) = U
     //           * mpsL:  C(i) = S
     //           * mpsR:  B(i+1) = V * MR_PR (loses right normalization, but that is not be needed during the next optimization)
@@ -52,12 +30,10 @@ void tools::finite::env::internal::merge_mixing_terms_MP_N0(const StateFinite<T>
 
     tools::log->trace("merge_mixing_terms_MP_N0: ({}{},{}{}) {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), svd_cfg.to_string());
     svd::solver svd;
-    using Real = decltype(std::real(std::declval<T>()));
+    // using Real = decltype(std::real(std::declval<T>()));
     auto posR  = mpsR.get_position();
-    auto labL  = mpsL.get_label();
-    auto labR  = mpsR.get_label();
-    assert(labL == "AC");
-    assert(labR == "B");
+    assert(mpsL.get_label() == "AC");
+    assert(mpsR.get_label() == "B");
     auto [U, S, V] = svd.schmidt_into_left_normalized(MP, mpsL.spin_dim(), svd_cfg);
     mpsL.set_M(U);
     mpsL.set_LC(S);

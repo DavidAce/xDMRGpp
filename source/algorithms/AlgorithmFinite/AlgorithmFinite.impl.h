@@ -297,11 +297,11 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
 
     // m1.primme_method = "PRIMME_GD_Olsen_plusK";
     m1.primme_method = "PRIMME_DYNAMIC";
-
-    m1.eigv_target = 0.0; // We always target 0 when OptCost::VARIANCE
-    m1.eigs_nev    = settings::precision::eigs_nev_min;
-    m1.eigs_ncv    = settings::precision::eigs_ncv_min; // Sets to log2(problem_size) if a nonpositive value is given
-    m1.eigs_blk    = settings::precision::eigs_blk_min;
+    m1.eigs_lib      = "EIGSMPO";
+    m1.eigv_target   = 0.0; // We always target 0 when OptCost::VARIANCE
+    m1.eigs_nev      = settings::precision::eigs_nev_min;
+    m1.eigs_ncv      = settings::precision::eigs_ncv_min; // Sets to log2(problem_size) if a nonpositive value is given
+    m1.eigs_blk      = settings::precision::eigs_blk_min;
     if(status.algorithm_has_stuck_for > 0) {
         m1.eigs_nev = settings::precision::eigs_nev_max;
         m1.eigs_ncv = settings::precision::eigs_ncv_max; // Sets to log2(problem_size) if a nonpositive value is given
@@ -341,8 +341,7 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     m1.optSolver = m1.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
     m1.label     = enum2sv(m1.optAlgo);
 
-    if(has_any_flags(m1.optType, OptType::FP128, OptType::CX128)) m1.optSolver = OptSolver::H1H2;
-    if(m1.optSolver == OptSolver::EIGS) { m1.optSolver = OptSolver::H1H2; }
+    if(has_any_flags(m1.optType, OptType::FP128, OptType::CX128)) m1.eigs_lib = "EIGSMPO";
     m1.validate();
     return m1;
 }
@@ -355,12 +354,20 @@ BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionO
     bcfg.maxiter       = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
     bcfg.nkrylov       = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
     bcfg.bond_factor   = order == BondExpansionOrder::PREOPT ? settings::strategy::dmrg_bond_expansion::preopt::bond_factor : 1.0f;
-    bcfg.bond_limit    = static_cast<long>(std::ceil(bcfg.bond_factor * status.bond_lim));
-    bcfg.trnc_limit    = status.trnc_lim;
+    bcfg.bond_lim      = static_cast<long>(std::ceil(bcfg.bond_factor * status.bond_lim));
+    bcfg.trnc_lim      = status.trnc_lim;
     bcfg.blocksize     = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
     bcfg.mixing_factor = status.mixing_factor;
     bcfg.optAlgo       = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
     bcfg.optRitz       = status.opt_ritz;
+    switch(settings::precision::optScalar) {
+        case ScalarType::FP32: bcfg.optType = OptType::FP32; break;
+        case ScalarType::FP64: bcfg.optType = OptType::FP64; break;
+        case ScalarType::FP128: bcfg.optType = OptType::FP128; break;
+        case ScalarType::CX32: bcfg.optType = OptType::CX32; break;
+        case ScalarType::CX64: bcfg.optType = OptType::CX64; break;
+        case ScalarType::CX128: bcfg.optType = OptType::CX128; break;
+    }
 
     return tensors.expand_bonds(bcfg);
 }
@@ -607,7 +614,7 @@ void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
     if constexpr(settings::debug) {
         if(tools::log->level() == spdlog::level::trace) {
             double truncation_threshold = 2 * settings::precision::svd_truncation_min;
-            size_t trunc_bond_count     = tensors.state->num_sites_truncated(truncation_threshold);
+            size_t trunc_bond_count     = tensors.state->num_bonds_truncated(truncation_threshold);
             size_t bond_at_lim_count    = tensors.state->num_bonds_at_limit(status.bond_lim);
             tools::log->trace("Truncation threshold  : {:<.8e}", truncation_threshold);
             tools::log->trace("Truncation errors     : {}", tensors.state->get_truncation_errors());
@@ -620,7 +627,7 @@ void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
     // If we got here we want to increase the bond dimension limit progressively during the simulation
     // bool                          is_on_warmup      = status.iter < settings::strategy::iter_max_warmup;
 
-    bool is_truncated = is_atbondlim or tensors.state->is_truncated(status.trnc_lim);
+    bool is_truncated = tensors.state->is_truncated(status.trnc_lim);
     bool is_saturated = status.algorithm_saturated_for > 0; // Allow one round while saturated so that extra efforts get a chance.
     bool is_has_stuck = status.algorithm_has_stuck_for > 0;
     bool is_next_iter = true; // Should be checked
@@ -725,7 +732,7 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if constexpr(settings::debug) {
         if(tools::log->level() == spdlog::level::trace) {
             double truncation_threshold = 2 * settings::precision::svd_truncation_min;
-            size_t trunc_bond_count     = tensors.state->num_sites_truncated(truncation_threshold);
+            size_t trunc_bond_count     = tensors.state->num_bonds_truncated(truncation_threshold);
             tools::log->trace("Truncation threshold  : {:<.8e}", truncation_threshold);
             tools::log->trace("Truncation errors     : {}", tensors.state->get_truncation_errors());
             tools::log->trace("Bond dimensions       : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
@@ -734,32 +741,39 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
         }
     }
 
+
+
     // If we got here we want to decrease the truncation error limit progressively during the simulation
-    bool                          is_truncated      = tensors.state->is_at_bond_limit(status.bond_lim) or tensors.state->is_truncated(status.trnc_lim);
-    bool                          is_saturated      = status.algorithm_saturated_for > 0; // Allow one round while saturated so that extra efforts get a chance.
-    bool                          is_has_stuck      = status.algorithm_has_stuck_for > 0;
-    bool                          is_next_iter      = true; // Should be checked
-    bool                          is_even_iter      = status.iter % 2 == 0;
-    bool                          drop_if_truncated = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::TRUNCATED);
-    bool                          drop_if_saturated = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::SAT_ALGO);
-    bool                          drop_if_has_stuck = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::STK_ALGO);
-    bool                          drop_if_next_iter = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::HALFSWEEP);
-    bool                          drop_if_even_iter = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::FULLSWEEP);
+    // Note that "is_truncated" it is special, as it is an additional requirement on the other conditions if enabled (drop_if_truncated)
+    bool is_truncated      = tensors.state->is_truncated(0.707 * status.trnc_lim);
+    bool is_saturated      = status.algorithm_saturated_for > 0; // Allow one round while saturated so that extra efforts get a chance.
+    bool is_has_stuck      = status.algorithm_has_stuck_for > 0;
+    bool is_next_iter      = true; // Should be checked
+    bool is_even_iter      = status.iter % 2 == 0;
+    bool drop_if_truncated = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::TRUNCATED);
+    bool drop_if_saturated = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::SAT_ALGO);
+    bool drop_if_has_stuck = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::STK_ALGO);
+    bool drop_if_next_iter = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::HALFSWEEP);
+    bool drop_if_even_iter = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::FULLSWEEP);
+
     std::vector<std::string_view> reason;
+    bool                          truncated_ok = drop_if_truncated ? is_truncated : true;
     if(drop_if_truncated and is_truncated) reason.emplace_back("truncated");
-    if(drop_if_saturated and is_saturated) reason.emplace_back("saturated");
-    if(drop_if_has_stuck and is_has_stuck) reason.emplace_back("stuck");
-    if(drop_if_next_iter and is_next_iter) reason.emplace_back("next iter");
-    if(drop_if_even_iter and is_even_iter) reason.emplace_back("even iter");
+    if(drop_if_saturated and is_saturated and truncated_ok) reason.emplace_back("saturated");
+    if(drop_if_has_stuck and is_has_stuck and truncated_ok) reason.emplace_back("stuck");
+    if(drop_if_next_iter and is_next_iter and truncated_ok) reason.emplace_back("next iter");
+    if(drop_if_even_iter and is_even_iter and truncated_ok) reason.emplace_back("even iter");
     if(reason.empty()) {
-        tools::log->trace("Kept truncation error limit:  {:8.2e} | no reason to update", status.trnc_lim);
+        tools::log->debug("Kept truncation error limit:  {:8.2e} | no reason to update", status.trnc_lim);
+        tools::log->trace("Truncation errors {::.3e}", tensors.get_state().get_truncation_errors());
+
         return;
     }
 
     // Write current results before updating the truncation error limit
     write_to_file(StorageEvent::TRNC_UPDATE);
 
-    // If we got to this point we will update the truncation error limit by a factor
+    // If we got to this point we will likely update the truncation error limit by a factor
     auto rate = settings::strategy::trnc_decrease_rate;
     if(rate > 1.0 or rate < 0) throw except::runtime_error("Error: trnc_decrease_rate == {:8.2e} | must be in [0, 1]");
 
@@ -767,6 +781,7 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if(trnc_new < status.trnc_min / rate) trnc_new = status.trnc_min; // If the truncation error is close enough to reaching min, just set min.
 
     tools::log->info("Updated truncation error limit: {:8.2e} -> {:8.2e} | reasons: {}", status.trnc_lim, trnc_new, fmt::join(reason, " | "));
+    tools::log->info("Truncation errors {::8.2e}", tensors.get_state().get_truncation_errors());
 
     status.trnc_lim                   = trnc_new;
     status.trnc_limit_has_reached_min = std::abs(status.trnc_lim - status.trnc_min) < std::numeric_limits<double>::epsilon();
@@ -955,7 +970,7 @@ void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     if(drop_if_stk_algo and is_stk_algo) reason.emplace_back("stuck");
     if(drop_if_next_iter and is_next_iter) reason.emplace_back("next iter");
     if(drop_if_even_iter and is_even_iter) reason.emplace_back("even iter");
-    if(vary_dynamically and is_sat_evar) reason.emplace_back("variance saturated (dynamic)");
+    if(vary_dynamically) reason.emplace_back("vary dynamically");
     if(reason.empty()) {
         tools::log->trace("Kept eigs tolerance:  {:8.2e} | no reason to update", dmrg_eigs_tol);
         return;

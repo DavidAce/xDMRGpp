@@ -383,9 +383,9 @@ template<typename Scalar>
 void tools::finite::mps::init::randomize_given_state(StateFinite<Scalar> &state, StateInitType type) {
     using namespace qm::spin::half::matrix;
     switch(type) {
-        case StateInitType::REAL: tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::Matrix2cd>{id, 1.0 / std::sqrt(2.0) * (sx + sz)}); break;
+        case StateInitType::REAL: tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::MatrixXcd>{id, 1.0 / std::sqrt(2.0) * (sx + sz)}); break;
         case StateInitType::CPLX:
-            tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::Matrix2cd>{id, 1.0 / std::sqrt(3.0) * (sx + sy + sz)});
+            tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::MatrixXcd>{id, 1.0 / std::sqrt(3.0) * (sx + sy + sz)});
             break;
     }
 }

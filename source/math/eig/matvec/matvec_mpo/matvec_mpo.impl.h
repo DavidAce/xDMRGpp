@@ -7,6 +7,7 @@
 #include "math/tenx.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
+#include "tools/common/contraction/MatrixLikeOperator.h"
 #include <Eigen/Cholesky>
 #include <primme/primme.h>
 namespace eig {
@@ -74,12 +75,14 @@ void MatVecMPO<T>::FactorOP() {
 
 template<typename T>
 void MatVecMPO<T>::MultOPv(T *mps_in_, T *mps_out_) {
-    auto                                  token = t_multOPv->tic_token();
-    Eigen::TensorMap<Eigen::Tensor<T, 3>> mps_in(mps_in_, shape_mps);
-    Eigen::TensorMap<Eigen::Tensor<T, 3>> mps_out(mps_out_, shape_mps);
+    auto token = t_multOPv->tic_token();
     switch(side) {
         case eig::Side::R: {
-            tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpo, envL, envR, iLinSolvCfg);
+            auto MultOp   = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return MultAX(X); };
+            auto MatrixOp = MatrixLikeOperator<Scalar>(size_mps, MultOp);
+            auto mps_out  = Eigen::Map<VectorType>(mps_out_, size_mps);
+            mps_out       = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, mps_in_, iLinSolvCfg);
+            // tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpo, envL, envR, iLinSolvCfg);
             break;
         }
         case eig::Side::L: {
@@ -95,27 +98,23 @@ void MatVecMPO<T>::MultOPv(T *mps_in_, T *mps_out_) {
 
 template<typename T>
 void MatVecMPO<T>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, int *err) {
-    auto token = t_multOPv->tic_token();
+    auto token    = t_multOPv->tic_token();
+    auto MultOp   = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return MultAX(X); };
+    auto MatrixOp = MatrixLikeOperator<Scalar>(size_mps, MultOp);
     switch(side) {
         case eig::Side::R: {
             for(int i = 0; i < *blockSize; i++) {
-                T *x_ptr = static_cast<T *>(x) + *ldx * i;
-                T *y_ptr = static_cast<T *>(y) + *ldy * i;
+                T                     *x_ptr = static_cast<T *>(x) + *ldx * i;
+                T                     *y_ptr = static_cast<T *>(y) + *ldy * i;
+                Eigen::Map<VectorType> x_map(x_ptr, *ldx);
+                Eigen::Map<VectorType> y_map(y_ptr, *ldy);
                 if(factorization == eig::Factorization::NONE) {
-                    Eigen::TensorMap<Eigen::Tensor<T, 3>> x_map(x_ptr, shape_mps);
-                    Eigen::TensorMap<Eigen::Tensor<T, 3>> y_map(y_ptr, shape_mps);
-                    tools::common::contraction::matrix_inverse_vector_product(y_map, x_map, mpo, envL, envR, iLinSolvCfg);
+                    y_map.noalias() = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, x_ptr, iLinSolvCfg);
                 } else if(factorization == eig::Factorization::LDLT) {
-                    Eigen::Map<VectorType> x_map(x_ptr, *ldx);
-                    Eigen::Map<VectorType> y_map(y_ptr, *ldy);
                     y_map.noalias() = ldlt.solve(x_map);
                 } else if(factorization == eig::Factorization::LLT) {
-                    Eigen::Map<VectorType> x_map(x_ptr, *ldx);
-                    Eigen::Map<VectorType> y_map(y_ptr, *ldy);
                     y_map.noalias() = llt.solve(x_map);
                 } else if(factorization == eig::Factorization::LU) {
-                    Eigen::Map<VectorType> x_map(x_ptr, *ldx);
-                    Eigen::Map<VectorType> y_map(y_ptr, *ldy);
                     y_map.noalias() = lu.solve(x_map);
                 }
                 num_op++;
@@ -134,12 +133,17 @@ void MatVecMPO<T>::MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize,
 }
 
 template<typename T>
-void MatVecMPO<T>::MultAx(T *mps_in_, T *mps_out_) {
-    auto                                  token = t_multAx->tic_token();
-    Eigen::TensorMap<Eigen::Tensor<T, 3>> mps_in(mps_in_, shape_mps);
-    Eigen::TensorMap<Eigen::Tensor<T, 3>> mps_out(mps_out_, shape_mps);
+void MatVecMPO<T>::MultAx(const T *mps_in_, T *mps_out_) const {
+    auto                                        token = t_multAx->tic_token();
+    Eigen::TensorMap<Eigen::Tensor<const T, 3>> mps_in(mps_in_, shape_mps);
+    Eigen::TensorMap<Eigen::Tensor<T, 3>>       mps_out(mps_out_, shape_mps);
     tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpo, envL, envR);
     num_mv++;
+}
+
+template<typename T>
+void MatVecMPO<T>::MultAx(T *mps_in_, T *mps_out_) {
+    MultAx(static_cast<const Scalar *>(mps_in_), mps_out_);
 }
 
 template<typename T>
@@ -173,6 +177,42 @@ void MatVecMPO<T>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, 
 
     num_mv += *blockSize;
     *err = 0;
+}
+
+template<typename Scalar>
+Eigen::Tensor<Scalar, 3> MatVecMPO<Scalar>::operator*(const Eigen::Tensor<Scalar, 3> &x) const {
+    assert(x.size() == get_size());
+    Eigen::Tensor<Scalar, 3> y(x.dimensions());
+    MultAx(x.data(), y.data());
+    return y;
+}
+template<typename Scalar>
+Eigen::Tensor<Scalar, 1> MatVecMPO<Scalar>::operator*(const Eigen::Tensor<Scalar, 1> &x) const {
+    assert(x.size() == get_size());
+    Eigen::Tensor<Scalar, 1> y(x.size());
+    MultAx(x.data(), y.data());
+    return y;
+}
+template<typename Scalar>
+typename MatVecMPO<Scalar>::VectorType MatVecMPO<Scalar>::operator*(const VectorType &x) const {
+    assert(x.size() == get_size());
+    VectorType y(x.size());
+    MultAx(x.data(), y.data());
+    return y;
+}
+template<typename Scalar>
+typename MatVecMPO<Scalar>::MatrixType MatVecMPO<Scalar>::MultAX(const Eigen::Ref<const MatrixType> &X) const {
+    assert(X.rows() == get_size());
+    MatrixType Y(X.rows(), X.cols());
+    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultAx(X.col(i).data(), Y.col(i).data()); }
+    return Y;
+}
+template<typename Scalar>
+typename MatVecMPO<Scalar>::VectorType MatVecMPO<Scalar>::MultAx(const Eigen::Ref<const VectorType> &x) const {
+    assert(x.rows() == get_size());
+    VectorType y(x.rows());
+    MultAx(x.data(), y.data());
+    return y;
 }
 
 template<typename T>

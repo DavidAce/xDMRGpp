@@ -2,7 +2,7 @@
 
 #include "../../../opt_meta.h"
 #include "../../../opt_mps.h"
-#include "algorithms/AlgorithmStatus.h"
+#include "../../launch_gdplusk.h"
 #include "config/settings.h"
 #include "general/sfinae.h"
 #include "math/eig.h"
@@ -107,6 +107,14 @@ void eigs_generalized_shift_invert_executor(eig::solver &solver, MatVecType &ham
     hamiltonian_squared.reset();
 
     tools::log->trace("eigs_variance_executor: Defining the Hamiltonian-squared matrix-vector product");
+    switch(solver.config.lib.value_or(eig::Lib::EIGSMPO)) {
+        case eig::Lib::ARPACK: throw except::logic_error("optimize_generalized_shift_invert_eigs: ARPACK is not supported");
+        case eig::Lib::EIGSMPO: {
+            results = eigs_gdplusk<CalcType>(tensors, initial_mps, meta);
+            return;
+        }
+        default: break;
+    }
 
     if(solver.config.lib == eig::Lib::ARPACK) {
         throw except::logic_error("optimize_generalized_shift_invert_eigs: ARPACK is not supported");
@@ -180,15 +188,8 @@ void eigs_manager_generalized_shift_invert(const TensorsFinite<Scalar> &tensors,
 
 template<typename Scalar>
 opt_mps<Scalar> internal::optimize_generalized_shift_invert(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                            [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::eigs_log<Scalar> &elog) {
-    if(meta.optSolver == OptSolver::EIG) return optimize_generalized_shift_invert_eig(tensors, initial_mps, status, meta, elog);
-
-    // auto meta2          = meta;
-    // meta2.optSolver     = OptSolver::H1H2;
-    // meta2.optType       = OptType::FP128;
-    // meta2.eigs_iter_max = 100;
-    // meta2.eigs_ncv      = 3;
-    // return optimize_lanczos_h1h2(tensors, initial_mps, status, meta2, elog);
+                                                            [[maybe_unused]] OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+    if(meta.optSolver == OptSolver::EIG) return optimize_generalized_shift_invert_eig(tensors, initial_mps, meta, elog);
 
     using namespace internal;
     using namespace settings::precision;

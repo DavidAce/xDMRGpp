@@ -165,8 +165,8 @@ class MatVecMPOS {
     void FactorOP();                                //  Factorizes (A-sigma*I) (or finds its diagonal elements)
     void MultOPv(Scalar *mps_in_, Scalar *mps_out); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
     void MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
-    void MultAx(Scalar *mps_in_, Scalar *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultAx(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultAx(Scalar *mps_in_, Scalar *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
     void MultBx(Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
@@ -180,11 +180,12 @@ class MatVecMPOS {
     VectorType               operator*(const VectorType &x) const;
     MatrixType               MultAX(const Eigen::Ref<const MatrixType> &X) const;
     VectorType               MultAx(const Eigen::Ref<const VectorType> &x) const;
-
-    void       CalcPc(Scalar shift = 0.0);                                         // Calculates the diagonal or tridiagonal part of A
-    void       MultPc(const Scalar *mps_in_, Scalar *mps_out, Scalar shift = 0.0); // Applies the preconditioner
-    void       MultPc(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); // Applies the preconditioner
-    MatrixType MultPX(const Eigen::Ref<const MatrixType> &X); //  Applies the preconditioner onto many columns in X
+    MatrixType               MultBX(const Eigen::Ref<const MatrixType> &X) const;
+    VectorType               MultBx(const Eigen::Ref<const VectorType> &x) const;
+    void                     CalcPc(Scalar shift = 0.0);                                         // Calculates the diagonal or tridiagonal part of A
+    void                     MultPc(const Scalar *mps_in_, Scalar *mps_out, Scalar shift = 0.0); // Applies the preconditioner
+    void                     MultPc(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); // Applies the preconditioner
+    MatrixType               MultPX(const Eigen::Ref<const MatrixType> &X); //  Applies the preconditioner onto many columns in X
 
     // Various utility functions
     mutable long num_mv = 0;

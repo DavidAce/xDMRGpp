@@ -433,7 +433,7 @@ std::vector<std::reference_wrapper<MpsSite<Scalar>>> StateFinite<Scalar>::get_mp
 }
 
 template<typename Scalar>
-std::array<long, 3> StateFinite<Scalar>::active_dimensions() const {
+std::array<long, 3> StateFinite<Scalar>::active_problem_dims() const {
     return tools::finite::multisite::get_dimensions(*this, active_sites);
 }
 
@@ -660,7 +660,7 @@ fp64 StateFinite<Scalar>::get_truncation_error_active_max() const {
 }
 
 template<typename Scalar>
-size_t StateFinite<Scalar>::num_sites_truncated(double truncation_threshold) const {
+size_t StateFinite<Scalar>::num_bonds_truncated(double truncation_threshold) const {
     auto truncation_errors = get_truncation_errors();
     auto trunc_bond_count  = safe_cast<size_t>(
         std::count_if(truncation_errors.begin(), truncation_errors.end(), [truncation_threshold](auto const &val) { return val > truncation_threshold; }));
@@ -676,8 +676,13 @@ size_t StateFinite<Scalar>::num_bonds_at_limit(long bond_lim) const {
 }
 
 template<typename Scalar>
-bool StateFinite<Scalar>::is_at_bond_limit(long bond_lim) const {
-    return num_bonds_at_limit(bond_lim) > 0;
+bool StateFinite<Scalar>::is_at_bond_limit(long bond_lim, double fraction) const {
+    auto num = num_bonds_at_limit(bond_lim);
+    if(fraction == std::clamp(fraction, 0.0, 1.0)) {
+        return safe_cast<double>(num) / get_length<double>() > fraction;
+    } else {
+        return num > 0;
+    }
 }
 
 template<typename Scalar>

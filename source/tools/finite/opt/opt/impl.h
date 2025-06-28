@@ -1,5 +1,5 @@
 #pragma once
-#include "algorithms/AlgorithmStatus.h"
+
 #include "config/debug.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
@@ -70,10 +70,10 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_opt_initial_mps(cons
 
 template<typename Scalar>
 tools::finite::opt::opt_mps<Scalar> tools::finite::opt::find_ground_state(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                                          const AlgorithmStatus &status, OptMeta &meta) {
+                                                                          OptMeta &meta) {
     auto t_opt  = tid::tic_scope("opt");
     auto elog   = reports::eigs_log<Scalar>();
-    auto result = internal::optimize_energy(tensors, initial_mps, status, meta, elog);
+    auto result = internal::optimize_energy(tensors, initial_mps, meta, elog);
     elog.print_eigs_report();
     // Finish up
     result.set_optsolver(meta.optSolver);
@@ -86,11 +86,11 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::find_ground_state(const 
 
 template<typename Scalar>
 tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                                          const AlgorithmStatus &status, OptMeta &meta) {
+                                                                          OptMeta &meta) {
     auto t_opt = tid::tic_scope("opt");
     tools::log->trace("Starting optimization: algo [{}] | solver [{}] | type [{}] | ritz [{}] | position [{}] | sites {} | shape {} = {}",
-                      enum2sv(meta.optAlgo), enum2sv(meta.optSolver), enum2sv(meta.optType), enum2sv(meta.optRitz), status.position, tensors.active_sites,
-                      tensors.active_problem_dims(), tensors.active_problem_size());
+                      enum2sv(meta.optAlgo), enum2sv(meta.optSolver), enum2sv(meta.optType), enum2sv(meta.optRitz), tensors.template get_position<long>(),
+                      tensors.active_sites, tensors.active_problem_dims(), tensors.active_problem_size());
 
     using namespace opt::internal;
 
@@ -101,50 +101,34 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
     reports::eigs_log<Scalar> elog;
     reports::subs_log<Scalar> slog;
     // Dispatch optimization to the correct routine depending on the chosen algorithm
-    if(meta.optSolver == OptSolver::H1H2) {
-        result = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta, elog);
-        // auto meta2      = meta;
-        // meta2.optSolver = OptSolver::EIGS;
-        // meta2.optAlgo   = OptAlgo::XDMRG;
-        // meta2.optRitz   = OptRitz::SM;
-        // auto result2    = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta2, elog);
-        // auto meta3      = meta;
-        // meta3.optSolver = meta.optSolver == OptSolver::EIGS ? OptSolver::H1H2 : OptSolver::EIGS;
-        // meta3.optType   = OptType::FP64;
-        // meta3.optAlgo   = OptAlgo::GDMRG;
-        // meta3.optRitz   = OptRitz::LM;
-        // if(meta.optSolver != meta3.optSolver or meta.optType != meta3.optType or meta.optAlgo != meta3.optAlgo or meta.optRitz != meta3.optRitz) {
-        //     if(meta3.optSolver == OptSolver::EIGS) {
-        //         auto result3 = internal::optimize_generalized_shift_invert(tensors, initial_mps, status, meta3, elog);
-        //     } else {
-        //         auto result3 = internal::optimize_lanczos_h1h2(tensors, initial_mps, status, meta3, elog);
-        //     }
-        // }
-    } else {
-        switch(meta.optAlgo) {
-            case OptAlgo::DMRG: {
-                result = internal::optimize_energy(tensors, initial_mps, status, meta, elog);
-                break;
-            }
-            case OptAlgo::DMRGX: {
-                result = internal::optimize_overlap(tensors, initial_mps, status, meta, slog);
-                break;
-            }
-            case OptAlgo::HYBRID_DMRGX: {
-                result = internal::optimize_subspace_variance(tensors, initial_mps, status, meta, elog);
-                break;
-            }
-            case OptAlgo::XDMRG: {
-                result = internal::optimize_folded_spectrum(tensors, initial_mps, status, meta, elog);
-                break;
-            }
-            case OptAlgo::GDMRG: {
-                result = internal::optimize_generalized_shift_invert(tensors, initial_mps, status, meta, elog);
-                break;
-            }
-        }
+    // if(meta.optSolver == OptSolver::H1H2) {
+    // result = internal::optimize_lanczos_h1h2(tensors, initial_mps, meta, elog);
+    // auto meta2      = meta;
+    // meta2.optSolver = OptSolver::EIGS;
+    // meta2.optAlgo   = OptAlgo::XDMRG;
+    // meta2.optRitz   = OptRitz::SM;
+    // auto result2    = internal::optimize_lanczos_h1h2(tensors, initial_mps, meta2, elog);
+    // auto meta3      = meta;
+    // meta3.optSolver = meta.optSolver == OptSolver::EIGS ? OptSolver::H1H2 : OptSolver::EIGS;
+    // meta3.optType   = OptType::FP64;
+    // meta3.optAlgo   = OptAlgo::GDMRG;
+    // meta3.optRitz   = OptRitz::LM;
+    // if(meta.optSolver != meta3.optSolver or meta.optType != meta3.optType or meta.optAlgo != meta3.optAlgo or meta.optRitz != meta3.optRitz) {
+    //     if(meta3.optSolver == OptSolver::EIGS) {
+    //         auto result3 = internal::optimize_generalized_shift_invert(tensors, initial_mps, meta3, elog);
+    //     } else {
+    //         auto result3 = internal::optimize_lanczos_h1h2(tensors, initial_mps, meta3, elog);
+    //     }
+    // }
+    // } else {
+    switch(meta.optAlgo) {
+        case OptAlgo::DMRG: result = internal::optimize_energy(tensors, initial_mps, meta, elog); break;
+        case OptAlgo::DMRGX: result = internal::optimize_overlap(tensors, initial_mps, meta, slog); break;
+        case OptAlgo::HYBRID_DMRGX: result = internal::optimize_subspace_variance(tensors, initial_mps, meta, elog); break;
+        case OptAlgo::XDMRG: result = internal::optimize_folded_spectrum(tensors, initial_mps, meta, elog); break;
+        case OptAlgo::GDMRG: result = internal::optimize_generalized_shift_invert(tensors, initial_mps, meta, elog); break;
     }
-
+    // }
 
     slog.print_subs_report();
     elog.print_eigs_report();

@@ -8,7 +8,7 @@ namespace eig {
     using size_type = long;
 
     // Enums
-    enum class Lib { ARPACK, SPECTRA, PRIMME };               // Choose the underlying library
+    enum class Lib { ARPACK, SPECTRA, PRIMME, EIGSMPO };      // Choose the underlying library
     enum class Form { SYMM, NSYM };                           // Symmetric or non-symmetric problems (complex symmetric are assumed Hermitian)
     enum class Type { FP32, FP64, FP128, CX32, CX64, CX128 }; // Real or complex, 32, 64 or 128 bit
     enum class Side { L, R, LR };                             // Left, right or both eigenvectors (for nsym problems)
@@ -117,7 +117,6 @@ namespace eig {
         }
     }
 
-
     inline std::string_view FactorizationToString(Factorization fact) {
         switch(fact) {
             case Factorization::NONE: return "NONE";
@@ -137,12 +136,19 @@ namespace eig {
             default: throw std::logic_error("No valid eig::Preconditioner given");
         }
     }
+    inline Preconditioner StringToPreconditioner(std::string_view prec) {
+        if(prec == "NONE") return Preconditioner::NONE;
+        if(prec == "JACOBI") return Preconditioner::JACOBI;
+        if(prec == "SOLVE") return Preconditioner::SOLVE;
+        return Preconditioner::NONE;
+    }
     inline std::string_view RitzToString(std::optional<Ritz> ritz) { return ritz ? RitzToString(ritz.value()) : "Ritz:NONE"; }
     inline std::string_view LibToString(Lib lib) {
         switch(lib) {
             case Lib::ARPACK: return "ARPACK";
             case Lib::SPECTRA: return "SPECTRA";
             case Lib::PRIMME: return "PRIMME";
+            case Lib::EIGSMPO: return "EIGSMPO";
             default: throw std::logic_error("No valid eig::Lib given");
         }
     }
@@ -151,6 +157,7 @@ namespace eig {
         if(libstr == "ARPACK") return Lib::ARPACK;
         if(libstr == "PRIMME") return Lib::PRIMME;
         if(libstr == "SPECTRA") return Lib::SPECTRA;
+        if(libstr == "EIGSMPO") return Lib::EIGSMPO;
         throw std::logic_error("The string does not match any eig::Lib");
     }
 

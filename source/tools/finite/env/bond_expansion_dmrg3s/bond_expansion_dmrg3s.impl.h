@@ -104,9 +104,9 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_dmrg3s(StateFinite<S
     // Bond dimension can't grow faster than x spin_dim.
     auto bondL_max = mpsL.spin_dim() * mpsL.get_chiL();
     auto bondR_max = mpsR.spin_dim() * mpsR.get_chiR();
-    auto bond_max  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bond_limit});
+    auto bond_max  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bond_lim});
 
-    auto svd_cfg = svd::config(bond_max, bcfg.trnc_limit);
+    auto svd_cfg = svd::config(bond_max, bcfg.trnc_lim);
 
     bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
     bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);

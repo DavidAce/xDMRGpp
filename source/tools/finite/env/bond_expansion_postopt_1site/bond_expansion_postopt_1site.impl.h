@@ -38,56 +38,6 @@ namespace settings {
 }
 
 template<typename Scalar>
-void merge_rexpansion_terms_r2l(MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &N_0, MpsSite<Scalar> &mpsR, const Eigen::Tensor<Scalar, 3> &M_P) {
-    // The expanded bond sits between mpsL and mpsR.
-    // During postopt expansion <--
-    //      * mpsL is A(i)Λc
-    //      * mpsR is B(i+1)
-    //      * N_0 is [A(i), 0]
-    //      * M_P is [B(i+1), P]^T
-
-    tools::log->trace("merge_rexpansion_terms_r2l: ({}{},{}{})", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions());
-
-    // Create a padded LC
-
-    Eigen::Tensor<Scalar, 1> LC_pad(N_0.dimension(2));
-    LC_pad.setConstant(Scalar{1});
-
-    auto LC_off                  = tenx::array1{0};
-    auto LC_ext                  = tenx::array1{mpsL.get_LC().size()};
-    LC_pad.slice(LC_off, LC_ext) = mpsL.get_LC();
-
-    mpsL.set_M(N_0);
-    mpsL.set_LC(LC_pad);
-
-    mpsR.set_M(M_P);
-}
-
-template<typename Scalar>
-void merge_rexpansion_terms_l2r(MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &M_P, MpsSite<Scalar> &mpsR, const Eigen::Tensor<Scalar, 3> &N_0) {
-    // The expanded bond sits between mpsL and mpsR.
-    // During postopt expansion -->
-    //      * mpsL is A(i)Λc
-    //      * mpsR is B(i+1)
-    //      * M_P is [A(i), P]
-    //      * N_0 is [B, 0]^T
-
-    tools::log->trace("merge_rexpansion_terms_l2r: ({}{},{}{})", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions());
-    svd::solver svd;
-
-    // Create a longer padded LC
-    Eigen::Tensor<Scalar, 1> LC_pad(M_P.dimension(2));
-    LC_pad.setConstant(Scalar{1});
-    auto LC_off                  = tenx::array1{0};
-    auto LC_ext                  = tenx::array1{mpsL.get_LC().size()};
-    LC_pad.slice(LC_off, LC_ext) = mpsL.get_LC();
-    mpsL.set_M(M_P);
-    mpsL.set_LC(LC_pad, -1.0);
-
-    mpsR.set_M(N_0);
-}
-
-template<typename Scalar>
 BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(StateFinite<Scalar> &state, ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges,
                                                                            BondExpansionConfig bcfg) {
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
@@ -125,13 +75,13 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
 
     // Determine the maximum bond size
     // Bond dimension can't grow faster than x spin_dim.
-    if(bcfg.bond_limit < 1) throw except::logic_error("Invalid bondexp_bondlim: {} < 1", bcfg.bond_limit);
+    if(bcfg.bond_lim < 1) throw except::logic_error("Invalid bondexp_bondlim: {} < 1", bcfg.bond_lim);
     auto bondL_max = mpsL.spin_dim() * mpsL.get_chiL();
     auto bondR_max = mpsR.spin_dim() * mpsR.get_chiR();
-    auto bond_max  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bond_limit});
-    if(bond_max == mpsL.get_chiR()) {
+    auto bond_lim  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bond_lim});
+    if(bond_lim == mpsL.get_chiR()) {
         auto res = BondExpansionResult<Scalar>();
-        res.msg  = fmt::format("The bond [{}-{}] has reached bond_max {} | mode {}", mpsL.get_tag(), mpsR.get_tag(), bond_max, flag2str(bcfg.policy));
+        res.msg  = fmt::format("The bond [{}-{}] has reached bond_max {} | mode {}", mpsL.get_tag(), mpsR.get_tag(), bond_lim, flag2str(bcfg.policy));
         return res; // No update
     }
 
@@ -161,7 +111,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
     res.var_old   = tools::finite::measure::energy_variance(state, model, edges);
 
     tools::log->debug("Expanding {}{} - {}{} | ene {:.8f} var {:.5e} | χmax {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(),
-                      fp(res.ene_old), fp(res.var_old), bond_max);
+                      fp(res.ene_old), fp(res.var_old), bond_lim);
 
     bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
     bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
@@ -178,11 +128,11 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
         assert_orthonormal<2>(M); // A(i) should be left-orthonormal
         assert_orthonormal<1>(N); // B(i+1) should be right-orthonormal
 
-        auto [M_P, N_0] = internal::get_expansion_terms_MP_N0(M, N, P1, P2, res, bond_max);
+        auto [M_P, N_0] = internal::get_expansion_terms_MP_N0(M, N, P1, P2, res, bond_lim, Scalar{0});
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
-        merge_rexpansion_terms_l2r(mpsP, M_P, mps0, N_0);
-        tools::log->debug("Bond expansion l2r {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bond_max, dimP_old, M.dimensions(),
+        internal::merge_rexpansion_terms_MP_N0(mpsP, M_P, mps0, N_0, bond_lim, Scalar{1e-4f});
+        tools::log->debug("Bond expansion l2r {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bond_lim, dimP_old, M.dimensions(),
                           M_P.dimensions());
         assert(state.template get_position<long>() == static_cast<long>(posP));
 
@@ -191,11 +141,11 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
         assert_orthonormal<2>(N); // A(i) should be left-orthonormal
         assert_orthonormal<1>(M); // B(i+1) should be right-orthonormal
 
-        auto [N_0, M_P] = internal::get_expansion_terms_N0_MP(N, M, P1, P2, res, bond_max);
+        auto [N_0, M_P] = internal::get_expansion_terms_N0_MP(N, M, P1, P2, res, bond_lim, Scalar{0});
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
-        merge_rexpansion_terms_r2l(mps0, N_0, mpsP, M_P);
-        tools::log->debug("Bond expansion r2l {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bond_max, dimP_old, M.dimensions(),
+        internal::merge_rexpansion_terms_N0_MP(mps0, N_0, mpsP, M_P, bond_lim, Scalar{1e-4f});
+        tools::log->debug("Bond expansion r2l {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bond_lim, dimP_old, M.dimensions(),
                           M_P.dimensions());
         assert(state.template get_position<long>() == static_cast<long>(pos0));
     }
@@ -214,13 +164,13 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
     env::rebuild_edges(state, model, edges);
 
     assert(mpsL.get_chiR() == mpsR.get_chiL());
-    if(mpsL.get_chiR() > bond_max) {
+    if(mpsL.get_chiR() > bond_lim) {
         throw except::logic_error("rexpand_bond_postopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                                  mpsR.dimensions(), mpsL.get_chiR(), bond_max);
+                                  mpsR.dimensions(), mpsL.get_chiR(), bond_lim);
     }
-    if(mpsR.get_chiL() > bond_max) {
+    if(mpsR.get_chiL() > bond_lim) {
         throw except::logic_error("rexpand_bond_postopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                                  mpsR.dimensions(), mpsL.get_chiR(), bond_max);
+                                  mpsR.dimensions(), mpsL.get_chiR(), bond_lim);
     }
     res.dimL_new = mpsL.dimensions();
     res.dimR_new = mpsR.dimensions();

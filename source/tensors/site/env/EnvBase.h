@@ -18,9 +18,12 @@ class MpsSite;
 template<typename Scalar>
 class MpoSite;
 
-template<typename Scalar>
+template<typename Scalar_>
 class EnvBase {
     public:
+    using Scalar     = Scalar_;
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
+
     protected:
     void build_block(Eigen::Tensor<Scalar, 3> &otherblock, const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo);
     void enlarge(const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo);

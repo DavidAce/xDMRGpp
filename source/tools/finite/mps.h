@@ -45,7 +45,7 @@ namespace tools::finite::mps {
     template<typename Scalar>  void initialize_state                     (StateFinite<Scalar>& state, StateInit state_type, StateInitType type, std::string_view sector, bool use_eigenspinors, long bond_lim, std::string & pattern);
     template<typename Scalar>  StateFinite<Scalar> add_states            (const StateFinite<Scalar>& stateA, const StateFinite<Scalar>& stateB);
 
-    template<typename Scalar>  void apply_random_paulis                  (StateFinite<Scalar>& state, const std::vector<Eigen::Matrix2cd> & paulimatrices);
+    template<typename Scalar>  void apply_random_paulis                  (StateFinite<Scalar>& state, const std::vector<Eigen::MatrixXcd> & paulimatrices);
     template<typename Scalar>  void apply_random_paulis                  (StateFinite<Scalar>& state, const std::vector<std::string> & paulistrings);
     template<typename Scalar>  void truncate_all_sites                   (StateFinite<Scalar>& state, std::optional<svd::config> svd_cfg = std::nullopt);
     template<typename Scalar>  void truncate_active_sites                (StateFinite<Scalar>& state, std::optional<svd::config> svd_cfg = std::nullopt);

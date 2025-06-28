@@ -1,5 +1,5 @@
 #pragma once
-#include "algorithms/AlgorithmStatus.h"
+
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/eig.h"
@@ -163,9 +163,8 @@ void optimize_generalized_shift_invert_eig_executor(const TensorsFinite<Scalar> 
 
 template<typename Scalar>
 opt_mps<Scalar> tools::finite::opt::internal::optimize_generalized_shift_invert_eig(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                                                    [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta,
-                                                                                    reports::eigs_log<Scalar> &elog) {
-    if(meta.optSolver == OptSolver::EIGS) return optimize_generalized_shift_invert(tensors, initial_mps, status, meta, elog);
+                                                                                    OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+    if(meta.optSolver == OptSolver::EIGS) return optimize_generalized_shift_invert(tensors, initial_mps, meta, elog);
     if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_generalized_shift_invert_eig(): not implemented for type {}", enum2sv(meta.optType));
     }

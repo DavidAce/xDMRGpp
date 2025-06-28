@@ -402,7 +402,7 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_preopt_nsite(StateFi
 
     tools::log->debug("Expanding {}({}) - {}({})", mpsL.get_label(), mpsL.get_position(), mpsR.get_label(), mpsR.get_position());
 
-    auto svd_cfg = svd::config(bcfg.bond_limit, bcfg.trnc_limit);
+    auto svd_cfg = svd::config(bcfg.bond_lim, bcfg.trnc_lim);
 
     mps::merge_multisite_mps(state, res.mixed_blk, pos_active_and_expanded, state.template get_position<long>(), MergeEvent::EXP, svd_cfg);
 
@@ -410,7 +410,7 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_preopt_nsite(StateFi
     res.bond_new = state.get_bond_dims(pos_active_and_expanded);
 
     tools::log->debug("Bond expansion pos {} | {} {} | svd_ε {:.2e} | χlim {} | χ {} -> {}", pos_active_and_expanded,
-                      enum2sv(bcfg.optAlgo), enum2sv(bcfg.optRitz), bcfg.trnc_limit, bcfg.bond_limit, res.bond_old, res.bond_new);
+                      enum2sv(bcfg.optAlgo), enum2sv(bcfg.optRitz), bcfg.trnc_lim, bcfg.bond_lim, res.bond_old, res.bond_new);
     state.clear_cache();
     state.clear_measurements();
     for(const auto &mps : state.get_mps(pos_active_and_expanded)) mps.get().assert_normalized();

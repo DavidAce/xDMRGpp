@@ -277,13 +277,14 @@ namespace tenx {
 
     template<typename T, typename Device = Eigen::DefaultDevice>
     auto asNormalized(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr) {
-        auto tensor                          = tenx::asEval(expr);
-        using Scalar                         = typename decltype(tensor)::Scalar;
-        using DimType                        = typename decltype(tensor)::Dimensions;
-        constexpr auto           rank        = Eigen::internal::array_size<DimType>::value;
-        auto                     tensorMap   = Eigen::TensorMap<const Eigen::Tensor<Scalar, rank>>(tensor.data(), tensor.dimensions());
-        auto                     csquare     = [](auto z) -> double { return std::abs(std::conj(z) * z); };
-        Eigen::Tensor<double, 0> normInverse = tensorMap.unaryExpr(csquare).sum().sqrt().inverse();
+        auto tensor                              = tenx::asEval(expr);
+        using Scalar                             = typename decltype(tensor)::Scalar;
+        using RealScalar                         = typename decltype(tensor)::RealScalar;
+        using DimType                            = typename decltype(tensor)::Dimensions;
+        constexpr auto               rank        = Eigen::internal::array_size<DimType>::value;
+        auto                         tensorMap   = Eigen::TensorMap<const Eigen::Tensor<Scalar, rank>>(tensor.data(), tensor.dimensions());
+        auto                         csquare     = [](auto z) -> RealScalar { return std::abs(std::conj(z) * z); };
+        Eigen::Tensor<RealScalar, 0> normInverse = tensorMap.unaryExpr(csquare).sum().sqrt().inverse();
         return Eigen::Tensor<Scalar, rank>(tensorMap * tensorMap.constant(normInverse.coeff(0)));
     }
 

@@ -83,10 +83,18 @@ class MatVecMPO {
     void MultOPv(T *mps_in_, T *mps_out); //  Computes the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
     void MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err);
     void MultAx(T *mps_in_, T *mps_out_); //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultAx(const T *mps_in_, T *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultAx(T *mps_in, T *mps_out, T *mpo_ptr, T *envL_ptr, T *envR_ptr, std::array<long, 3> shape_mps_,
                 std::array<long, 4> shape_mpo_); //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err);
     void perform_op(const T *mps_in_, T *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
+
+    Eigen::Tensor<Scalar, 3> operator*(const Eigen::Tensor<Scalar, 3> &x) const;
+    Eigen::Tensor<Scalar, 1> operator*(const Eigen::Tensor<Scalar, 1> &x) const;
+    VectorType               operator*(const VectorType &x) const;
+    MatrixType               MultAX(const Eigen::Ref<const MatrixType> &X) const;
+    VectorType               MultAx(const Eigen::Ref<const VectorType> &x) const;
+
 
     // Various utility functions
     mutable long num_mv = 0;

@@ -1,5 +1,5 @@
 #pragma once
-#include "algorithms/AlgorithmStatus.h"
+
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/cast.h"
@@ -62,7 +62,7 @@ using namespace tools::finite::opt::internal;
  */
 template<typename Scalar>
 opt_mps<Scalar> tools::finite::opt::internal::optimize_overlap(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                               [[maybe_unused]] const AlgorithmStatus &status, OptMeta &meta, reports::subs_log<Scalar> &slog) {
+                                                               [[maybe_unused]]  OptMeta &meta, reports::subs_log<Scalar> &slog) {
     if(meta.optAlgo != OptAlgo::DMRGX)
         throw except::runtime_error("optimize_overlap: Expected OptAlgo [{}] | Got [{}]", enum2sv(OptAlgo::DMRGX), enum2sv(meta.optAlgo));
     tools::log->trace("Optimizing in OVERLAP mode");

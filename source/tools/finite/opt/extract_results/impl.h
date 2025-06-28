@@ -4,10 +4,12 @@
 #include "../../opt_mps.h"
 #include "config/settings.h"
 #include "math/eig.h"
+#include "math/eig/solver_eigsmpo/solver_gdplusk.h"
 #include "math/num.h"
 #include "math/tenx.h"
 #include "measure/MeasurementsTensorsFinite.h"
 #include "tensors/edges/EdgesFinite.h"
+#include "tensors/model/ModelFinite.h"
 #include "tensors/state/StateFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
@@ -16,7 +18,6 @@
 #include "tools/finite/measure/residual.h"
 #include "tools/finite/opt/opt-internal.h"
 #include <fmt/ranges.h>
-#include <tensors/model/ModelFinite.h>
 
 template<typename CalcType, typename Scalar>
 void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, const OptMeta &meta,
@@ -96,6 +97,55 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
             }
         }
     }
+}
+
+template<typename CalcType, typename Scalar>
+void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial, const OptMeta &opt_meta,
+                                                   const solver_gdplusk<CalcType> &solver, std::vector<opt_mps<Scalar>> &results) {
+    // Extract solution
+    results.emplace_back(opt_mps<Scalar>());
+    auto &res           = results.back();
+    res.is_basis_vector = false;
+    res.set_name(fmt::format("eigenvector 0 [{} gdplusk]", enum2sv(opt_meta.optAlgo)));
+    res.set_tensor(Eigen::TensorMap<const Eigen::Tensor<CalcType, 3>>(solver.V.col(0).data(), solver.mps_shape));
+    res.set_overlap(std::abs(initial.get_vector().dot(res.get_vector())));
+    res.set_sites(initial.get_sites());
+    res.set_eshift(initial.get_eshift()); // Will set energy if also given the eigval
+    res.set_eigs_idx(0);
+    res.set_eigs_nev(solver.nev);
+    res.set_eigs_ncv(solver.ncv);
+    res.set_eigs_tol(solver.tol);
+    res.set_eigs_jcb(solver.get_jcbMaxBlockSize());
+    res.set_eigs_ritz(enum2sv(solver.ritz));
+    res.set_eigs_type(enum2sv(opt_meta.optType));
+    res.set_optalgo(solver.algo);
+    res.set_opttype(opt_meta.optType);
+    res.set_optsolver(opt_meta.optSolver);
+    res.set_energy_shifted(initial.get_energy_shifted());
+
+    res.set_length(initial.get_length());
+    res.set_time(solver.status.time_elapsed.get_time());
+    res.set_time_mv(solver.status.time_matvecs_total.get_time());
+    res.set_time_pc(solver.status.time_precond_total.get_time());
+    res.set_op(solver.H1.num_op + solver.H2.num_op);
+    res.set_mv(solver.status.num_matvecs_total);
+    res.set_pc(solver.status.num_precond_total);
+    res.set_iter(solver.status.iter);
+    res.set_eigs_rnorm(solver.status.rNorms(0));
+    res.set_eigs_eigval(static_cast<fp64>(solver.status.optVal[0]));
+    auto mpos    = tensors.get_model().get_mpo_active();
+    auto enve    = tensors.get_edges().get_ene_active();
+    auto envv    = tensors.get_edges().get_var_active();
+    auto vh1v    = tools::finite::measure::expval_hamiltonian(res.get_tensor(), mpos, enve);
+    auto vh2v    = tools::finite::measure::expval_hamiltonian_squared(res.get_tensor(), mpos, envv);
+    auto rnormH1 = tools::finite::measure::residual_norm(res.get_tensor(), mpos, enve);
+    auto rnormH2 = tools::finite::measure::residual_norm(res.get_tensor(), mpos, envv);
+    res.set_rnorm_H1(rnormH1);
+    res.set_rnorm_H2(rnormH2);
+    res.set_energy(std::real(vh1v + res.get_eshift()));
+    res.set_variance(std::real(vh2v) - std::abs(vh1v * vh1v));
+    res.set_energy_shifted(std::real(vh1v));
+    res.set_hsquared(std::real(vh2v));
 }
 
 template<typename CalcType, typename Scalar>

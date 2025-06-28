@@ -75,7 +75,10 @@ void assert_orthonormal(const Eigen::TensorBase<Derived, Eigen::ReadOnlyAccessor
         using MapType    = Eigen::Map<const MatrixType>;
 
         auto X = Eigen::TensorMap<const TensorType>(tensor.data(), tensor.dimensions());
-        if(X.size() == 0) return;
+        if(X.size() == 0) {
+            tools::log->warn("{}:{}: {}: assert_orthonormal<{}>: X.size() == 0", location.file_name(), location.line(), location.function_name(), axis);
+            return;
+        }
 
         Eigen::Tensor<Scalar, 2> G;
         Eigen::Index             oxis    = axis == 1l ? 2l : 1l; // other axis

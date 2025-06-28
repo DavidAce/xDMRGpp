@@ -10,32 +10,32 @@ namespace qm::mpo {
     template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
     template<typename Scalar> using CplxScalar = std::complex<RealScalar<Scalar>>;
     template<typename Scalar>
-    std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> pauli_mpo(const Eigen::Matrix2cd &paulimatrix);
+    std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> pauli_mpo(const Eigen::MatrixXcd &paulimatrix);
 
     template<typename Scalar>
     std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> prod_pauli_mpo(std::string_view axis);
 
     template<typename Scalar>
     std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-        parity_projector_mpos(const Eigen::Matrix2cd &paulimatrix, size_t sites, int sector = 1);
+        parity_projector_mpos(const Eigen::MatrixXcd &paulimatrix, size_t sites, int sector = 1);
 
     template<typename Scalar>
     std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-        random_pauli_mpos(const Eigen::Matrix2cd &paulimatrix, size_t sites);
+        random_pauli_mpos(const Eigen::MatrixXcd &paulimatrix, size_t sites);
 
     template<typename Scalar>
     std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-        random_pauli_mpos_x2(const Eigen::Matrix2cd &paulimatrix1, const Eigen::Matrix2cd &paulimatrix2, size_t sites);
+        random_pauli_mpos_x2(const Eigen::MatrixXcd &paulimatrix1, const Eigen::MatrixXcd &paulimatrix2, size_t sites);
 
     template<typename Scalar>
     std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-        random_pauli_mpos(const std::vector<Eigen::Matrix2cd> &paulimatrices, size_t sites);
+        random_pauli_mpos(const std::vector<Eigen::MatrixXcd> &paulimatrices, size_t sites);
 
     template<typename Scalar>
     std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-        sum_of_pauli_mpo(const std::vector<Eigen::Matrix2cd> &paulimatrices, size_t sites, RandomizerMode mode);
+        sum_of_pauli_mpo(const std::vector<Eigen::MatrixXcd> &paulimatrices, size_t sites, RandomizerMode mode);
 
     template<typename Scalar>
     std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-        random_pauli_mpos(const std::vector<Eigen::Matrix2cd> &paulimatrices, const std::vector<double> &uniform_dist_widths, size_t sites);
+        random_pauli_mpos(const std::vector<Eigen::MatrixXcd> &paulimatrices, const std::vector<double> &uniform_dist_widths, size_t sites);
 }

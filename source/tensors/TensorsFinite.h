@@ -76,6 +76,7 @@ class TensorsFinite {
     TensorsFinite(const TensorsFinite &other);            // copy ctor
     TensorsFinite &operator=(const TensorsFinite &other); // copy assign
     TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position);
+    TensorsFinite(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges);
 
     StateFinite<Scalar>       &get_state();
     ModelFinite<Scalar>       &get_model();

@@ -271,15 +271,17 @@ enum class ResetReason { INIT, FIND_WINDOW, SATURATED, NEW_STATE, BOND_UPDATE };
         - note that no zero-padding is used here.
  */
 enum class BondExpansionPolicy : int {
-    NONE              = 0,  /*!< No bond expansion (strictly for multisite DMRG, but not recommended anyway) */
-    DMRG3S            = 1,  /*!< Single-site expansion of 1 bond ahead, after optimization (DMRG3S) */
-    POSTOPT_1SITE     = 2,  /*!< Single-site expansion of 1 bond ahead, after optimization */
-    PREOPT_1SITE      = 4,  /*!< Single-site expansion of 1 bond ahead, before optimization */
-    PREOPT_NSITE_REAR = 8,  /*!< (Experimental) Multisite expansion of [active sites] plus 1 sites behind.  */
-    PREOPT_NSITE_FORE = 16, /*!< (Experimental) Multisite expansion of [active sites] plus 1 sites ahead. */
-    H1                = 32, /*!< Enable bond expansion using H¹ */
-    H2                = 64, /*!< Enable bond expansion using H² */
-    DEFAULT           = PREOPT_1SITE | POSTOPT_1SITE | H1 | H2,
+    NONE               = 0,      /*!< No bond expansion (strictly for multisite DMRG, but not recommended anyway) */
+    DMRG3S             = 1 << 0, /*!< Single-site expansion of 1 bond ahead, after optimization (DMRG3S) */
+    POSTOPT_1SITE      = 1 << 1, /*!< Single-site expansion of 1 bond ahead, after optimization */
+    PREOPT_1SITE       = 1 << 2, /*!< Single-site expansion of 1 bond ahead, before optimization */
+    POSTOPT_RDMP_1SITE = 1 << 4, /*!< Single-site expansion after optimization (reduced density matrix perturbation) */
+    PREOPT_RDMP_1SITE  = 1 << 3, /*!< Single-site expansion before optimization (reduced density matrix perturbation) */
+    PREOPT_NSITE_REAR  = 1 << 5, /*!< (Experimental) Multisite expansion of [active sites] plus 1 sites behind.  */
+    PREOPT_NSITE_FORE  = 1 << 6, /*!< (Experimental) Multisite expansion of [active sites] plus 1 sites ahead. */
+    H1                 = 1 << 7, /*!< Enable bond expansion using H¹ */
+    H2                 = 1 << 8, /*!< Enable bond expansion using H² */
+    DEFAULT            = PREOPT_1SITE | POSTOPT_1SITE | H1 | H2,
     allow_bitops
 };
 
@@ -323,7 +325,6 @@ enum class OptAlgo {
 enum class OptSolver {
     EIG,  /*!< Use an exact solver */
     EIGS, /*!< Use an iterative solver (e.g. PRIMME or Arpack) */
-    H1H2  /*!< Lanczos iterations using the local effective {H¹, H²}|Ψ> as Krylov subspace (can use higher than double precision) */
 };
 
 /*! Choose the target eigenpair */
@@ -638,6 +639,8 @@ std::string flag2str(const T &item) noexcept {
         if(has_flag(item, BondExpansionPolicy::DMRG3S)) v.emplace_back("DMRG3S");
         if(has_flag(item, BondExpansionPolicy::POSTOPT_1SITE)) v.emplace_back("POSTOPT_1SITE");
         if(has_flag(item, BondExpansionPolicy::PREOPT_1SITE)) v.emplace_back("PREOPT_1SITE");
+        if(has_flag(item, BondExpansionPolicy::POSTOPT_RDMP_1SITE)) v.emplace_back("POSTOPT_RDMP_1SITE");
+        if(has_flag(item, BondExpansionPolicy::PREOPT_RDMP_1SITE)) v.emplace_back("PREOPT_RDMP_1SITE");
         if(has_flag(item, BondExpansionPolicy::PREOPT_NSITE_REAR)) v.emplace_back("PREOPT_NSITE_REAR");
         if(has_flag(item, BondExpansionPolicy::PREOPT_NSITE_FORE)) v.emplace_back("PREOPT_NSITE_FORE");
         if(has_flag(item, BondExpansionPolicy::H1)) v.emplace_back("H1");
@@ -882,6 +885,8 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         if(item == BondExpansionPolicy::DMRG3S)                         return "DMRG3S";
         if(item == BondExpansionPolicy::POSTOPT_1SITE)                  return "POSTOPT_1SITE";
         if(item == BondExpansionPolicy::PREOPT_1SITE)                   return "PREOPT_1SITE";
+        if(item == BondExpansionPolicy::POSTOPT_RDMP_1SITE)             return "POSTOPT_RDMP_1SITE";
+        if(item == BondExpansionPolicy::PREOPT_RDMP_1SITE)              return "PREOPT_RDMP_1SITE";
         if(item == BondExpansionPolicy::PREOPT_NSITE_REAR)              return "PREOPT_NSITE_REAR";
         if(item == BondExpansionPolicy::PREOPT_NSITE_FORE)              return "PREOPT_NSITE_FORE";
         if(item == BondExpansionPolicy::H1)                             return "H1";
@@ -1063,7 +1068,6 @@ constexpr std::string_view enum2sv(const T item) noexcept {
     if constexpr(std::is_same_v<T,OptSolver>){
         if(item == OptSolver::EIG)                                     return "EIG";
         if(item == OptSolver::EIGS)                                    return "EIGS";
-        if(item == OptSolver::H1H2)                                    return "H1H2";
     }
     if constexpr(std::is_same_v<T,OptWhen>){
         if(item == OptWhen::NEVER)                                     return "NEVER";
@@ -1355,6 +1359,8 @@ constexpr auto sv2enum(std::string_view item) {
         if(item.find("DMRG3S")               != std::string_view::npos) policy |= BondExpansionPolicy::DMRG3S;
         if(item.find("POSTOPT_1SITE")        != std::string_view::npos) policy |= BondExpansionPolicy::POSTOPT_1SITE;
         if(item.find("PREOPT_1SITE")         != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_1SITE;
+        if(item.find("POSTOPT_RDMP_1SITE")   != std::string_view::npos) policy |= BondExpansionPolicy::POSTOPT_RDMP_1SITE;
+        if(item.find("PREOPT_RDMP_1SITE")    != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_RDMP_1SITE;
         if(item.find("PREOPT_NSITE_REAR")    != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_NSITE_REAR;
         if(item.find("PREOPT_NSITE_FORE")    != std::string_view::npos) policy |= BondExpansionPolicy::PREOPT_NSITE_FORE;
         if(item.find("H1")                   != std::string_view::npos) policy |= BondExpansionPolicy::H1;
@@ -1543,7 +1549,6 @@ constexpr auto sv2enum(std::string_view item) {
     if constexpr(std::is_same_v<T,OptSolver>){
         if(item == "EIG")                                   return OptSolver::EIG;
         if(item == "EIGS")                                  return OptSolver::EIGS;
-        if(item == "H1H2")                                  return OptSolver::H1H2;
     }
     if constexpr(std::is_same_v<T,OptWhen>){
         if(item == "NEVER")                                 return OptWhen::NEVER;
