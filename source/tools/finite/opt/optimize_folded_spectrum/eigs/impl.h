@@ -223,7 +223,8 @@ namespace folded_spectrum {
 
 template<typename MatVecType, typename Scalar>
 void eigs_executor_folded_spectrum(eig::solver &solver, MatVecType &hamiltonian_squared, const TensorsFinite<Scalar> &tensors,
-                                   const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results, const OptMeta &meta) {
+                                   const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results, const OptMeta &meta,
+                                   reports::eigs_log<Scalar> &elog) {
     using CalcType = typename MatVecType::Scalar;
     hamiltonian_squared.reset();
 
@@ -250,7 +251,7 @@ void eigs_executor_folded_spectrum(eig::solver &solver, MatVecType &hamiltonian_
             break;
         }
         case eig::Lib::EIGSMPO: {
-            results = eigs_gdplusk<CalcType>(tensors, initial_mps, meta);
+            results = eigs_gdplusk<CalcType>(tensors, initial_mps, meta, elog);
             return;
         }
     }
@@ -270,7 +271,7 @@ void eigs_executor_folded_spectrum(eig::solver &solver, MatVecType &hamiltonian_
 
 template<typename CalcType, typename Scalar>
 void eigs_manager_folded_spectrum(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results,
-                                  const OptMeta &meta) {
+                                  const OptMeta &meta, reports::eigs_log<Scalar> &elog) {
     eig::solver solver;
     auto       &cfg           = solver.config;
     cfg.loglevel              = 2;
@@ -309,7 +310,7 @@ void eigs_manager_folded_spectrum(const TensorsFinite<Scalar> &tensors, const op
     auto        hamiltonian_squared   = MatVecMPOS<CalcType>(mpos, envv);
     hamiltonian_squared.factorization = eig::Factorization::LLT; // H² is positive definite so this should work for the preconditioner
 
-    eigs_executor_folded_spectrum(solver, hamiltonian_squared, tensors, initial_mps, results, meta);
+    eigs_executor_folded_spectrum(solver, hamiltonian_squared, tensors, initial_mps, results, meta, elog);
 }
 template<typename Scalar>
 opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, OptMeta &meta,
@@ -325,19 +326,19 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum(const Ten
     std::vector<opt_mps<Scalar>> results;
     if constexpr(sfinae::is_std_complex_v<Scalar>) {
         switch(meta.optType) {
-            case OptType::FP32: eigs_manager_folded_spectrum<fp32>(tensors, initial_mps, results, meta); break;
-            case OptType::CX32: eigs_manager_folded_spectrum<cx32>(tensors, initial_mps, results, meta); break;
-            case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CX64: eigs_manager_folded_spectrum<cx64>(tensors, initial_mps, results, meta); break;
-            case OptType::FP128: eigs_manager_folded_spectrum<fp128>(tensors, initial_mps, results, meta); break;
-            case OptType::CX128: eigs_manager_folded_spectrum<cx128>(tensors, initial_mps, results, meta); break;
+            case OptType::FP32: eigs_manager_folded_spectrum<fp32>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::CX32: eigs_manager_folded_spectrum<cx32>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::CX64: eigs_manager_folded_spectrum<cx64>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::FP128: eigs_manager_folded_spectrum<fp128>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::CX128: eigs_manager_folded_spectrum<cx128>(tensors, initial_mps, results, meta, elog); break;
             default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
         }
     } else {
         switch(meta.optType) {
-            case OptType::FP32: eigs_manager_folded_spectrum<fp32>(tensors, initial_mps, results, meta); break;
-            case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::FP128: eigs_manager_folded_spectrum<fp128>(tensors, initial_mps, results, meta); break;
+            case OptType::FP32: eigs_manager_folded_spectrum<fp32>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::FP128: eigs_manager_folded_spectrum<fp128>(tensors, initial_mps, results, meta, elog); break;
             case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
             case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
             default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));

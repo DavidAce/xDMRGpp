@@ -360,6 +360,19 @@ BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionO
     bcfg.mixing_factor = status.mixing_factor;
     bcfg.optAlgo       = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
     bcfg.optRitz       = status.opt_ritz;
+
+    if(status.algo_type == AlgorithmType::xDMRG) {
+        // auto h2 = tools::finite::measure::expval_hamiltonian_squared(tensors);
+        if(status.algorithm_has_stuck_for > 1) {
+            bcfg.optAlgo = settings::xdmrg::algo_stuck;
+            bcfg.optRitz = settings::xdmrg::ritz_stuck;
+        }
+        if(status.iter < settings::strategy::iter_max_warmup /* or std::abs(h2) > 1e-3 */) {
+            bcfg.optAlgo = settings::xdmrg::algo_warmup;
+            bcfg.optRitz = settings::xdmrg::ritz_warmup;
+        }
+    }
+
     switch(settings::precision::optScalar) {
         case ScalarType::FP32: bcfg.optType = OptType::FP32; break;
         case ScalarType::FP64: bcfg.optType = OptType::FP64; break;
@@ -740,8 +753,6 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
             tools::log->trace("Entanglement entropies: {} ", fv(tools::finite::measure::entanglement_entropies(tensors.get_state())));
         }
     }
-
-
 
     // If we got here we want to decrease the truncation error limit progressively during the simulation
     // Note that "is_truncated" it is special, as it is an additional requirement on the other conditions if enabled (drop_if_truncated)

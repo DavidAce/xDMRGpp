@@ -2,6 +2,9 @@
 #include "IterativeLinearSolverConfig.h"
 #include <chrono>
 #include <Eigen/Core>
+namespace settings {
+    static constexpr bool debug_jcb = false;
+}
 
 template<typename MatrixLikeType>
 class IterativeLinearSolverPreconditioner {
@@ -115,37 +118,54 @@ class IterativeLinearSolverPreconditioner {
     }
 
     template<typename Rhs, typename Dest, typename SolverType>
-    void apply_jacobi_blocks(const Rhs &b, Dest &x, const std::vector<std::tuple<long, VectorType, std::unique_ptr<SolverType>>> *blocks) const {
+    void apply_jacobi_blocks(const Rhs &b, Dest &x, const std::vector<std::tuple<long, int, std::unique_ptr<SolverType>>> *blocks) const {
         if(blocks == nullptr) return;
         if(blocks->empty()) return;
 #pragma omp parallel for
         for(size_t idx = 0; idx < blocks->size(); ++idx) {
-            const auto &[offset, invdiag, solver] = blocks->at(idx);
-            long extent                           = solver->rows();
-            auto x_segment                        = Eigen::Map<VectorType>(x.data() + offset, extent);
-            auto b_segment                        = Eigen::Map<const VectorType>(b.data() + offset, extent);
-            x_segment.noalias()                   = solver->solve(b_segment);
+            const auto &[offset, sign, solver] = blocks->at(idx);
+            long extent                         = solver->rows();
+            auto x_segment                      = Eigen::Map<VectorType>(x.data() + offset, extent);
+            auto b_segment                      = Eigen::Map<const VectorType>(b.data() + offset, extent);
+            x_segment.noalias() = solver->solve(b_segment*static_cast<RealScalar>(sign));
         }
         m_iterations++;
     }
 
     template<typename Rhs, typename Dest>
     void solve_jacobi(const Rhs &b, Dest &x) const {
+        if(config->jacobi.skipjcb) {
+            x = b;
+            return;
+        }
+        VectorType y = b;
+        if constexpr(matrix->has_projector_op) {
+            // Project out an operator if present here
+            y = matrix->ProjectOpR(b);
+        }
+
         auto old_iterations = m_iterations;
         if(config->jacobi.invdiag != nullptr) {
             // None of the block jacobi preconditioners were applied.
             auto invdiag = Eigen::Map<const VectorType>(config->jacobi.invdiag, rows());
-            x.noalias()  = invdiag.array().cwiseProduct(b.array()).matrix();
+            x.noalias()  = invdiag.array().cwiseProduct(y.array()).matrix();
             m_iterations++;
         }
-        apply_jacobi_blocks(b, x, config->jacobi.lltJcbBlocks);
-        apply_jacobi_blocks(b, x, config->jacobi.ldltJcbBlocks);
-        apply_jacobi_blocks(b, x, config->jacobi.luJcbBlocks);
+        apply_jacobi_blocks(y, x, config->jacobi.lltJcbBlocks);
+        apply_jacobi_blocks(y, x, config->jacobi.ldltJcbBlocks);
+        apply_jacobi_blocks(y, x, config->jacobi.luJcbBlocks);
+        apply_jacobi_blocks(y, x, config->jacobi.qrJcbBlocks);
 
         if(m_iterations == old_iterations) {
             // No blocks given (all are nullptr or size 0)
             // Then this should act like an identity preconditioner
-            x = b;
+            throw std::runtime_error("no blocks applied");
+            // x = b;
+        }
+
+        if constexpr(matrix->has_projector_op) {
+            // Project out an operator if present here
+            x = matrix->ProjectOpL(x);
         }
     }
     template<typename Rhs, typename Dest>
@@ -174,6 +194,8 @@ class IterativeLinearSolverPreconditioner {
 
     template<typename Rhs, typename Dest>
     void solve_coarse_jacobi(const Rhs &b, Dest &x) const {
+        // x = b;
+        // return;
         // Step 1: Apply the jacobi preconditioner
         solve_jacobi(b, x); // x = M_BJ⁻¹ * b
         const MatrixType &Z  = config->jacobi.coarseZ;

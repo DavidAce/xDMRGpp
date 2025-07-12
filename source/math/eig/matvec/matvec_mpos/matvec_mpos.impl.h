@@ -516,7 +516,7 @@ typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_diagonal_block(l
 
 template<typename Scalar>
 typename MatVecMPOS<Scalar>::MatrixType
-    MatVecMPOS<Scalar>::get_diagonal_block(long offset, long extent, Scalar shift, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_A,
+    MatVecMPOS<Scalar>::get_diagonal_block(long offset, long extent, RealScalar shift, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_A,
                                            const Eigen::Tensor<Scalar, 3> &ENVL_A, const Eigen::Tensor<Scalar, 3> &ENVR_A,
                                            const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_B, const Eigen::Tensor<Scalar, 3> &ENVL_B,
                                            const Eigen::Tensor<Scalar, 3> &ENVR_B) const {
@@ -536,7 +536,7 @@ typename MatVecMPOS<Scalar>::MatrixType
                 if(J + offset >= size_mps) continue;
                 // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
                 Scalar elemA = get_matrix_element(I + offset, J + offset, MPOS_A, ENVL_A, ENVR_A);
-                Scalar elemB = shift != Scalar{0.0} ? get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B) : Scalar{0.0};
+                Scalar elemB = shift != RealScalar{0} ? get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B) : Scalar{0.0};
                 Scalar elem  = elemA - shift * elemB;
                 res(I, J)    = elem;
                 if constexpr(std::is_same_v<Scalar, cx64>)
@@ -1031,69 +1031,171 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> cond(const Eigen::MatrixBase<Derived> &
     return solver.singularValues().head(rank);
 }
 
+//-------------------------
+// Gershgorin lower bound
+//-------------------------
+template<typename Derived>
+typename Derived::RealScalar gershgorin_lower_bound(const Eigen::MatrixBase<Derived> &A) {
+    using RealScalar = typename Derived::RealScalar; // double / float
+    using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
+    /* radius_i = Σ_{k≠i} |a_ik|  =  rowSum_i - |a_ii| */
+    VectorReal rowSum  = A.derived().cwiseAbs().rowwise().sum(); // Σ_k |a_ik|
+    VectorReal diagAbs = A.derived().diagonal().cwiseAbs();
+
+    /* Gershgorin centre − radius for each row */
+    VectorReal centre_minus_rad = A.derived().diagonal().real().array() - (rowSum - diagAbs).array();
+    return centre_minus_rad.minCoeff(); // ≤ λ_min(A)
+}
+
 template<typename Scalar>
-void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
+void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
     // if(readyCalcPc) return;
-    if(lockCalcPc) return;
     auto fname = fmt::format("MatVecMPOS<Scalar>::CalcPc()", sfinae::type_name<Scalar>());
     if(preconditioner == eig::Preconditioner::NONE) {
-        eig::log->info("{}: no preconditioner chosen", fname);
+        eig::log->debug("{}: no preconditioner chosen", fname);
         return;
     }
     if(factorization == eig::Factorization::NONE) {
-        eig::log->info("{}: no factorization chosen", fname);
+        eig::log->debug("{}: no factorization chosen", fname);
         return;
     }
-    if(jcbShift.has_value()) {
-        RealScalar relchange = std::abs(shift - jcbShift.value()) / (std::abs(shift + jcbShift.value()) / 2);
-        if(relchange < static_cast<RealScalar>(1e-1)) return; // Keep the preconditioner if the shifts haven't changed by more than 1%
-        eig::log->trace("{}: Recomputing the preconditioner with shift {:.16f}", fname, fp(jcbShift.value()));
+    if(jcbMaxBlockSize <= 0) {
+        eig::log->debug("{}: jcbMaxBlockSize <= 0", fname);
+        return;
     }
+
+    if(doneCalcPc) {
+        // We have already computed jacobi blocks. We need to determine if we should really make new ones
+        bool shift_active = !mpos_B.empty();
+        bool shift_is_new = std::isfinite(shift) and (jcbShift.has_value() ? std::abs(shift - jcbShift.value()) != 0 : true);
+        bool bsize_is_new = jcbBlockSize != jcbMaxBlockSize;
+        if(bsize_is_new or (shift_active and shift_is_new)) {
+            eig::log->trace("{}: Recomputing the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname, fp(shift),
+                            bsize_is_new, shift_active, shift_is_new);
+            doneCalcPc = false;
+        }
+        else {
+            eig::log->trace("{}: No need to recompute the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname, fp(shift),
+                            bsize_is_new, shift_active, shift_is_new);
+        }
+
+    }
+
+    if(doneCalcPc) return;
     jcbShift = shift;
 
-    long jcbBlockSize = jcbMaxBlockSize;
+    jcbBlockSize = jcbMaxBlockSize;
     if(jcbBlockSize == 1) {
         if(jcbDiagA.size() + jcbDiagB.size() > 0) return; // We only need to do this once
         eig::log->trace("{}: calculating the jacobi preconditioner ... (shift = {:.16f})", fname, fp(shift));
         jcbDiagA   = get_diagonal_new(0, mpos_A, envL_A, envR_A);
         jcbDiagB   = get_diagonal_new(0, mpos_B, envL_B, envR_B);
-        lockCalcPc = true;
+        doneCalcPc = true;
         eig::log->debug("{}: calculating the jacobi preconditioner ... done (shift = {:.16f})", fname, fp(shift));
     } else if(jcbBlockSize > 1) {
         long nblocks = 1 + ((size_mps - 1) / jcbBlockSize); // ceil: note that the last block may be smaller than blocksize!
 
-        eig::log->debug("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} ...", fname,
-                        eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks);
+        eig::log->debug("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} ...", fname,
+                        eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks, fp(shift));
         std::vector<fp64> sparsity;
         auto              m_rss = debug::mem_hwm_in_mb();
         auto              t_jcb = tid::ur("jcb");
         t_jcb.tic();
 
         lltJcbBlocks.clear();
-        luJcbBlocks.clear();
         ldltJcbBlocks.clear();
+        luJcbBlocks.clear();
+        qrJcbBlocks.clear();
         // cgJcbBlocks.clear();
         // bicgstabJcbBlocks.clear();
 
 #pragma omp parallel for ordered schedule(dynamic, 1)
         for(long blkidx = 0; blkidx < nblocks; ++blkidx) {
-            long offset = blkidx * jcbBlockSize;
-            long extent = std::min((blkidx + 1) * jcbBlockSize - offset, size_mps - offset);
+            eig::Factorization factorization_internal = factorization;
+            long               offset                 = blkidx * jcbBlockSize;
+            long               extent                 = std::min((blkidx + 1) * jcbBlockSize - offset, size_mps - offset);
             // if constexpr(eig::debug_matvec_mpos) eig::log->trace("calculating block {}/{} ... done", blkidx, nblocks);
             auto t_dblk = tid::ur("dblk");
             t_dblk.tic();
 
             MatrixType block;
+            int        sign = 1;
             if(mpos_B.empty()) {
                 block      = get_diagonal_block(offset, extent, mpos_A, envL_A, envR_A);
-                lockCalcPc = true;
+                doneCalcPc = true;
             } else {
                 {
                     // Instead of using the preconditioner P = (H-shift*H²) we simply take P = H² when
                     // calculating the generalized eigenvalue problem for GSI-DMRG with ritz == LM.
                     // See the discussion in https://github.com/primme/primme/issues/83
-                    block      = get_diagonal_block(offset, extent, mpos_B, envL_B, envR_B);
-                    lockCalcPc = true;
+                    // block      = get_diagonal_block(offset, extent, mpos_B, envL_B, envR_B);
+
+                    // --- 1.  Cholesky of  H2i  ------------------------------------
+                    // Eigen::LLT<MatrixType> H2llt(H2i);
+                    // if(H2llt.info() != Eigen::Success) throw std::runtime_error("H2 block not SPD – cannot build scaled preconditioner");
+
+                    // MatrixType L = H2llt.matrixL(); // lower-triangular   (alias-free copy)
+
+                    // --- 2.  Compute   block = L⁻¹ * H1i * L^{-T} - shift * I  -------------------
+                    // block = H2llt.matrixL().solve(H1i); // left solve
+                    // block            = H2llt.matrixU().solve(block);   // right solve (Lᵀ is U)
+                    // block.diagonal().array() -= jcbShift.value();
+                    MatrixType H1i = get_diagonal_block(offset, extent, mpos_A, envL_A, envR_A);
+                    MatrixType H2i = get_diagonal_block(offset, extent, mpos_B, envL_B, envR_B);
+
+                    block                  = H1i - jcbShift.value() * H2i;
+                    RealScalar gmin        = gershgorin_lower_bound(block);
+                    factorization_internal = eig::Factorization::LLT;
+
+                    if(gmin <= RealScalar{0}) {
+                        // The matrix is possibly indefinite.
+                        Eigen::SelfAdjointEigenSolver<MatrixType> es(block, Eigen::ComputeEigenvectors);
+                        RealScalar                                minev_before = es.eigenvalues().minCoeff();
+                        RealScalar                                maxev_before = es.eigenvalues().maxCoeff();
+                        std::vector<Eigen::Index>                 evIdx        = {0, es.eigenvalues().size() - 1l};
+                        VectorReal                                evs          = es.eigenvalues()(evIdx);
+
+                        if(minev_before <= 0) {
+                            // Take the absolute value of the eigenvalues to generate a PSD block
+                            VectorReal absEval = es.eigenvalues().cwiseAbs(); // Abs and regularize (all ev larger than epsnorm)
+                            RealScalar epsnorm = std::max(RealScalar{1}, block.norm()) * std::numeric_limits<RealScalar>::epsilon();
+                            if(evs.cwiseAbs().minCoeff() < epsnorm) {
+                                absEval = es.eigenvalues().cwiseAbs().cwiseMax(epsnorm); // Abs and regularize (all ev larger than epsnorm)
+                            }
+                            block = es.eigenvectors() * absEval.asDiagonal() * es.eigenvectors().adjoint();
+                            es.compute(block, Eigen::EigenvaluesOnly);
+                            RealScalar minev_after = es.eigenvalues().minCoeff();
+                            RealScalar maxev_after = es.eigenvalues().maxCoeff();
+                            eig::log->info("Calculating |H1 {:+.3e} * H2| | abs | gmin {:.5e} | evals {:.5e} ... {:.5e} --> {:.5e} ... {:.5e} : {}",
+                                           fp(jcbShift.value()), fp(gmin), fp(minev_before), fp(maxev_before), fp(minev_after), fp(maxev_after),
+                                           eig::FactorizationToString(factorization_internal));
+                        } else {
+                            eig::log->info("Calculating H1 {:+.3e} * H2  | gmin {:.5e} | evals {:.5e} ... {:.5e} : {}", fp(jcbShift.value()), fp(gmin),
+                                           fp(minev_before), fp(maxev_before), eig::FactorizationToString(factorization_internal));
+                        }
+
+                    } else {
+                        eig::log->info("Calculating H1 - {:+.3e} * H2 | gmin={:.5e}: {}", fp(jcbShift.value()), fp(gmin),
+                                       eig::FactorizationToString(factorization_internal));
+                    }
+
+                    // Eigen::SelfAdjointEigenSolver<MatrixType> es(block);
+                    // RealScalar                                minev = es.eigenvalues().minCoeff();
+                    // RealScalar                                maxev = es.eigenvalues().maxCoeff();
+                    // RealScalar                                eps   = std::numeric_limits<RealScalar>::epsilon();
+                    // if(minev * maxev > eps) {
+                    //     factorization_internal = eig::Factorization::LLT;
+                    // } else if(minev * maxev >= 0 and std::abs(minev) + std::abs(maxev) != 0) {
+                    //     factorization_internal = eig::Factorization::LDLT;
+                    // } else if(minev * maxev < 0) {
+                    //     factorization_internal = eig::Factorization::LU;
+                    // } else if(minev * maxev == 0) {
+                    //     factorization_internal = eig::Factorization::NONE;
+                    // }
+                    // eig::log->info("Calculating H1 - {:.3e} * H2 | evals {:.5e} ... {:.5e}: {}", fp(jcbShift.value()),  fp(minev), fp(maxev),
+                    //                eig::FactorizationToString(factorization_internal));
+
+                    doneCalcPc = true;
                 }
                 // if(shift == 0.0) {
                 //     block = get_diagonal_block(offset, extent, mpos_A, envL_A, envR_A);
@@ -1112,6 +1214,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
             auto       llt         = std::make_unique<LLTType>();
             auto       ldlt        = std::make_unique<LDLTType>();
             auto       lu          = std::make_unique<LUType>();
+            auto       qr          = std::make_unique<QRType>();
             auto       sparseRM    = std::make_unique<SparseRowM>();
             auto       blockPtr    = std::make_unique<MatrixType>();
             bool       lltSuccess  = false;
@@ -1121,7 +1224,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
             VectorType blockInvDiag; //    = block.diagonal().cwiseInverse();
             // auto blockInvDiag = blockDiag.cwiseAbs().cwiseSqrt().cwiseInverse();
             // block             = (blockInvDiag.asDiagonal() * block * blockInvDiag.asDiagonal()).eval();
-            switch(factorization) {
+            switch(factorization_internal) {
                 case eig::Factorization::NONE: {
                     eig::log->warn("{}: No factorization has been set for the preconditioner", fname);
                     break;
@@ -1135,6 +1238,8 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                         llt->compute(block);
                     } else {
                         llt->compute(-block); // Can sometimes be negative definite in the generalized problem
+                        sign = -1;
+                        eig::log->info("llt: flipping the block");
                     }
                     lltSuccess = llt->info() == Eigen::Success;
                     t_llt.toc();
@@ -1147,6 +1252,25 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                     if(lltSuccess) break;
                     eig::log->info("llt factorization failed on block {}/{}: time {:.3e} info {}", blkidx, nblocks, t_llt.get_last_interval(),
                                    static_cast<int>(llt->info()));
+                    [[fallthrough]];
+                }
+                case eig::Factorization::QR: {
+                    auto t_qr = tid::ur("t_qr");
+                    t_qr.tic();
+                    qr->compute(block);
+                    t_qr.toc();
+                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10f}).cwiseInverse();
+                    qrSuccess    = true;
+                    break;
+                }
+                case eig::Factorization::LDLT: {
+                    eig::log->info("-- ldlt");
+                    if constexpr(eig::debug_matvec_mpos) eig::log->trace("ldlt factorizing block {}/{}", blkidx, nblocks);
+                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10f}).cwiseInverse();
+                    ldlt->compute(block);
+                    ldltSuccess = ldlt->info() == Eigen::Success;
+                    if(ldltSuccess) break;
+                    eig::log->debug("ldlt factorization failed on block {}/{}: info {}", blkidx, nblocks, static_cast<int>(ldlt->info()));
                     [[fallthrough]];
                 }
                 case eig::Factorization::LU: {
@@ -1163,50 +1287,29 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
                                         static_cast<int>(llt->info()), omp_get_thread_num(), t_dblk.get_time(), t_lu.get_time());
                     break;
                 }
-                case eig::Factorization::LDLT: {
-                    eig::log->info("-- ldlt");
-                    if constexpr(eig::debug_matvec_mpos) eig::log->trace("ldlt factorizing block {}/{}", blkidx, nblocks);
-                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10f}).cwiseInverse();
-                    ldlt->compute(block);
-                    ldltSuccess = ldlt->info() == Eigen::Success;
-                    if(ldltSuccess) break;
-                    eig::log->debug("ldlt factorization failed on block {}/{}: info {}", blkidx, nblocks, static_cast<int>(ldlt->info()));
-                    [[fallthrough]];
-                }
-                case eig::Factorization::QR: {
-                    auto qr      = Eigen::HouseholderQR<MatrixType>(block);
-                    blockInvDiag = (block.diagonal().cwiseAbs().array() + RealScalar{1e-10f}).cwiseInverse();
-                    block        = qr.solve(MatrixType::Identity(extent, extent));
-                    qrSuccess    = true;
-                    break;
-                }
                 default: throw except::runtime_error("MatvecMPOS::CalcPc(): factorization is not implemented");
             }
 
-            if(!lltSuccess and !luSuccess and !ldltSuccess and !qrSuccess and factorization != eig::Factorization::ILUT and
-               factorization != eig::Factorization::ILDLT) {
-                eig::log->warn("factorization {} (and others) failed on block {}/{} ... resorting to Eigen::ColPivHouseholderQR",
-                               eig::FactorizationToString(factorization), blkidx, nblocks);
-                block = Eigen::ColPivHouseholderQR<MatrixType>(block).inverse(); // Should work on any matrix
-            }
 #pragma omp ordered
             {
                 sparsity.emplace_back(sp);
                 if(lltSuccess and llt->rows() > 0) {
-                    lltJcbBlocks.emplace_back(offset, std::move(blockInvDiag), std::move(llt));
+                    lltJcbBlocks.emplace_back(offset, sign, std::move(llt));
                 } else if(ldltSuccess and ldlt->rows() > 0) {
-                    ldltJcbBlocks.emplace_back(offset, std::move(blockInvDiag), std::move(ldlt));
+                    ldltJcbBlocks.emplace_back(offset, sign, std::move(ldlt));
                 } else if(luSuccess and lu->rows() > 0) {
-                    luJcbBlocks.emplace_back(offset, std::move(blockInvDiag), std::move(lu));
+                    luJcbBlocks.emplace_back(offset, sign, std::move(lu));
+                } else if(qrSuccess and qr->rows() > 0) {
+                    qrJcbBlocks.emplace_back(offset, sign, std::move(qr));
                 }
             }
         }
         t_jcb.toc();
         auto spavg = std::accumulate(sparsity.begin(), sparsity.end(), 0.0) / static_cast<double>(sparsity.size());
-        eig::log->debug("{}: calculating the block jacobi preconditioner | size {} | diagonal blocksize {} | nblocks {} ... done | t "
+        eig::log->debug("{}: calculating the block jacobi preconditioner | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} ... done | t "
                         "{:.3e} s | avg "
                         "sparsity {:.3e} | mem +{:.3e} MB",
-                        fname, size_mps, jcbBlockSize, nblocks, t_jcb.get_last_interval(), spavg, debug::mem_hwm_in_mb() - m_rss);
+                        fname, size_mps, jcbBlockSize, nblocks, fp(shift), t_jcb.get_last_interval(), spavg, debug::mem_hwm_in_mb() - m_rss);
     }
 
     if(jcbMaxBlockSize == 1) {
@@ -1216,6 +1319,7 @@ void MatVecMPOS<Scalar>::CalcPc(Scalar shift) {
         iLinSolvCfg.jacobi.lltJcbBlocks  = &lltJcbBlocks;
         iLinSolvCfg.jacobi.ldltJcbBlocks = &ldltJcbBlocks;
         iLinSolvCfg.jacobi.luJcbBlocks   = &luJcbBlocks;
+        iLinSolvCfg.jacobi.qrJcbBlocks   = &qrJcbBlocks;
     }
     readyCalcPc = true;
 }
@@ -1224,7 +1328,7 @@ template<typename Scalar>
 void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] void *x, [[maybe_unused]] int *ldx, [[maybe_unused]] void *y, [[maybe_unused]] int *ldy,
                                 [[maybe_unused]] int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) {
     for(int i = 0; i < *blockSize; i++) {
-        Scalar shift = static_cast<Scalar>(primme->ShiftsForPreconditioner[i]);
+        RealScalar shift = static_cast<RealScalar>(primme->ShiftsForPreconditioner[i]);
         // if(!mpos_B.empty())
         //     shift = std::abs(primme->stats.estimateMaxEVal) > std::abs(primme->stats.estimateMinEVal) ? primme->stats.estimateMaxEVal
         //                                                                                               : primme->stats.estimateMinEVal;
@@ -1241,16 +1345,20 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] void *x, [[maybe_unused]] int *
 }
 
 template<typename Scalar>
-typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultPX(const Eigen::Ref<const MatrixType> &X) {
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultPX(const Eigen::Ref<const MatrixType>               &X,
+                                                                   std::optional<const Eigen::Ref<const VectorReal>> shifts) {
     if(preconditioner == eig::Preconditioner::NONE) return X;
     assert(X.rows() == get_size());
     MatrixType Y(X.rows(), X.cols());
-    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultPc(X.col(i).data(), Y.col(i).data()); }
+    if(shifts.has_value() and shifts->size() == X.cols())
+        for(Eigen::Index i = 0; i < X.cols(); ++i) { MultPc(X.col(i).data(), Y.col(i).data(), shifts->coeff(i)); }
+    else
+        for(Eigen::Index i = 0; i < X.cols(); ++i) { MultPc(X.col(i).data(), Y.col(i).data()); }
     return Y;
 }
 
 template<typename Scalar>
-void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_unused]] Scalar *mps_out_, Scalar shift) {
+void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_unused]] Scalar *mps_out_, RealScalar shift) {
     if(preconditioner == eig::Preconditioner::NONE) return;
     CalcPc(shift); // Computes the diagonal jacobi blocks which are useful for both types of preconditioner.
 
@@ -1288,27 +1396,35 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
             auto token = t_multPc->tic_token();
 #pragma omp parallel for
             for(size_t idx = 0; idx < lltJcbBlocks.size(); ++idx) {
-                const auto &[offset, invdiag, solver] = lltJcbBlocks[idx];
-                long extent                           = solver->rows();
-                auto mps_out_segment                  = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment                   = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()             = solver->solve(mps_in_segment);
+                const auto &[offset, sign, solver] = lltJcbBlocks[idx];
+                long extent                        = solver->rows();
+                auto mps_out_segment               = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment                = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()          = solver->solve(mps_in_segment * static_cast<RealScalar>(sign));
             }
 #pragma omp parallel for
             for(size_t idx = 0; idx < ldltJcbBlocks.size(); ++idx) {
-                const auto &[offset, invdiag, solver] = ldltJcbBlocks[idx];
-                long extent                           = solver->rows();
-                auto mps_out_segment                  = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment                   = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()             = solver->solve(mps_in_segment);
+                const auto &[offset, sign, solver] = ldltJcbBlocks[idx];
+                long extent                        = solver->rows();
+                auto mps_out_segment               = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment                = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()          = solver->solve(mps_in_segment * static_cast<RealScalar>(sign));
             }
 #pragma omp parallel for
             for(size_t idx = 0; idx < luJcbBlocks.size(); ++idx) {
-                const auto &[offset, invdiag, solver] = luJcbBlocks[idx];
-                long extent                           = solver->rows();
-                auto mps_out_segment                  = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment                   = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()             = solver->solve(mps_in_segment);
+                const auto &[offset, sign, solver] = luJcbBlocks[idx];
+                long extent                        = solver->rows();
+                auto mps_out_segment               = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment                = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()          = solver->solve(mps_in_segment * static_cast<RealScalar>(sign));
+            }
+#pragma omp parallel for
+            for(size_t idx = 0; idx < qrJcbBlocks.size(); ++idx) {
+                const auto &[offset, sign, solver] = qrJcbBlocks[idx];
+                long extent                        = solver->rows();
+                auto mps_out_segment               = Eigen::Map<VectorType>(mps_out_ + offset, extent);
+                auto mps_in_segment                = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
+                mps_out_segment.noalias()          = solver->solve(mps_in_segment * static_cast<RealScalar>(sign));
             }
         }
     }
@@ -1623,15 +1739,18 @@ bool MatVecMPOS<Scalar>::isReadyShift() const {
 }
 
 template<typename Scalar>
-typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters) {
+typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters, RealScalar reltol) {
     if(!std::isnan(op_norm) and max_op_norm_iters <= op_norm_iters) return op_norm;
     VectorType v = VectorType::Random(size_mps).normalized();
     VectorType w(size_mps);
 
     for(Eigen::Index i = 0; i < max_op_norm_iters; ++i) {
-        w       = MultAx(v); // w = H * v
-        op_norm = w.norm();
-        v       = w / op_norm;
+        auto op_norm_old = op_norm;
+        w                = MultAx(v); // w = H * v
+        op_norm          = w.norm();
+        if(op_norm < RealScalar{1e-12f}) break;
+        v = w / op_norm;
+        if(std::abs(op_norm - op_norm_old) < reltol * op_norm_old) break;
     }
     // Rayleigh quotient for improved accuracy:
     w             = MultAx(v);

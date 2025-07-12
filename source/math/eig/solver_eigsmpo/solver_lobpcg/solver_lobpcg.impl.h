@@ -60,7 +60,7 @@ std::pair<typename solver_lobpcg<Scalar>::VectorIdxT, typename solver_lobpcg<Sca
         for(Index prev_blk = 0; prev_blk < blk; ++prev_blk) {
             Index prev_col_start = prev_blk * b;
             auto  G_block        = G.block(prev_col_start, col_start, b, b);
-            if(G_block.cwiseAbs().maxCoeff() > orthTolQ) {
+            if(G_block.cwiseAbs().maxCoeff() > orthTol) {
                 bad = true;
                 break;
             }
@@ -69,7 +69,7 @@ std::pair<typename solver_lobpcg<Scalar>::VectorIdxT, typename solver_lobpcg<Sca
         if(!bad) {
             auto       G_diag = G.block(col_start, col_start, b, b);
             MatrixType I      = MatrixType::Identity(b, b);
-            if((G_diag - I).cwiseAbs().maxCoeff() > normTolQ) { bad = true; }
+            if((G_diag - I).cwiseAbs().maxCoeff() > normTol) { bad = true; }
         }
 
         if(bad) needs_reortho.push_back(blk);
@@ -90,7 +90,7 @@ std::pair<typename solver_lobpcg<Scalar>::VectorIdxT, typename solver_lobpcg<Sca
             MatrixType proj = Qj.adjoint() * Qk;
             Qk -= Qj * proj;
         }
-        active_block_mask(blk) = Qk.norm() > normTolQ;
+        active_block_mask(blk) = Qk.norm() > normTol;
         change_block_mask(blk) = 1;
         // Orthonormalize block using HouseholderQR
         Eigen::HouseholderQR<MatrixType> hhqr(Qk);
@@ -247,17 +247,18 @@ void solver_lobpcg<Scalar>::build() {
     // Keep track of which Q blocks change, so we know which HQ blocks to recompute later
     VectorIdxT change_block_mask = VectorIdxT::Ones(qBlocks + wBlocks + mBlocks + sBlocks + rBlocks);
 
-    auto MultPX = [this](const Eigen::Ref<const MatrixType> &X, std::optional<const Eigen::Ref<const MatrixType>> iG) -> MatrixType {
+    auto MultP = [this](const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals,
+                        std::optional<const Eigen::Ref<const MatrixType>> iG) -> MatrixType {
         if(algo == OptAlgo::GDMRG)
-            return this->MultP2X(X, iG);
+            return this->MultP2(X, evals, iG);
         else
-            return this->MultPX(X, iG);
+            return this->MultP(X, evals, iG);
     };
 
     /* clang-format off */
-    if(wBlocks > 0) { Q.middleCols(wOffset * b, b) = get_wBlock(MultPX); change_block_mask(wOffset) = 1; }
+    if(wBlocks > 0) { Q.middleCols(wOffset * b, b) = get_wBlock(MultP); change_block_mask(wOffset) = 1; }
     if(mBlocks > 0) { Q.middleCols(mOffset * b, b) = get_mBlock();       change_block_mask(mOffset) = 1; }
-    if(sBlocks > 0) { Q.middleCols(sOffset * b, b) = get_sBlock(S, MultPX); change_block_mask(sOffset) = 1; }
+    if(sBlocks > 0) { Q.middleCols(sOffset * b, b) = get_sBlock(S, MultP); change_block_mask(sOffset) = 1; }
     if(rBlocks > 0) { Q.middleCols(rOffset * b, b) = get_rBlock();       change_block_mask(rOffset) = 1; }
     /* clang-format off */
 
@@ -271,39 +272,39 @@ void solver_lobpcg<Scalar>::build() {
     // This lets the DGKS below to clean W, R and S quickly against [V, V_prev]
     hhqr.compute(Q.leftCols(qBlocks * b));
     Q.leftCols(qBlocks * b) = hhqr.householderQ().setLength(qBlocks * b) * MatrixType::Identity(N, qBlocks * b); //
-    change_block_mask.middleRows(0, qBlocks).setOnes();
 
     assert_allFinite(Q);
 
     // eiglog->warn("Q before DGKS: \n{}\n", linalg::matrix::to_string(Q, 8));
 
     // pick a relative breakdown tolerance:
-    auto       breakdownTol      = eps * 10 * std::max({status.max_eval_estimate()});
-    VectorIdxT active_block_mask = VectorIdxT::Ones(qBlocks + wBlocks + mBlocks + sBlocks + rBlocks);
 
-    assert(active_block_mask.size() * b == Q.cols());
-    assert(change_block_mask.size() * b == Q.cols());
 
     // DGKS on each of X = M, W, R, S to remove overlap with [V, V_prev]
-    orthonormalize(Q.leftCols(qBlocks * b),                                  //[V_prev, V]
-                   Q.rightCols((mBlocks + wBlocks + sBlocks + rBlocks) * b), // all the others
-                   breakdownTol,                                             // For block normalization checks
-                   active_block_mask.bottomRows(mBlocks + wBlocks + sBlocks + rBlocks));
 
-    compress_cols(Q, active_block_mask);
+    OrthMeta mQL, mQR;
+    mQL.maskTol = eps * 10 * std::max({status.max_eval_estimate()});
+    mQR.maskTol = eps * 10 * std::max({status.max_eval_estimate()});
+    MatrixType QL =  Q.leftCols(qBlocks * b);//[V_prev, V]
+    MatrixType QR =  Q.rightCols((mBlocks + wBlocks + sBlocks + rBlocks) * b);// all the others
+    MatrixType HQL = HQ.leftCols(qBlocks * b);
+    MatrixType HQR = HQ.rightCols((mBlocks + wBlocks + sBlocks + rBlocks) * b);// all the others;
+    block_l2_orthonormalize(QL, HQL, mQL);
+    block_l2_orthogonalize(QL, HQL, QR, HQR, mQR);
+    // Copy back
+    Q.resize(Eigen::NoChange, QL.cols() + QR.cols());
+    Q.leftCols(QL.cols()) = QL;
+    Q.rightCols(QR.cols()) = QR;
 
+    HQ.resize(Eigen::NoChange, HQL.cols() + HQR.cols());
+    HQ.leftCols(HQL.cols()) = HQL;
+    HQ.rightCols(HQR.cols()) = HQR;
 
     if constexpr(settings::print_q) eiglog->warn("Q after compression: \n{}\n", linalg::matrix::to_string(Q, 8));
     if constexpr(settings::print_q) eiglog->warn("HQ after compression: \n{}\n", linalg::matrix::to_string(HQ, 8));
 
     assert_allFinite(Q);
-    assert_orthonormal(Q, normTolQ);
-
-    hhqr.compute(Q);
-    Q = hhqr.householderQ().setLength(Q.cols()) * MatrixType::Identity(N, Q.cols()); //
-
-    assert_allFinite(Q);
-    assert_orthonormal(Q, normTolQ);
+    assert_l2_orthonormal(Q);
 
     // unset_HQ();
 
@@ -312,7 +313,7 @@ void solver_lobpcg<Scalar>::build() {
     //     eiglog->info("Updating HQ block {}", j);
     //     HQ.middleCols(j * b, b) = MultHX(Q.middleCols(j * b, b));
     // }
-    HQ = MultHX(Q);
+    // HQ = MultH(Q);
 
     if constexpr(settings::print_q) eiglog->warn("Q after householder: \n{}\n", linalg::matrix::to_string(Q, 8));
     if constexpr(settings::print_q) eiglog->warn("HQ after householder: \n{}\n", linalg::matrix::to_string(HQ, 8));

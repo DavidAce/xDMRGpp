@@ -61,7 +61,7 @@ void solver_lanczos<Scalar>::build() {
     Q.leftCols(b) = V;   // Copy the V panel as initial guess
 
     assert(Q.leftCols(b).allFinite());
-    assert(std::abs((Q.leftCols(b).adjoint() * Q.leftCols(b)).norm() - std::sqrt<RealScalar>(b)) < orthTolQ);
+    assert(std::abs((Q.leftCols(b).adjoint() * Q.leftCols(b)).norm() - std::sqrt<RealScalar>(b)) < orthTol);
 
     T.setZero(Q.cols(), Q.cols());
 
@@ -80,7 +80,7 @@ void solver_lanczos<Scalar>::build() {
         const auto Q_cur = Q.middleCols(i * b, b);
 
         // 1) Apply the operator and form W = [f(H1,H2)*Q_cur]
-        W  = MultHX(Q_cur);
+        W  = MultH(Q_cur);
         HQ = W; // Save for later, when updating B
 
         assert(W.allFinite());
@@ -118,7 +118,7 @@ void solver_lanczos<Scalar>::build() {
             break;
         }
 
-        if(use_preconditioner) { W = MultPX(W); }
+        if(use_preconditioner) { W = MultP(W, T_evals.topRows(b)); }
 
         write_Q_next_B_DGKS(i);
 
@@ -135,9 +135,9 @@ void solver_lanczos<Scalar>::build() {
                 [[maybe_unused]] auto Q1Q1_norm = (Q1.adjoint() * Q1).norm();
                 [[maybe_unused]] auto Q2Q2_norm = (Q2.adjoint() * Q2).norm();
                 [[maybe_unused]] auto Q1Q2_norm = (Q1.adjoint() * Q2).norm();
-                assert(std::abs(Q1Q1_norm - std::sqrt<RealScalar>(b)) < orthTolQ);
-                assert(std::abs(Q2Q2_norm - std::sqrt<RealScalar>(b)) < orthTolQ);
-                assert(Q1Q2_norm < orthTolQ);
+                assert(std::abs(Q1Q1_norm - std::sqrt<RealScalar>(b)) < orthTol);
+                assert(std::abs(Q2Q2_norm - std::sqrt<RealScalar>(b)) < orthTol);
+                assert(Q1Q2_norm < orthTol);
 
                 if(i > 0) {
                     auto                  Q0         = Q.middleCols((i - 1) * b, b);
@@ -145,10 +145,9 @@ void solver_lanczos<Scalar>::build() {
                     [[maybe_unused]] auto Q0Q1_norm  = (Q0.adjoint() * Q1).norm();
                     [[maybe_unused]] auto Q0Q2_norm  = (Q0.adjoint() * Q2).norm();
                     [[maybe_unused]] auto Q0HQ0_norm = (Q0.adjoint() * HQ).norm(); // A0
-                    assert(std::abs(Q0Q0_norm - std::sqrt<RealScalar>(b)) < orthTolQ);
-                    assert(Q0Q1_norm < orthTolQ * 10000);
-                    assert(Q0Q2_norm < orthTolQ * 10000);
-                    // assert(Q1HQ0_norm < normTol);
+                    assert(std::abs(Q0Q0_norm - std::sqrt<RealScalar>(b)) < orthTol);
+                    assert(Q0Q1_norm < orthTol * 10000);
+                    assert(Q0Q2_norm < orthTol * 10000);
                 }
                 // Check orthogonality explicitly
                 auto Q_next = Q.middleCols((i + 1) * b, b);
@@ -159,7 +158,7 @@ void solver_lanczos<Scalar>::build() {
                         auto Qj           = Q.middleCols(j * b, b); // Q_prev and Q_cur
                         auto QjQnext_norm = (Qj.adjoint() * Q_next).norm();
                         // eiglog->info("overlap Q({}).adjoint() * Q({}) = {:.16f} ", j, i + 1, QjQnext_norm);
-                        assert(QjQnext_norm < orthTolQ * 10000);
+                        assert(QjQnext_norm < orthTol * 10000);
                     }
                 }
             }
@@ -169,7 +168,7 @@ void solver_lanczos<Scalar>::build() {
     if constexpr(settings::debug_lanczos) {
         if(status.iter % 10 == 0) {
             Eigen::Index tcols    = T.rows();
-            MatrixType   T_direct = Q.leftCols(tcols).adjoint() * MultHX(Q.leftCols(tcols));
+            MatrixType   T_direct = Q.leftCols(tcols).adjoint() * MultH(Q.leftCols(tcols));
             // 3) Compare with your assembled T2:
             MatrixType diff      = T_direct - T;
             RealScalar diffNorm  = diff.norm();

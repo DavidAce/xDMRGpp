@@ -103,11 +103,23 @@ template<typename CalcType, typename Scalar>
 void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial, const OptMeta &opt_meta,
                                                    const solver_gdplusk<CalcType> &solver, std::vector<opt_mps<Scalar>> &results) {
     // Extract solution
+
     results.emplace_back(opt_mps<Scalar>());
     auto &res           = results.back();
     res.is_basis_vector = false;
-    res.set_name(fmt::format("eigenvector 0 [{} gdplusk]", enum2sv(opt_meta.optAlgo)));
-    res.set_tensor(Eigen::TensorMap<const Eigen::Tensor<CalcType, 3>>(solver.V.col(0).data(), solver.mps_shape));
+    res.set_name(fmt::format("[{} gd+k {}]", enum2sv(opt_meta.optAlgo), solver.tag));
+    if(solver.use_h2_inner_product) {
+        using MatrixType  = typename solver_gdplusk<CalcType>::MatrixType;
+        Eigen::Index rows = solver.V.rows();
+        Eigen::Index cols = solver.V.cols();
+        Eigen::Index rank = std::min(rows, cols);
+
+        Eigen::HouseholderQR<MatrixType> hhqr(solver.V);
+        MatrixType                       V = hhqr.householderQ().setLength(rank) * MatrixType::Identity(rows, rank);
+        res.set_tensor(Eigen::TensorMap<const Eigen::Tensor<CalcType, 3>>(V.col(0).data(), solver.mps_shape));
+    } else {
+        res.set_tensor(Eigen::TensorMap<const Eigen::Tensor<CalcType, 3>>(solver.V.col(0).data(), solver.mps_shape));
+    }
     res.set_overlap(std::abs(initial.get_vector().dot(res.get_vector())));
     res.set_sites(initial.get_sites());
     res.set_eshift(initial.get_eshift()); // Will set energy if also given the eigval

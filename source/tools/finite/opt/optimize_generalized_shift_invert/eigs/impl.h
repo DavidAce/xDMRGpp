@@ -96,7 +96,8 @@ namespace gsi {
 
 template<typename MatVecType, typename Scalar>
 void eigs_generalized_shift_invert_executor(eig::solver &solver, MatVecType &hamiltonian_squared, const TensorsFinite<Scalar> &tensors,
-                                            const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results, const OptMeta &meta) {
+                                            const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results, const OptMeta &meta,
+                                            reports::eigs_log<Scalar> &elog) {
     using CalcType = typename MatVecType::Scalar;
     if(std::is_same_v<CalcType, cx64> and meta.optType == OptType::FP64)
         throw except::logic_error("eigs_variance_executor error: Mixed Scalar:cx64 with OptType::FP64");
@@ -110,7 +111,7 @@ void eigs_generalized_shift_invert_executor(eig::solver &solver, MatVecType &ham
     switch(solver.config.lib.value_or(eig::Lib::EIGSMPO)) {
         case eig::Lib::ARPACK: throw except::logic_error("optimize_generalized_shift_invert_eigs: ARPACK is not supported");
         case eig::Lib::EIGSMPO: {
-            results = eigs_gdplusk<CalcType>(tensors, initial_mps, meta);
+            results = eigs_gdplusk<CalcType>(tensors, initial_mps, meta, elog);
             return;
         }
         default: break;
@@ -138,7 +139,7 @@ void eigs_generalized_shift_invert_executor(eig::solver &solver, MatVecType &ham
 
 template<typename CalcType, typename Scalar>
 void eigs_manager_generalized_shift_invert(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, std::vector<opt_mps<Scalar>> &results,
-                                           const OptMeta &meta) {
+                                           const OptMeta &meta, reports::eigs_log<Scalar> &elog) {
     eig::solver solver;
     auto       &cfg           = solver.config;
     cfg.loglevel              = 2;
@@ -183,7 +184,7 @@ void eigs_manager_generalized_shift_invert(const TensorsFinite<Scalar> &tensors,
     const auto &envv                  = tensors.get_edges().get_var_active();
     auto        hamiltonian_squared   = MatVecMPOS<CalcType>(mpos, enve, envv);
     hamiltonian_squared.factorization = eig::Factorization::LLT;
-    eigs_generalized_shift_invert_executor(solver, hamiltonian_squared, tensors, initial_mps, results, meta);
+    eigs_generalized_shift_invert_executor(solver, hamiltonian_squared, tensors, initial_mps, results, meta, elog);
 }
 
 template<typename Scalar>
@@ -200,19 +201,19 @@ opt_mps<Scalar> internal::optimize_generalized_shift_invert(const TensorsFinite<
     std::vector<opt_mps<Scalar>> results;
     if constexpr(sfinae::is_std_complex_v<Scalar>) {
         switch(meta.optType) {
-            case OptType::FP32: eigs_manager_generalized_shift_invert<fp32>(tensors, initial_mps, results, meta); break;
-            case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::FP128: eigs_manager_generalized_shift_invert<fp128>(tensors, initial_mps, results, meta); break;
-            case OptType::CX32: eigs_manager_generalized_shift_invert<cx32>(tensors, initial_mps, results, meta); break;
-            case OptType::CX64: eigs_manager_generalized_shift_invert<cx64>(tensors, initial_mps, results, meta); break;
-            case OptType::CX128: eigs_manager_generalized_shift_invert<cx128>(tensors, initial_mps, results, meta); break;
+            case OptType::FP32: eigs_manager_generalized_shift_invert<fp32>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::FP128: eigs_manager_generalized_shift_invert<fp128>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::CX32: eigs_manager_generalized_shift_invert<cx32>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::CX64: eigs_manager_generalized_shift_invert<cx64>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::CX128: eigs_manager_generalized_shift_invert<cx128>(tensors, initial_mps, results, meta, elog); break;
             default: throw except::runtime_error("optimize_generalized_shift_invert(): not implemented for type {}", enum2sv(meta.optType));
         }
     } else {
         switch(meta.optType) {
-            case OptType::FP32: eigs_manager_generalized_shift_invert<fp32>(tensors, initial_mps, results, meta); break;
-            case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::FP128: eigs_manager_generalized_shift_invert<fp128>(tensors, initial_mps, results, meta); break;
+            case OptType::FP32: eigs_manager_generalized_shift_invert<fp32>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta, elog); break;
+            case OptType::FP128: eigs_manager_generalized_shift_invert<fp128>(tensors, initial_mps, results, meta, elog); break;
             case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
             case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
             case OptType::CX128: throw except::logic_error("Cannot run OptType::CX128 with Scalar type {}", sfinae::type_name<Scalar>());

@@ -23,9 +23,10 @@ class MatrixLikeOperator : public Eigen::EigenBase<MatrixLikeOperator<Scalar_>> 
     typedef int StorageIndex;
     enum { ColsAtCompileTime = Eigen::Dynamic, MaxColsAtCompileTime = Eigen::Dynamic, IsRowMajor = false };
 
-    mutable Eigen::Index m_opcounter = 0;
-    mutable double       m_optimer   = 0.0;
-    Eigen::Index         size;
+    static constexpr bool has_projector_op = false;
+    mutable Eigen::Index  m_opcounter      = 0;
+    mutable double        m_optimer        = 0.0;
+    Eigen::Index          size;
 
     void _check_template_params() {};
     // Custom API:

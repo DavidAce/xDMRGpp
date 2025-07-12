@@ -27,6 +27,7 @@ tools::common::contraction::VectorType<Scalar> tools::common::contraction::matri
     using DefSolverType      = Eigen::ConjugateGradient<MatrixLikeOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>;
     using IndSolverType      = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                //
                                                   Eigen::BiCGSTAB<MatrixLikeOperator<Scalar>, PreconditionerType>, //
+                                                  // Eigen::BiCGSTAB<MatrixLikeOperator<Scalar>, PreconditionerType> //
                                                   Eigen::MINRES<MatrixLikeOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>
                                                   // Eigen::GMRES<MatrixLikeOperator<Scalar>, PreconditionerType>
                                                   >;

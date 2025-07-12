@@ -22,12 +22,16 @@ class solver_gdplusk : public solver_base<Scalar> {
     using VectorType = typename solver_base<Scalar>::VectorType;
     using VectorReal = typename solver_base<Scalar>::VectorReal;
     using VectorIdxT = typename solver_base<Scalar>::VectorIdxT;
-    using fMultHX_t  = typename solver_base<Scalar>::fMultHX_t;
-    using fMultPX_t  = typename solver_base<Scalar>::fMultPX_t;
+    using fMultH_t   = typename solver_base<Scalar>::fMultH_t;
+    using fMultP_t   = typename solver_base<Scalar>::fMultP_t;
+    using OrthMeta   = typename solver_base<Scalar>::OrthMeta;
+    using MaskPolicy = typename solver_base<Scalar>::MaskPolicy;
 
     using solver_base<Scalar>::eiglog;
     using solver_base<Scalar>::use_preconditioner;
     using solver_base<Scalar>::use_refined_rayleigh_ritz;
+    using solver_base<Scalar>::use_h2_inner_product;
+    using solver_base<Scalar>::use_h1h2_preconditioner;
     using solver_base<Scalar>::dev_orthogonalization_before_preconditioning;
     using solver_base<Scalar>::dev_append_extra_blocks_to_basis;
     using solver_base<Scalar>::residual_correction_type_internal;
@@ -56,7 +60,6 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::HQ;
     using solver_base<Scalar>::H1Q;
     using solver_base<Scalar>::H2Q;
-
     using solver_base<Scalar>::get_wBlock;
     using solver_base<Scalar>::get_mBlock;
     using solver_base<Scalar>::get_sBlock;
@@ -76,8 +79,8 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::eps;
     using solver_base<Scalar>::tol;
     using solver_base<Scalar>::rnormTol;
-    using solver_base<Scalar>::normTolQ;
-    using solver_base<Scalar>::orthTolQ;
+    using solver_base<Scalar>::normTol;
+    using solver_base<Scalar>::orthTol;
     using solver_base<Scalar>::quotTolB;
     using solver_base<Scalar>::max_iters;
     using solver_base<Scalar>::max_matvecs;
@@ -88,20 +91,26 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::bIsOK;
     using solver_base<Scalar>::get_ritz_indices;
     using solver_base<Scalar>::extractRitzVectors;
-    using solver_base<Scalar>::MultHX;
-    using solver_base<Scalar>::MultH1X;
-    using solver_base<Scalar>::MultH2X;
-    using solver_base<Scalar>::MultPX;
-    using solver_base<Scalar>::MultP1X;
-    using solver_base<Scalar>::MultP2X;
+    using solver_base<Scalar>::MultH;
+    using solver_base<Scalar>::MultH1;
+    using solver_base<Scalar>::MultH2;
+    using solver_base<Scalar>::MultP;
+    using solver_base<Scalar>::MultP1;
+    using solver_base<Scalar>::MultP2;
+
+    using solver_base<Scalar>::block_l2_orthogonalize;
+    using solver_base<Scalar>::block_l2_orthonormalize;
+    using solver_base<Scalar>::block_h2_orthonormalize;
+    using solver_base<Scalar>::block_h2_orthogonalize;
+    using solver_base<Scalar>::assert_l2_orthonormal;
+    using solver_base<Scalar>::assert_l2_orthogonal;
+    using solver_base<Scalar>::assert_h2_orthonormal;
+    using solver_base<Scalar>::assert_h2_orthogonal;
     using solver_base<Scalar>::assert_allFinite;
-    using solver_base<Scalar>::assert_orthonormal;
-    using solver_base<Scalar>::assert_orthogonal;
+
     using solver_base<Scalar>::chebyshevFilter;
     using solver_base<Scalar>::qr_and_chebyshevFilter;
-    using solver_base<Scalar>::orthogonalize;
-    using solver_base<Scalar>::orthonormalize;
-    using solver_base<Scalar>::compress_cols;
+    using solver_base<Scalar>::compress_col_blocks;
     using solver_base<Scalar>::compress_rows_and_cols;
 
     private:
@@ -110,44 +119,30 @@ class solver_gdplusk : public solver_base<Scalar> {
     void shift_blocks_right(Eigen::Ref<MatrixType> matrix, Eigen::Index offset_old, Eigen::Index offset_new, Eigen::Index extent);
     void roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent);
 
-    Eigen::Index max_wBlocks     = 1;
     Eigen::Index max_mBlocks     = 1;
     Eigen::Index max_sBlocks     = 1;
-    Eigen::Index max_s1Blocks    = 0;
-    Eigen::Index max_s2Blocks    = 0;
     Eigen::Index vBlocks         = 0;
-    Eigen::Index wBlocks         = 0;
     Eigen::Index mBlocks         = 0;
-    Eigen::Index rBlocks         = 0;
     Eigen::Index sBlocks         = 0;
-    Eigen::Index s1Blocks        = 0; // Last resort blocks if GDMRG fails to add sBlocks
-    Eigen::Index s2Blocks        = 0; // Last resort blocks if GDMRG fails to add sBlocks
     Eigen::Index kBlocks         = 0;
     Eigen::Index maxBasisBlocks  = 8;
     Eigen::Index maxRetainBlocks = 1;
+    MatrixType   Q_new, HQ_new, H1Q_new, H2Q_new;
     MatrixType   G;
-    // Store all Qenr_i
-    void delete_blocks_from_left_until_orthogonal(const Eigen::Ref<const MatrixType> X,         // (N, xcols)
-                                                  MatrixType                        &Y,         // (N, ycols)
-                                                  MatrixType                        &HY,        // (N, ycols)
-                                                  Eigen::Index                       maxBlocks, // Keep this many blocks at most
-                                                  RealScalar                         threshold  // Allow this much overlap between V and Q_enr
-    );
+
     void selective_orthonormalize(const Eigen::Ref<const MatrixType> X,            // (N, xcols)
                                   Eigen::Ref<MatrixType>             Y,            // (N, ycols)
                                   RealScalar                         breakdownTol, // The smallest allowed norm
                                   VectorIdxT                        &mask          // block norm mask, size = n_blocks = ycols / blockWidth
     );
 
-    MatrixType get_Q_res(fMultPX_t MultPX);
+    void make_new_Q_block(fMultP_t fMultP);
 
     public:
     bool inject_randomness = false;
     void build() final;
-    void build(MatrixType &Q_res, MatrixType &Q, MatrixType &HQ, fMultHX_t MultHX);
-    void build(MatrixType &Q1_res, MatrixType &Q2_res, MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q);
-    void build(MatrixType &Q_res, MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q);
-    void set_maxLanczosResidualHistory(Eigen::Index k);
+    void build(MatrixType &Q, MatrixType &HQ, const MatrixType &Q_new, const MatrixType &HQ_new);
+    void build(MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q, const MatrixType &Q_new, const MatrixType &H1Q_new, const MatrixType &H2Q_new);
     void set_maxExtraRitzHistory(Eigen::Index m);
     void set_maxRitzResidualHistory(Eigen::Index s);
     void set_maxBasisBlocks(Eigen::Index bb);

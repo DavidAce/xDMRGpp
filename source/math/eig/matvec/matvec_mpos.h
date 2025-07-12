@@ -6,6 +6,7 @@
 #include <Eigen/Cholesky>
 // #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/LU>
+#include <Eigen/QR>
 #include <Eigen/Sparse>
 // #include <Eigen/SparseCholesky>
 #include "tools/common/contraction/IterativeLinearSolverConfig.h"
@@ -33,6 +34,7 @@ class MatVecMPOS {
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using BlockType  = Eigen::Block<MatrixType, Eigen::Dynamic, Eigen::Dynamic, true>; // contiguous block
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+    using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
     using SparseType = Eigen::SparseMatrix<Scalar>;
     using MatrixRowM = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
     using SparseRowM = Eigen::SparseMatrix<Scalar, Eigen::RowMajor>;
@@ -53,25 +55,26 @@ class MatVecMPOS {
     void                                  init_mpos_A();
     void                                  init_mpos_B();
 
-    std::array<long, 3>   shape_mps;
-    long                  size_mps;
-    std::vector<long>     spindims;
-    eig::Form             form            = eig::Form::SYMM;
-    eig::Side             side            = eig::Side::R;
-    std::optional<Scalar> jcbShift        = std::nullopt;
-    long                  jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
-    VectorType            jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
-    VectorType            invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
-    mutable VectorType    invJcbDiagB;          // Used with spectra
+    std::array<long, 3>       shape_mps;
+    long                      size_mps;
+    std::vector<long>         spindims;
+    eig::Form                 form            = eig::Form::SYMM;
+    eig::Side                 side            = eig::Side::R;
+    std::optional<RealScalar> jcbShift        = std::nullopt;
+    long                      jcbBlockSize    = 0l; // Jacobi block size.
+    long                      jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
+    VectorType                jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
+    VectorType                invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
+    mutable VectorType        invJcbDiagB;          // Used with spectra
 
-    using LLTType = Eigen::LLT<MatrixType, Eigen::Lower>;
-    std::vector<std::tuple<long, VectorType, std::unique_ptr<LLTType>>> lltJcbBlocks; // Solvers for the block Jacobi preconditioner
-
-    using LUType = Eigen::PartialPivLU<MatrixType>;
-    std::vector<std::tuple<long, VectorType, std::unique_ptr<LUType>>> luJcbBlocks; // Solvers for the block Jacobi preconditioner
-
+    using LLTType  = Eigen::LLT<MatrixType, Eigen::Lower>;
+    using LUType   = Eigen::PartialPivLU<MatrixType>;
     using LDLTType = Eigen::LDLT<MatrixType, Eigen::Lower>;
-    std::vector<std::tuple<long, VectorType, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
+    using QRType   = Eigen::ColPivHouseholderQR<MatrixType>;
+    std::vector<std::tuple<long, int, std::unique_ptr<LLTType>>>  lltJcbBlocks;  // Solvers for the block Jacobi preconditioner
+    std::vector<std::tuple<long, int, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
+    std::vector<std::tuple<long, int, std::unique_ptr<LUType>>>   luJcbBlocks;   // Solvers for the block Jacobi preconditioner
+    std::vector<std::tuple<long, int, std::unique_ptr<QRType>>>   qrJcbBlocks;   // Solvers for the block Jacobi preconditioner
 
     // using BICGType = Eigen::BiCGSTAB<SparseRowM, Eigen::IncompleteLUT<Scalar>>;
     // std::vector<std::tuple<long, std::unique_ptr<SparseRowM>, std::unique_ptr<BICGType>>> bicgstabJcbBlocks; // Solvers for the block Jacobi preconditioner
@@ -123,7 +126,7 @@ class MatVecMPOS {
                                 const Eigen::Tensor<Scalar, 3> &ENVR) const;
     MatrixType get_diagonal_block(long offset, long extent, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS, const Eigen::Tensor<Scalar, 3> &ENVL,
                                   const Eigen::Tensor<Scalar, 3> &ENVR) const;
-    MatrixType get_diagonal_block(long offset, long extent, Scalar shift, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_A,
+    MatrixType get_diagonal_block(long offset, long extent, RealScalar shift, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_A,
                                   const Eigen::Tensor<Scalar, 3> &ENVL_A, const Eigen::Tensor<Scalar, 3> &ENVR_A,
                                   const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS_B, const Eigen::Tensor<Scalar, 3> &ENVL_B,
                                   const Eigen::Tensor<Scalar, 3> &ENVR_B) const;
@@ -144,7 +147,7 @@ class MatVecMPOS {
     bool         readyShift    = false;                // Flag to make sure the shift has occurred
     bool         readyFactorOp = false;                // Flag to check if factorization has occurred
     mutable bool readyCalcPc   = false;
-    mutable bool lockCalcPc    = false;
+    mutable bool doneCalcPc    = false;
 
     public:
     MatVecMPOS() = default;
@@ -182,10 +185,12 @@ class MatVecMPOS {
     VectorType               MultAx(const Eigen::Ref<const VectorType> &x) const;
     MatrixType               MultBX(const Eigen::Ref<const MatrixType> &X) const;
     VectorType               MultBx(const Eigen::Ref<const VectorType> &x) const;
-    void                     CalcPc(Scalar shift = 0.0);                                         // Calculates the diagonal or tridiagonal part of A
-    void                     MultPc(const Scalar *mps_in_, Scalar *mps_out, Scalar shift = 0.0); // Applies the preconditioner
-    void                     MultPc(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); // Applies the preconditioner
-    MatrixType               MultPX(const Eigen::Ref<const MatrixType> &X); //  Applies the preconditioner onto many columns in X
+
+    void       CalcPc(RealScalar shift = RealScalar{0});                                         // Calculates the diagonal or tridiagonal part of A
+    void       MultPc(const Scalar *mps_in_, Scalar *mps_out, RealScalar shift = RealScalar{0}); // Applies the preconditioner
+    void       MultPc(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); // Applies the preconditioner
+    MatrixType MultPX(const Eigen::Ref<const MatrixType>               &X,
+                      std::optional<const Eigen::Ref<const VectorReal>> shifts = std::nullopt); //  Applies the preconditioner onto many columns in X
 
     // Various utility functions
     mutable long num_mv = 0;
@@ -235,7 +240,7 @@ class MatVecMPOS {
     std::unique_ptr<tid::ur> t_multPc; // Preconditioner time
     std::unique_ptr<tid::ur> t_multAx; // Matvec time
 
-    RealScalar get_op_norm(Eigen::Index max_op_norm_iters);
+    RealScalar get_op_norm(Eigen::Index max_op_norm_iters = 5, RealScalar reltol = RealScalar{1e-3f});
 
     private:
     mutable Eigen::Index op_norm_iters;

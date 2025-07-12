@@ -20,7 +20,7 @@ template<typename T>
 using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
 namespace settings {
-    static constexpr bool debug_jdop = false;
+    static constexpr bool debug_jdop = true;
 }
 
 namespace Eigen::internal {
@@ -43,40 +43,30 @@ class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Sc
     typedef int StorageIndex;
     enum { ColsAtCompileTime = Eigen::Dynamic, MaxColsAtCompileTime = Eigen::Dynamic, IsRowMajor = false };
 
-
     mutable Eigen::Index m_opcounter = 0;
     mutable double       m_optimer   = 0.0;
 
-    const VectorType &v;
-    const VectorType &Bv;
-    const VectorType &s;
-
-    RealScalar            vH_Bv = RealScalar{1};
-    static constexpr auto eps   = std::numeric_limits<RealScalar>::epsilon();
+    static constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
     mutable VectorType    x_tmp; // Scratch memory
     mutable VectorType    y_tmp; // Scratch memory
-
+    const Eigen::Index    size;
+    static constexpr bool has_projector_op = true;
     // Timers
     public:
     std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ResidualOp;
+    std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ProjectOpL;
+    std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ProjectOpR;
     std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MatrixOp;
 
     void _check_template_params() {};
     // Custom API:
     JacobiDavidsonOperator() = default;
-    JacobiDavidsonOperator(const VectorType                                               &v_,          //
-                           const VectorType                                               &Bv_,         //
-                           const VectorType                                               &s_,          //
+    JacobiDavidsonOperator(Eigen::Index                                                    size_,
                            std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ResidualOp_, //
+                           std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ProjectOpL_, //
+                           std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ProjectOpR_, //
                            std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MatrixOp_)
-        :
-
-          v(v_), Bv(Bv_), s(s_), ResidualOp(ResidualOp_), MatrixOp(MatrixOp_) {
-        vH_Bv = std::real(v.dot(Bv));
-        x_tmp.resizeLike(v);
-        y_tmp.resizeLike(v);
-        assert(vH_Bv > eps); // B ≻ 0 ⇒ v†Bv strictly positive
-    }
+        : size(size_), ResidualOp(ResidualOp_), ProjectOpL(ProjectOpL_), ProjectOpR(ProjectOpR_), MatrixOp(MatrixOp_) {}
 
     template<typename Rhs>
     Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs> &x) const {
@@ -96,8 +86,8 @@ class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Sc
         m_opcounter++;
         return result;
     }
-    [[nodiscard]] Eigen::Index rows() const { return safe_cast<Eigen::Index>(v.size()); };
-    [[nodiscard]] Eigen::Index cols() const { return safe_cast<Eigen::Index>(v.size()); };
+    [[nodiscard]] Eigen::Index rows() const { return size; };
+    [[nodiscard]] Eigen::Index cols() const { return size; };
     Eigen::Index               iterations() const { return m_opcounter; }
     double                     elapsed_time() const { return m_optimer; }
 };
@@ -119,30 +109,16 @@ namespace Eigen::internal {
             EIGEN_ONLY_USED_FOR_DEBUG(alpha);
 
             {
-                using VectorType                        = JacobiDavidsonOperator<ReplScalar>::VectorType;
-                [[maybe_unused]] const auto &v          = mat.v;                     // Ritz vector
-                const auto                  &Bv         = mat.Bv;                    // B * v    (cached)
-                const auto                  &ResidualOp = mat.ResidualOp;            // (A - θB)
-                VectorType                  &x_tmp      = mat.x_tmp;                 // Scratch memory
-                [[maybe_unused]] VectorType &y_tmp      = mat.y_tmp;                 // Scratch memory
-                const ReplScalar             inv_vHvB   = ReplScalar(1) / mat.vH_Bv; // 1 / (v† B v)
-
-                // B-orthogonal projector
-                auto project_B = [&](const VectorType &z) -> VectorType {
-                    Scalar delta = inv_vHvB * Bv.dot(z); // (v† z)/(v† B v)
-                    return z - Bv * delta;               // P_B z
-                };
-
-                // ---- apply JD operator ----
+                const auto &ResidualOp = mat.ResidualOp; // (A - θB)
+                const auto &ProjectOpL = mat.ProjectOpL; // (I - Bv * v.adjoint() / vHBv)
+                const auto &ProjectOpR = mat.ProjectOpR; // (I - v * Bv.adjoint() / vHBv)
+                auto       &x_tmp      = mat.x_tmp;      // Scratch memory
+                auto       &y_tmp      = mat.y_tmp;      // Scratch memory
 
                 // standard JD-op
-                x_tmp.noalias() = project_B(rhs);
+                x_tmp.noalias() = ProjectOpR(rhs);
                 y_tmp.noalias() = ResidualOp(x_tmp);
-                dst.noalias()   = project_B(y_tmp);
-
-                // harmonic JD-op
-                // x_tmp.noalias() = project_B(rhs);
-                // dst.noalias()   = ResidualOp(x_tmp);
+                dst.noalias()   = ProjectOpL(y_tmp);
             }
         }
     };
@@ -151,12 +127,13 @@ namespace Eigen::internal {
 
 template<typename Scalar>
 typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolver(JacobiDavidsonOperator<Scalar>      &matRepl, //
-                                                                                 const VectorType                    &rhs,     //
-                                                                                 IterativeLinearSolverConfig<Scalar> &cfg) {
+                                                                                   const VectorType                    &rhs,     //
+                                                                                   IterativeLinearSolverConfig<Scalar> &cfg) {
     using PreconditionerType = IterativeLinearSolverPreconditioner<JacobiDavidsonOperator<Scalar>>;
     using DefSolverType      = Eigen::ConjugateGradient<JacobiDavidsonOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>;
     using IndSolverType      = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                    //
                                                   Eigen::BiCGSTAB<JacobiDavidsonOperator<Scalar>, PreconditionerType>, //
+                                                  // Eigen::BiCGSTAB<JacobiDavidsonOperator<Scalar>, PreconditionerType> //
                                                   Eigen::MINRES<JacobiDavidsonOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>
                                                   // Eigen::GMRES<JacobiDavidsonOperator<Scalar>, PreconditionerType>
                                                   >;
@@ -177,9 +154,11 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
         }
         return "Unknown solver";
     };
+
     VectorType res;
     auto       run = [&](auto &solver) {
         auto t_jdop = tid::tic_token("jdop", tid::level::higher);
+
         solver.setMaxIterations(cfg.maxiters);
         solver.setTolerance(cfg.tolerance);
         solver.preconditioner().attach(&matRepl, &cfg);

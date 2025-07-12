@@ -46,8 +46,8 @@ class solver_lanczos : solver_base<Scalar> {
     using solver_base<Scalar>::hhqr;
     using solver_base<Scalar>::eps;
     using solver_base<Scalar>::tol;
-    using solver_base<Scalar>::normTolQ;
-    using solver_base<Scalar>::orthTolQ;
+    using solver_base<Scalar>::normTol;
+    using solver_base<Scalar>::orthTol;
     using solver_base<Scalar>::quotTolB;
     using solver_base<Scalar>::max_iters;
     using solver_base<Scalar>::max_matvecs;
@@ -57,8 +57,8 @@ class solver_lanczos : solver_base<Scalar> {
 
     using solver_base<Scalar>::bIsOK;
     using solver_base<Scalar>::get_ritz_indices;
-    using solver_base<Scalar>::MultHX;
-    using solver_base<Scalar>::MultPX;
+    using solver_base<Scalar>::MultH;
+    using solver_base<Scalar>::MultP;
 
     void write_Q_next_B_DGKS(Eigen::Index i);
 

@@ -21,6 +21,7 @@ class solver_lobpcg : public solver_base<Scalar> {
     using VectorType = typename solver_base<Scalar>::VectorType;
     using VectorReal = typename solver_base<Scalar>::VectorReal;
     using VectorIdxT = typename solver_base<Scalar>::VectorIdxT;
+    using OrthMeta   = typename solver_base<Scalar>::OrthMeta;
 
     using solver_base<Scalar>::eiglog;
     using solver_base<Scalar>::use_preconditioner;
@@ -63,8 +64,8 @@ class solver_lobpcg : public solver_base<Scalar> {
     using solver_base<Scalar>::hhqr;
     using solver_base<Scalar>::eps;
     using solver_base<Scalar>::tol;
-    using solver_base<Scalar>::normTolQ;
-    using solver_base<Scalar>::orthTolQ;
+    using solver_base<Scalar>::normTol;
+    using solver_base<Scalar>::orthTol;
     using solver_base<Scalar>::quotTolB;
     using solver_base<Scalar>::max_iters;
     using solver_base<Scalar>::max_matvecs;
@@ -74,15 +75,18 @@ class solver_lobpcg : public solver_base<Scalar> {
 
     using solver_base<Scalar>::bIsOK;
     using solver_base<Scalar>::get_ritz_indices;
-    using solver_base<Scalar>::MultHX;
-    using solver_base<Scalar>::MultPX;
-    using solver_base<Scalar>::assert_allFinite;
-    using solver_base<Scalar>::assert_orthonormal;
-    using solver_base<Scalar>::assert_orthogonal;
+    using solver_base<Scalar>::MultH;
+    using solver_base<Scalar>::MultP;
     using solver_base<Scalar>::chebyshevFilter;
     using solver_base<Scalar>::qr_and_chebyshevFilter;
-    using solver_base<Scalar>::orthonormalize;
-    using solver_base<Scalar>::compress_cols;
+
+    using solver_base<Scalar>::block_l2_orthogonalize;
+    using solver_base<Scalar>::block_l2_orthonormalize;
+    using solver_base<Scalar>::assert_l2_orthonormal;
+    using solver_base<Scalar>::assert_l2_orthogonal;
+    using solver_base<Scalar>::assert_allFinite;
+
+    using solver_base<Scalar>::compress_col_blocks;
     using solver_base<Scalar>::compress_rows_and_cols;
 
     private:

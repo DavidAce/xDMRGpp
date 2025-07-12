@@ -19,18 +19,22 @@ struct IterativeLinearSolverConfig {
         using LLTType                             = Eigen::LLT<MatrixType, Eigen::Lower>;
         using LDLTType                            = Eigen::LDLT<MatrixType, Eigen::Lower>;
         using LUType                              = Eigen::PartialPivLU<MatrixType>;
-        using LLTJcbBlocksType                    = std::vector<std::tuple<long, VectorType, std::unique_ptr<LLTType>>>;
-        using LDLTJcbBlocksType                   = std::vector<std::tuple<long, VectorType, std::unique_ptr<LDLTType>>>;
-        using LUJcbBlocksType                     = std::vector<std::tuple<long, VectorType, std::unique_ptr<LUType>>>;
+        using QRType                              = Eigen::ColPivHouseholderQR<MatrixType>;
+        using LLTJcbBlocksType                    = std::vector<std::tuple<long, int, std::unique_ptr<LLTType>>>;
+        using LDLTJcbBlocksType                   = std::vector<std::tuple<long, int, std::unique_ptr<LDLTType>>>;
+        using LUJcbBlocksType                     = std::vector<std::tuple<long, int, std::unique_ptr<LUType>>>;
+        using QRJcbBlocksType                     = std::vector<std::tuple<long, int, std::unique_ptr<QRType>>>;
         const Scalar            *invdiag          = nullptr;
         const LLTJcbBlocksType  *lltJcbBlocks     = nullptr;
         const LDLTJcbBlocksType *ldltJcbBlocks    = nullptr;
         const LUJcbBlocksType   *luJcbBlocks      = nullptr;
+        const QRJcbBlocksType   *qrJcbBlocks      = nullptr;
         Real                     cond             = std::numeric_limits<Real>::quiet_NaN();
         MatrixType               deflationEigVecs = {};
         VectorType               deflationEigInvs = {};
         MatrixType               coarseZ          = {};
         MatrixType               coarseHZ         = {};
+        bool                     skipjcb          = false;
     };
 
     struct ChebyshevPreconditionerConfig {
