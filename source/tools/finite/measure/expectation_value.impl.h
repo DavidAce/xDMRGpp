@@ -15,6 +15,7 @@
 #include "tools/common/log.h"
 #include "tools/common/split.h"
 #include "tools/finite/mpo.h"
+#include "tools/finite/ops.h"
 #include <array>
 #include <general/sfinae.h>
 #include <h5pp/details/h5ppType.h>
@@ -51,24 +52,22 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
     auto chain = tenx::TensorIdentity<CalcType>(d0);
     if(d0 != 1) tools::log->warn("expectation_value: chiL is not 1");
 
-    auto &threads = tenx::threads::get();
-    for(const auto &mps : state.mps_sites) {
-        Eigen::Tensor<CalcType, 3> M = mps->template get_M_as<CalcType>();
-        Eigen::Tensor<CalcType, 3> temp;
-        const auto                 pos = mps->template get_position<long>();
-        for(const auto &op : iter::reverse(ops)) {
-            // Reverse to apply operators right to left if they are at the same position
-            // i.e. ABC|psi> should apply C first and A last (if A and C are on the same site).
-            if(op.used or op.pos != pos) continue;
-            contract_op_M_1_0(temp, tenx::asScalarType<CalcType>(op.op), M, threads);
-            M       = std::move(temp);
-            op.used = true;
-        }
-        chain = contract_chain_M_Mconj_0_1_01_10(chain, M, threads); // Contracts the chain with M and M.conjugate() with indices in the name
+    // auto               &threads = tenx::threads::get();
+    StateFinite<Scalar> stateOp = state;
+    for(const auto &op : iter::reverse(ops)) {
+        auto                     pos    = op.pos;
+        auto                    &mps    = stateOp.get_mps_site(pos);
+        Eigen::Tensor<Scalar, 2> op_ct  = tenx::asScalarType<Scalar>(op.op);
+        Eigen::Tensor<Scalar, 4> mpo_op = op_ct.reshape(Eigen::DSizes<Eigen::Index, 4>{1, 1, op_ct.dimension(0), op_ct.dimension(1)});
+        mps.apply_mpo(mpo_op);
     }
-
-    Eigen::Tensor<CalcType, 0> expval = chain.trace();
-    return expval.coeff(0);
+    Scalar expval = ops::overlap<Scalar>(stateOp, state);
+    if constexpr(sfinae::is_std_complex_v<CalcType>) {
+        using CalcReal = decltype(std::real(std::declval<CalcType>()));
+        return std::complex<CalcReal>(static_cast<CalcReal>(std::real(expval)), static_cast<CalcReal>(std::imag(expval)));
+    } else {
+        return static_cast<CalcType>(std::real(expval));
+    }
 }
 
 template<typename CalcType, typename Scalar, typename MpoType>

@@ -39,7 +39,7 @@ void diagonal_environment_padding(EnvType &env, typename EnvType::Scalar pad_val
  * without hurting the precision of the pre-expansion MPS.
  */
 template<typename Scalar>
-void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar> &tensors, long posP, long pos0, Scalar pad_value_env,
+void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar> &tensors, long posP, long pos0, [[maybe_unused]] Scalar pad_value_env,
                                                             BondExpansionConfig bcfg) {
     [[maybe_unused]] auto &state = tensors.get_state();
     [[maybe_unused]] auto &model = tensors.get_model();
@@ -83,7 +83,7 @@ void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar
     optm.eigs_blk                             = settings::precision::eigs_blk_min;
     optm.eigs_ncv                             = settings::precision::eigs_ncv_min;
     optm.eigs_jcbMaxBlockSize                 = std::min(1l, settings::precision::eigs_jcb_blocksize_min);
-    optm.eigs_use_coarse_inner_preconditioner = true;
+    optm.eigs_use_coarse_inner_preconditioner = false;
     optm.optRitz                              = bcfg.optRitz;
     optm.optAlgo                              = bcfg.optAlgo;
     optm.optType                              = bcfg.optType;

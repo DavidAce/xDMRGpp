@@ -1073,12 +1073,10 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
             eig::log->trace("{}: Recomputing the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname, fp(shift),
                             bsize_is_new, shift_active, shift_is_new);
             doneCalcPc = false;
+        } else {
+            eig::log->trace("{}: No need to recompute the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname,
+                            fp(shift), bsize_is_new, shift_active, shift_is_new);
         }
-        else {
-            eig::log->trace("{}: No need to recompute the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname, fp(shift),
-                            bsize_is_new, shift_active, shift_is_new);
-        }
-
     }
 
     if(doneCalcPc) return;
@@ -1166,17 +1164,17 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
                             es.compute(block, Eigen::EigenvaluesOnly);
                             RealScalar minev_after = es.eigenvalues().minCoeff();
                             RealScalar maxev_after = es.eigenvalues().maxCoeff();
-                            eig::log->info("Calculating |H1 {:+.3e} * H2| | abs | gmin {:.5e} | evals {:.5e} ... {:.5e} --> {:.5e} ... {:.5e} : {}",
-                                           fp(jcbShift.value()), fp(gmin), fp(minev_before), fp(maxev_before), fp(minev_after), fp(maxev_after),
-                                           eig::FactorizationToString(factorization_internal));
+                            eig::log->trace("Calculating |H1 {:+.3e} * H2| | abs | gmin {:.5e} | evals {:.5e} ... {:.5e} --> {:.5e} ... {:.5e} : {}",
+                                            fp(jcbShift.value()), fp(gmin), fp(minev_before), fp(maxev_before), fp(minev_after), fp(maxev_after),
+                                            eig::FactorizationToString(factorization_internal));
                         } else {
-                            eig::log->info("Calculating H1 {:+.3e} * H2  | gmin {:.5e} | evals {:.5e} ... {:.5e} : {}", fp(jcbShift.value()), fp(gmin),
-                                           fp(minev_before), fp(maxev_before), eig::FactorizationToString(factorization_internal));
+                            eig::log->trace("Calculating H1 {:+.3e} * H2  | gmin {:.5e} | evals {:.5e} ... {:.5e} : {}", fp(jcbShift.value()), fp(gmin),
+                                            fp(minev_before), fp(maxev_before), eig::FactorizationToString(factorization_internal));
                         }
 
                     } else {
-                        eig::log->info("Calculating H1 - {:+.3e} * H2 | gmin={:.5e}: {}", fp(jcbShift.value()), fp(gmin),
-                                       eig::FactorizationToString(factorization_internal));
+                        eig::log->trace("Calculating H1 - {:+.3e} * H2 | gmin={:.5e}: {}", fp(jcbShift.value()), fp(gmin),
+                                        eig::FactorizationToString(factorization_internal));
                     }
 
                     // Eigen::SelfAdjointEigenSolver<MatrixType> es(block);
@@ -1313,7 +1311,18 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
     }
 
     if(jcbMaxBlockSize == 1) {
-        invJcbDiagonal             = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+        if(mpos_B.empty()) invJcbDiagonal = jcbDiagA.array().cwiseInverse().matrix();
+        else invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+        // for(Eigen::Index i = 0; i < jcbDiagA.size(); ++i) {
+        //     eig::log->info("{:4}: {:20.16f} {:20.16f} {:20.16f}", i, fp(jcbDiagA(i)), fp(jcbDiagB(i)), fp(invJcbDiagonal(i)));
+        // }
+
+        assert(jcbDiagA.allFinite());
+        assert(jcbDiagB.allFinite());
+        assert(jcbDiagA.nonZeros() == jcbDiagA.size());
+        assert(jcbDiagB.nonZeros() == jcbDiagB.size());
+        assert(jcbDiagB.allFinite());
+        assert(invJcbDiagonal.allFinite());
         iLinSolvCfg.jacobi.invdiag = invJcbDiagonal.data();
     } else if(jcbMaxBlockSize > 1) {
         iLinSolvCfg.jacobi.lltJcbBlocks  = &lltJcbBlocks;

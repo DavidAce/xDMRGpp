@@ -390,7 +390,10 @@ void xdmrg<Scalar>::update_state() {
 
     tools::log->trace("Optimization [{}|{}]: {}. Variance change {:8.2e} --> {:8.2e} ({:.3f} %)", enum2sv(opt_meta.optAlgo), enum2sv(opt_meta.optSolver),
                       flag2str(opt_meta.optExit), fp(var_latest), fp(opt_state.get_variance()), fp(opt_state.get_relchange() * 100));
-    if(opt_state.get_relchange() > 1000) tools::log->warn("Variance increase by x {:.2e}", fp(opt_state.get_relchange()));
+    if(opt_state.get_relchange() > 1000) {
+        tools::log->warn("Variance increase by x {:.2e} | variance new {:.3e} | variance old {:.3e}", fp(opt_state.get_relchange()),
+                         fp(opt_state.get_variance()), fp(var_latest));
+    }
 
     if(tools::log->level() <= spdlog::level::debug) {
         tools::log->debug("Optimization result: {:<24} | E {:<20.16f}| σ²H {:<8.2e} | rnorm {:8.2e} | overlap {:.16f} | "
@@ -421,7 +424,6 @@ void xdmrg<Scalar>::update_state() {
     ene_delta                     = ene_mrg - ene_latest;
     var_latest                    = var_mrg;
     ene_latest                    = ene_mrg;
-
     auto bondexp_result = expand_bonds(BondExpansionOrder::POSTOPT);
 
     auto ene_ini = initial_state.get_energy();

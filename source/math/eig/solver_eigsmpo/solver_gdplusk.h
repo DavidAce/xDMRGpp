@@ -25,7 +25,7 @@ class solver_gdplusk : public solver_base<Scalar> {
     using fMultH_t   = typename solver_base<Scalar>::fMultH_t;
     using fMultP_t   = typename solver_base<Scalar>::fMultP_t;
     using OrthMeta   = typename solver_base<Scalar>::OrthMeta;
-    using MaskPolicy = typename solver_base<Scalar>::MaskPolicy;
+    // using MaskPolicy = typename solver_base<Scalar>::MaskPolicy;
 
     using solver_base<Scalar>::eiglog;
     using solver_base<Scalar>::use_preconditioner;
@@ -100,7 +100,8 @@ class solver_gdplusk : public solver_base<Scalar> {
 
     using solver_base<Scalar>::block_l2_orthogonalize;
     using solver_base<Scalar>::block_l2_orthonormalize;
-    using solver_base<Scalar>::block_h2_orthonormalize;
+    using solver_base<Scalar>::block_h2_orthonormalize_dgks;
+    using solver_base<Scalar>::block_h2_orthonormalize_llt;
     using solver_base<Scalar>::block_h2_orthogonalize;
     using solver_base<Scalar>::assert_l2_orthonormal;
     using solver_base<Scalar>::assert_l2_orthogonal;

@@ -20,7 +20,7 @@ template<typename T>
 using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
 namespace settings {
-    static constexpr bool debug_jdop = true;
+    static constexpr bool debug_jdop = false;
 }
 
 namespace Eigen::internal {
@@ -31,7 +31,7 @@ namespace Eigen::internal {
 }
 
 // Example of a matrix-free wrapper from a user type to Eigen's compatible type
-// For the sake of simplicity, this example simply wrap a Eigen::Matrix.
+// For the sake of simplicity, this example simply wraps an Eigen::Matrix.
 template<typename Scalar_>
 class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Scalar_>> {
     public:

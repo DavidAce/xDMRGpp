@@ -17,7 +17,7 @@
 
 namespace settings {
 #if defined(NDEBUG)
-    constexpr bool debug_solver = true;
+    constexpr bool debug_solver = false;
 #else
     constexpr bool debug_solver = true;
 #endif
@@ -378,16 +378,14 @@ void solver_base<Scalar>::adjust_preconditioner_tolerance(const Eigen::Ref<const
     H1H2.get_iterativeLinearSolverConfig().jacobi.cond = status.condition;
 
     if(!use_adaptive_inner_tolerance) return;
-    auto Snorm = S.colwise().norm().minCoeff();
+    auto Snorm = S.leftCols(nev).colwise().norm().minCoeff();
     if(dev_thick_jd_projector) Snorm = std::pow(Snorm, RealScalar{2});
     H1.get_iterativeLinearSolverConfig().tolerance   = std::min<RealScalar>(RealScalar{0.1f}, std::sqrt(Snorm));
     H2.get_iterativeLinearSolverConfig().tolerance   = std::min<RealScalar>(RealScalar{0.1f}, std::sqrt(Snorm));
     H1H2.get_iterativeLinearSolverConfig().tolerance = std::min<RealScalar>(RealScalar{0.1f}, std::sqrt(Snorm));
 
-    auto maxiters1                                  = std::max(100l, safe_cast<long>(100 / H1.get_iterativeLinearSolverConfig().tolerance));
-    auto maxiters2                                  = std::max(100l, safe_cast<long>(100 / H2.get_iterativeLinearSolverConfig().tolerance));
-    maxiters1                                       = std::min(maxiters1, 2000l);
-    maxiters2                                       = std::min(maxiters2, 2000l);
+    auto maxiters1                                  = std::max(50l, safe_cast<long>(50 / H1.get_iterativeLinearSolverConfig().tolerance));
+    auto maxiters2                                  = std::max(50l, safe_cast<long>(50 / H2.get_iterativeLinearSolverConfig().tolerance));
     H1.get_iterativeLinearSolverConfig().maxiters   = maxiters1;
     H2.get_iterativeLinearSolverConfig().maxiters   = maxiters2;
     H1H2.get_iterativeLinearSolverConfig().maxiters = maxiters2;
@@ -634,6 +632,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::cheap_Olsen_correc
     // Where Δ is a diagonal matrix that Δ𝑖,𝑖 holds an estimation of the error of
     // the approximate eigenvalue Λ𝑖,𝑖.
     for(long i = 0; i < S.cols(); ++i) {
+        auto d           = D.col(i);
         auto v           = V.col(i);
         auto s           = S.col(i);
         auto numerator   = Scalar{1};
@@ -650,8 +649,8 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::cheap_Olsen_correc
             denominator = v.dot(v); // v^H * v
         }
 
-        auto delta         = std::abs(denominator) > eps * 100 ? numerator / denominator : RealScalar{0};
-        D.col(i).noalias() = s - delta * v; // Gets preconditioned later
+        auto delta  = std::abs(denominator) > eps * 100 ? numerator / denominator : RealScalar{0};
+        d.noalias() = s - delta * v; // Gets preconditioned later
     }
     return D;
 }
@@ -710,18 +709,6 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
     //      ProjectOpL = (I - V * V.adjoint()) =
     //      ProjectOpR = (I - V * V.adjoint()) =  = ProjectOpL,
 
-    auto ProjectOpL = [this, &V](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-        if(dev_thick_jd_projector)
-            return X - Q * (Q.adjoint() * X).eval();
-        else
-            return X - V * (V.adjoint() * X).eval();
-    };
-    auto ProjectOpR = [this, &V](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-        if(dev_thick_jd_projector)
-            return X - Q * (Q.adjoint() * X).eval();
-        else
-            return X - V * (V.adjoint() * X).eval();
-    };
 
     // Define the matrix-vector operator for the H2 operator
     auto MatrixOp = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
@@ -733,88 +720,69 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
     };
 
     // Right-hand side (projected)
-    MatrixType RHS = -ProjectOpL(S); // Use the L2 inner product
+    MatrixType RHS = -(S - V * (V.adjoint() * S).eval()); // Use the L2 inner product
 
     MatrixType D(S.rows(), S.cols()); // accumulate the result from the JD correction equation
 
     for(Eigen::Index i = 0; i < b; ++i) { // We use block size b
         // v: current Ritz vector, s: current residual, Bv: either I*v (Euclidean) or H2*v (H2-orthonormal)
+        auto              d   = D.col(i);   // The solution vector i
         const VectorType &s   = S.col(i);   // The residual vector i
         const VectorType &v   = V.col(i);   // The ritz vector i
         const RealScalar &th  = evals(i);   // The ritz value for this ritz vector
         const VectorType &rhs = RHS.col(i); // Right-hand side (projected)
 
-        if(i > 0) {
-            // Do Cheap Olsen + CG instead
-            auto ev            = evals.middleRows(i, 1);
-            D.col(i).noalias() = MultP2(s, ev);
-            D.col(i).noalias() = cheap_Olsen_correction(v, D.col(i));
-        } else {
-            auto  token_precond = status.time_precond.tic_token();
-            auto &H             = algo == OptAlgo::DMRG ? H1 : (use_h1h2_preconditioner ? H1H2 : H2);
-            H.CalcPc(th); // Compute the block-jacobi preconditioner (do llt/ldlt on all blocks)
+        // if(i > 0) {
+        //     // Do Cheap Olsen + CG instead
+        //     auto ev            = evals.middleRows(i, 1);
+        //     d.noalias() = MultP2(s, ev);
+        //     d.noalias() = cheap_Olsen_correction(v, d);
+        // } else {
+        auto  token_precond = status.time_precond.tic_token();
+        auto &H             = algo == OptAlgo::DMRG ? H1 : (use_h1h2_preconditioner ? H1H2 : H2);
+        H.CalcPc(th); // Compute the block-jacobi preconditioner (do llt/ldlt on all blocks)
 
-            IterativeLinearSolverConfig<Scalar> cfg = H.get_iterativeLinearSolverConfig(); // Get the jacobi blocks
-            cfg.result                              = {};
-            cfg.matdef                              = MatDef::IND;
-            cfg.precondType                         = PreconditionerType::JACOBI;
-            cfg.jacobi.skipjcb                      = dev_skipjcb;
+        IterativeLinearSolverConfig<Scalar> cfg = H.get_iterativeLinearSolverConfig(); // Get the jacobi blocks
+        cfg.result                              = {};
+        cfg.matdef                              = MatDef::IND;
+        cfg.precondType                         = PreconditionerType::JACOBI;
+        cfg.jacobi.skipjcb                      = dev_skipjcb;
 
-            // Define the residual matrix-vector operator depending on the different DMRG algorithms
-            auto ResidualOp = [this, th, &H](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-                MatrixType HX(X.rows(), X.cols());
-                switch(algo) {
-                    case OptAlgo::DMRG: [[fallthrough]];
-                    case OptAlgo::DMRGX: [[fallthrough]];
-                    case OptAlgo::HYBRID_DMRGX: [[fallthrough]];
-                    case OptAlgo::XDMRG:
-                        HX.noalias() = H.MultAX(X) - th * X;
-                        status.num_matvecs_inner += X.cols();
-                        break;
-                    case OptAlgo::GDMRG: // Generalized problem
-                        HX.noalias() = H1.MultAX(X) - th * H2.MultAX(X);
-                        status.num_matvecs_inner += 2 * X.cols();
-                        break;
-                    default: throw except::runtime_error("unknown algorithm {}", enum2sv(algo));
-                }
-                return HX;
-            };
-
-            auto JDop = JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
-
-            D.col(i).noalias() = JacobiDavidsonSolver(JDop, rhs, cfg);
-
-            // status.num_matvecs_inner += cfg.result.matvecs;
-            status.num_precond_inner += cfg.result.precond;
-            status.time_matvecs_inner += cfg.result.time_matvecs;
-            status.time_precond_inner += cfg.result.time_precond;
-
-            H.get_iterativeLinearSolverConfig().result += cfg.result;
-
-            if constexpr(settings::debug_solver) {
-                // D.col(i) should be L2-orthogonal to V (to within tolerance)
-                if(cfg.result.info == Eigen::Success) {
-                    RealScalar       rhsNorm   = rhs.norm();
-                    RealScalar       projError = (V.adjoint() * D.col(i)).norm();
-                    const RealScalar tol       = cfg.tolerance; // inner solver tol
-
-                    // 1. orthogonality
-                    if(projError > tol * rhsNorm) {
-                        MatrixType PL_D = ProjectOpL(D.col(i));
-                        eiglog->warn("L2-orthogonality leak: {:.3e} | D.col(i).norm() = {:.3e} | ProjectOpL(D.col(i)).norm() = {:.3e}", fp(projError / rhsNorm),
-                                     fp(D.col(i).norm()), fp(PL_D.norm()));
-                    }
-                    // 2. JD residual
-                    RealScalar relRes = (JDop * D.col(i) - rhs).norm() / rhsNorm;
-                    if(relRes > tol) eiglog->warn("JD L2 residual {:.3e} exceeds tol {:.3e}", fp(relRes), fp(tol));
-
-                    // 3. angle with v
-                    RealScalar cosTh = std::abs(v.dot(D.col(i))) / (V.norm() * D.col(i).norm() + eps);
-                    if(cosTh > RealScalar{0.99f}) eiglog->warn("JD L2 correction ~ parallel to Ritz vector (cosθ = {:.3e})", fp(cosTh));
-                }
+        // Define the residual matrix-vector operator depending on the different DMRG algorithms
+        auto ResidualOp = [this, th, &H](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+            MatrixType HX(X.rows(), X.cols());
+            switch(algo) {
+                case OptAlgo::DMRG: [[fallthrough]];
+                case OptAlgo::DMRGX: [[fallthrough]];
+                case OptAlgo::HYBRID_DMRGX: [[fallthrough]];
+                case OptAlgo::XDMRG:
+                    HX.noalias() = H.MultAX(X) - th * X;
+                    status.num_matvecs_inner += X.cols();
+                    break;
+                case OptAlgo::GDMRG: // Generalized problem
+                    HX.noalias() = H1.MultAX(X) - th * H2.MultAX(X);
+                    status.num_matvecs_inner += 2 * X.cols();
+                    break;
+                default: throw except::runtime_error("unknown algorithm {}", enum2sv(algo));
             }
-        }
+            return HX;
+        };
+        auto ProjectOpL = [this, &v](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return X - v * (v.adjoint() * X).eval(); };
+        auto ProjectOpR = [this, &v](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return X - v * (v.adjoint() * X).eval(); };
+
+
+        auto JDop = JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
+
+        d.noalias() = JacobiDavidsonSolver(JDop, rhs, cfg);
+
+        // status.num_matvecs_inner += cfg.result.matvecs;
+        status.num_precond_inner += cfg.result.precond;
+        status.time_matvecs_inner += cfg.result.time_matvecs;
+        status.time_precond_inner += cfg.result.time_precond;
+
+        H.get_iterativeLinearSolverConfig().result += cfg.result;
     }
+    // }
     status.num_precond += b; // This routine is a preconditioner
     // D_prec = D;              // Store the result so we can use it in the next iteration.
     return D; // N x b, enrichment directions
@@ -842,6 +810,7 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType
 
     for(Eigen::Index i = 0; i < b; ++i) { // We use block size b
         // v: current Ritz vector, s: current residual,
+        auto              d   = D.col(i);   // The solution vector i
         const VectorType &v   = V.col(i);   // The ritz vector i
         const VectorType &h2v = H2V.col(i); // MultH2(v);   H2 applied on v.
         const RealScalar &th  = evals(i);   // The ritz value for this ritz vector
@@ -881,7 +850,7 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType
 
             auto JDop = JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
 
-            D.col(i).noalias() = JacobiDavidsonSolver(JDop, rhs, cfg);
+            d.noalias() = JacobiDavidsonSolver(JDop, rhs, cfg);
 
             // status.num_matvecs_inner += cfg.result.matvecs;
             status.num_precond_inner += cfg.result.precond;
@@ -889,50 +858,10 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType
             status.time_precond_inner += cfg.result.time_precond;
 
             H.get_iterativeLinearSolverConfig().result += cfg.result;
-
-            if constexpr(settings::debug_solver) {
-                // D.col(i) should be H2-orthogonal to V (to within tolerance)
-                if(cfg.result.info == Eigen::Success) {
-                    RealScalar       rhsNorm        = rhs.norm();
-                    RealScalar       projError      = (V.adjoint() * MultH2(D.col(i))).norm();
-                    const RealScalar tol            = cfg.tolerance; // inner solver tol
-                    RealScalar       vH_H2v         = (V.adjoint() * MultH2(V)).norm();
-                    auto             preconditioner = IterativeLinearSolverPreconditioner<JacobiDavidsonOperator<Scalar>>();
-                    preconditioner.attach(&JDop, &cfg);
-                    // 1. orthogonality
-                    if(projError > tol * rhsNorm) {
-                        MatrixType PL_D = ProjectOpL(D.col(i));
-                        eiglog->warn(
-                            "H2-orthogonality projError: {:.3e} | rhsNorm = {:.3e} | tol = {:.3e} | v.adjoint()*H2*v = {:.16f} | D.col(i).norm() = {:.3e} | "
-                            "ProjectOpL(D.col(i)).norm() = {:.3e}",
-                            fp(projError), fp(rhsNorm), fp(tol), fp(vH_H2v), fp(D.col(i).norm()), fp(PL_D.norm()));
-                    }
-                    // 2. JD residual
-                    VectorType res        = JDop * D.col(i) - rhs;
-                    RealScalar relResPrec = preconditioner.solve(res).norm() / preconditioner.solve(rhs).norm();
-                    if(relResPrec > tol)
-                        eiglog->warn("JD H2 preconditioned residual {:.3e} exceeds tol {:.3e} | unpreconditioned: {:.3e}", fp(relResPrec), fp(tol),
-                                     fp(res.norm()));
-
-                    // 3. angle with v
-                    RealScalar cosTh = std::abs(v.dot(D.col(i))) / (v.norm() * D.col(i).norm() + eps);
-                    if(cosTh > RealScalar{0.99f}) eiglog->warn("JD H2 correction ~ parallel to Ritz vector (cosθ = {:.3e})", fp(cosTh));
-                }
-            }
         }
     }
-    RealScalar vHBv    = (V.adjoint() * H2V).norm();
-    RealScalar vHB_RHS = (V.adjoint() * MultH2(RHS)).norm();
-    RealScalar vHB_D   = (V.adjoint() * MultH2(D)).norm();
-    eiglog->info("S.norm()          : {}", fp(S.norm()));
-    eiglog->info("RHS.norm()        : {}", fp(RHS.norm()));
-    eiglog->info("D.norm()          : {}", fp(D.norm()));
-    eiglog->info("V.adjoint()*H2*V  : {:.5e}", fp(vHBv));
-    eiglog->info("V.adjoint()*H2*RHS: {:.5e}", fp(vHB_RHS));
-    eiglog->info("V.adjoint()*H2*D  : {:.5e}", fp(vHB_D));
     status.num_precond += b; // This routine is a preconditioner
-    // D_prec = D;              // Store the result so we can use it in the next iteration.
-    return D; // N x b, enrichment directions
+    return D;                // N x b, enrichment directions
 }
 
 template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<Scalar>::get_sBlock(const MatrixType &S_in, fMultP_t MultP) {
@@ -1052,7 +981,6 @@ void solver_base<Scalar>::mask_col_blocks(Eigen::Ref<MatrixType> Y, OrthMeta &m)
     if(m.mask.size() != n_blocks_y) throw except::runtime_error("mask_col_blocks: mask size must match the number of blocks in Y");
     assert(m.Rdiag.size() == Y.cols());
     assert(m.mask.size() == n_blocks_y);
-    if(!std::isfinite(m.maskTol)) return;
     for(Eigen::Index i = 0; i < n_blocks_y; ++i) {
         if(m.mask(i) == 0) continue;
         auto ri = m.Rdiag.middleRows(i * b, b);
@@ -1070,7 +998,6 @@ void solver_base<Scalar>::mask_cols(Eigen::Ref<MatrixType> Y, OrthMeta &m) {
 
     assert(m.Rdiag.size() == Y.cols());
     assert(m.mask.size() == Y.cols());
-    if(!std::isfinite(m.maskTol)) return;
     for(Eigen::Index i = 0; i < Y.cols(); ++i) {
         if(m.mask(i) == 0) continue;
         auto ri = m.Rdiag.row(i);
@@ -1210,11 +1137,11 @@ void solver_base<Scalar>::assert_l2_orthonormal(const Eigen::Ref<const MatrixTyp
         if(X.cols() == 0) return;
 
         MatrixType Gram      = X.adjoint() * X;
-        auto       orthError = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).cwiseAbs().maxCoeff();
+        RealScalar orthError = (Gram.cwiseAbs() - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
         RealScalar xnorm     = X.norm();
         RealScalar t_abs     = X.size() * eps * (xnorm + xnorm);
         RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : normTol;
-        RealScalar finalTol  = std::max({t_abs, normTol, maskTol});
+        RealScalar finalTol  = std::max({t_abs, normTol, maskTol}) * RealScalar{10};
 
         if(orthError > finalTol) {
             eiglog->info("mask      = {} ", m.mask);
@@ -1244,12 +1171,12 @@ void solver_base<Scalar>::assert_l2_orthogonal(const Eigen::Ref<const MatrixType
         if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
         MatrixType Gram      = X.adjoint() * Y;
-        auto       orthError = Gram.cwiseAbs().maxCoeff();
+        RealScalar orthError = Gram.norm();
         RealScalar xnorm     = X.norm();
         RealScalar ynorm     = Y.norm();
         RealScalar t_abs     = X.size() * eps * (xnorm + ynorm);
         RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
-        RealScalar finalTol  = std::max({t_abs, orthTol, maskTol});
+        RealScalar finalTol  = std::max({t_abs, orthTol, maskTol}) * RealScalar{10};
 
         if(orthError > finalTol) {
             eiglog->info("mask      = {} ", m.mask);
@@ -1276,7 +1203,7 @@ void solver_base<Scalar>::assert_h2_orthogonal(const Eigen::Ref<const MatrixType
         if(X.cols() == 0 || H2Y.cols() == 0) return;
 
         MatrixType Gram      = X.adjoint() * H2Y;
-        auto       orthError = Gram.cwiseAbs().maxCoeff();
+        auto       orthError = Gram.norm();
         RealScalar xnorm     = X.norm();
         RealScalar h2ynorm   = H2Y.norm();
         RealScalar h2norm    = std::isfinite(status.T2_max_eval) ? status.T2_max_eval : RealScalar{1};
@@ -1284,7 +1211,7 @@ void solver_base<Scalar>::assert_h2_orthogonal(const Eigen::Ref<const MatrixType
         RealScalar opTol     = X.cols() * eps * h2norm;
         RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
 
-        RealScalar finalTol = std::max({t_abs, orthTol, opTol, maskTol});
+        RealScalar finalTol = std::max({t_abs, orthTol, opTol, maskTol}) * RealScalar{10};
         if(orthError > finalTol) {
             eiglog->info("mask      = {}", m.mask);
             eiglog->info("xnorm     = {}", fp(xnorm));
@@ -1296,7 +1223,7 @@ void solver_base<Scalar>::assert_h2_orthogonal(const Eigen::Ref<const MatrixType
             eiglog->info("finalTol  = {}", fp(finalTol));
             eiglog->info("orthError = {}", fp(orthError));
             eiglog->info("gram matrix: \n{}", linalg::matrix::to_string(Gram, 16));
-            eiglog->warn("{}:{}: {}: matrices are not orthogormal: error = {:.5e} > threshold = {:.5e}", location.file_name(), location.line(),
+            eiglog->warn("{}:{}: {}: matrices are not orthogonal: error = {:.5e} > threshold = {:.5e}", location.file_name(), location.line(),
                          location.function_name(), fp(orthError), fp(finalTol));
             if(orthError > 1000 * finalTol) {
                 throw except::runtime_error("{}:{}: {}: matrices are not orthogormal: error = {:.5e} > threshold = {:.5e}", location.file_name(),
@@ -1313,7 +1240,7 @@ void solver_base<Scalar>::assert_h2_orthonormal(const Eigen::Ref<const MatrixTyp
     if constexpr(settings::debug_solver) {
         if(X.cols() == 0) return;
         MatrixType Gram      = X.adjoint() * H2X;
-        auto       orthError = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).cwiseAbs().maxCoeff();
+        auto       orthError = (Gram.cwiseAbs() - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
         RealScalar xnorm     = X.norm();
         RealScalar h2xnorm   = H2X.norm();
 
@@ -1331,7 +1258,7 @@ void solver_base<Scalar>::assert_h2_orthonormal(const Eigen::Ref<const MatrixTyp
         RealScalar kappaG    = evG_max / evG_min;
         RealScalar kappaGTol = 20 * eps * kappaG;
         RealScalar maskTol   = std::isfinite(m.maskTol) ? m.maskTol : orthTol;
-        RealScalar finalTol  = std::max({t_abs, t_rel, orthTol, kappaGTol, maskTol});
+        RealScalar finalTol  = std::max({t_abs, t_rel, orthTol, kappaGTol, maskTol}) * RealScalar{10};
 
         if(orthError > finalTol) {
             eiglog->info("evG min   = {}", fp(evG_min));
@@ -1363,22 +1290,20 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &H1Y
 
     // Column-wise orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
 
-    m.mask = VectorIdxT::Ones(Y.cols());
-
-    if(!std::isfinite(m.maskTol)) { m.maskTol = normTol * Y.cols(); }
+    m.mask    = VectorIdxT::Ones(Y.cols());
+    m.maskTol = std::max(m.maskTol, normTol * Y.cols());
 
     auto handle_masked_columns = [&]() {
         if(m.mask.sum() != Y.cols()) {
-            VectorReal norms = (Y.adjoint() * Y).diagonal().cwiseAbs();
             switch(m.maskPolicy) {
                 case MaskPolicy::COMPRESS: {
-                    eiglog->warn("block_l2_orthonormalize: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(norms), fp(m.maskTol));
+                    eiglog->warn("block_l2_orthonormalize: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
                     compress_cols(Y, m.mask);
                     m.mask = VectorIdxT::Ones(Y.cols());
                     break;
                 }
                 case MaskPolicy::RANDOMIZE: {
-                    eiglog->warn("block_h2_orthonormalize: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(norms), fp(m.maskTol));
+                    eiglog->warn("block_l2_orthonormalize: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) { Y.col(j).setRandom(); }
                     }
@@ -1390,11 +1315,12 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &H1Y
     };
 
     // Initial mask
+    m.Rdiag = VectorReal::Zero(Y.cols());
     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-        auto yj   = Y.col(j);
-        RealScalar norm = yj.norm();
-        if(norm < m.maskTol) {
-            eiglog->trace("masking Y col {} | norm {:.3e}", j, fp(norm));
+        auto yj    = Y.col(j);
+        m.Rdiag(j) = yj.norm();
+        if(m.Rdiag(j) < m.maskTol) {
+            eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, fp(m.Rdiag(j)), fp(m.maskTol));
             m.mask(j) = 0;
             yj.setZero();
         }
@@ -1412,7 +1338,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &H1Y
         auto       yj   = Y.col(j);
         RealScalar norm = yj.norm();
         if(norm < m.maskTol) {
-            eiglog->trace("masking Y col {} | norm {:.3e}", j, fp(norm));
+            eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, fp(norm), fp(m.maskTol));
             m.mask(j) = 0;
             yj.setZero();
         }
@@ -1436,9 +1362,8 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 
     // Column-wise orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
 
-    m.mask = VectorIdxT::Ones(Y.cols());
-
-    if(!std::isfinite(m.maskTol)) { m.maskTol = normTol * Y.cols(); }
+    m.mask    = VectorIdxT::Ones(Y.cols());
+    m.maskTol = std::max(m.maskTol, normTol * Y.cols());
 
     auto handle_masked_columns = [&]() {
         if(m.mask.sum() != Y.cols()) {
@@ -1467,7 +1392,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
         auto       yj   = Y.col(j);
         RealScalar norm = yj.norm();
         if(norm < m.maskTol) {
-            eiglog->trace("masking Y col {} | norm {:.3e}", j, fp(norm));
+            eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, fp(norm), fp(m.maskTol));
             m.mask(j) = 0;
             yj.setZero();
         }
@@ -1482,10 +1407,10 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
     m.Rdiag = hhqr.matrixQR().diagonal().cwiseAbs().topRows(Y.cols());
     // Initial mask
     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-        auto yj   = Y.col(j);
+        auto       yj   = Y.col(j);
         RealScalar norm = yj.norm();
         if(norm < m.maskTol) {
-            eiglog->trace("masking Y col {} | norm {:.3e}", j, fp(norm));
+            eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, fp(norm), fp(m.maskTol));
             m.mask(j) = 0;
             yj.setZero();
         }
@@ -1509,7 +1434,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //
 //     // DGKS clean every block against previous blocks
 //     Eigen::Index n_blocks_y = Y.cols() / b;
-//     int          maxreps    = 4;
+//     int          maxreps    = 2;
 //     if(m.proj_sum_h.size() != n_blocks_y) m.proj_sum_h = VectorReal::Zero(n_blocks_y);
 //     if(m.scale_log.size() != n_blocks_y) m.scale_log = VectorReal::Zero(n_blocks_y);
 //     for(int rep = 0; rep < maxreps; ++rep) {
@@ -1538,7 +1463,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //
 //         // Determine whether to do another rep
 //         if(rep + 1 < maxreps) {
-//             RealScalar Gmax = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).cwiseAbs().maxCoeff();
+//             RealScalar Gmax = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 //             if(Gmax < m.maskTol) break; // skip the next rep
 //         }
 //     }
@@ -1573,7 +1498,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //
 //     // DGKS clean every block against previous blocks
 //     Eigen::Index n_blocks_y = Y.cols() / b;
-//     int          maxreps    = 4;
+//     int          maxreps    = 2;
 //     if(m.proj_sum_h.size() != n_blocks_y) m.proj_sum_h = VectorReal::Zero(n_blocks_y);
 //     if(m.scale_log.size() != n_blocks_y) m.scale_log = VectorReal::Zero(n_blocks_y);
 //     for(int rep = 0; rep < maxreps; ++rep) {
@@ -1602,7 +1527,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //
 //         // Determine whether to do another rep
 //         if(rep + 1 < maxreps) {
-//             RealScalar Gmax = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).cwiseAbs().maxCoeff();
+//             RealScalar Gmax = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 //             if(Gmax < m.maskTol) break; // skip the next rep
 //         }
 //     }
@@ -1638,7 +1563,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //     // DGKS clean every block against previous blocks
 //     Eigen::Index n_blocks_y = Y.cols() / b;
 //     if(m.mask.size() != n_blocks_y) m.mask = VectorIdxT::Ones(n_blocks_y);
-//     int maxreps = 4;
+//     int maxreps = 3;
 //     for(int rep = 0; rep < maxreps; ++rep) {
 //         for(Eigen::Index j = 0; j < n_blocks_y; ++j) {
 //             if(m.mask(j) == 0) continue;
@@ -1665,7 +1590,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //
 //         // Determine whether to do another rep
 //         if(rep + 1 < maxreps) {
-//             RealScalar Gmax = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).cwiseAbs().maxCoeff();
+//             RealScalar Gmax = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 //             if(Gmax < m.maskTol) break; // skip the next rep
 //         }
 //     }
@@ -1703,7 +1628,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //     assert_l2_orthonormal(X);
 //
 //     // DGKS clean Y against X
-//     auto maxReps = 4;
+//     auto maxReps = 3;
 //     for(int rep = 0; rep < 4; ++rep) {
 //         MatrixType proj = X.adjoint() * Y;
 //         Y.noalias() -= X * proj; // Remove projection
@@ -1715,7 +1640,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //
 //     m.Gram      = Y.adjoint() * Y;
 //     m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt(); // Equivalent to diag(R), with R from QR
-//     m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).cwiseAbs().maxCoeff();
+//     m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 //
 //     // Mask and compress
 //     auto mask_old_size = m.mask.size();
@@ -1729,7 +1654,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 //     if(m.mask.size() != mask_old_size and m.mask.sum() > 0 and Y.cols() >= b) {
 //         m.Gram      = Y.adjoint() * Y;
 //         m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt(); // Equivalent to diag(R), with R from QR
-//         m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).cwiseAbs().maxCoeff();
+//         m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 //     }
 //
 //     // orthonormalize Y and refresh HY
@@ -1750,16 +1675,18 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
     assert_allFinite(HY);
     assert_l2_orthonormal(X);
 
-    if(!std::isfinite(m.orthTol)) { m.orthTol = orthTol * Y.cols(); }
+    m.orthTol = std::max(m.orthTol, orthTol * Y.cols());
 
+    m.Gram      = X.adjoint() * Y;
+    m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
+    m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+
+    MatrixType xGram      = X.adjoint() * X;
+    RealScalar xOrthError = (xGram.cwiseAbs() - MatrixType::Identity(xGram.cols(), xGram.rows())).norm();
     // DGKS clean Y against X
-    Eigen::Index maxReps = 4;
-    for(int rep = 0; rep < maxReps; ++rep) {
-        m.Gram      = X.adjoint() * Y;
-        m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.cwiseAbs().maxCoeff();
-        eiglog->info("rep {} orthError bef l2 orthogonalization : {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
-
+    Eigen::Index maxReps = 3;
+    Eigen::Index rep     = 0;
+    for(rep = 0; rep < maxReps; ++rep) {
         Y.noalias() -= X * m.Gram;
 
         // orthonormalize Y and refresh HY
@@ -1767,13 +1694,13 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
 
         m.Gram      = X.adjoint() * Y;
         m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.cwiseAbs().maxCoeff();
-        eiglog->info("rep {} orthError aft l2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
+        m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
 
         // DGKS drop test – skip next rep if it already cleaned well
         bool orth_converged = m.orthError < m.orthTol;
-        if(orth_converged) break;
+        if(orth_converged or Y.cols() == 0) break;
     }
+    eiglog->trace("rep {} orthError after l2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
 
     assert_l2_orthogonal(X, Y, m);
 }
@@ -1794,16 +1721,18 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
     assert_allFinite(H2Y);
     assert_l2_orthonormal(X);
 
-    if(!std::isfinite(m.orthTol)) { m.orthTol = orthTol * Y.cols(); }
+    m.orthTol   = std::max(m.orthTol, orthTol * Y.cols());
+    m.Gram      = X.adjoint() * Y;
+    m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
+    m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+
+    MatrixType xGram      = X.adjoint() * X;
+    RealScalar xOrthError = xGram.norm();
 
     // DGKS clean Y against X
-    Eigen::Index maxReps = 4;
-    for(int rep = 0; rep < maxReps; ++rep) {
-        m.Gram      = X.adjoint() * Y;
-        m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.cwiseAbs().maxCoeff();
-        eiglog->info("rep {} orthError bef l2 orthogonalization : {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
-
+    Eigen::Index maxReps = 3;
+    Eigen::Index rep     = 0;
+    for(rep = 0; rep < maxReps; ++rep) {
         Y.noalias() -= X * m.Gram;
 
         // orthonormalize Y and refresh H1Y and H2Y
@@ -1811,13 +1740,13 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
 
         m.Gram      = X.adjoint() * Y;
         m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.cwiseAbs().maxCoeff();
-        eiglog->info("rep {} orthError aft l2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
+        m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
 
         // DGKS drop test – skip next rep if it already cleaned well
         bool orth_converged = m.orthError < m.orthTol;
-        if(orth_converged) break;
+        if(orth_converged or Y.cols() == 0) break;
     }
+    eiglog->trace("rep {} orthError after l2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
 
     assert_l2_orthogonal(X, Y, m);
 }
@@ -1838,7 +1767,7 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
 //     assert_l2_orthonormal(X);
 //
 //     // DGKS clean Y against X
-//     auto maxReps = 4;
+//     auto maxReps = 3;
 //     for(int rep = 0; rep < maxReps; ++rep) {
 //         MatrixType proj = X.adjoint() * Y; // X.cols() x Y.cols()
 //         Y.noalias() -= X * proj;           // Remove projection
@@ -1851,7 +1780,7 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
 //
 //     m.Gram      = Y.adjoint() * Y;
 //     m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt(); // Equivalent to diag(R), with R from QR
-//     m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).cwiseAbs().maxCoeff();
+//     m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 //
 //     // Mask and compress
 //     Eigen::Index n_blocks_y = Y.cols() / b;
@@ -1866,7 +1795,7 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
 //     if(m.mask.size() != mask_old_size and m.mask.sum() > 0 and Y.cols() >= b) {
 //         m.Gram      = Y.adjoint() * Y;
 //         m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt(); // Equivalent to diag(R), with R from QR
-//         m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).cwiseAbs().maxCoeff();
+//         m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 //     }
 //
 //     // orthonormalize Y and refresh H1Y and H2Y
@@ -1875,7 +1804,7 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
 // }
 
 template<typename Scalar>
-void solver_base<Scalar>::block_h2_orthonormalize(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m) {
+void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m) {
     if(Y.cols() == 0) return;
     if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
@@ -1887,27 +1816,235 @@ void solver_base<Scalar>::block_h2_orthonormalize(MatrixType &Y, MatrixType &H1Y
     m.proj_sum_h2 = VectorReal::Zero(Y.cols());
     m.scale_log   = VectorReal::Zero(Y.cols());
 
-    H2Y = MultH2(Y);
-    if(!std::isfinite(m.maskTol)) {
-        if(status.op_norm_estimate > RealScalar{1})
-            m.maskTol = normTol * std::sqrt(status.op_norm_estimate);
-        else
-            m.maskTol = normTol * std::max<RealScalar>(RealScalar{1}, H2Y.norm());
-    }
+    H2Y       = MultH2(Y);
+    m.maskTol = std::max(m.maskTol, normTol * std::sqrt(status.op_norm_estimate));
 
     auto handle_masked_columns = [&]() {
         if(m.mask.sum() != Y.cols()) {
-            VectorReal norms = (Y.adjoint() * H2Y).diagonal().cwiseAbs();
             switch(m.maskPolicy) {
                 case MaskPolicy::COMPRESS: {
-                    eiglog->warn("block_h2_orthonormalize: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(norms), fp(m.maskTol));
+                    eiglog->warn("block_h2_orthonormalize_dgks: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
                     compress_cols(Y, m.mask);
                     compress_cols(H2Y, m.mask);
                     m.mask = VectorIdxT::Ones(Y.cols());
                     break;
                 }
                 case MaskPolicy::RANDOMIZE: {
-                    eiglog->warn("block_h2_orthonormalize: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(norms), fp(m.maskTol));
+                    eiglog->warn("block_h2_orthonormalize_dgks: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
+                    for(Eigen::Index j = 0; j < Y.cols(); ++j) {
+                        if(m.mask(j) == 0) {
+                            Y.col(j).setRandom();
+                            H2Y.col(j) = MultH2(Y.col(j));
+                        }
+                    }
+                    break;
+                }
+                default: throw except::runtime_error("Unrecognized mask policy");
+            }
+        }
+    };
+    auto dot_fp128 = [](Eigen::Ref<VectorType> a, Eigen::Ref<VectorType> b) -> Scalar {
+        // high-precision inner product
+        using LScalar = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<fp128>, fp128>;
+        return static_cast<Scalar>(a.template cast<LScalar>().dot(b.template cast<LScalar>()));
+    };
+    // Initial mask
+    m.Rdiag = VectorReal::Zero(Y.cols());
+    for(Eigen::Index j = 0; j < Y.cols(); ++j) {
+        auto yj    = Y.col(j);
+        auto h2yj  = H2Y.col(j);
+        m.Rdiag(j) = std::sqrt(std::abs(yj.dot(h2yj)));
+        if(m.Rdiag(j) < m.maskTol) {
+            eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, fp(m.Rdiag(j)), fp(m.maskTol));
+            m.mask(j) = 0;
+            yj.setZero();
+            h2yj.setZero();
+        }
+    }
+    // Compress or randomize
+    handle_masked_columns();
+    if(Y.cols() == 0) return;
+
+    // DGKS passes
+    Eigen::Index maxReps = 3;
+    for(int rep = 0; rep < maxReps; ++rep) {
+        for(Eigen::Index j = 0; j < Y.cols(); ++j) {
+            if(m.mask(j) == 0) continue;
+
+            auto yj   = Y.col(j);
+            auto h2yj = H2Y.col(j);
+
+            // 1) Clean against i<j
+            for(Eigen::Index i = 0; i < j; ++i) {
+                if(m.mask(i) == 0) continue;
+                auto yi   = Y.col(i);
+                auto h2yi = H2Y.col(i);
+
+                // projection hij = yiᴴ H2 yj
+                // Scalar proj = yi.dot(h2yj);
+                Scalar proj = dot_fp128(yi, h2yj);
+
+                // subtract
+                yj.noalias() -= yi * proj;
+                h2yj.noalias() -= h2yi * proj;
+            }
+
+            // 2) Norm & mask‐check
+            RealScalar norm = std::sqrt(std::real(yj.dot(h2yj)));
+            if(norm <= m.maskTol) {
+                m.mask(j) = 0;
+                yj.setZero();
+                h2yj.setZero();
+                continue;
+            }
+
+            // 3) Normalize
+            yj /= norm;
+            h2yj /= norm;
+        }
+        // Compress or randomize
+        handle_masked_columns();
+
+        // Refresh gram matrix
+        H2Y         = MultH2(Y);
+        m.Gram      = Y.adjoint() * H2Y;
+        m.Gram      = RealScalar{0.5f} * (m.Gram + m.Gram.adjoint()); // The Gram matrix must be hermitian (and PSD)
+        m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();       // Equivalent to diag(R), with R from QR
+        m.orthError = (m.Gram.cwiseAbs() - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+        eiglog->debug("block_h2_orthonormalize_dgks: dgks rep {}: orthError {:.3e} | H2Y.norm() = {:.3e} | Y.cols() {} | H2 norm {:.3e}", rep, fp(m.orthError),
+                      fp(H2Y.norm()), Y.cols(), fp(H2.get_op_norm()));
+
+        if(m.orthError < normTol) break;
+    }
+
+    H1Y = MultH1(Y);
+    assert_h2_orthonormal(Y, H2Y, m);
+}
+
+template<typename LScalar>
+struct LLTOrthoStepMeta {
+    using RealLScalar = decltype(std::real(std::declval<LScalar>()));
+    using MatrixLType = Eigen::Matrix<LScalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorIdxT  = Eigen::Matrix<Eigen::Index, Eigen::Dynamic, 1>;
+    using VectorLReal = Eigen::Matrix<RealLScalar, Eigen::Dynamic, 1>;
+
+    MatrixLType Y;
+    MatrixLType H2Y;
+    VectorIdxT  mask;
+    RealLScalar maskTol;
+    MaskPolicy  maskPolicy;
+    MatrixLType G;
+    VectorLReal Rdiag;
+    RealLScalar orthError;
+    template<typename Scalar>
+    LLTOrthoStepMeta(Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &Y_Scalar,   //
+                     Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &H2Y_Scalar, //
+                     Eigen::Matrix<Eigen::Index, Eigen::Dynamic, 1>        &mask_,      //
+                     decltype(std::real(std::declval<Scalar>())) maskTol_Scalar, MaskPolicy maskPolicy_)
+        : Y(Y_Scalar.template cast<LScalar>()), H2Y(H2Y_Scalar.template cast<LScalar>()), mask(mask_), maskTol(static_cast<RealLScalar>(maskTol_Scalar)),
+          maskPolicy(maskPolicy_) {}
+};
+
+template<typename LScalar>
+void do_llt_orthonormalization_step(LLTOrthoStepMeta<LScalar> &m, std::shared_ptr<spdlog::logger> eiglog) {
+    using RealLScalar = typename LLTOrthoStepMeta<LScalar>::RealLScalar;
+    using MatrixLType = typename LLTOrthoStepMeta<LScalar>::MatrixLType;
+    using VectorIdxT  = typename LLTOrthoStepMeta<LScalar>::VectorIdxT;
+    // using VectorLReal = typename LLTOrthoStepMeta<LScalar>::VectorLReal;
+
+    auto &G         = m.G;
+    auto &Y         = m.Y;
+    auto &H2Y       = m.H2Y;
+    auto &mask      = m.mask;
+    auto &maskTol   = m.maskTol;
+    auto &orthError = m.orthError;
+
+    auto colMask2ColIndex = [](const VectorIdxT &mask) -> std::vector<Eigen::Index> {
+        std::vector<Eigen::Index> index;
+        for(Eigen::Index j = 0; j < mask.size(); ++j) {
+            if(mask(j) == 1) { index.push_back(j); }
+        }
+        return index;
+    };
+
+    G         = Y.adjoint() * H2Y;
+    G         = (G + G.adjoint()) / RealLScalar{2};  // The Gram matrix must be hermitian (and PSD)
+    m.Rdiag   = G.diagonal().cwiseAbs().cwiseSqrt(); // Equivalent to diag(R), with R from QR
+    orthError = (G.cwiseAbs() - MatrixLType::Identity(G.rows(), G.cols())).norm();
+
+    Eigen::LLT<MatrixLType> llt(G);
+    if(llt.info() != Eigen::Success) {
+        RealLScalar sigma = G.cwiseAbs().rowwise().sum().maxCoeff();
+        RealLScalar delta = Y.cols() * std::numeric_limits<RealLScalar>::epsilon() * sigma;
+
+        for(Eigen::Index attempt = 1; attempt < 3; ++attempt) {
+            // eiglog->warn("LLT failed, adding ridge δ = {:.3e}", fp(delta));
+            G.diagonal().array() += delta;
+            llt.compute(G);
+            if(llt.info() == Eigen::Success) break;
+            delta *= RealLScalar{10};
+        }
+        if(llt.info() != Eigen::Success)
+            throw except::runtime_error("llt failed even after ridge escalation to δ = {:.3e}. G: \n{}", fp(delta), linalg::matrix::to_string(G, 8));
+    }
+
+    MatrixLType Rinv = llt.matrixU().solve(MatrixLType::Identity(Y.cols(), Y.cols()));
+    Y *= Rinv;
+    H2Y *= Rinv;
+
+    for(Eigen::Index j = 0; j < Y.cols(); ++j) {
+        auto yj    = Y.col(j);
+        auto h2yj  = H2Y.col(j);
+        auto norm  = std::sqrt(std::abs(yj.dot(h2yj)));
+        m.Rdiag(j) = norm;
+        if(norm < maskTol) {
+            mask(j) = 0;
+            yj.setZero();
+            h2yj.setZero();
+            continue;
+        }
+        yj /= norm;
+        h2yj /= norm;
+    }
+
+    // Refresh
+    auto idx  = colMask2ColIndex(mask);
+    auto Ym   = Y(Eigen::all, idx);
+    auto H2Ym = H2Y(Eigen::all, idx);
+    G         = Ym.adjoint() * H2Ym;
+    G         = (G + G.adjoint()) / RealLScalar{2};  // The Gram matrix must be hermitian (and PSD)
+    m.Rdiag   = G.diagonal().cwiseAbs().cwiseSqrt(); // Equivalent to diag(R), with R from QR
+    orthError = (G.cwiseAbs() - MatrixLType::Identity(G.rows(), G.cols())).norm();
+}
+
+template<typename Scalar>
+void solver_base<Scalar>::block_h2_orthonormalize_llt(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m) {
+    if(Y.cols() == 0) return;
+    if(m.mask.size() > 0 and m.mask.sum() == 0) return;
+
+    assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
+
+    // Column-wise orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
+
+    m.mask        = VectorIdxT::Ones(Y.cols());
+    m.proj_sum_h2 = VectorReal::Zero(Y.cols());
+    m.scale_log   = VectorReal::Zero(Y.cols());
+
+    H2Y       = MultH2(Y);
+    m.maskTol = std::max(m.maskTol, normTol * std::sqrt(status.op_norm_estimate));
+
+    auto handle_masked_columns = [&]() {
+        if(m.mask.sum() != Y.cols()) {
+            switch(m.maskPolicy) {
+                case MaskPolicy::COMPRESS: {
+                    eiglog->warn("block_h2_orthonormalize_llt: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
+                    compress_cols(Y, m.mask);
+                    compress_cols(H2Y, m.mask);
+                    m.mask = VectorIdxT::Ones(Y.cols());
+                    break;
+                }
+                case MaskPolicy::RANDOMIZE: {
+                    eiglog->warn("block_h2_orthonormalize_llt: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) {
                             Y.col(j).setRandom();
@@ -1922,12 +2059,13 @@ void solver_base<Scalar>::block_h2_orthonormalize(MatrixType &Y, MatrixType &H1Y
     };
 
     // Initial mask
+    m.Rdiag = VectorReal::Zero(Y.cols());
     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-        auto yj   = Y.col(j);
-        auto h2yj = H2Y.col(j);
-        RealScalar norm = std::sqrt(std::abs(yj.dot(h2yj)));
-        if(norm < m.maskTol) {
-            eiglog->trace("masking Y col {} | norm {:.3e}", j, fp(norm));
+        auto yj    = Y.col(j);
+        auto h2yj  = H2Y.col(j);
+        m.Rdiag(j) = std::sqrt(std::abs(yj.dot(h2yj)));
+        if(m.Rdiag(j) < m.maskTol) {
+            eiglog->trace("masking Y col {} | norm {:.3e} | maskTol {:.3e}", j, fp(m.Rdiag(j)), fp(m.maskTol));
             m.mask(j) = 0;
             yj.setZero();
             h2yj.setZero();
@@ -1936,51 +2074,51 @@ void solver_base<Scalar>::block_h2_orthonormalize(MatrixType &Y, MatrixType &H1Y
     // Compress or randomize
     handle_masked_columns();
     if(Y.cols() == 0) return;
-
-    // Orthonormalize
+    // Refresh gram matrix
     m.Gram      = Y.adjoint() * H2Y;
-    m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt(); // Equivalent to diag(R), with R from QR
-    m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).cwiseAbs().maxCoeff();
+    m.Gram      = RealScalar{0.5f} * (m.Gram + m.Gram.adjoint()); // The Gram matrix must be hermitian (and PSD)
+    m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();       // Equivalent to diag(R), with R from QR
+    m.orthError = (m.Gram.cwiseAbs() - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 
-    // The Gram matrix must be positive definite
-    // Cholesky (SPD only, no permutation)
-    m.Gram = RealScalar{0.5f} * (m.Gram + m.Gram.adjoint());
-    Eigen::LLT<MatrixType> llt(m.Gram);
-    if(llt.info() != Eigen::Success) {
-        RealScalar sigma = m.Gram.cwiseAbs().rowwise().sum().maxCoeff();
-        RealScalar delta = Y.cols() * std::numeric_limits<RealScalar>::epsilon() * sigma;
+    eiglog->debug("block_h2_orthonormalize_llt: before llt: orthError {:.5e} | cols {} | H2Y.norm() =  {:.3e}", fp(m.orthError), Y.cols(), fp(H2Y.norm()));
 
-        for(Eigen::Index attempt = 1; attempt < 3; ++attempt) {
-            eiglog->warn("LLT failed, adding ridge δ = {:.3e}", fp(delta));
-            m.Gram.diagonal().array() += delta;
-            llt.compute(m.Gram);
-            if(llt.info() == Eigen::Success) break;
-            delta *= RealScalar{10};
-        }
-        if(llt.info() != Eigen::Success)
-            throw except::runtime_error("llt failed even after ridge escalation to δ = {:.3e}. G: \n{}", fp(delta), linalg::matrix::to_string(m.Gram, 8));
+    // using Scalar64  = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<double>, double>;
+    // using Scalar80  = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<long double>, long double>;
+    // using Scalar128 = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<long double>, long double>;
+
+    // eiglog->debug("gram - I : \n{}", linalg::matrix::to_string(m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols()), 16));
+
+    Eigen::Index maxReps = 3;
+    Eigen::Index rep     = 0;
+    for(rep = 0; rep < maxReps; ++rep) {
+        auto lm = LLTOrthoStepMeta<Scalar>(Y, H2Y, m.mask, m.maskTol, m.maskPolicy);
+        // auto l80  = LLTOrthoStepMeta<Scalar80>(Y, H2Y, m.mask, m.maskTol, m.maskPolicy);
+        // auto l128 = LLTOrthoStepMeta<Scalar128>(Y, H2Y, m.mask, m.maskTol, m.maskPolicy);
+        do_llt_orthonormalization_step(lm, eiglog);
+        // do_llt_orthonormalization_step(l80, eiglog);
+        // do_llt_orthonormalization_step(l128, eiglog);
+
+        // Extract the solution
+        Y           = lm.Y.template cast<Scalar>();
+        H2Y         = lm.H2Y.template cast<Scalar>();
+        m.mask      = lm.mask;
+        m.Gram      = lm.G;
+        m.Rdiag     = lm.Rdiag; // Equivalent to diag(R), with R from QR
+        m.orthError = lm.orthError;
+
+        handle_masked_columns(); // Compress or randomize
+
+        // Refresh gram matrix
+
+        // eiglog->debug("block_h2_orthonormalize_llt: llt rep {}: orthError l64: {:.5e} | l80: {:.5e} | l128: {:.5e} | final {:.5e}", rep, fp(l64.orthError),
+        // fp(l80.orthError), fp(l128.orthError), fp(m.orthError));
+
+        // eiglog->debug("block_h2_orthonormalize_llt: llt rep {}: orthError {:.5e} | tol {:.5e}", rep, fp(m.orthError), fp(normTol));
+        // eiglog->debug("gram - I: \n{}", linalg::matrix::to_string(m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols()), 16));
+        eiglog->debug("block_h2_orthonormalize_llt: llt rep {}: orthError {:.5e} | tol {:.5e}", rep, fp(m.orthError), fp(normTol));
+        if(rep >= 1 and m.orthError < normTol) break;
     }
-    VectorReal pivots = llt.matrixLLT().diagonal().cwiseAbs();
-
-    m.mask              = (pivots.array() > m.maskTol).template cast<Eigen::Index>(); // 1 keep, 0 drop
-    auto       idx      = colMask2ColIndex(m.mask);
-    MatrixType Rinv     = MatrixType::Zero(Y.cols(), Y.cols());
-    MatrixType Umask    = MatrixType(llt.matrixU())(idx, idx);
-    MatrixType RmaskInv = Umask.template triangularView<Eigen::Upper>().solve(MatrixType::Identity(idx.size(), idx.size()));
-    Rinv(idx, idx)      = RmaskInv;
-    Y *= Rinv;
-    H2Y *= Rinv;
-
-    for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-        m.scale_log(j) += std::log10(Rinv.col(j).norm() + eps);
-        if(m.scale_log(j) > 5) {
-            H2Y.col(j)     = MultH2(Y.col(j));
-            m.scale_log(j) = 0;
-        }
-    }
-
-    // Compress or randomize
-    handle_masked_columns();
+    // eiglog->debug("block_h2_orthonormalize_llt: llt rep {}: orthError {:.5e} | tol {:.5e}", rep, fp(m.orthError), fp(normTol));
 
     H1Y = MultH1(Y);
     assert_h2_orthonormal(Y, H2Y, m);
@@ -2001,27 +2139,24 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
     assert_allFinite(H2Y);
     assert_h2_orthonormal(X, H2X);
 
-    H2Y.noalias() = MultH2(Y);
+    m.orthTol = std::max(m.orthTol, eps * std::sqrt(status.op_norm_estimate));
 
-    if(!std::isfinite(m.orthTol)) {
-        if(status.op_norm_estimate > RealScalar{1})
-            m.orthTol = orthTol * std::sqrt(status.op_norm_estimate);
-        else
-            m.orthTol = orthTol * std::max<RealScalar>(RealScalar{1}, H1X.norm() + H2Y.norm());
-    }
+    H2Y.noalias() = MultH2(Y);
+    m.Gram        = X.adjoint() * H2Y;
+    m.Rdiag       = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
+    m.orthError   = m.Gram.size() > 0 ? m.Gram.norm() : 0;
+
+    MatrixType xGram      = X.adjoint() * H2X;
+    RealScalar xOrthError = (xGram.cwiseAbs() - MatrixType::Identity(xGram.cols(), xGram.rows())).norm();
 
     // DGKS clean Y against X
-    Eigen::Index maxReps = 4;
-    for(int rep = 0; rep < maxReps; ++rep) {
+    Eigen::Index maxReps = 3;
+    Eigen::Index rep     = 0;
+    for(rep = 0; rep < maxReps; ++rep) {
         if(m.mask.size() != Y.cols()) m.mask = VectorIdxT::Ones(Y.cols());
         if(m.proj_sum_h1.size() != Y.cols()) m.proj_sum_h1 = VectorReal::Zero(Y.cols());
         if(m.proj_sum_h2.size() != Y.cols()) m.proj_sum_h2 = VectorReal::Zero(Y.cols());
         if(m.scale_log.size() != Y.cols()) m.scale_log = VectorReal::Zero(Y.cols());
-
-        m.Gram      = X.adjoint() * H2Y;
-        m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.cwiseAbs().maxCoeff();
-        eiglog->info("rep {} orthError bef orthogonalization : {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
 
         for(Eigen::Index j = 0; j < Y.cols(); ++j) {
             auto       yj                = Y.col(j);
@@ -2031,31 +2166,35 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
             RealScalar gj_norm           = gj.norm();
             RealScalar refresh_threshold = RealScalar{0.1f} * yj_norm; // compares current sizes
             yj.noalias() -= X * gj;                                    // Remove projection
-            if(gj_norm > refresh_threshold) {
-                eiglog->info("rep {} block_h2_orthogonalize: recomputing h2y block {} | gj_norm {} > refresh threshold {}", rep, j, fp(gj_norm),
-                             fp(refresh_threshold));
-                h2yj.noalias()   = MultH2(yj); // Compute from scratch
-                m.proj_sum_h2(j) = 0;
-                m.scale_log.setZero();
-            } else {
-                MatrixType H2X_pj = H2X * gj;
-                h2yj.noalias() -= H2X_pj;          // Remove projection
-                m.proj_sum_h2(j) += H2X_pj.norm(); // Accumulate norms
-            }
+            h2yj = MultH2(yj);
+            // if(gj_norm > refresh_threshold) {
+            //     eiglog->info("rep {} block_h2_orthogonalize: recomputing h2y block {} | gj_norm {} > refresh threshold {}", rep, j, fp(gj_norm),
+            //                  fp(refresh_threshold));
+            //     h2yj.noalias()   = MultH2(yj); // Compute from scratch
+            //     m.proj_sum_h2(j) = 0;
+            //     m.scale_log.setZero();
+            // } else {
+            //     MatrixType H2X_pj = H2X * gj;
+            //     h2yj.noalias() -= H2X_pj;          // Remove projection
+            //     m.proj_sum_h2(j) += H2X_pj.norm(); // Accumulate norms
+            // }
         }
 
         // orthonormalize Y and refresh H1Y and H2Y
-        block_h2_orthonormalize(Y, H1Y, H2Y, m);
+
+        block_h2_orthonormalize_llt(Y, H1Y, H2Y, m);
 
         m.Gram      = X.adjoint() * H2Y;
         m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
-        m.orthError = m.Gram.cwiseAbs().maxCoeff();
-        eiglog->info("rep {} orthError aft orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
+        m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
 
-        // DGKS drop test – skip next rep if it already cleaned well
-        bool orth_converged = m.orthError < m.orthTol;
-        if(orth_converged) break;
+        if(rep >= 1) {
+            // DGKS drop test – skip next rep if it already cleaned well
+            bool orth_converged = m.orthError < m.orthTol;
+            if(orth_converged) break;
+        }
     }
+    eiglog->trace("rep {} orthError after h2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
 
     assert_h2_orthogonal(X, H2Y, m);
 }
@@ -2064,7 +2203,7 @@ template<typename Scalar>
 void solver_base<Scalar>::pad_and_orthonormalize(MatrixType &Y, MatrixType &HY, Eigen::Index nBlocks, OrthMeta &m) {
     Eigen::Index reps = 0;
     while(reps++ == 0 or Y.cols() / b < nBlocks) {
-        if(Y.cols() / b < nBlocks) {
+        if(Y.cols() < nBlocks * b) {
             // Pad with random vectors
             auto vc = Y.cols();
             Y.conservativeResize(Y.rows(), nBlocks * b);
@@ -2077,8 +2216,8 @@ void solver_base<Scalar>::pad_and_orthonormalize(MatrixType &Y, MatrixType &HY, 
 template<typename Scalar>
 void solver_base<Scalar>::pad_and_orthonormalize(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, Eigen::Index nBlocks, OrthMeta &m) {
     Eigen::Index reps = 0;
-    while(reps++ == 0 or Y.cols() / b < nBlocks) {
-        if(Y.cols() / b < nBlocks) {
+    while(reps++ == 0 or Y.cols() < nBlocks * b) {
+        if(Y.cols() < nBlocks * b) {
             // Pad with random vectors
             auto vc = Y.cols();
             Y.conservativeResize(Y.rows(), nBlocks * b);
@@ -2088,7 +2227,7 @@ void solver_base<Scalar>::pad_and_orthonormalize(MatrixType &Y, MatrixType &H1Y,
 
         if(algo == OptAlgo::GDMRG) {
             if(use_h2_inner_product) {
-                block_h2_orthonormalize(Y, H1Y, H2Y, m);
+                block_h2_orthonormalize_llt(Y, H1Y, H2Y, m);
             } else {
                 // V is expected to be H2-orthonormal, so we L2 orthonormalize it
                 block_l2_orthonormalize(Y, H1Y, H2Y, m);
@@ -2341,11 +2480,11 @@ void solver_base<Scalar>::diagonalizeT1T2() {
         auto       H2_max_abs = std::max(std::abs(status.T2_min_eval), std::abs(status.T2_max_eval));
         status.condition      = (H1_max_abs + T_evals(select1).cwiseAbs().coeff(0) * H2_max_abs) / min_sep;
 
-        auto       select_b = get_ritz_indices(ritz, 0, b, T_evals);
-        VectorReal evals    = T_evals(select_b);
-        eiglog->debug("Op evals {::.5e}", fv(evals));
-        eiglog->debug("H1 evals {::.5e}", fv(es1.eigenvalues()));
-        eiglog->debug("H2 evals {::.5e}", fv(es2.eigenvalues()));
+        // auto       select_b = get_ritz_indices(ritz, 0, b, T_evals);
+        // VectorReal evals    = T_evals(select_b);
+        // eiglog->debug("Op evals {::.5e}", fv(evals));
+        // eiglog->debug("H1 evals {::.5e}", fv(es1.eigenvalues()));
+        // eiglog->debug("H2 evals {::.5e}", fv(es2.eigenvalues()));
     }
 
     // Register deflation and coarse space vectors
@@ -2547,8 +2686,8 @@ void solver_base<Scalar>::refinedRitzVectors(const std::vector<Eigen::Index> &op
     H2V.noalias() = H2Q * Z_ref;
     if constexpr(settings::debug_solver) {
         MatrixType GramV      = V.adjoint() * (use_h2_inner_product ? H2V : V);
-        RealScalar orthErrorV = (GramV - MatrixType::Identity(GramV.rows(), GramV.cols())).norm();
-        eiglog->info("refinedRitzVectors: V orth error before: {}", fp(orthErrorV));
+        RealScalar orthErrorV = (GramV.cwiseAbs() - MatrixType::Identity(GramV.rows(), GramV.cols())).norm();
+        eiglog->trace("refinedRitzVectors: V orth error before: {}", fp(orthErrorV));
     }
 
     // We may need to orthonormalize V in GDMRG
@@ -2558,8 +2697,8 @@ void solver_base<Scalar>::refinedRitzVectors(const std::vector<Eigen::Index> &op
 
     if constexpr(settings::debug_solver) {
         MatrixType GramV      = V.adjoint() * (use_h2_inner_product ? H2V : V);
-        RealScalar orthErrorV = (GramV - MatrixType::Identity(GramV.rows(), GramV.cols())).norm();
-        eiglog->info("refinedRitzVectors: V orth error after : {}", fp(orthErrorV));
+        RealScalar orthErrorV = (GramV.cwiseAbs() - MatrixType::Identity(GramV.rows(), GramV.cols())).norm();
+        eiglog->trace("refinedRitzVectors: V orth error after : {}", fp(orthErrorV));
     }
 
     if(use_rayleigh_quotients_instead_of_evals) {
@@ -2663,15 +2802,16 @@ void solver_base<Scalar>::updateStatus() {
     while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
 
     constexpr auto beta         = RealScalar{0.5f};
-    VectorReal     rNorms       = status.rNorms.topRows(nev);                               // The current residual norms
+    VectorReal     rNorms       = status.rNorms.topRows(nev); // The current residual norms
+    RealScalar     relGap       = status.gap * status.op_norm_estimate;
     status.rNorm_below_rnormTol = (rNorms.array() < rnormTol(status.optVal).array()).all(); // Residual norm condition
+    status.rNorm_below_gap      = rNorms.maxCoeff() < beta * relGap; // Gap condition for the currently selected operator (H1, H2, or H1/H2)
 
     if(status.rNorm_below_rnormTol and status.rNorm_below_gap) {
-        std::string msg_rnorm_gap = fmt::format(" | gap {:.3e}", fp(status.gap));
+        std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", fp(status.gap), fp(relGap));
         if constexpr(settings::debug_solver) {
             if(algo == OptAlgo::GDMRG and dev_append_extra_blocks_to_basis) {
-                msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e} gap {:.3e}|{:.3e}", fp(H1.get_op_norm()), fp(H2.get_op_norm()), fp(status.gap_H1),
-                                            fp(status.gap_H2));
+                msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e}", fp(H1.get_op_norm()), fp(H2.get_op_norm()));
             }
         }
         status.stopMessage.emplace_back(fmt::format("converged rNorm {::.3e} < tol {::.3e}{} | iters {} | mv {} | {:.3e} s",
@@ -2698,10 +2838,7 @@ template<typename Scalar>
 void solver_base<Scalar>::printStatus() {
     std::string msg_rnorm_gap = fmt::format(" | gap {:.3e}", fp(status.gap));
     if constexpr(settings::debug_solver) {
-        if(algo == OptAlgo::GDMRG) {
-            msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e} gap {:.3e}|{:.3e}", fp(status.T1_max_eval), fp(status.T2_max_eval), fp(status.gap_H1),
-                                        fp(status.gap_H2));
-        }
+        if(algo == OptAlgo::GDMRG) { msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e}", fp(status.T1_max_eval), fp(status.T2_max_eval)); }
     }
 
     std::string optValMsg = optVal_has_saturated() ? "SAT" : "";
@@ -2727,10 +2864,10 @@ void solver_base<Scalar>::printStatus() {
     bool        log_low_maxiter = max_iters < 10;
     bool        log_jacobi_prec = preconditioner_type == eig::Preconditioner::JACOBI and status.iter % 100 == 0;
     bool        log_solve_prec  = preconditioner_type == eig::Preconditioner::SOLVE;
-    eiglog->debug("rNorms: {::.3e}", fv(status.rNorms));
+    // eiglog->debug("rNorms: {::.3e}", fv(status.rNorms));
     if(log_low_maxiter or log_jacobi_prec or log_solve_prec)
         eiglog->debug("it {:3} mv {:3} pc {:3} t {:.1e}s {}"
-                      "optVal {::.16f}{} rNorms {::.8e}{} rNormTol {::.3e} tol {:.2e} ({:9.2e}/mv) col {:2} x {} ritz {} "
+                      "optVal {::.16f}{} rNorms {::.8e}{} rNormTol {::.3e} tol {:.2e} ({:9.2e}/mv) col {:2} b {} ritz {} "
                       "op norm {:.2e} cond {:.2e}{}",
                       status.iter + 1,                   //
                       status.num_matvecs,                //
@@ -2744,7 +2881,7 @@ void solver_base<Scalar>::printStatus() {
                       fv(rnormTol(status.optVal)),                //
                       fp(tol),                                    //
                       fp(get_rNorms_log10_change_per_matvec()),   //
-                      Q.cols() / b,                               //
+                      Q.cols(),                                   //
                       b,                                          //
                       enum2sv(ritz),                              //
                       fp(status.op_norm_estimate),                //

@@ -148,6 +148,7 @@ class IterativeLinearSolverPreconditioner {
         if(config->jacobi.invdiag != nullptr) {
             // None of the block jacobi preconditioners were applied.
             auto invdiag = Eigen::Map<const VectorType>(config->jacobi.invdiag, rows());
+            assert(invdiag.allFinite());
             x.noalias()  = invdiag.array().cwiseProduct(y.array()).matrix();
             m_iterations++;
         }

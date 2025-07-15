@@ -1,7 +1,7 @@
 #pragma once
 
-#include "entanglement_entropy.h"
 #include "debug/exceptions.h"
+#include "entanglement_entropy.h"
 #include "math/float.h"
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"
@@ -17,14 +17,13 @@ RealScalar<Scalar> tools::finite::measure::entanglement_entropy(const Eigen::Ten
     return std::abs(S(0));
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::entanglement_entropy_current(const StateFinite<Scalar> &state) {
     if(state.measurements.entanglement_entropy_current) return state.measurements.entanglement_entropy_current.value();
     if(state.has_center_point()) {
         state.measurements.entanglement_entropy_current = entanglement_entropy(state.current_bond());
     } else {
-        tools::log->warn("entanglement_entropy_current: state has no center point!");
+        tools::log->trace("entanglement_entropy_current: state has no center point!");
         state.measurements.entanglement_entropy_current = 0;
     }
     return state.measurements.entanglement_entropy_current.value();

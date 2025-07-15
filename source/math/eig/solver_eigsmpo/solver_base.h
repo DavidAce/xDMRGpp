@@ -19,6 +19,7 @@
 
 template<typename Scalar> class JacobiDavidsonOperator;
 enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON, AUTO };
+enum class MaskPolicy { COMPRESS, RANDOMIZE };
 
 inline std::string_view ResidualCorrectionToString(ResidualCorrectionType rct) {
     switch(rct) {
@@ -57,7 +58,6 @@ class solver_base {
     solver_base(Eigen::Index nev, Eigen::Index ncv, OptAlgo algo, OptRitz ritz, const MatrixType &V, MatVecMPOS<Scalar> &H1, MatVecMPOS<Scalar> &H2,
                 MatVecMPOS<Scalar> &H1H2, spdlog::level::level_enum logLevel_ = spdlog::level::warn);
 
-    enum class MaskPolicy { COMPRESS, RANDOMIZE };
     struct OrthMeta {
         // By convention, H2Y is the matrix that we modify, while H2X is const.
         // private:
@@ -77,8 +77,8 @@ class solver_base {
         // cols; } void                                set_MultH2(fMultH_t fMultH2_) { fMultH2 = fMultH2_; }
         MatrixType Gram;
         VectorReal Rdiag;
-        RealScalar orthTol   = std::numeric_limits<RealScalar>::quiet_NaN();
-        RealScalar maskTol   = std::numeric_limits<RealScalar>::quiet_NaN();
+        RealScalar maskTol   = 10 * std::numeric_limits<RealScalar>::epsilon();
+        RealScalar orthTol   = 100 * std::numeric_limits<RealScalar>::epsilon();
         RealScalar orthError = std::numeric_limits<RealScalar>::quiet_NaN();
         VectorReal proj_sum_h;
         VectorReal proj_sum_h1;
@@ -248,7 +248,8 @@ class solver_base {
     void block_l2_orthogonalize(const MatrixType &X, const MatrixType &H1X, const MatrixType &H2X, MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y,
                                 OrthMeta &m);
 
-    void block_h2_orthonormalize(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
+    void block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
+    void block_h2_orthonormalize_llt(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     // void block_h2_orthonormalize_old(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     void block_h2_orthogonalize(const MatrixType &X, const MatrixType &H1X, const MatrixType &H2X, MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y,
                                 OrthMeta &m);
@@ -331,9 +332,9 @@ class solver_base {
      * Converged if rnorm < tol * opNorm. */
     VectorReal rnormTol(Eigen::Ref<VectorReal> evals) const {
         if(use_relative_rnorm_tolerance)
-            return get_op_norm_estimates(evals) * tol;
+            return get_op_norm_estimates(evals) * tol * RealScalar{2};
         else
-            return VectorReal::Ones(evals.size()) * tol;
+            return VectorReal::Ones(evals.size()) * tol * RealScalar{2};
     }
 
     /*! Norm tolerance of B-matrices.

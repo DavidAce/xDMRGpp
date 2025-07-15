@@ -112,9 +112,9 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
     assert(Q_new.rows() == N);
 
     // Append the enrichment for this iteration
-    auto oldBlocks = Q.cols() / b;
-    auto newBlocks = std::max<Eigen::Index>(1, std::min<Eigen::Index>({(Q.cols() + Q_new.cols()) / b, (N / b)}));
-    if(newBlocks > maxBasisBlocks or Q.cols() == 0 or Q_new.cols() == 0) {
+    auto oldCols = Q.cols();
+    auto newCols = std::max<Eigen::Index>(1, std::min<Eigen::Index>({Q.cols() + Q_new.cols(), N}));
+    if(newCols > maxBasisBlocks or Q.cols() == 0 or Q_new.cols() == 0) {
         // (re)start
         if(Q_new.cols() == 0 and status.iter <= status.iter_last_restart + 2) {
             // Failed to add a nonzero residual
@@ -131,45 +131,45 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
         // Q_new: the latest block of preconditioned residuals
 
         status.iter_last_restart = status.iter;
-        Eigen::Index qBlocks_old = std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() / b - vBlocks + mBlocks, maxRetainBlocks));
-        Eigen::Index vBlocks     = V.cols() / b;
-        Eigen::Index mBlocks     = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
-        Eigen::Index kBlocks = qBlocks_old; // std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() / b - vBlocks + mBlocks + rBlocks, maxRetainBlocks));
-        Eigen::Index qBlocks = Q_new.cols() / b;
+        Eigen::Index qCols_old   = std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() - vBlocks * b + mBlocks * b, maxRetainBlocks * b));
+        Eigen::Index vCols       = V.cols();
+        Eigen::Index mCols       = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? b : 0;
+        Eigen::Index kCols       = qCols_old;
+        Eigen::Index qCols       = Q_new.cols();
 
         auto vOffset = 0;
-        auto mOffset = vBlocks;
-        auto kOffset = vBlocks + mBlocks;
-        auto qOffset = vBlocks + mBlocks + kBlocks;
+        auto mOffset = vCols;
+        auto kOffset = vCols + mCols;
+        auto qOffset = vCols + mCols + kCols;
 
-        MatrixType Q_keep  = Q.middleCols(kOffset * b, kBlocks * b);
-        MatrixType HQ_keep = HQ.middleCols(kOffset * b, kBlocks * b);
+        MatrixType Q_keep  = Q.middleCols(kOffset, kCols);
+        MatrixType HQ_keep = HQ.middleCols(kOffset, kCols);
 
-        if(mBlocks > 0) M = get_mBlock(); // Generates M and HM before modifying Q
-        Q.conservativeResize(N, (vBlocks + mBlocks + kBlocks) * b + Q_new.cols());
-        HQ.conservativeResize(N, (vBlocks + mBlocks + kBlocks) * b + Q_new.cols());
+        if(mCols > 0) M = get_mBlock(); // Generates M and HM before modifying Q
+        Q.conservativeResize(N, (vCols + mCols + kCols) + Q_new.cols());
+        HQ.conservativeResize(N, (vCols + mCols + kCols) + Q_new.cols());
 
-        if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
-        if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = M;
-        if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
-        if(qBlocks > 0) Q.middleCols(qOffset * b, qBlocks * b) = Q_new;
+        if(vCols > 0) Q.middleCols(vOffset, vCols) = V;
+        if(mCols > 0) Q.middleCols(mOffset, mCols) = M;
+        if(kCols > 0) Q.middleCols(kOffset, kCols) = Q_keep;
+        if(qCols > 0) Q.middleCols(qOffset, qCols) = Q_new;
 
-        if(vBlocks > 0) HQ.middleCols(vOffset * b, vBlocks * b) = HV;
-        if(mBlocks > 0) HQ.middleCols(mOffset * b, mBlocks * b) = HM;
-        if(kBlocks > 0) HQ.middleCols(kOffset * b, kBlocks * b) = HQ_keep;
-        if(qBlocks > 0) HQ.middleCols(qOffset * b, qBlocks * b) = HQ_new;
+        if(vCols > 0) HQ.middleCols(vOffset, vCols) = HV;
+        if(mCols > 0) HQ.middleCols(mOffset, mCols) = HM;
+        if(kCols > 0) HQ.middleCols(kOffset, kCols) = HQ_keep;
+        if(qCols > 0) HQ.middleCols(qOffset, qCols) = HQ_new;
 
         OrthMeta m;
         m.maskPolicy = MaskPolicy::COMPRESS;
         block_l2_orthonormalize(Q, HQ, m);
 
-    } else if(oldBlocks != newBlocks) {
+    } else if(oldCols != newCols) {
         // Append enrichment
-        Q.conservativeResize(N, newBlocks * b);
-        HQ.conservativeResize(N, newBlocks * b);
-        auto copyBlocks              = std::min<Eigen::Index>(Q.cols() / b, Q_new.cols() / b);
-        Q.rightCols(copyBlocks * b)  = Q_new.leftCols(copyBlocks * b);
-        HQ.rightCols(copyBlocks * b) = HQ_new;
+        Q.conservativeResize(N, newCols);
+        HQ.conservativeResize(N, newCols);
+        auto copyCols          = std::min<Eigen::Index>(Q.cols(), Q_new.cols());
+        Q.rightCols(copyCols)  = Q_new.leftCols(copyCols);
+        HQ.rightCols(copyCols) = HQ_new;
     }
     assert_l2_orthonormal(Q);
     assert(Q.colwise().norm().minCoeff() > eps);
@@ -185,9 +185,9 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
 
     // Append the enrichment for this iteration
 
-    auto oldBlocks = Q.cols() / b;
-    auto newBlocks = std::max<Eigen::Index>(1, std::min<Eigen::Index>({(Q.cols() + Q_new.cols()) / b, (N / b)}));
-    if(newBlocks > maxBasisBlocks or Q.cols() == 0 or Q_new.cols() == 0) {
+    auto oldCols = Q.cols();
+    auto newCols = std::max<Eigen::Index>(1, std::min<Eigen::Index>({Q.cols() + Q_new.cols(), N}));
+    if(newCols > maxBasisBlocks * b or Q.cols() == 0 or Q_new.cols() == 0) {
         // (re)start
         if(Q_new.cols() == 0 and status.iter <= status.iter_last_restart + 2) {
             // Failed to add a nonzero residual
@@ -198,47 +198,60 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
         }
 
         status.iter_last_restart = status.iter;
-        Eigen::Index qBlocks_old = std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() / b - vBlocks + mBlocks, maxRetainBlocks));
-        Eigen::Index vBlocks     = V.cols() / b;
-        Eigen::Index mBlocks     = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? 1 : 0;
-        Eigen::Index kBlocks     = qBlocks_old;
-        Eigen::Index qBlocks     = (Q_new.cols()) / b;
+        Eigen::Index qCols_old   = std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() - vBlocks * b + mBlocks * b, maxRetainBlocks * b));
+        Eigen::Index vCols       = V.cols();
+        Eigen::Index mCols       = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? b : 0;
+        Eigen::Index kCols       = qCols_old;
+        Eigen::Index qCols       = Q_new.cols();
 
         auto vOffset = 0;
-        auto mOffset = vBlocks;
-        auto kOffset = vBlocks + mBlocks;
-        auto qOffset = vBlocks + mBlocks + kBlocks;
+        auto mOffset = vCols;
+        auto kOffset = vCols + mCols;
+        auto qOffset = vCols + mCols + kCols;
 
-        MatrixType Q_keep = Q.rightCols(kBlocks * b);
+        MatrixType Q_keep = Q.rightCols(kCols);
 
-        if(mBlocks > 0) M = get_mBlock(); // Generates M, H1M, H2M before modifying Q
-        Q.conservativeResize(N, (vBlocks + mBlocks + kBlocks) * b + Q_new.cols());
+        if(mCols > 0) M = get_mBlock(); // Generates M, H1M, H2M before modifying Q
+        Q.conservativeResize(N, vCols + mCols + kCols + Q_new.cols());
 
-        if(vBlocks > 0) Q.middleCols(vOffset * b, vBlocks * b) = V;
-        if(mBlocks > 0) Q.middleCols(mOffset * b, mBlocks * b) = M;
-        if(kBlocks > 0) Q.middleCols(kOffset * b, kBlocks * b) = Q_keep;
-        if(qBlocks > 0) Q.middleCols(qOffset * b, qBlocks * b) = Q_new;
+        if(vCols > 0) Q.middleCols(vOffset, vCols) = V;
+        if(mCols > 0) Q.middleCols(mOffset, mCols) = M;
+        if(kCols > 0) Q.middleCols(kOffset, kCols) = Q_keep;
+        if(qCols > 0) Q.middleCols(qOffset, qCols) = Q_new;
 
         OrthMeta m;
         m.maskPolicy = MaskPolicy::COMPRESS;
-        H1Q             = MatrixType();
-        H2Q             = MatrixType();
+        H1Q          = MatrixType();
+        H2Q          = MatrixType();
         if(use_h2_inner_product) {
-            block_h2_orthonormalize(Q, H1Q, H2Q, m);
+            block_h2_orthonormalize_llt(Q, H1Q, H2Q, m);
         } else {
             block_l2_orthonormalize(Q, H1Q, H2Q, m);
         }
 
-    } else if(oldBlocks != newBlocks) {
+    } else if(oldCols != newCols) {
         // Append enrichment
-        Q.conservativeResize(N, newBlocks * b);
-        H1Q.conservativeResize(N, newBlocks * b);
-        H2Q.conservativeResize(N, newBlocks * b);
+        Q.conservativeResize(N, newCols);
+        H1Q.conservativeResize(N, newCols);
+        H2Q.conservativeResize(N, newCols);
 
-        auto copyBlocks               = std::min<Eigen::Index>(Q.cols() / b, (Q_new.cols()) / b);
-        Q.rightCols(copyBlocks * b)   = Q_new.leftCols(copyBlocks * b);
-        H1Q.rightCols(copyBlocks * b) = H1Q_new.leftCols(copyBlocks * b);
-        H2Q.rightCols(copyBlocks * b) = H2Q_new.leftCols(copyBlocks * b);
+        auto copyCols           = std::min<Eigen::Index>(Q.cols(), Q_new.cols());
+        Q.rightCols(copyCols)   = Q_new.leftCols(copyCols);
+        H1Q.rightCols(copyCols) = H1Q_new.leftCols(copyCols);
+        H2Q.rightCols(copyCols) = H2Q_new.leftCols(copyCols);
+        //
+        OrthMeta m;
+        m.maskPolicy = MaskPolicy::COMPRESS;
+        m.Gram =  Q.adjoint() * H2Q;
+        m.orthError = (m.Gram.cwiseAbs() - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+        if(m.orthError > normTol * std::sqrt(status.op_norm_estimate)) {
+            if(use_h2_inner_product) {
+                block_h2_orthonormalize_llt(Q, H1Q, H2Q, m);
+            } else {
+                block_l2_orthonormalize(Q, H1Q, H2Q, m);
+            }
+        }
+
     }
     if(use_h2_inner_product) {
         assert_h2_orthonormal(Q, H2Q);

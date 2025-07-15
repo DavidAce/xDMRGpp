@@ -1126,7 +1126,7 @@ void AlgorithmFinite<Scalar>::try_projection(std::optional<std::string> target_a
         if(projection_if_stuck) msg.emplace_back("stuck");
         if(projection_if_conv) msg.emplace_back("converged");
         if(projection_if_iter) msg.emplace_back("iter");
-        tools::log->info("Trying projection to {} | reasons: {}", target_axis.value(), fmt::join(msg, " | "));
+        tools::log->debug("Trying projection to {} | reasons: {}", target_axis.value(), fmt::join(msg, " | "));
 
         auto sector_sign   = qm::spin::half::get_sign(target_axis.value());
         auto energy_old    = tools::finite::measure::energy(tensors);
@@ -1397,10 +1397,11 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
     if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::variance_saturation_sensitivity);
     if(saturation_sensitivity <= 0) return;
     if(not threshold) {
+        threshold = settings::precision::variance_convergence_threshold;
         if(status.algorithm_has_stuck_for > 1)
             threshold = std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
-        else
-            threshold = std::min(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
+        else if(status.algorithm_has_stuck_for > 5)
+            threshold = 10 * std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
     }
     saturation_sensitivity =
         std::max(saturation_sensitivity.value(), static_cast<RealScalar>(std::sqrt(status.trnc_lim))); // Large trnc causes noise that never saturates
@@ -1599,12 +1600,12 @@ void AlgorithmFinite<Scalar>::check_convergence_spin_parity_sector(std::string_v
         auto spin_component_along_axus = tools::finite::measure::spin_component(tensors.get_state(), target_axus);
         bool spin_along_axus_near_abs1 = std::abs(std::abs(spin_component_along_axus) - 1) <= RealScalar(threshold);
         auto spin_sign_along_axus      = tools::finite::measure::spin_sign(tensors.get_state(), target_axus);
-        tools::log->info("target_axus                : {}", target_axus);
-        tools::log->info("target_sign                : {}", target_sign);
-        tools::log->info("spin_components            : {}", fv(spin_components));
-        tools::log->info("spin_component_along_axus  : {}", fp(spin_component_along_axus));
-        tools::log->info("spin_along_axus_near_abs1  : {}", spin_along_axus_near_abs1);
-        tools::log->info("spin_sign_along_axus       : {}", spin_sign_along_axus);
+        tools::log->trace("target_axus                : {}", target_axus);
+        tools::log->trace("target_sign                : {}", target_sign);
+        tools::log->debug("spin_components            : {}", fv(spin_components));
+        tools::log->trace("spin_component_along_axus  : {}", fp(spin_component_along_axus));
+        tools::log->trace("spin_along_axus_near_abs1  : {}", spin_along_axus_near_abs1);
+        tools::log->trace("spin_sign_along_axus       : {}", spin_sign_along_axus);
         // We may have shifted the spin parity sector in the MPO or MPO².
         // If we shifted for +z, that means we are targeting +z and therefore shifted -z out of the way.
         // So we would need to make sure we are actually converging to +z and not -z.
@@ -1629,11 +1630,15 @@ void AlgorithmFinite<Scalar>::check_convergence_spin_parity_sector(std::string_v
             if(spin_along_axus_near_abs1) {
                 // We seem to have converged in the opposite parity sector.
                 // The algorithm will likely not be able to escape the current sector, so we might as well set it as the target.
+
                 auto target_axis_opposite = fmt::format("{}{}", fmt::format("{:+}", spin_sign_along_axus).front(), target_axus);
                 tools::log->warn("check_convergence_spin_parity_sector: resetting spin parity target: {}", target_axis_opposite);
-                set_parity_shift_mpo(target_axis_opposite);
-                set_parity_shift_mpo_squared(target_axis_opposite);
-                rebuild_tensors(); // Rebuilds and compresses mpos, then rebuilds the environments
+                initialize_state(ResetReason::INIT, settings::strategy::initial_state); // Second use of random!
+                return;
+
+                // set_parity_shift_mpo(target_axis_opposite);
+                // set_parity_shift_mpo_squared(target_axis_opposite);
+                // rebuild_tensors(); // Rebuilds and compresses mpos, then rebuilds the environments
             }
         }
 
@@ -1739,8 +1744,10 @@ void AlgorithmFinite<Scalar>::print_status() {
     report += fmt::format("Sₑ({:>2}):{:<10.8f} ", tensors.template get_position<long>(),
                           fp(tools::finite::measure::entanglement_entropy_current(tensors.get_state())));
 
-    report += fmt::format("ε:{:<8.2e} ", tensors.state->get_truncation_error_active_max());
-    report += fmt::format("α:{:<8.2e} ", status.mixing_factor);
+    report += fmt::format("ε:{:<7.1e} ", tensors.state->get_truncation_error_active_max());
+    report += fmt::format("({:<7.1e}) ", status.trnc_lim);
+
+    if(has_flag(settings::strategy::dmrg_bond_expansion_policy, BondExpansionPolicy::DMRG3S)) report += fmt::format("α:{:<8.2e} ", status.mixing_factor);
     if(status.bond_max == status.bond_lim) {
         report += fmt::format("χ:{:<3}|", status.bond_max);
     } else {
