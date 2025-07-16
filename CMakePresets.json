@@ -441,6 +441,7 @@
       ],
       "binaryDir": "${sourceDir}/build/Release",
       "cacheVariables": {
+        "COMPILER_ENABLE_CCACHE": "FALSE",
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "TRUE",
         "CMAKE_INSTALL_PREFIX": "$env{HOME}/xdmrg++-pkg-install",
         "DMRG_BUILD_TOOLS": "FALSE",
