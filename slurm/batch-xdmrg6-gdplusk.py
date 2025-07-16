@@ -21,7 +21,7 @@ config_ranges = {
     "storage::resume_policy": ['IF_UNSUCCESSFUL'],
     "storage::file_collision_policy": ['REVIVE'],
     "storage::temp_dir": [config_paths['temp_dir']],
-    "strategy::initial_state": ["PRODUCT_STATE_NEEL"],
+    "strategy::initial_state": ["PRODUCT_STATE_NEEL_SHUFFLED"],
     "model::model_type": ['ising_majorana'],
     "model::model_size": ['12'],
     "model::ising_majorana::g": ['0.500'],
