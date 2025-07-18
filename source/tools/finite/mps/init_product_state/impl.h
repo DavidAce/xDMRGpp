@@ -92,7 +92,7 @@ void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<Scala
             label = "B";
         }
     }
-    tools::log->debug("Initial state: {}", bitfield);
+    tools::log->info("Initial state: {}", bitfield);
     pattern        = fmt::format("b{}", bitfield);
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();

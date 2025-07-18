@@ -1631,8 +1631,9 @@ void AlgorithmFinite<Scalar>::check_convergence_spin_parity_sector(std::string_v
                 // We seem to have converged in the opposite parity sector.
                 // The algorithm will likely not be able to escape the current sector, so we might as well set it as the target.
 
-                auto target_axis_opposite = fmt::format("{}{}", fmt::format("{:+}", spin_sign_along_axus).front(), target_axus);
-                tools::log->warn("check_convergence_spin_parity_sector: resetting spin parity target: {}", target_axis_opposite);
+                // auto target_axis_opposite = fmt::format("{}{}", fmt::format("{:+}", spin_sign_along_axus).front(), target_axus);
+                // tools::log->warn("check_convergence_spin_parity_sector: resetting spin parity target: {}", target_axis_opposite);
+                settings::strategy::initial_pattern = ""; // Clear to randomize
                 initialize_state(ResetReason::INIT, settings::strategy::initial_state); // Second use of random!
                 return;
 
