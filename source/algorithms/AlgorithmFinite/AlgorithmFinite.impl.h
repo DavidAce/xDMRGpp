@@ -1415,31 +1415,30 @@ void AlgorithmFinite<Scalar>::check_convergence_energy(std::optional<RealScalar>
                    [](const log_entry &h) -> RealScalar { return h.energy; });
 
     //    var_mpo_iter.emplace_back(tools::finite::measure::energy_variance(tensors));
-    auto report = check_saturation(energy_iter, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::mov);
+    auto report = check_saturation(energy_iter, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid);
     if(report.has_computed) {
         status.energy_mpo_saturated_for = report.saturated_count;
 
-        // if(tools::log->level() >= spdlog::level::debug)
-        tools::log->info("Energy saturation: {} (since {})", status.energy_mpo_saturated_for, report.saturated_count, report.saturated_point);
-        // if(tools::log->level() <= spdlog::level::trace) {
+        tools::log->debug("Energy saturation: {} (since {})", status.energy_mpo_saturated_for, report.saturated_count, report.saturated_point);
+        if(tools::log->level() > spdlog::level::trace) return;
+
         std::vector<double> times;
         std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
-        tools::log->info("Energy saturation details:");
-        tools::log->info(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
-        tools::log->info(" -- saturated point = {} ", report.saturated_point);
-        tools::log->info(" -- saturated count = {} ", report.saturated_count);
-        tools::log->info(" -- converged count = {} ", status.variance_mpo_converged_for);
-        tools::log->info(" -- sat             = {}", report.Y_sat);
-        tools::log->info(" -- val             = {::7.4e}", fv(report.Y_vec));
-        tools::log->info(" -- min             = {::7.4e}", fv(report.Y_min));
-        tools::log->info(" -- max             = {::7.4e}", fv(report.Y_max));
-        tools::log->info(" -- mid             = {::7.4e}", fv(report.Y_mid));
-        tools::log->info(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
-        tools::log->info(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
-        tools::log->info(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
-        tools::log->info(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
-        tools::log->info(" -- ste_mov         = {::7.4e}", fv(report.Y_mov_std));
-        tools::log->info(" -- time            = {::7.4e}", times);
+        tools::log->trace("Energy saturation details:");
+        tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
+        tools::log->trace(" -- saturated point = {} ", report.saturated_point);
+        tools::log->trace(" -- saturated count = {} ", report.saturated_count);
+        tools::log->trace(" -- sat             = {}", report.Y_sat);
+        tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
+        tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
+        tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
+        tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
+        tools::log->trace(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
+        tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+        tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+        tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+        tools::log->trace(" -- std_mov         = {::7.4e}", fv(report.Y_mov_std));
+        tools::log->trace(" -- time            = {::7.4e}", times);
         // }
     }
 }
@@ -1451,10 +1450,11 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
     if(saturation_sensitivity <= 0) return;
     if(not threshold) {
         threshold = settings::precision::variance_convergence_threshold;
-        if(status.algorithm_has_stuck_for > 1)
-            threshold = std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
-        else if(status.algorithm_has_stuck_for > 5)
+        if(status.algorithm_has_stuck_for > 0) threshold = 1 * std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
+        if(status.algorithm_has_stuck_for > 4)
             threshold = 10 * std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
+        if(status.algorithm_has_stuck_for > 8)
+            threshold = 100 * std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
     }
     saturation_sensitivity =
         std::max(saturation_sensitivity.value(), static_cast<RealScalar>(std::sqrt(status.trnc_lim))); // Large trnc causes noise that never saturates
@@ -1478,10 +1478,9 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
         algorithm_history.back().status.variance_mpo_converged_for = status.variance_mpo_converged_for;
         algorithm_history.back().status.variance_mpo_saturated_for = status.variance_mpo_saturated_for;
 
-        // if(tools::log->level() >= spdlog::level::debug)
-        tools::log->info("Energy variance convergence: converged {} | saturated {} (since {})", status.variance_mpo_converged_for, report.saturated_count,
-                         report.saturated_point);
-        // if(tools::log->level() <= spdlog::level::trace) {
+        tools::log->debug("Energy variance convergence: converged {} | saturated {} (since {})", status.variance_mpo_converged_for, report.saturated_count,
+                          report.saturated_point);
+        if(tools::log->level() > spdlog::level::trace) return;
         std::vector<double>     times;
         std::vector<RealScalar> energies;
         std::vector<RealScalar> eigvals;
@@ -1490,33 +1489,32 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
                        [](const log_entry &h) -> RealScalar { return h.energy; });
         std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(eigvals),
                        [](const log_entry &h) -> RealScalar { return h.variance - h.energy * h.energy; });
-        tools::log->info("Energy variance convergence details:");
-        tools::log->info(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
-        tools::log->info(" -- threshold       = {:7.4e}", fp(threshold.value()));
-        tools::log->info(" -- saturated point = {} ", report.saturated_point);
-        tools::log->info(" -- saturated count = {} ", report.saturated_count);
-        tools::log->info(" -- converged count = {} ", status.variance_mpo_converged_for);
-        tools::log->info(" -- sat             = {}", report.Y_sat);
-        tools::log->info(" -- var             = {::7.4e}", fv(var_mpo_iter));
-        tools::log->info(" -- val             = {::7.4e}", fv(report.Y_vec));
-        tools::log->info(" -- ene             = {::7.4e}", fv(energies));
-        tools::log->info(" -- eig             = {::7.4e}", fv(eigvals));
-        tools::log->info(" -- time            = {::7.4e}", times);
-        tools::log->info(" -- avg             = {::7.4e}", fv(report.Y_avg));
-        tools::log->info(" -- med             = {::7.4e}", fv(report.Y_med));
-        tools::log->info(" -- min             = {::7.4e}", fv(report.Y_min));
-        tools::log->info(" -- max             = {::7.4e}", fv(report.Y_max));
-        tools::log->info(" -- mid             = {::7.4e}", fv(report.Y_mid));
-        tools::log->info(" -- dif             = {::7.4e}", fv(report.Y_dif));
-        tools::log->info(" -- std_val         = {::7.4e}", fv(report.Y_vec_std));
-        tools::log->info(" -- std_avg         = {::7.4e}", fv(report.Y_avg_std));
-        tools::log->info(" -- std_med         = {::7.4e}", fv(report.Y_med_std));
-        tools::log->info(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
-        tools::log->info(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
-        tools::log->info(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
-        tools::log->info(" -- dif_avg         = {::7.4e}", fv(report.Y_dif_avg));
-        tools::log->info(" -- std_mov         = {::7.4e}", fv(report.Y_mov_std));
-        // }
+        tools::log->trace("Energy variance convergence details:");
+        tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
+        tools::log->trace(" -- threshold       = {:7.4e}", fp(threshold.value()));
+        tools::log->trace(" -- saturated point = {} ", report.saturated_point);
+        tools::log->trace(" -- saturated count = {} ", report.saturated_count);
+        tools::log->trace(" -- converged count = {} ", status.variance_mpo_converged_for);
+        tools::log->trace(" -- sat             = {}", report.Y_sat);
+        tools::log->trace(" -- var             = {::7.4e}", fv(var_mpo_iter));
+        tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
+        tools::log->trace(" -- ene             = {::7.4e}", fv(energies));
+        tools::log->trace(" -- eig             = {::7.4e}", fv(eigvals));
+        tools::log->trace(" -- time            = {::7.4e}", times);
+        tools::log->trace(" -- avg             = {::7.4e}", fv(report.Y_avg));
+        tools::log->trace(" -- med             = {::7.4e}", fv(report.Y_med));
+        tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
+        tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
+        tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
+        tools::log->trace(" -- dif             = {::7.4e}", fv(report.Y_dif));
+        tools::log->trace(" -- std_val         = {::7.4e}", fv(report.Y_vec_std));
+        tools::log->trace(" -- std_avg         = {::7.4e}", fv(report.Y_avg_std));
+        tools::log->trace(" -- std_med         = {::7.4e}", fv(report.Y_med_std));
+        tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+        tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+        tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+        tools::log->trace(" -- dif_avg         = {::7.4e}", fv(report.Y_dif_avg));
+        tools::log->trace(" -- std_mov         = {::7.4e}", fv(report.Y_mov_std));
     }
 }
 
@@ -1715,7 +1713,7 @@ void AlgorithmFinite<Scalar>::check_convergence_truncation_error() {
     auto trnc_max_it = std::max_element(trnc_err.begin(), trnc_err.end());
     auto trnc_max    = trnc_max_it != trnc_err.end() ? *trnc_max_it : 1;
     tools::log->debug("truncation error max: {:.5e}", fp(*trnc_max_it));
-    status.trnc_error_has_converged = trnc_max < settings::precision::svd_truncation_min or status.trnc_limit_has_reached_min;
+    status.trnc_error_has_converged = trnc_max < status.trnc_lim or status.trnc_limit_has_reached_min;
 }
 
 template<typename Scalar>

@@ -169,7 +169,8 @@ AlgorithmBase::SaturationReport<T> AlgorithmBase::check_saturation(const std::ve
         bool med_sat     = report.Y_med_std[i] < sensitivity and has_flag(policy, SaturationPolicy::med);
         bool min_sat     = report.Y_min_std[i] < sensitivity and has_flag(policy, SaturationPolicy::min);
         bool max_sat     = report.Y_max_std[i] < sensitivity and has_flag(policy, SaturationPolicy::max);
-        bool mid_sat     = report.Y_mid_std[i] < fluctuation and has_flag(policy, SaturationPolicy::mid);
+        // bool mid_sat     = report.Y_mid_std[i] < fluctuation and has_flag(policy, SaturationPolicy::mid);
+        bool mid_sat     = report.Y_mid_std[i] < sensitivity and has_flag(policy, SaturationPolicy::mid);
         bool mov_sat     = report.Y_mov_std[i] < sensitivity and has_flag(policy, SaturationPolicy::mov);
         bool dif_sat     = report.Y_dif_avg[i] < sensitivity and has_flag(policy, SaturationPolicy::dif);
         report.Y_sat[i]  = vec_sat or avg_sat or med_sat or min_sat or max_sat or mid_sat or mov_sat or dif_sat;
