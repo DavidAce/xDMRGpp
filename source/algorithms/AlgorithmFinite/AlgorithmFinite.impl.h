@@ -1014,8 +1014,6 @@ void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     if(dmrg_eigs_tol != etol_new)
         tools::log->info("Updated eigs tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_tol, etol_new, fmt::join(reason, " | "));
     dmrg_eigs_tol = etol_new;
-    // status.algorithm_has_stuck_for = 0;
-    // status.algorithm_saturated_for = 0;
     // Last sanity check before leaving here
     if(dmrg_eigs_tol < eigs_tol_min) throw except::logic_error("dmrg_eigs_tol is smaller than eigs_tol_min ! {:8.2e} > {:8.2e}", dmrg_eigs_tol, eigs_tol_min);
 }
@@ -1077,23 +1075,23 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
 
     tensors.rebuild_edges();
     tools::log->info("State initialization successful:");
-    tools::log->info("-- name          : {}", tensors.state->get_name());
-    tools::log->info("-- type          : {}", enum2sv(state_init));
-    tools::log->info("-- value         : {}", enum2sv(state_type.value()));
-    tools::log->info("-- axis          : {}", axis.value());
-    tools::log->info("-- pattern       : {}", settings::strategy::initial_pattern);
-    tools::log->info("-- labels        : {}", tensors.state->get_labels());
-    tools::log->info("-- norm          : {:.16f}", fp(tools::finite::measure::norm(tensors.get_state())));
-    tools::log->info("-- spin (X,Y,Z)  : {::.16f}", fv(tools::finite::measure::spin_components(tensors.get_state())));
-    tools::log->info("-- bond dimensions          : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
+    tools::log->info("-- name            : {}", tensors.state->get_name());
+    tools::log->info("-- type            : {}", enum2sv(state_init));
+    tools::log->info("-- value           : {}", enum2sv(state_type.value()));
+    tools::log->info("-- axis            : {}", axis.value());
+    tools::log->info("-- pattern         : {}", settings::strategy::initial_pattern);
+    tools::log->info("-- labels          : {}", tensors.state->get_labels());
+    tools::log->info("-- norm            : {:.16f}", fp(tools::finite::measure::norm(tensors.get_state())));
+    tools::log->info("-- spin (X,Y,Z)    : {::.16f}", fv(tools::finite::measure::spin_components(tensors.get_state())));
+    tools::log->info("-- bond dimensions : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
 
     if(status.algo_type != AlgorithmType::fLBIT) {
-        tools::log->info("-- energy                   : {}", fp(tools::finite::measure::energy(tensors)));
+        tools::log->info("-- energy          : {}", fp(tools::finite::measure::energy(tensors)));
         if(!std::isnan(status.energy_min + status.energy_max))
-            tools::log->info(
-                "-- energy density           : {}",
+            tools::log->info("-- energy density  : {}",
                 fp(tools::finite::measure::energy_normalized(tensors, static_cast<RealScalar>(status.energy_min), static_cast<RealScalar>(status.energy_max))));
-        tools::log->info("-- energy variance          : {:8.2e}", fp(tools::finite::measure::energy_variance(tensors)));
+        tools::log->info("-- energy variance : {:8.2e}", fp(tools::finite::measure::energy_variance(tensors)));
+
     }
     write_to_file(StorageEvent::INIT);
 }
@@ -1425,8 +1423,8 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
         algorithm_history.back().status.variance_mpo_converged_for = status.variance_mpo_converged_for;
         algorithm_history.back().status.variance_mpo_saturated_for = status.variance_mpo_saturated_for;
 
-        if(tools::log->level() >= spdlog::level::debug)
-            tools::log->debug("Energy variance convergence: converged {} | saturated {} (since {})", status.variance_mpo_converged_for, report.saturated_count,
+        // if(tools::log->level() >= spdlog::level::debug)
+            tools::log->info("Energy variance convergence: converged {} | saturated {} (since {})", status.variance_mpo_converged_for, report.saturated_count,
                               report.saturated_point);
         if(tools::log->level() <= spdlog::level::trace) {
             std::vector<double>     times;
