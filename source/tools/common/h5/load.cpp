@@ -48,7 +48,7 @@ namespace tools::common::h5 {
         status.algorithm_has_stuck_for      = h5file.readTableField<std::optional<size_t>>               (status_path, "algorithm_has_stuck_for",    offset).value_or(0);
         status.algorithm_saturated_for      = h5file.readTableField<std::optional<size_t>>               (status_path, "algorithm_saturated_for",    offset).value_or(0);
         status.algorithm_converged_for      = h5file.readTableField<std::optional<size_t>>               (status_path, "algorithm_converged_for",    offset).value_or(0);
-        status.entanglement_converged_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "entanglement_converged_for", offset).value_or(0);
+        status.energy_mpo_saturated_for     = h5file.readTableField<std::optional<size_t>>               (status_path, "energy_mpo_saturated_for",    offset).value_or(0);
         status.entanglement_saturated_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "entanglement_saturated_for", offset).value_or(0);
         status.locinfoscale_saturated_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "locinfoscale_saturated_for", offset).value_or(0);
         status.variance_mpo_converged_for   = h5file.readTableField<std::optional<size_t>>               (status_path, "variance_mpo_converged_for", offset).value_or(0);

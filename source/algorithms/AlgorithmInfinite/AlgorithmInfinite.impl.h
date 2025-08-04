@@ -211,7 +211,7 @@ void AlgorithmInfinite<Scalar>::clear_convergence_status() {
     status.algorithm_has_stuck_for    = 0;
     status.algorithm_saturated_for    = 0;
     status.algorithm_converged_for    = 0;
-    status.entanglement_converged_for = 0;
+    status.energy_mpo_saturated_for   = 0;
     status.entanglement_saturated_for = 0;
     status.variance_mpo_converged_for = 0;
     status.variance_mpo_saturated_for = 0;
@@ -267,7 +267,6 @@ void AlgorithmInfinite<Scalar>::check_convergence_entanglement(std::optional<Rea
     auto report = check_saturation(entropy_iter, sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mov);
     if(report.has_computed) {
         status.entanglement_saturated_for = report.saturated_count;
-        status.entanglement_converged_for = report.saturated_count;
     }
 }
 
@@ -400,10 +399,10 @@ void AlgorithmInfinite<Scalar>::print_status_full() {
     tools::log->info("Algorithm saturated for  = {:<}", status.algorithm_saturated_for);
     tools::log->info("Algorithm converged for  = {:<}", status.algorithm_converged_for);
     tools::log->info("Algorithm has stuck for  = {:<}", status.algorithm_has_stuck_for);
-    tools::log->info("σ² MPO                   = Converged : {:<4}  Saturated: {:<4}", status.variance_mpo_converged_for, status.variance_mpo_saturated_for);
-    tools::log->info("σ² HAM                   = Converged : {:<4}  Saturated: {:<4}", status.variance_ham_converged_for, status.variance_ham_saturated_for);
-    tools::log->info("σ² MOM                   = Converged : {:<4}  Saturated: {:<4}", status.variance_mom_converged_for, status.variance_mom_saturated_for);
-    tools::log->info("Sₑ                       = Converged : {:<4}  Saturated: {:<4}", status.entanglement_converged_for, status.entanglement_saturated_for);
+    tools::log->info("σ² MPO                   = Saturated: {:<4} Converged : {:<4}", status.variance_mpo_saturated_for, status.variance_mpo_converged_for);
+    tools::log->info("σ² HAM                   = Saturated: {:<4} Converged : {:<4}", status.variance_ham_saturated_for, status.variance_ham_converged_for);
+    tools::log->info("σ² MOM                   = Saturated: {:<4} Converged : {:<4}", status.variance_mom_saturated_for, status.variance_mom_converged_for);
+    tools::log->info("Sₑ                       = Saturated: {:<4}", status.entanglement_saturated_for);
     tools::log->info("Time                     = {:<16.16f}", tid::get_unscoped("t_tot").get_time());
     tools::log->info("Mem RSS                  = {:<.1f} MB", debug::mem_rss_in_mb());
     tools::log->info("Mem Peak                 = {:<.1f} MB", debug::mem_hwm_in_mb());

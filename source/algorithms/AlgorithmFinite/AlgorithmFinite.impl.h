@@ -1088,10 +1088,9 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
     if(status.algo_type != AlgorithmType::fLBIT) {
         tools::log->info("-- energy          : {}", fp(tools::finite::measure::energy(tensors)));
         if(!std::isnan(status.energy_min + status.energy_max))
-            tools::log->info("-- energy density  : {}",
-                fp(tools::finite::measure::energy_normalized(tensors, static_cast<RealScalar>(status.energy_min), static_cast<RealScalar>(status.energy_max))));
+            tools::log->info("-- energy density  : {}", fp(tools::finite::measure::energy_normalized(tensors, static_cast<RealScalar>(status.energy_min),
+                                                                                                     static_cast<RealScalar>(status.energy_max))));
         tools::log->info("-- energy variance : {:8.2e}", fp(tools::finite::measure::energy_variance(tensors)));
-
     }
     write_to_file(StorageEvent::INIT);
 }
@@ -1290,6 +1289,7 @@ void AlgorithmFinite<Scalar>::check_convergence() {
     if(not tensors.position_is_inward_edge()) return;
     auto t_con = tid::tic_scope("conv");
 
+    check_convergence_energy();
     check_convergence_variance();
     check_convergence_entanglement();
     check_convergence_spin_parity_sector(settings::strategy::target_axis);
@@ -1297,24 +1297,31 @@ void AlgorithmFinite<Scalar>::check_convergence() {
     check_convergence_truncation_error();
 
     // Determine if the algorithm has saturated
-    size_t sum_saturated_for    = status.variance_mpo_saturated_for + status.entanglement_saturated_for + status.locinfoscale_saturated_for;
-    int    num_enabled          = 0;
-    bool   variance_enabled     = settings::precision::variance_saturation_sensitivity > 0;
-    bool   entanglement_enabled = settings::precision::entanglement_saturation_sensitivity > 0;
-    bool   locinfoscale_enabled = settings::precision::locinfoscale_saturation_sensitivity > 0;
-    if(variance_enabled) num_enabled++;
-    if(entanglement_enabled) num_enabled++;
-    if(locinfoscale_enabled) num_enabled++;
-    int    variance_saturated     = variance_enabled and status.variance_mpo_saturated_for > 1;
-    int    entanglement_saturated = entanglement_enabled and status.entanglement_saturated_for > 1;
-    int    locinfoscale_saturated = locinfoscale_enabled and status.locinfoscale_saturated_for > 1;
-    int    all_saturated          = variance_saturated + entanglement_saturated + locinfoscale_saturated >= num_enabled;
-    bool   max_saturated          = sum_saturated_for > settings::strategy::iter_max_saturated * safe_cast<size_t>(num_enabled);
-    size_t min_saturated_for      = std::min<size_t>({
-        variance_enabled ? status.variance_mpo_saturated_for : sum_saturated_for,
-        entanglement_enabled ? status.entanglement_saturated_for : sum_saturated_for,
-        locinfoscale_enabled ? status.locinfoscale_saturated_for : sum_saturated_for,
-         });
+    bool energy_enabled       = settings::precision::energy_saturation_sensitivity > 0;
+    bool variance_enabled     = settings::precision::variance_saturation_sensitivity > 0;
+    bool entanglement_enabled = settings::precision::entanglement_saturation_sensitivity > 0;
+    bool locinfoscale_enabled = settings::precision::locinfoscale_saturation_sensitivity > 0;
+
+    bool energy_saturated       = energy_enabled ? status.energy_mpo_saturated_for > 1 : true;
+    bool variance_saturated     = variance_enabled ? status.variance_mpo_saturated_for > 1 : true;
+    bool entanglement_saturated = entanglement_enabled ? status.entanglement_saturated_for > 1 : true;
+    bool locinfoscale_saturated = locinfoscale_enabled ? status.locinfoscale_saturated_for > 1 : true;
+
+    bool energy_saturated_max       = energy_enabled and status.energy_mpo_saturated_for > settings::strategy::iter_max_saturated;
+    bool variance_saturated_max     = variance_enabled and status.variance_mpo_saturated_for > settings::strategy::iter_max_saturated;
+    bool entanglement_saturated_max = entanglement_enabled and status.entanglement_saturated_for > settings::strategy::iter_max_saturated;
+    bool locinfoscale_saturated_max = locinfoscale_enabled and status.locinfoscale_saturated_for > settings::strategy::iter_max_saturated;
+
+    bool all_saturated = energy_saturated and variance_saturated and entanglement_saturated and locinfoscale_saturated;
+    bool max_saturated = energy_saturated_max or variance_saturated_max or entanglement_saturated_max or locinfoscale_saturated_max;
+
+    // Get the shortest saturation streak
+    size_t min_saturated_for =
+        std::max({status.energy_mpo_saturated_for, status.variance_mpo_saturated_for, status.entanglement_saturated_for, status.locinfoscale_saturated_for});
+    if(energy_enabled) min_saturated_for = std::min(min_saturated_for, status.energy_mpo_saturated_for);
+    if(variance_enabled) min_saturated_for = std::min(min_saturated_for, status.variance_mpo_saturated_for);
+    if(entanglement_enabled) min_saturated_for = std::min(min_saturated_for, status.entanglement_saturated_for);
+    if(locinfoscale_enabled) min_saturated_for = std::min(min_saturated_for, status.locinfoscale_saturated_for);
 
     if(all_saturated or max_saturated) {
         if(status.algorithm_saturated_for > min_saturated_for) {
@@ -1328,9 +1335,10 @@ void AlgorithmFinite<Scalar>::check_convergence() {
 
     // Determine if the algorithm has converged
 
+    bool energy_mpo_converged   = settings::precision::energy_saturation_sensitivity > 0 ? status.energy_mpo_saturated_for > 0 : true;
     bool variance_mpo_converged = settings::precision::variance_saturation_sensitivity > 0 ? status.variance_mpo_converged_for > 0 : true;
-    bool entanglement_converged = settings::precision::entanglement_saturation_sensitivity > 0 ? status.entanglement_converged_for > 0 : true;
-    if(variance_mpo_converged and entanglement_converged and status.spin_parity_has_converged and status.trnc_error_has_converged)
+    bool entanglement_converged = settings::precision::entanglement_saturation_sensitivity > 0 ? status.entanglement_saturated_for > 0 : true;
+    if(energy_mpo_converged and variance_mpo_converged and entanglement_converged and status.spin_parity_has_converged and status.trnc_error_has_converged)
         status.algorithm_converged_for++;
     else
         status.algorithm_converged_for = 0;
@@ -1355,10 +1363,10 @@ void AlgorithmFinite<Scalar>::check_convergence() {
     status.algorithm_has_to_stop =
         status.bond_limit_has_reached_max and status.trnc_limit_has_reached_min and status.algorithm_has_stuck_for >= settings::strategy::iter_max_stuck;
 
-    tools::log->info("Algorithm report: converged {} (σ² {} Sₑ {} spin {}) | saturated {} (σ² {} Sₑ {} iₗ {}) | stuck {} | succeeded {} | has to stop {} | var "
+    tools::log->info("Algorithm report: converged {} (σ² {} spin {}) | saturated {} (E {} σ² {} Sₑ {} iₗ {}) | stuck {} | succeeded {} | has to stop {} | var "
                      "prec limit {:8.2e}",
-                     status.algorithm_converged_for, status.variance_mpo_converged_for, status.entanglement_converged_for, status.spin_parity_has_converged,
-                     status.algorithm_saturated_for, status.variance_mpo_saturated_for, status.entanglement_saturated_for, status.locinfoscale_saturated_for,
+                     status.algorithm_converged_for, status.variance_mpo_converged_for, status.spin_parity_has_converged, status.algorithm_saturated_for,
+                     status.energy_mpo_saturated_for, status.variance_mpo_saturated_for, status.entanglement_saturated_for, status.locinfoscale_saturated_for,
                      status.algorithm_has_stuck_for, status.algorithm_has_succeeded, status.algorithm_has_to_stop, status.energy_variance_prec_limit);
     tools::log->info("Truncation errors: {::.3e}", tensors.state->get_truncation_errors());
     tools::log->info("Bond dimensions  : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
@@ -1386,6 +1394,53 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
     locinfoscale           = 0.0;
     if(settings::precision::locinfoscale_saturation_sensitivity > 0.0 and status.algo_type != AlgorithmType::fLBIT) {
         locinfoscale = tools::finite::measure::information_center_of_mass(t.get_state(), ip);
+    }
+}
+
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::check_convergence_energy(std::optional<RealScalar> saturation_sensitivity) {
+    if(not tensors.position_is_inward_edge()) return;
+    if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::energy_saturation_sensitivity);
+    if(saturation_sensitivity <= 0) return;
+    tools::log->trace("Checking convergence of the energy | sensitivity {:.2e}", fp(saturation_sensitivity.value()));
+
+    if(algorithm_history.empty() or algorithm_history.back().status.step < status.step)
+        algorithm_history.emplace_back(status, tensors);
+    else
+        algorithm_history.back() = log_entry(status, tensors);
+
+    // Gather the information center of mass history
+    std::vector<RealScalar> energy_iter;
+    std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(energy_iter),
+                   [](const log_entry &h) -> RealScalar { return h.energy; });
+
+    //    var_mpo_iter.emplace_back(tools::finite::measure::energy_variance(tensors));
+    auto report = check_saturation(energy_iter, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::mov);
+    if(report.has_computed) {
+        status.energy_mpo_saturated_for = report.saturated_count;
+
+        // if(tools::log->level() >= spdlog::level::debug)
+        tools::log->info("Energy saturation: {} (since {})", status.energy_mpo_saturated_for, report.saturated_count, report.saturated_point);
+        // if(tools::log->level() <= spdlog::level::trace) {
+        std::vector<double> times;
+        std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
+        tools::log->info("Energy saturation details:");
+        tools::log->info(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
+        tools::log->info(" -- saturated point = {} ", report.saturated_point);
+        tools::log->info(" -- saturated count = {} ", report.saturated_count);
+        tools::log->info(" -- converged count = {} ", status.variance_mpo_converged_for);
+        tools::log->info(" -- sat             = {}", report.Y_sat);
+        tools::log->info(" -- val             = {::7.4e}", fv(report.Y_vec));
+        tools::log->info(" -- min             = {::7.4e}", fv(report.Y_min));
+        tools::log->info(" -- max             = {::7.4e}", fv(report.Y_max));
+        tools::log->info(" -- mid             = {::7.4e}", fv(report.Y_mid));
+        tools::log->info(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
+        tools::log->info(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+        tools::log->info(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+        tools::log->info(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+        tools::log->info(" -- ste_mov         = {::7.4e}", fv(report.Y_mov_std));
+        tools::log->info(" -- time            = {::7.4e}", times);
+        // }
     }
 }
 
@@ -1424,43 +1479,44 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
         algorithm_history.back().status.variance_mpo_saturated_for = status.variance_mpo_saturated_for;
 
         // if(tools::log->level() >= spdlog::level::debug)
-            tools::log->info("Energy variance convergence: converged {} | saturated {} (since {})", status.variance_mpo_converged_for, report.saturated_count,
-                              report.saturated_point);
-        if(tools::log->level() <= spdlog::level::trace) {
-            std::vector<double>     times;
-            std::vector<RealScalar> energies;
-            std::vector<RealScalar> eigvals;
-            std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
-            std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(energies),
-                           [](const log_entry &h) -> RealScalar { return h.energy; });
-            std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(eigvals),
-                           [](const log_entry &h) -> RealScalar { return h.variance - h.energy * h.energy; });
-            tools::log->trace("Energy variance convergence details:");
-            tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
-            tools::log->trace(" -- threshold       = {:7.4e}", fp(threshold.value()));
-            tools::log->trace(" -- saturated point = {} ", report.saturated_point);
-            tools::log->trace(" -- saturated count = {} ", report.saturated_count);
-            tools::log->trace(" -- converged count = {} ", status.variance_mpo_converged_for);
-            tools::log->trace(" -- sat             = {}", report.Y_sat);
-            tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
-            tools::log->trace(" -- ene             = {::7.4e}", fv(energies));
-            tools::log->trace(" -- eig             = {::7.4e}", fv(eigvals));
-            tools::log->trace(" -- time            = {::7.4e}", times);
-            tools::log->trace(" -- avg             = {::7.4e}", fv(report.Y_avg));
-            tools::log->trace(" -- med             = {::7.4e}", fv(report.Y_med));
-            tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
-            tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
-            tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
-            tools::log->trace(" -- dif             = {::7.4e}", fv(report.Y_dif));
-            tools::log->trace(" -- std_val         = {::7.4e}", fv(report.Y_vec_std));
-            tools::log->trace(" -- std_avg         = {::7.4e}", fv(report.Y_avg_std));
-            tools::log->trace(" -- std_med         = {::7.4e}", fv(report.Y_med_std));
-            tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
-            tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
-            tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
-            tools::log->trace(" -- dif_avg         = {::7.4e}", fv(report.Y_dif_avg));
-            tools::log->trace(" -- std_mov         = {::7.4e}", fv(report.Y_mov_std));
-        }
+        tools::log->info("Energy variance convergence: converged {} | saturated {} (since {})", status.variance_mpo_converged_for, report.saturated_count,
+                         report.saturated_point);
+        // if(tools::log->level() <= spdlog::level::trace) {
+        std::vector<double>     times;
+        std::vector<RealScalar> energies;
+        std::vector<RealScalar> eigvals;
+        std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
+        std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(energies),
+                       [](const log_entry &h) -> RealScalar { return h.energy; });
+        std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(eigvals),
+                       [](const log_entry &h) -> RealScalar { return h.variance - h.energy * h.energy; });
+        tools::log->info("Energy variance convergence details:");
+        tools::log->info(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
+        tools::log->info(" -- threshold       = {:7.4e}", fp(threshold.value()));
+        tools::log->info(" -- saturated point = {} ", report.saturated_point);
+        tools::log->info(" -- saturated count = {} ", report.saturated_count);
+        tools::log->info(" -- converged count = {} ", status.variance_mpo_converged_for);
+        tools::log->info(" -- sat             = {}", report.Y_sat);
+        tools::log->info(" -- var             = {::7.4e}", fv(var_mpo_iter));
+        tools::log->info(" -- val             = {::7.4e}", fv(report.Y_vec));
+        tools::log->info(" -- ene             = {::7.4e}", fv(energies));
+        tools::log->info(" -- eig             = {::7.4e}", fv(eigvals));
+        tools::log->info(" -- time            = {::7.4e}", times);
+        tools::log->info(" -- avg             = {::7.4e}", fv(report.Y_avg));
+        tools::log->info(" -- med             = {::7.4e}", fv(report.Y_med));
+        tools::log->info(" -- min             = {::7.4e}", fv(report.Y_min));
+        tools::log->info(" -- max             = {::7.4e}", fv(report.Y_max));
+        tools::log->info(" -- mid             = {::7.4e}", fv(report.Y_mid));
+        tools::log->info(" -- dif             = {::7.4e}", fv(report.Y_dif));
+        tools::log->info(" -- std_val         = {::7.4e}", fv(report.Y_vec_std));
+        tools::log->info(" -- std_avg         = {::7.4e}", fv(report.Y_avg_std));
+        tools::log->info(" -- std_med         = {::7.4e}", fv(report.Y_med_std));
+        tools::log->info(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+        tools::log->info(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+        tools::log->info(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+        tools::log->info(" -- dif_avg         = {::7.4e}", fv(report.Y_dif_avg));
+        tools::log->info(" -- std_mov         = {::7.4e}", fv(report.Y_mov_std));
+        // }
     }
 }
 
@@ -1486,29 +1542,29 @@ void AlgorithmFinite<Scalar>::check_convergence_locinfoscale(std::optional<RealS
     if(report.has_computed) {
         status.locinfoscale_saturated_for = report.saturated_count;
 
-        if(tools::log->level() >= spdlog::level::debug)
-            tools::log->debug("local information scale saturation: saturated {} (since {})", status.locinfoscale_saturated_for, report.saturated_count,
-                              report.saturated_point);
-        if(tools::log->level() <= spdlog::level::trace) {
-            std::vector<double> times;
-            std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
-            tools::log->trace("Local information scale saturation details:");
-            tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
-            tools::log->trace(" -- saturated point = {} ", report.saturated_point);
-            tools::log->trace(" -- saturated count = {} ", report.saturated_count);
-            tools::log->trace(" -- converged count = {} ", status.variance_mpo_converged_for);
-            tools::log->trace(" -- sat             = {}", report.Y_sat);
-            tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
-            tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
-            tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
-            tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
-            tools::log->trace(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
-            tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
-            tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
-            tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
-            tools::log->trace(" -- ste_mov         = {::7.4e}", fv(report.Y_mov_std));
-            tools::log->trace(" -- time            = {::7.4e}", times);
-        }
+        // if(tools::log->level() >= spdlog::level::debug)
+        tools::log->info("local information scale saturation: saturated {} (since {})", status.locinfoscale_saturated_for, report.saturated_count,
+                         report.saturated_point);
+        // if(tools::log->level() <= spdlog::level::trace) {
+        std::vector<double> times;
+        std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
+        tools::log->info("Local information scale saturation details:");
+        tools::log->info(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
+        tools::log->info(" -- saturated point = {} ", report.saturated_point);
+        tools::log->info(" -- saturated count = {} ", report.saturated_count);
+        tools::log->info(" -- converged count = {} ", status.variance_mpo_converged_for);
+        tools::log->info(" -- sat             = {}", report.Y_sat);
+        tools::log->info(" -- val             = {::7.4e}", fv(report.Y_vec));
+        tools::log->info(" -- min             = {::7.4e}", fv(report.Y_min));
+        tools::log->info(" -- max             = {::7.4e}", fv(report.Y_max));
+        tools::log->info(" -- mid             = {::7.4e}", fv(report.Y_mid));
+        tools::log->info(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
+        tools::log->info(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+        tools::log->info(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+        tools::log->info(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+        tools::log->info(" -- ste_mov         = {::7.4e}", fv(report.Y_mov_std));
+        tools::log->info(" -- time            = {::7.4e}", times);
+        // }
     }
 }
 
@@ -1525,8 +1581,6 @@ void AlgorithmFinite<Scalar>::check_convergence_entanglement(std::optional<RealS
 
     if(status.algo_type == AlgorithmType::fLBIT) {
         status.entanglement_saturated_for                          = 0;
-        status.entanglement_converged_for                          = 0;
-        algorithm_history.back().status.entanglement_converged_for = 0;
         algorithm_history.back().status.entanglement_saturated_for = 0;
         return;
     }
@@ -1560,29 +1614,27 @@ void AlgorithmFinite<Scalar>::check_convergence_entanglement(std::optional<RealS
             auto  last_saturated_site         = safe_cast<size_t>(std::distance(reports.begin(), last_saturated_itr));
             auto &report                      = reports[last_saturated_site];
             status.entanglement_saturated_for = report.saturated_count;
-            if(tools::log->level() >= spdlog::level::debug)
-                tools::log->debug("Entanglement ent. convergence at site {}: converged {} | saturated {} iters (since {})", last_saturated_site,
-                                  status.entanglement_converged_for, report.saturated_count, report.saturated_point);
-            if(tools::log->level() <= spdlog::level::trace) {
-                tools::log->trace("Entanglement convergence details:");
-                tools::log->trace(" -- site            = {}", last_saturated_site);
-                tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
-                tools::log->trace(" -- saturated point = {} ", report.saturated_point);
-                tools::log->trace(" -- saturated count = {} ", report.saturated_count);
-                tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
-                tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
-                tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
-                tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
-                tools::log->trace(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
-                tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
-                tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
-                tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
-                tools::log->trace(" -- ste_mov         = {::7.4e}", fv(report.Y_mov_std));
-            }
+            // if(tools::log->level() >= spdlog::level::debug)
+            tools::log->info("Entanglement ent. convergence at site {}: saturated {} iters (since {})", last_saturated_site, report.saturated_count,
+                             report.saturated_point);
+            // if(tools::log->level() <= spdlog::level::trace) {
+            tools::log->info("Entanglement convergence details:");
+            tools::log->info(" -- site            = {}", last_saturated_site);
+            tools::log->info(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
+            tools::log->info(" -- saturated point = {} ", report.saturated_point);
+            tools::log->info(" -- saturated count = {} ", report.saturated_count);
+            tools::log->info(" -- val             = {::7.4e}", fv(report.Y_vec));
+            tools::log->info(" -- min             = {::7.4e}", fv(report.Y_min));
+            tools::log->info(" -- max             = {::7.4e}", fv(report.Y_max));
+            tools::log->info(" -- mid             = {::7.4e}", fv(report.Y_mid));
+            tools::log->info(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
+            tools::log->info(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+            tools::log->info(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+            tools::log->info(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+            tools::log->info(" -- ste_mov         = {::7.4e}", fv(report.Y_mov_std));
+            // }
         }
     }
-    status.entanglement_converged_for                          = status.entanglement_saturated_for;
-    algorithm_history.back().status.entanglement_converged_for = status.entanglement_converged_for;
     algorithm_history.back().status.entanglement_saturated_for = status.entanglement_saturated_for;
 }
 
@@ -1631,7 +1683,7 @@ void AlgorithmFinite<Scalar>::check_convergence_spin_parity_sector(std::string_v
 
                 // auto target_axis_opposite = fmt::format("{}{}", fmt::format("{:+}", spin_sign_along_axus).front(), target_axus);
                 // tools::log->warn("check_convergence_spin_parity_sector: resetting spin parity target: {}", target_axis_opposite);
-                settings::strategy::initial_pattern = ""; // Clear to randomize
+                settings::strategy::initial_pattern = "";                               // Clear to randomize
                 initialize_state(ResetReason::INIT, settings::strategy::initial_state); // Second use of random!
                 return;
 
@@ -1677,7 +1729,7 @@ void AlgorithmFinite<Scalar>::clear_convergence_status() {
     status.algorithm_has_stuck_for    = 0;
     status.algorithm_saturated_for    = 0;
     status.algorithm_converged_for    = 0;
-    status.entanglement_converged_for = 0;
+    status.energy_mpo_saturated_for   = 0;
     status.entanglement_saturated_for = 0;
     status.variance_mpo_converged_for = 0;
     status.variance_mpo_saturated_for = 0;
@@ -1775,8 +1827,10 @@ void AlgorithmFinite<Scalar>::print_status() {
     if(status.algorithm_has_stuck_for > 0) { stat = fmt::format("stk:{:<1} ", status.algorithm_has_stuck_for); }
     if(status.algorithm_converged_for > 0) { stat = fmt::format("con:{:<1} ", status.algorithm_converged_for); }
     report += stat;
-    if(settings::precision::variance_saturation_sensitivity > 0 or settings::precision::entanglement_saturation_sensitivity > 0) {
+    if(settings::precision::energy_saturation_sensitivity > 0 or settings::precision::variance_saturation_sensitivity > 0 or
+       settings::precision::entanglement_saturation_sensitivity > 0 or settings::precision::locinfoscale_saturation_sensitivity > 0) {
         std::vector<std::string> satstr;
+        if(settings::precision::energy_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("E:{:<}", status.energy_mpo_saturated_for));
         if(settings::precision::variance_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("σ²H:{:<}", status.variance_mpo_saturated_for));
         if(settings::precision::entanglement_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("Sₑ:{:<1}", status.entanglement_saturated_for));
         if(settings::precision::locinfoscale_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("iₗ:{:<1}", status.locinfoscale_saturated_for));
@@ -1861,8 +1915,7 @@ void AlgorithmFinite<Scalar>::print_status_full() {
         tools::log->info("σ²                                 = Converged : {:<4}  Saturated: {:<4}", status.variance_mpo_converged_for,
                          status.variance_mpo_saturated_for);
     }
-    tools::log->info("Sₑ                                 = Converged : {:<4}  Saturated: {:<4}", status.entanglement_converged_for,
-                     status.entanglement_saturated_for);
+    tools::log->info("Sₑ                                 = Saturated: {:<4}", status.entanglement_saturated_for);
     tools::log->info("Mem RSS                            = {:<.1f} MB", debug::mem_rss_in_mb());
     tools::log->info("Mem Peak                           = {:<.1f} MB", debug::mem_hwm_in_mb());
     tools::log->info("Mem VM                             = {:<.1f} MB", debug::mem_vm_in_mb());

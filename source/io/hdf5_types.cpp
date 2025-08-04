@@ -247,7 +247,7 @@ void h5pp_table_algorithm_status::register_table_type() {
     H5Tinsert(h5_type, "algorithm_has_stuck_for",     HOFFSET(table, algorithm_has_stuck_for),    H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "algorithm_saturated_for",     HOFFSET(table, algorithm_saturated_for),    H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "algorithm_converged_for",     HOFFSET(table, algorithm_converged_for),    H5T_NATIVE_ULONG);
-    H5Tinsert(h5_type, "entanglement_converged_for",  HOFFSET(table, entanglement_converged_for), H5T_NATIVE_ULONG);
+    H5Tinsert(h5_type, "energy_mpo_saturated_for",    HOFFSET(table, energy_mpo_saturated_for),   H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "entanglement_saturated_for",  HOFFSET(table, entanglement_saturated_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "locinfoscale_saturated_for",  HOFFSET(table, locinfoscale_saturated_for), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "variance_mpo_converged_for",  HOFFSET(table, variance_mpo_converged_for), H5T_NATIVE_ULONG);

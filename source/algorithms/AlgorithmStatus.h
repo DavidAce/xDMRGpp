@@ -43,7 +43,7 @@ class AlgorithmStatus {
     size_t            algorithm_has_stuck_for    = 0;
     size_t            algorithm_saturated_for    = 0;
     size_t            algorithm_converged_for    = 0;
-    size_t            entanglement_converged_for = 0;
+    size_t            energy_mpo_saturated_for   = 0;
     size_t            entanglement_saturated_for = 0;
     size_t            locinfoscale_saturated_for = 0;
     size_t            variance_mpo_converged_for = 0;

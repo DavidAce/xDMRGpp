@@ -8,7 +8,6 @@
 #include "tools/common/log.h"
 #include "tools/infinite/opt.h"
 
-
 template<typename Scalar>
 idmrg<Scalar>::idmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmInfinite<Scalar>(std::move(h5ppFile_), OptRitz::SR, AlgorithmType::iDMRG) {
     tools::log->trace("Constructing class_idmrg");
@@ -86,7 +85,7 @@ void idmrg<Scalar>::check_convergence() {
     check_convergence_variance_mpo();
     check_convergence_variance_ham();
     check_convergence_variance_mom();
-    if(status.entanglement_converged_for > 0 and status.variance_mpo_converged_for > 0 and status.variance_ham_converged_for > 0 and
+    if(status.energy_mpo_saturated_for > 0 and status.variance_mpo_converged_for > 0 and status.variance_ham_converged_for > 0 and
        status.variance_mom_converged_for > 0 and status.bond_limit_has_reached_max) {
         status.algorithm_converged_for++;
     } else

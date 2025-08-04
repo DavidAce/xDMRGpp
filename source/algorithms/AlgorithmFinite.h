@@ -100,6 +100,7 @@ class AlgorithmFinite : public AlgorithmBase {
     void print_status() override;
     void print_status_full() final;
     void check_convergence() override;
+    void check_convergence_energy(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
     void check_convergence_variance(std::optional<RealScalar> threshold = std::nullopt, std::optional<RealScalar> saturation_sensitivity = std::nullopt);
     void check_convergence_locinfoscale(std::optional<RealScalar> saturation_sensitivity = std::nullopt);
     void check_convergence_entanglement(std::optional<RealScalar> saturation_sensitivity = std::nullopt);

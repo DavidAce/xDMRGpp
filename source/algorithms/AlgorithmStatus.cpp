@@ -67,7 +67,7 @@ bool AlgorithmStatus::operator==(const AlgorithmStatus &s) const {
         this->algorithm_has_stuck_for       == s.algorithm_has_stuck_for and
         this->algorithm_saturated_for       == s.algorithm_saturated_for and
         this->algorithm_converged_for       == s.algorithm_converged_for and
-        this->entanglement_converged_for    == s.entanglement_converged_for and
+        this->energy_mpo_saturated_for      == s.energy_mpo_saturated_for and
         this->entanglement_saturated_for    == s.entanglement_saturated_for and
         this->locinfoscale_saturated_for    == s.locinfoscale_saturated_for and
         this->variance_mpo_converged_for    == s.variance_mpo_converged_for and

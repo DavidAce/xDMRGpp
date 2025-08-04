@@ -9,7 +9,6 @@
 #include "tools/common/log.h"
 #include "tools/infinite/opt.h"
 
-
 template<typename Scalar>
 itebd<Scalar>::itebd(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmInfinite<Scalar>(std::move(h5ppFile_), OptRitz::NONE, AlgorithmType::iTEBD) {
     tools::log->trace("Constructing class_itebd");
@@ -26,8 +25,8 @@ template<typename Scalar> void itebd<Scalar>::run_preprocessing() {
     h_evn          = tensors.model->get_2site_ham_AB();
     h_odd          = tensors.model->get_2site_ham_BA();
 
-    unitary_time_evolving_operators =
-        qm::time::get_twosite_time_evolution_operators<CplxScalar>(status.delta_t.template to_floating_point<cx128>(), settings::itebd::suzuki_order, h_evn, h_odd);
+    unitary_time_evolving_operators = qm::time::get_twosite_time_evolution_operators<CplxScalar>(status.delta_t.template to_floating_point<cx128>(),
+                                                                                                 settings::itebd::suzuki_order, h_evn, h_odd);
     tools::log->info("Finished {} preprocessing", status.algo_type_sv());
 }
 
@@ -73,7 +72,7 @@ template<typename Scalar> void itebd<Scalar>::check_convergence() {
     check_convergence_variance_mom();
     update_bond_dimension_limit();
     check_convergence_time_step();
-    if(status.entanglement_converged_for > 0 and status.variance_ham_converged_for > 0 and status.variance_mom_converged_for > 0 and
+    if(status.entanglement_saturated_for > 0 and status.variance_ham_converged_for > 0 and status.variance_mom_converged_for > 0 and
        status.bond_limit_has_reached_max and status.time_step_has_converged) {
         status.algorithm_converged_for++;
     } else
@@ -84,7 +83,7 @@ template<typename Scalar> void itebd<Scalar>::check_convergence_time_step() {
     auto delta_t = status.delta_t.template to_floating_point<cx128>();
     if(abs(delta_t) <= static_cast<fp128>(settings::itebd::time_step_min)) {
         status.time_step_has_converged = true;
-    } else if(status.bond_limit_has_reached_max and status.entanglement_converged_for > 0) {
+    } else if(status.bond_limit_has_reached_max and status.entanglement_saturated_for > 0) {
         // TODO : This step is not compatible with switching between real/imag time evolution... I think?
         status.delta_t                  = std::max<fp128>(static_cast<fp128>(settings::itebd::time_step_min), abs(delta_t) * static_cast<fp128>(0.5));
         unitary_time_evolving_operators = qm::time::get_twosite_time_evolution_operators<CplxScalar>(delta_t, settings::itebd::suzuki_order, h_evn, h_odd);

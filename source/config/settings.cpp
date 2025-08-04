@@ -247,6 +247,7 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("precision::use_parity_shifted_mpo_squared"        , precision::use_parity_shifted_mpo_squared);
     dmrg_config.load_parameter("precision::variance_convergence_threshold"        , precision::variance_convergence_threshold);
     dmrg_config.load_parameter("precision::variance_saturation_sensitivity"       , precision::variance_saturation_sensitivity);
+    dmrg_config.load_parameter("precision::energy_saturation_sensitivity"         , precision::energy_saturation_sensitivity);
     dmrg_config.load_parameter("precision::entanglement_saturation_sensitivity"   , precision::entanglement_saturation_sensitivity);
     dmrg_config.load_parameter("precision::locinfoscale_saturation_sensitivity"   , precision::locinfoscale_saturation_sensitivity);
     dmrg_config.load_parameter("precision::target_subspace_error"                 , precision::target_subspace_error);
