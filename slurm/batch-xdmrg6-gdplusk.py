@@ -23,7 +23,7 @@ config_ranges = {
     "storage::temp_dir": [config_paths['temp_dir']],
     "strategy::initial_state": ["PRODUCT_STATE_NEEL_SHUFFLED"],
     "model::model_type": ['ising_majorana'],
-    "model::model_size": ['12'],
+    "model::model_size": ['12', '14', '16'],
     "model::ising_majorana::g": ['0.500'],
     "model::ising_majorana::delta": ['-6.00', '-5.50', '-5.00', '-4.50', '-4.00', '-3.50', '-3.00', '-2.50', '-2.00', '-1.50', '-1.00', '-0.50', '0.00', '0.50', '1.00', '1.50', '2.00', '2.50', '3.00', '3.50', '4.00', '4.50', '5.00', '5.50', '6.00'],
     "xdmrg::energy_spectrum_shift": ['0.0'],
