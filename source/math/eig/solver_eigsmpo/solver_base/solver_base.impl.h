@@ -709,7 +709,6 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
     //      ProjectOpL = (I - V * V.adjoint()) =
     //      ProjectOpR = (I - V * V.adjoint()) =  = ProjectOpL,
 
-
     // Define the matrix-vector operator for the H2 operator
     auto MatrixOp = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
         status.num_matvecs_inner += X.cols();
@@ -769,7 +768,6 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
         };
         auto ProjectOpL = [this, &v](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return X - v * (v.adjoint() * X).eval(); };
         auto ProjectOpR = [this, &v](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return X - v * (v.adjoint() * X).eval(); };
-
 
         auto JDop = JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
 
@@ -1370,13 +1368,13 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
             VectorReal norms = (Y.adjoint() * Y).diagonal().cwiseAbs();
             switch(m.maskPolicy) {
                 case MaskPolicy::COMPRESS: {
-                    eiglog->warn("block_l2_orthonormalize: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(norms), fp(m.maskTol));
+                    eiglog->debug("block_l2_orthonormalize: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(norms), fp(m.maskTol));
                     compress_cols(Y, m.mask);
                     m.mask = VectorIdxT::Ones(Y.cols());
                     break;
                 }
                 case MaskPolicy::RANDOMIZE: {
-                    eiglog->warn("block_l2_orthonormalize: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(norms), fp(m.maskTol));
+                    eiglog->debug("block_l2_orthonormalize: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(norms), fp(m.maskTol));
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) { Y.col(j).setRandom(); }
                     }
@@ -1681,8 +1679,8 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
     m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
     m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
 
-    MatrixType xGram      = X.adjoint() * X;
-    RealScalar xOrthError = (xGram.cwiseAbs() - MatrixType::Identity(xGram.cols(), xGram.rows())).norm();
+    MatrixType xGram = X.adjoint() * X;
+    // RealScalar xOrthError = (xGram.cwiseAbs() - MatrixType::Identity(xGram.cols(), xGram.rows())).norm();
     // DGKS clean Y against X
     Eigen::Index maxReps = 3;
     Eigen::Index rep     = 0;
@@ -1726,8 +1724,8 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
     m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
     m.orthError = m.Gram.size() > 0 ? m.Gram.norm() : 0;
 
-    MatrixType xGram      = X.adjoint() * X;
-    RealScalar xOrthError = xGram.norm();
+    MatrixType xGram = X.adjoint() * X;
+    // RealScalar xOrthError = xGram.norm();
 
     // DGKS clean Y against X
     Eigen::Index maxReps = 3;
@@ -1823,14 +1821,14 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType
         if(m.mask.sum() != Y.cols()) {
             switch(m.maskPolicy) {
                 case MaskPolicy::COMPRESS: {
-                    eiglog->warn("block_h2_orthonormalize_dgks: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
+                    eiglog->debug("block_h2_orthonormalize_dgks: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
                     compress_cols(Y, m.mask);
                     compress_cols(H2Y, m.mask);
                     m.mask = VectorIdxT::Ones(Y.cols());
                     break;
                 }
                 case MaskPolicy::RANDOMIZE: {
-                    eiglog->warn("block_h2_orthonormalize_dgks: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
+                    eiglog->debug("block_h2_orthonormalize_dgks: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) {
                             Y.col(j).setRandom();
@@ -1946,7 +1944,7 @@ struct LLTOrthoStepMeta {
 };
 
 template<typename LScalar>
-void do_llt_orthonormalization_step(LLTOrthoStepMeta<LScalar> &m, std::shared_ptr<spdlog::logger> eiglog) {
+void do_llt_orthonormalization_step(LLTOrthoStepMeta<LScalar> &m, [[maybe_unused]] std::shared_ptr<spdlog::logger> eiglog) {
     using RealLScalar = typename LLTOrthoStepMeta<LScalar>::RealLScalar;
     using MatrixLType = typename LLTOrthoStepMeta<LScalar>::MatrixLType;
     using VectorIdxT  = typename LLTOrthoStepMeta<LScalar>::VectorIdxT;
@@ -2037,14 +2035,14 @@ void solver_base<Scalar>::block_h2_orthonormalize_llt(MatrixType &Y, MatrixType 
         if(m.mask.sum() != Y.cols()) {
             switch(m.maskPolicy) {
                 case MaskPolicy::COMPRESS: {
-                    eiglog->warn("block_h2_orthonormalize_llt: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
+                    eiglog->debug("block_h2_orthonormalize_llt: Compressing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
                     compress_cols(Y, m.mask);
                     compress_cols(H2Y, m.mask);
                     m.mask = VectorIdxT::Ones(Y.cols());
                     break;
                 }
                 case MaskPolicy::RANDOMIZE: {
-                    eiglog->warn("block_h2_orthonormalize_llt: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
+                    eiglog->debug("block_h2_orthonormalize_llt: Randomizing Y. Mask: {} | norms {::.3e} | maskTol {:.3e}", m.mask, fv(m.Rdiag), fp(m.maskTol));
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) {
                             Y.col(j).setRandom();
@@ -2146,8 +2144,8 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
     m.Rdiag       = m.Gram.diagonal().cwiseAbs().cwiseSqrt();
     m.orthError   = m.Gram.size() > 0 ? m.Gram.norm() : 0;
 
-    MatrixType xGram      = X.adjoint() * H2X;
-    RealScalar xOrthError = (xGram.cwiseAbs() - MatrixType::Identity(xGram.cols(), xGram.rows())).norm();
+    MatrixType xGram = X.adjoint() * H2X;
+    // RealScalar xOrthError = (xGram.cwiseAbs() - MatrixType::Identity(xGram.cols(), xGram.rows())).norm();
 
     // DGKS clean Y against X
     Eigen::Index maxReps = 3;
@@ -2159,11 +2157,11 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
         if(m.scale_log.size() != Y.cols()) m.scale_log = VectorReal::Zero(Y.cols());
 
         for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-            auto       yj                = Y.col(j);
-            auto       h2yj              = H2Y.col(j);
-            MatrixType gj                = m.Gram.col(j);
-            RealScalar yj_norm           = yj.norm();
-            RealScalar gj_norm           = gj.norm();
+            auto       yj      = Y.col(j);
+            auto       h2yj    = H2Y.col(j);
+            MatrixType gj      = m.Gram.col(j);
+            RealScalar yj_norm = yj.norm();
+            // RealScalar gj_norm           = gj.norm();
             RealScalar refresh_threshold = RealScalar{0.1f} * yj_norm; // compares current sizes
             yj.noalias() -= X * gj;                                    // Remove projection
             h2yj = MultH2(yj);

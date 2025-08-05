@@ -1400,7 +1400,10 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::check_convergence_energy(std::optional<RealScalar> saturation_sensitivity) {
     if(not tensors.position_is_inward_edge()) return;
-    if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::energy_saturation_sensitivity);
+    if(not saturation_sensitivity) {
+        saturation_sensitivity = static_cast<RealScalar>(settings::precision::energy_saturation_sensitivity);
+        saturation_sensitivity = std::max(saturation_sensitivity.value(), 2*std::sqrt(var_latest)); // Fluctuations within two standard deviations
+    }
     if(saturation_sensitivity <= 0) return;
     tools::log->trace("Checking convergence of the energy | sensitivity {:.2e}", fp(saturation_sensitivity.value()));
 
@@ -1419,26 +1422,26 @@ void AlgorithmFinite<Scalar>::check_convergence_energy(std::optional<RealScalar>
     if(report.has_computed) {
         status.energy_mpo_saturated_for = report.saturated_count;
 
-        tools::log->debug("Energy saturation: {} (since {})", status.energy_mpo_saturated_for, report.saturated_count, report.saturated_point);
-        if(tools::log->level() > spdlog::level::trace) return;
+        tools::log->info("Energy saturation: {} (since {})", status.energy_mpo_saturated_for, report.saturated_count, report.saturated_point);
+        // if(tools::log->level() > spdlog::level::trace) return;
 
         std::vector<double> times;
         std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(times), [](const log_entry &h) -> double { return h.time; });
-        tools::log->trace("Energy saturation details:");
-        tools::log->trace(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
-        tools::log->trace(" -- saturated point = {} ", report.saturated_point);
-        tools::log->trace(" -- saturated count = {} ", report.saturated_count);
-        tools::log->trace(" -- sat             = {}", report.Y_sat);
-        tools::log->trace(" -- val             = {::7.4e}", fv(report.Y_vec));
-        tools::log->trace(" -- min             = {::7.4e}", fv(report.Y_min));
-        tools::log->trace(" -- max             = {::7.4e}", fv(report.Y_max));
-        tools::log->trace(" -- mid             = {::7.4e}", fv(report.Y_mid));
-        tools::log->trace(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
-        tools::log->trace(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
-        tools::log->trace(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
-        tools::log->trace(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
-        tools::log->trace(" -- std_mov         = {::7.4e}", fv(report.Y_mov_std));
-        tools::log->trace(" -- time            = {::7.4e}", times);
+        tools::log->info("Energy saturation details:");
+        tools::log->info(" -- sensitivity     = {:7.4e}", fp(saturation_sensitivity.value()));
+        tools::log->info(" -- saturated point = {} ", report.saturated_point);
+        tools::log->info(" -- saturated count = {} ", report.saturated_count);
+        tools::log->info(" -- sat             = {}", report.Y_sat);
+        tools::log->info(" -- val             = {::7.4e}", fv(report.Y_vec));
+        tools::log->info(" -- min             = {::7.4e}", fv(report.Y_min));
+        tools::log->info(" -- max             = {::7.4e}", fv(report.Y_max));
+        tools::log->info(" -- mid             = {::7.4e}", fv(report.Y_mid));
+        tools::log->info(" -- std_var         = {::7.4e}", fv(report.Y_vec_std));
+        tools::log->info(" -- std_min         = {::7.4e}", fv(report.Y_min_std));
+        tools::log->info(" -- std_max         = {::7.4e}", fv(report.Y_max_std));
+        tools::log->info(" -- std_mid         = {::7.4e}", fv(report.Y_mid_std));
+        tools::log->info(" -- std_mov         = {::7.4e}", fv(report.Y_mov_std));
+        tools::log->info(" -- time            = {::7.4e}", times);
         // }
     }
 }
