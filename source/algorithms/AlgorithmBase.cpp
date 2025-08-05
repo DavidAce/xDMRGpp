@@ -123,7 +123,7 @@ AlgorithmBase::SaturationReport<T> AlgorithmBase::check_saturation(const std::ve
     report.Y_max.back() = std::max(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
     for(size_t i = 0; i < report.Y_vec.size(); ++i) report.Y_mid[i] = static_cast<T>(0.5) * (report.Y_min[i] + report.Y_max[i]);
     // The fix above to min/max causes the last two entries in Y_mid to be identical. Here we fix that.
-    report.Y_mid.back() = static_cast<T>(0.5) * (report.Y_mid.back() + report.Y_vec.back());
+    // report.Y_mid.back() = static_cast<T>(0.5) * (report.Y_mid.back() + report.Y_vec.back());
 
     for(size_t i = 1; i < report.Y_vec.size(); ++i) report.Y_dif[i] = report.Y_mid[i] - report.Y_mid[i - 1];
     report.Y_dif[0] = report.Y_dif[1]; // Fill with the second value
