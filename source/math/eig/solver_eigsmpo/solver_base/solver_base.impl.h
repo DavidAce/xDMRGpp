@@ -2157,13 +2157,13 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
         if(m.scale_log.size() != Y.cols()) m.scale_log = VectorReal::Zero(Y.cols());
 
         for(Eigen::Index j = 0; j < Y.cols(); ++j) {
-            auto       yj      = Y.col(j);
-            auto       h2yj    = H2Y.col(j);
-            MatrixType gj      = m.Gram.col(j);
-            RealScalar yj_norm = yj.norm();
+            auto       yj   = Y.col(j);
+            auto       h2yj = H2Y.col(j);
+            MatrixType gj   = m.Gram.col(j);
+            // RealScalar yj_norm = yj.norm();
             // RealScalar gj_norm           = gj.norm();
-            RealScalar refresh_threshold = RealScalar{0.1f} * yj_norm; // compares current sizes
-            yj.noalias() -= X * gj;                                    // Remove projection
+            // RealScalar refresh_threshold = RealScalar{0.1f} * yj_norm; // compares current sizes
+            yj.noalias() -= X * gj; // Remove projection
             h2yj = MultH2(yj);
             // if(gj_norm > refresh_threshold) {
             //     eiglog->info("rep {} block_h2_orthogonalize: recomputing h2y block {} | gj_norm {} > refresh threshold {}", rep, j, fp(gj_norm),

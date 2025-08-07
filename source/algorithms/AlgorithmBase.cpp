@@ -84,7 +84,6 @@ template size_t AlgorithmBase::count_convergence(const std::vector<fp32> &Y_vec,
 template size_t AlgorithmBase::count_convergence(const std::vector<fp64> &Y_vec, fp64 threshold, size_t start_idx);
 template size_t AlgorithmBase::count_convergence(const std::vector<fp128> &Y_vec, fp128 threshold, size_t start_idx);
 
-
 template<typename T>
 AlgorithmBase::SaturationReport<T> AlgorithmBase::check_saturation(const std::vector<T> &Y_vec, T sensitivity, SaturationPolicy policy) {
     SaturationReport<T> report;
@@ -119,9 +118,11 @@ AlgorithmBase::SaturationReport<T> AlgorithmBase::check_saturation(const std::ve
     for(size_t i = 0; i < report.Y_min.size(); ++i) report.Y_min[i] = std::max(report.Y_min[i], report.Y_nim[i]);
     for(size_t i = 0; i < report.Y_max.size(); ++i) report.Y_max[i] = std::min(report.Y_max[i], report.Y_xam[i]);
     // In the last point, the min/max gap shrinks to zero. Fix that by using the last two values
-    report.Y_min.back() = std::min(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
-    report.Y_max.back() = std::max(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
-    for(size_t i = 0; i < report.Y_vec.size(); ++i) report.Y_mid[i] = static_cast<T>(0.5) * (report.Y_min[i] + report.Y_max[i]);
+    // report.Y_min.back() = std::min(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
+    // report.Y_max.back() = std::max(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
+    for(size_t i = 0; i < report.Y_vec.size(); ++i)
+        report.Y_mid[i] = static_cast<T>(0.5) * (report.Y_min[i] + report.Y_max[i]); // The last two points will be identical!
+
     // The fix above to min/max causes the last two entries in Y_mid to be identical. Here we fix that.
     // report.Y_mid.back() = static_cast<T>(0.5) * (report.Y_mid.back() + report.Y_vec.back());
 
@@ -170,10 +171,10 @@ AlgorithmBase::SaturationReport<T> AlgorithmBase::check_saturation(const std::ve
         bool min_sat     = report.Y_min_std[i] < sensitivity and has_flag(policy, SaturationPolicy::min);
         bool max_sat     = report.Y_max_std[i] < sensitivity and has_flag(policy, SaturationPolicy::max);
         // bool mid_sat     = report.Y_mid_std[i] < fluctuation and has_flag(policy, SaturationPolicy::mid);
-        bool mid_sat     = report.Y_mid_std[i] < sensitivity and has_flag(policy, SaturationPolicy::mid);
-        bool mov_sat     = report.Y_mov_std[i] < sensitivity and has_flag(policy, SaturationPolicy::mov);
-        bool dif_sat     = report.Y_dif_avg[i] < sensitivity and has_flag(policy, SaturationPolicy::dif);
-        report.Y_sat[i]  = vec_sat or avg_sat or med_sat or min_sat or max_sat or mid_sat or mov_sat or dif_sat;
+        bool mid_sat    = report.Y_mid_std[i] < sensitivity and has_flag(policy, SaturationPolicy::mid);
+        bool mov_sat    = report.Y_mov_std[i] < sensitivity and has_flag(policy, SaturationPolicy::mov);
+        bool dif_sat    = report.Y_dif_avg[i] < sensitivity and has_flag(policy, SaturationPolicy::dif);
+        report.Y_sat[i] = vec_sat or avg_sat or med_sat or min_sat or max_sat or mid_sat or mov_sat or dif_sat;
     }
 
     // Since the last element in Y_vec is always zero, Y_sat is always zero. we just copy the saturation state of the second to last element.
