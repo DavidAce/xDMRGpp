@@ -547,19 +547,19 @@
       "name": "tetralith",
       "displayName": "Release|march=native|conan|mkl",
       "configurePreset": "tetralith",
-      "jobs": 16
+      "jobs": 32
     },
     {
       "name": "tetralith-debug",
       "displayName": "Debug|conan|mkl",
       "configurePreset": "tetralith-debug",
-      "jobs": 16
+      "jobs": 32
     },
     {
       "name": "pdc",
       "displayName": "Release|march=native|conan|openblas",
       "configurePreset": "pdc",
-      "jobs": 16
+      "jobs": 32
     },
     {
       "name": "github-actions-cmake",
