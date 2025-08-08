@@ -29,6 +29,10 @@ namespace tools::h5io {
                                       long depth = 0, bool usecache = true);
 
     template<typename H, typename C>
+    void saveEnvironment(const h5pp::File &h5_src, h5pp::File &h5_tgt, std::unordered_map<std::string, InfoId<h5pp::TableInfo>> &tgtModelDb,
+                         const ModelId<H, C> &modelId, const FileId &fileId);
+
+    template<typename H, typename C>
     std::vector<ModelKey> loadModel(const h5pp::File &h5_src, std::unordered_map<std::string, ModelId<H, C>> &srcModelDb, const std::vector<ModelKey> &srcKeys);
 
     template<typename H, typename C>

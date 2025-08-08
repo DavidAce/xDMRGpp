@@ -64,6 +64,6 @@ def dmrg_avg(args):
 if __name__ == '__main__':
     # batch = get_batches('fDMRG', ['fdmrg-see-test3'], states=['state_emin'], basedir='/mnt/WDB-AN1500/mbl_transition')
     # batch = get_batches('fDMRG', ['fdmrg6-see'], states=['state_emin'], basedir='/mnt/WDB-AN1500/mbl_transition')
-    batch = get_batches('xDMRG', ['xdmrg3-letsgo'], states=['state_emid'], basedir='/mnt/WDB-AN1500/mbl_transition')
+    batch = get_batches('xDMRG', ['xdmrg6-gdplusk'], states=['state_emid'], basedir='/mnt/WDB-AN1500/mbl_transition')
     batch.clear = True
     dmrg_avg(batch)

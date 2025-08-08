@@ -24,10 +24,10 @@ struct BufferedTableInfo {
     h5pp::TableInfo              *info = nullptr;
     std::vector<ContiguousBuffer> recordBuffer;
     size_t                        maxRecords = 100; // Will hold maxRecords seeds for each crono iter. We would like this to be max 1 GB worth of data
-                                  BufferedTableInfo();
-                                  BufferedTableInfo(h5pp::TableInfo *info_);
-    BufferedTableInfo            &operator=(h5pp::TableInfo *info_);
-    ~                             BufferedTableInfo();
+    BufferedTableInfo();
+    BufferedTableInfo(h5pp::TableInfo *info_);
+    BufferedTableInfo &operator=(h5pp::TableInfo *info_);
+    ~BufferedTableInfo();
 
     void    insert(const std::vector<std::byte> &entry, hsize_t index /* index in units of table entries */);
     void    insert(const std::vector<std::byte>::const_iterator begin, const std::vector<std::byte>::const_iterator end, hsize_t index);
@@ -51,11 +51,11 @@ struct FileStats {
 };
 
 struct FileId {
-    long                      seed      = -1;
-    char                      path[512] = {};
-    size_t                    hash      = {};
-                              FileId()  = default;
-                              FileId(long seed_, std::string_view path_, size_t hash_);
+    long   seed      = -1;
+    char   path[512] = {};
+    size_t hash      = {};
+    FileId()         = default;
+    FileId(long seed_, std::string_view path_, size_t hash_);
     [[nodiscard]] std::string string() const;
 };
 
@@ -121,9 +121,9 @@ struct ModelId {
 
 struct PathId {
     public:
-    std::string               src_path, tgt_path;
-    std::string               base, algo, state;
-                              PathId(std::string_view base_, std::string_view algo_, std::string_view state_);
+    std::string src_path, tgt_path;
+    std::string base, algo, state;
+    PathId(std::string_view base_, std::string_view algo_, std::string_view state_);
     [[nodiscard]] bool        match(std::string_view algo_pattern, std::string_view state_pattern) const;
     [[nodiscard]] std::string dset_path(std::string_view dsetname) const;
     [[nodiscard]] std::string table_path(std::string_view tablename) const;
@@ -148,13 +148,13 @@ struct InfoId {
     std::unordered_map<long, hsize_t> db;
 
     public:
-    InfoType info     = InfoType();
-             InfoId() = default;
-             InfoId(long seed_, hsize_t index_);
-             InfoId(const InfoType &info_);
-    bool     db_modified() const { return modified; }
-    bool     has_index(long seed) const { return db.find(seed) != db.end(); }
-    hsize_t  get_index(long seed) const {
+    InfoType info = InfoType();
+    InfoId()      = default;
+    InfoId(long seed_, hsize_t index_);
+    InfoId(const InfoType &info_);
+    bool    db_modified() const { return modified; }
+    bool    has_index(long seed) const { return db.find(seed) != db.end(); }
+    hsize_t get_index(long seed) const {
         auto res = db.find(seed);
         if(res != db.end())
             return res->second;
@@ -176,12 +176,12 @@ struct InfoId<BufferedTableInfo> {
     std::vector<std::pair<long, hsize_t>> db;
 
     public:
-    h5pp::TableInfo   info     = h5pp::TableInfo();
-    BufferedTableInfo buff     = BufferedTableInfo();
-                      InfoId() = default;
-                      InfoId(long seed_, hsize_t index_);
-                      InfoId(const h5pp::TableInfo &info_);
-    InfoId           &operator=(const h5pp::TableInfo &info_);
+    h5pp::TableInfo   info = h5pp::TableInfo();
+    BufferedTableInfo buff = BufferedTableInfo();
+    InfoId()               = default;
+    InfoId(long seed_, hsize_t index_);
+    InfoId(const h5pp::TableInfo &info_);
+    InfoId &operator=(const h5pp::TableInfo &info_);
 
     void allocateBuffers(size_t expectedIters) {
         buff.allocateBuffers(expectedIters);
@@ -217,25 +217,25 @@ struct InfoId<BufferedTableInfo> {
 };
 
 struct SeedId {
-    long                      seed     = -1;
-    hsize_t                   index    = std::numeric_limits<hsize_t>::max();
-                              SeedId() = default;
-                              SeedId(long seed_, hsize_t index_) : seed(seed_), index(index_) {}
+    long    seed  = -1;
+    hsize_t index = std::numeric_limits<hsize_t>::max();
+    SeedId()      = default;
+    SeedId(long seed_, hsize_t index_) : seed(seed_), index(index_) {}
     [[nodiscard]] std::string string() const { return h5pp::format("seed {} | index {}", index, seed); }
 };
 
 class H5T_FileId {
     public:
     static inline h5pp::hid::h5t h5_type;
-                                 H5T_FileId();
-    static void                  register_table_type();
+    H5T_FileId();
+    static void register_table_type();
 };
 
 class H5T_SeedId {
     public:
     static inline h5pp::hid::h5t h5_type;
-                                 H5T_SeedId();
-    static void                  register_table_type();
+    H5T_SeedId();
+    static void register_table_type();
 };
 
 class H5T_profiling {
@@ -248,6 +248,57 @@ class H5T_profiling {
         size_t count;
     };
 
-                H5T_profiling();
+    H5T_profiling();
     static void register_table_type();
+};
+
+class H5T_EnvBuild {
+    static inline h5pp::hid::h5t h5_type;
+    public:
+
+    struct EnvBuild {
+        h5pp::fstr_t<16>  compiler;
+        h5pp::fstr_t<512> compiler_flags;
+        h5pp::fstr_t<512> linker_flags;
+        h5pp::fstr_t<256> cpu_type;
+        h5pp::fstr_t<32>  datetime;
+        h5pp::fstr_t<64>  hostname;
+        h5pp::fstr_t<64>  os_name;
+        h5pp::fstr_t<64>  os_platform;
+        h5pp::fstr_t<64>  os_release;
+        h5pp::fstr_t<64>  os_version;
+    };
+    H5T_EnvBuild();
+    static void register_table_type();
+    static const h5pp::hid::h5t get_h5_type();
+};
+
+class H5T_EnvExec {
+    static inline h5pp::hid::h5t h5_type;
+    public:
+
+    struct EnvExec {
+        h5pp::fstr_t<256> cpu_type;
+        h5pp::fstr_t<32>  datetime;
+        h5pp::fstr_t<64>  hostname;
+    };
+    H5T_EnvExec();
+    static void register_table_type();
+    static const h5pp::hid::h5t get_h5_type();
+
+};
+
+class H5T_EnvGit {
+    static inline h5pp::hid::h5t h5_type;
+    public:
+
+    struct EnvGit {
+        h5pp::fstr_t<64> branch;
+        h5pp::fstr_t<64> commit;
+        h5pp::fstr_t<64> revision;
+    };
+    H5T_EnvGit();
+    static void register_table_type();
+    static const h5pp::hid::h5t get_h5_type();
+
 };

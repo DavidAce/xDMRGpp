@@ -79,6 +79,7 @@ namespace tools::h5db {
         std::unordered_map<std::string, InfoId<BufferedTableInfo>> rbds;
         std::unordered_map<std::string, InfoId<BufferedTableInfo>> rtes;
         std::unordered_map<std::string, InfoId<h5pp::TableInfo>>   model;
+        std::unordered_map<std::string, InfoId<h5pp::TableInfo>>   env;
         void                                                       clear() {
             file.clear();
             dset.clear();
@@ -88,6 +89,7 @@ namespace tools::h5db {
             rbds.clear();
             rtes.clear();
             model.clear();
+            env.clear();
         }
     };
 

@@ -510,9 +510,10 @@ int main(int argc, char *argv[]) {
                 t_open.toc();
                 {
                     // Start by copying the environment metadata like git version. This should be the same for all files, so we only do it once
-                    if(not h5_tgt_part.linkExists(".env")) { h5_tgt_part.copyLinkFromFile(".env", h5_src.getFilePath(), ".env"); }
+                    // if(not h5_tgt_part.linkExists(".env")) { h5_tgt_part.copyLinkFromFile(".env", h5_src.getFilePath(), ".env"); }
                     //                    auto tgtKeepOpen = h5_tgt_part.getFileHandleToken();
                     //                    auto srcKeepOpen = h5_src.getFileHandleToken();
+
                     switch(model) {
                         case Model::SDUAL: {
                             tools::h5io::merge<ModelId<sdual, nocircuit>>(h5_tgt_part, h5_src, fileId, keys, tgtdb);
@@ -539,6 +540,7 @@ int main(int argc, char *argv[]) {
             tools::h5db::saveDatabase(h5_tgt_part, tgtdb.rbds);
             tools::h5db::saveDatabase(h5_tgt_part, tgtdb.rtes);
             tools::h5db::saveDatabase(h5_tgt_part, tgtdb.dset);
+            tools::h5db::saveDatabase(h5_tgt_part, tgtdb.env);
 
             tgtdb.file.clear();
             tgtdb.model.clear();
@@ -548,6 +550,7 @@ int main(int argc, char *argv[]) {
             tgtdb.rbds.clear();
             tgtdb.rtes.clear();
             tgtdb.dset.clear();
+            tgtdb.env.clear();
 
             // TODO: Put the lines below in a "at quick exit" function
             tools::h5io::writeProfiling(h5_tgt_part);
@@ -573,7 +576,6 @@ int main(int argc, char *argv[]) {
         auto failpath = tgt_dir / "failed.job";
         auto failfile = std::ofstream(failpath.string(), std::ios::trunc | std::ios_base::out);
 
-
         for(const auto &obj : h5pp::fs::directory_iterator(tgt_dir, h5pp::fs::directory_options::follow_directory_symlink)) {
             // Take care hdf5 files
             if(obj.is_regular_file() and obj.path().extension() == ".h5") {
@@ -581,18 +583,28 @@ int main(int argc, char *argv[]) {
                     // Found a file that we can link!
                     auto h5_ext = h5pp::File(obj.path().string(), h5pp::FilePermission::READONLY, verbosity_h5pp);
                     // Find the path to the algorithm in this external file
-                    auto algo_group = h5_ext.findGroups(algo, "/", 1);
-                    if(algo_group.empty()) {
-                        tools::logger::log->error("Could not find algo group {} in external file {}: [{}]", algo, obj.path().string(), algo_group);
+                    auto algo_groups = h5_ext.findGroups(algo, "/", -1, -1); // Need any number of hits (-1) at any recursive depth (-1)
+                    if(algo_groups.empty()) {
+                        tools::logger::log->error("Could not find algo group {} in external file {}: [{}]", algo, obj.path().string(), algo_groups);
                         continue;
-                        //                        throw std::runtime_error(
-                        //                            h5pp::format("Could not find algo group {} in external file {}: [{}]", tgt_algo, obj.path().string(),
-                        //                            algo_group));
                     }
+                    tools::logger::log->info("algo: {} | algo_groups: {}", algo, algo_groups);
+                    for(const auto &algo_group : algo_groups) {
+                        if(algo_group.find(".env") != algo_group.npos) {
+                            // We don't care about the environment group here
+                            continue;
+                        }
+                        bool linkExists = h5_tgt.linkExists(algo_group);
+                        if(linkExists) {
+                            tools::logger::log->error("The link [{}] is already in the target file [{}]", algo_group, h5_tgt.getFileName());
+                            continue;
+                        }
 
-                    auto tgt_link = h5pp::fs::proximate(obj.path(), tgt_dir);
-                    tools::logger::log->info("Creating external link: {} -> {}", algo_group[0], tgt_link.string());
-                    h5_tgt.createExternalLink(tgt_link.string(), algo_group[0], algo_group[0]);
+                        auto tgt_link = h5pp::fs::proximate(obj.path(), tgt_dir);
+                        tools::logger::log->info("Creating external link: {} -> {}", algo_group, tgt_link.string());
+
+                        h5_tgt.createExternalLink(tgt_link.string(), algo_group, algo_group);
+                    }
                 }
             }
         }

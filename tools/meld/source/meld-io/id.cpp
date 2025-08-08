@@ -142,7 +142,7 @@ bool PathId::match(std::string_view algo_pattern, std::string_view state_pattern
 [[nodiscard]] std::string PathId::table_path(std::string_view tablename) const { return h5pp::format("{}/{}/{}/tables/{}", base, algo, state, tablename); }
 
 H5T_FileId::H5T_FileId() { register_table_type(); }
-void        H5T_FileId::register_table_type() {
+void H5T_FileId::register_table_type() {
     if(h5_type.valid()) return;
     auto           t_scope  = tid::tic_scope(__FUNCTION__);
     h5pp::hid::h5t H5T_PATH = H5Tcopy(H5T_C_S1);
@@ -156,7 +156,7 @@ void        H5T_FileId::register_table_type() {
 }
 
 H5T_SeedId::H5T_SeedId() { register_table_type(); }
-void        H5T_SeedId::register_table_type() {
+void H5T_SeedId::register_table_type() {
     auto t_scope = tid::tic_scope(__FUNCTION__);
     if(h5_type.valid()) return;
     h5_type = H5Tcreate(H5T_COMPOUND, sizeof(SeedId));
@@ -165,7 +165,7 @@ void        H5T_SeedId::register_table_type() {
 }
 
 H5T_profiling::H5T_profiling() { register_table_type(); }
-void           H5T_profiling::register_table_type() {
+void H5T_profiling::register_table_type() {
     if(h5_type.valid()) return;
     h5_type = H5Tcreate(H5T_COMPOUND, sizeof(item));
     H5Tinsert(h5_type, "time", HOFFSET(item, time), H5T_NATIVE_DOUBLE);
@@ -250,5 +250,51 @@ const h5pp::hid::h5t majorana::get_h5_type() {
     H5Tinsert(h5_type, "g", HOFFSET(majorana, g), H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "delta", HOFFSET(majorana, delta), H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "distribution", HOFFSET(majorana, distribution), h5pp::vstr_t::get_h5type());
+    return h5_type;
+}
+
+H5T_EnvBuild::H5T_EnvBuild() { register_table_type(); }
+void H5T_EnvBuild::register_table_type() {
+    h5_type = H5Tcreate(H5T_COMPOUND, sizeof(EnvBuild));
+    H5Tinsert(h5_type, "compiler", HOFFSET(EnvBuild, compiler), h5pp::fstr_t<16>::get_h5type());
+    H5Tinsert(h5_type, "compiler_flags", HOFFSET(EnvBuild, compiler_flags), h5pp::fstr_t<512>::get_h5type());
+    H5Tinsert(h5_type, "linker_flags", HOFFSET(EnvBuild, linker_flags), h5pp::fstr_t<512>::get_h5type());
+    H5Tinsert(h5_type, "cpu_type", HOFFSET(EnvBuild, cpu_type), h5pp::fstr_t<256>::get_h5type());
+    H5Tinsert(h5_type, "datetime", HOFFSET(EnvBuild, datetime), h5pp::fstr_t<32>::get_h5type());
+    H5Tinsert(h5_type, "hostname", HOFFSET(EnvBuild, hostname), h5pp::fstr_t<64>::get_h5type());
+    H5Tinsert(h5_type, "os_name", HOFFSET(EnvBuild, os_name), h5pp::fstr_t<64>::get_h5type());
+    H5Tinsert(h5_type, "os_platform", HOFFSET(EnvBuild, os_platform), h5pp::fstr_t<64>::get_h5type());
+    H5Tinsert(h5_type, "os_release", HOFFSET(EnvBuild, os_release), h5pp::fstr_t<64>::get_h5type());
+    H5Tinsert(h5_type, "os_version", HOFFSET(EnvBuild, os_version), h5pp::fstr_t<64>::get_h5type());
+}
+const h5pp::hid::h5t H5T_EnvBuild::get_h5_type() {
+    if(h5_type.valid()) return h5_type;
+    register_table_type();
+    return h5_type;
+}
+
+H5T_EnvExec::H5T_EnvExec() { register_table_type(); }
+void H5T_EnvExec::register_table_type() {
+    h5_type = H5Tcreate(H5T_COMPOUND, sizeof(EnvExec));
+    H5Tinsert(h5_type, "cpu_type", HOFFSET(EnvExec, cpu_type), h5pp::fstr_t<256>::get_h5type());
+    H5Tinsert(h5_type, "datetime", HOFFSET(EnvExec, datetime), h5pp::fstr_t<32>::get_h5type());
+    H5Tinsert(h5_type, "hostname", HOFFSET(EnvExec, hostname), h5pp::fstr_t<64>::get_h5type());
+}
+const h5pp::hid::h5t H5T_EnvExec::get_h5_type() {
+    if(h5_type.valid()) return h5_type;
+    register_table_type();
+    return h5_type;
+}
+
+H5T_EnvGit::H5T_EnvGit() { register_table_type(); }
+void H5T_EnvGit::register_table_type() {
+    h5_type = H5Tcreate(H5T_COMPOUND, sizeof(EnvGit));
+    H5Tinsert(h5_type, "branch", HOFFSET(EnvGit, branch), h5pp::fstr_t<64>::get_h5type());
+    H5Tinsert(h5_type, "commit", HOFFSET(EnvGit, commit), h5pp::fstr_t<64>::get_h5type());
+    H5Tinsert(h5_type, "revision", HOFFSET(EnvGit, revision), h5pp::fstr_t<64>::get_h5type());
+}
+const h5pp::hid::h5t H5T_EnvGit::get_h5_type() {
+    if(h5_type.valid()) return h5_type;
+    register_table_type();
     return h5_type;
 }

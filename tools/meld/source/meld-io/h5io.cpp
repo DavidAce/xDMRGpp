@@ -207,6 +207,7 @@ namespace tools::h5io {
         }
         return result;
     }
+
     template<typename H, typename C>
     std::vector<ModelKey> loadModel(const h5pp::File &h5_src, std::unordered_map<std::string, ModelId<H, C>> &srcModelDb,
                                     const std::vector<ModelKey> &srcKeys) {
@@ -488,8 +489,9 @@ namespace tools::h5io {
                 }
                 //            tools::logger::log->info("<{}> : numRecords: {}", sfinae::type_name<KeyT>(), numRecords);
                 if(std::any_of(tableRecords.begin(), tableRecords.end(), [&tableRecords](auto rec) -> bool { return rec.second != tableRecords[0].second; }))
-                    tools::logger::log->warn("unequal number of records in {} tables:\n{}\n{}\n", keys.front().classtag,h5_src.getFilePath(), fmt::join(tableRecords, "\n"));
-                    // throw except::runtime_error("unequal number of records in {} tables:\n{}\n", keys.front().classtag, fmt::join(tableRecords, "\n"));
+                    tools::logger::log->warn("unequal number of records in {} tables:\n{}\n{}\n", keys.front().classtag, h5_src.getFilePath(),
+                                             fmt::join(tableRecords, "\n"));
+                // throw except::runtime_error("unequal number of records in {} tables:\n{}\n", keys.front().classtag, fmt::join(tableRecords, "\n"));
             }
         }
         return keys;
@@ -510,13 +512,23 @@ namespace tools::h5io {
         // Start finding the required components in the source
         auto groups = tools::h5io::findKeys(h5_src, "/", keys.get_algos(), -1, 0);
         for(const auto &algo : groups) {
-            // Start by extracting the model
+            // Extract the model
             auto modelKeys = tools::h5io::loadModel(h5_src, srcdb.model, keys.models);
             if(modelKeys.size() != 1) throw std::runtime_error("Exactly 1 model has to be loaded into keys");
             auto &modelId = srcdb.model[modelKeys.back().key];
             // Save the model to file if it hasn't
             tools::h5io::saveModel(h5_src, h5_tgt, tgtdb.model, modelId, fileId);
-            auto tgt_base = modelId.basepath;
+            auto tgt_base     = modelId.basepath;
+            auto tgt_env_base = fmt::format("{}/{}/.env", modelId.basepath, modelId.algorithm);
+
+            try {
+                auto t_xfer = tid::tic_scope("xfer");
+                tools::h5xf::transferEnvironment(h5_tgt, tgtdb.env, h5_src, tgt_env_base, fileId);
+            } catch(const std::runtime_error &ex) {
+                tools::logger::log->warn("Transfer failed in [{}]: {}", tgt_env_base, ex.what());
+                saveFailedJob(h5_src, "transfer failed", ex);
+            }
+
             // Next search for tables and datasets in the source file
             // and transfer them to the target file
             auto state_groups = tools::h5io::findKeys(h5_src, algo, keys.get_states(), -1, 0);

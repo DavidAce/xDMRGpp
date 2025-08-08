@@ -12,7 +12,7 @@ namespace tools::h5xf {
     namespace internal {
         void copy_dset(h5pp::File &h5_tgt, const h5pp::File &h5_src, h5pp::DsetInfo &tgtInfo, h5pp::DsetInfo &srcInfo, hsize_t index, size_t axis,
                        SlabSelect ssel = SlabSelect::FULL) {
-            auto           t_scope = tid::tic_scope(__FUNCTION__);
+            auto t_scope = tid::tic_scope(__FUNCTION__);
             h5pp::DataInfo dataInfo;
             // The axis parameter must be  < srcInfo.rank+1
             if(axis >= srcInfo.dsetDims->size()) {
@@ -23,12 +23,14 @@ namespace tools::h5xf {
                 dataInfo.dataDims = std::vector<hsize_t>(axis + 1, 1ull);
                 std::copy_n(srcInfo.dsetDims->begin(), srcInfo.dsetDims->size(), dataInfo.dataDims->begin());
                 dataInfo.h5Space = h5pp::util::getMemSpace(dataInfo.dataSize.value(), dataInfo.dataDims.value());
+                dataInfo.h5Type  = srcInfo.h5Type;
             } else {
-                dataInfo.dataDims = srcInfo.dsetDims;
-                dataInfo.dataSize = srcInfo.dsetSize;
                 dataInfo.dataByte = srcInfo.dsetByte;
+                dataInfo.dataSize = srcInfo.dsetSize;
                 dataInfo.dataRank = srcInfo.dsetRank;
+                dataInfo.dataDims = srcInfo.dsetDims;
                 dataInfo.h5Space  = srcInfo.h5Space;
+                dataInfo.h5Type   = srcInfo.h5Type;
             }
             tgtInfo.resizePolicy = h5pp::ResizePolicy::GROW;
             // tgtInfo.dsetSlab                   = h5pp::Hyperslab();
@@ -152,6 +154,77 @@ namespace tools::h5xf {
         };
     }
 
+    void transferEnvironment(h5pp::File &h5_tgt, std::unordered_map<std::string, InfoId<h5pp::TableInfo>> &tgtTableDb, const h5pp::File &h5_src,
+                             std::string tgtEnvBase, const FileId &fileId) {
+        auto t_scope = tid::tic_scope(__FUNCTION__);
+        // tools::logger::log->trace("Copying environment to [{}]", tgtEnvBase);
+        {
+            auto envBuild           = H5T_EnvBuild::EnvBuild();
+            envBuild.compiler       = h5_src.readDataset<std::string>(".env/xDMRG++/build/compiler");
+            envBuild.compiler_flags = h5_src.readDataset<std::string>(".env/xDMRG++/build/compiler_flags");
+            envBuild.linker_flags   = h5_src.readDataset<std::string>(".env/xDMRG++/build/linker_flags");
+            envBuild.cpu_type       = h5_src.readDataset<std::string>(".env/xDMRG++/build/cpu_type");
+            envBuild.datetime       = h5_src.readDataset<std::string>(".env/xDMRG++/build/datetime");
+            envBuild.hostname       = h5_src.readDataset<std::string>(".env/xDMRG++/build/hostname");
+            envBuild.os_name        = h5_src.readDataset<std::string>(".env/xDMRG++/build/os_name");
+            envBuild.os_platform    = h5_src.readDataset<std::string>(".env/xDMRG++/build/os_platform");
+            envBuild.os_release     = h5_src.readDataset<std::string>(".env/xDMRG++/build/os_release");
+            envBuild.os_version     = h5_src.readDataset<std::string>(".env/xDMRG++/build/os_version");
+
+            auto envExec     = H5T_EnvExec::EnvExec();
+            envExec.cpu_type = h5_src.readDataset<std::string>(".env/xDMRG++/exec/cpu_type");
+            envExec.datetime = h5_src.readDataset<std::string>(".env/xDMRG++/exec/datetime");
+            envExec.hostname = h5_src.readDataset<std::string>(".env/xDMRG++/exec/hostname");
+
+            auto envGit     = H5T_EnvGit::EnvGit();
+            envGit.branch   = h5_src.readDataset<std::string>(".env/xDMRG++/git/branch");
+            envGit.commit   = h5_src.readDataset<std::string>(".env/xDMRG++/git/commit");
+            envGit.revision = h5_src.readDataset<std::string>(".env/xDMRG++/git/revision");
+
+            auto tgtPathBuild = fmt::format("{}/build", tgtEnvBase);
+            auto tgtPathExec  = fmt::format("{}/exec", tgtEnvBase);
+            auto tgtPathGit   = fmt::format("{}/git", tgtEnvBase);
+            if(tgtTableDb.find(tgtPathBuild) == tgtTableDb.end()) {
+                auto t_create = tid::tic_scope("createTable");
+                tools::logger::log->debug("Adding target table {}", tgtPathBuild);
+                h5pp::TableInfo tableInfo = h5_tgt.getTableInfo(tgtPathBuild);
+                if(not tableInfo.tableExists.value()) tableInfo = h5_tgt.createTable(H5T_EnvBuild::get_h5_type(), tgtPathBuild, "Build", std::nullopt, true);
+                tgtTableDb[tgtPathBuild] = tableInfo;
+            }
+            if(tgtTableDb.find(tgtPathExec) == tgtTableDb.end()) {
+                auto t_create = tid::tic_scope("createTable");
+                tools::logger::log->debug("Adding target table {}", tgtPathExec);
+                h5pp::TableInfo tableInfo = h5_tgt.getTableInfo(tgtPathExec);
+                if(not tableInfo.tableExists.value()) tableInfo = h5_tgt.createTable(H5T_EnvExec::get_h5_type(), tgtPathExec, "Execution", std::nullopt, true);
+                tgtTableDb[tgtPathExec] = tableInfo;
+            }
+            if(tgtTableDb.find(tgtPathGit) == tgtTableDb.end()) {
+                auto t_create = tid::tic_scope("createTable");
+                tools::logger::log->debug("Adding target table {}", tgtPathGit);
+                h5pp::TableInfo tableInfo = h5_tgt.getTableInfo(tgtPathGit);
+                if(not tableInfo.tableExists.value()) tableInfo = h5_tgt.createTable(H5T_EnvGit::get_h5_type(), tgtPathGit, "Git", std::nullopt, true);
+                tgtTableDb[tgtPathGit] = tableInfo;
+            }
+            auto &tgtIdBuild = tgtTableDb[tgtPathBuild];
+            auto &tgtIdExec  = tgtTableDb[tgtPathExec];
+            auto &tgtIdGit   = tgtTableDb[tgtPathGit];
+
+            // Determine the target index where to copy this record
+            hsize_t indexBuild = tgtIdBuild.get_index(fileId.seed); // Positive if it has been read already, numeric_limits::max if it's new
+            hsize_t indexExec  = tgtIdExec.get_index(fileId.seed);  // Positive if it has been read already, numeric_limits::max if it's new
+            hsize_t indexGit   = tgtIdGit.get_index(fileId.seed);   // Positive if it has been read already, numeric_limits::max if it's new
+            auto    t_copy     = tid::tic_scope("copyTableRecords");
+            tools::logger::log->trace("Transferring environment tables");
+            h5_tgt.writeTableRecords(envBuild, tgtPathBuild, indexBuild, 1);
+            h5_tgt.writeTableRecords(envExec, tgtPathExec, indexExec, 1);
+            h5_tgt.writeTableRecords(envGit, tgtPathGit, indexGit, 1);
+            // Update the database
+            tgtIdBuild.insert(fileId.seed, indexBuild);
+            tgtIdExec.insert(fileId.seed, indexExec);
+            tgtIdGit.insert(fileId.seed, indexGit);
+        }
+    }
+
     void transferDatasets(h5pp::File &h5_tgt, std::unordered_map<std::string, InfoId<h5pp::DsetInfo>> &tgtDsetDb, const h5pp::File &h5_src,
                           std::unordered_map<std::string, h5pp::DsetInfo> &srcDsetDb, const PathId &pathid, const std::vector<DsetKey> &srcDsetKeys,
                           const FileId &fileId) {
@@ -265,12 +338,12 @@ namespace tools::h5xf {
                         size_t sfidx = static_cast<size_t>(std::distance(srcFnames.begin(), srcFiter)); // Source field idx
                         if(srcFsizes[sfidx] != tgtFsize) continue;
                         // We have found the corresponding field index in source. Now copy that field to target
-                        //auto &srcFname = srcFnames.at(sfidx);
-                        //auto &srcFsize = srcFsizes.at(sfidx);
-                        //auto &srcFofst = srcFofsts.at(sfidx);
-                        auto  srcBegin = srcBuffer.begin() + rec * srcInfo.recordBytes.value() + srcFofsts[sfidx];
-                        auto  srcEnd   = srcBegin + srcFsizes.at(sfidx);
-                        auto  tgtBegin = tgtBuffer.begin() + rec * tgtInfo.recordBytes.value() + tgtFofst;
+                        // auto &srcFname = srcFnames.at(sfidx);
+                        // auto &srcFsize = srcFsizes.at(sfidx);
+                        // auto &srcFofst = srcFofsts.at(sfidx);
+                        auto srcBegin = srcBuffer.begin() + rec * srcInfo.recordBytes.value() + srcFofsts[sfidx];
+                        auto srcEnd   = srcBegin + srcFsizes.at(sfidx);
+                        auto tgtBegin = tgtBuffer.begin() + rec * tgtInfo.recordBytes.value() + tgtFofst;
                         std::copy(srcBegin, srcEnd, tgtBegin);
                     }
                 }
