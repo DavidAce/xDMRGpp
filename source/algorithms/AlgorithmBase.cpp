@@ -118,8 +118,8 @@ AlgorithmBase::SaturationReport<T> AlgorithmBase::check_saturation(const std::ve
     for(size_t i = 0; i < report.Y_min.size(); ++i) report.Y_min[i] = std::max(report.Y_min[i], report.Y_nim[i]);
     for(size_t i = 0; i < report.Y_max.size(); ++i) report.Y_max[i] = std::min(report.Y_max[i], report.Y_xam[i]);
     // In the last point, the min/max gap shrinks to zero. Fix that by using the last two values
-    // report.Y_min.back() = std::min(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
-    // report.Y_max.back() = std::max(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
+    report.Y_min.back() = std::min(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
+    report.Y_max.back() = std::max(report.Y_vec.rbegin()[0], report.Y_vec.rbegin()[1]);
     for(size_t i = 0; i < report.Y_vec.size(); ++i)
         report.Y_mid[i] = static_cast<T>(0.5) * (report.Y_min[i] + report.Y_max[i]); // The last two points will be identical!
 
