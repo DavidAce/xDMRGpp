@@ -90,9 +90,15 @@ target_link_libraries(xdmrg++-deps INTERFACE
             )
 
 if(DMRG_ENABLE_TBLIS)
-    pkg_install(tblis)
-    find_package(tblis REQUIRED MODULE BYPASS_PROVIDER)
-    target_link_libraries(xdmrg++-deps INTERFACE tblis::tblis)
+#    pkg_install(tblis)
+#    find_package(tblis REQUIRED MODULE BYPASS_PROVIDER)
+#    target_link_libraries(xdmrg++-deps INTERFACE tblis::tblis)
+
+    pkg_install(TBLIS)
+    find_package(TCI REQUIRED CONFIG BYPASS_PROVIDER)
+    find_package(MArray REQUIRED CONFIG BYPASS_PROVIDER)
+    find_package(TBLIS REQUIRED CONFIG BYPASS_PROVIDER)
+    target_link_libraries(xdmrg++-deps INTERFACE TBLIS::tblis)
 endif()
 
 # Configure Eigen

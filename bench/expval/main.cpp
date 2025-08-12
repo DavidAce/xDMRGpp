@@ -23,7 +23,7 @@ using namespace tools::common::contraction;
 #if defined(DMRG_ENABLE_TBLIS)
 template<typename ea_type, typename eb_type, typename ec_type>
 void contract_tblis(const TensorRead<ea_type> &ea, const TensorRead<eb_type> &eb, TensorWrite<ec_type> &ec, const tblis::label_vector &la,
-                    const tblis::label_vector &lb, const tblis::label_vector &lc, const tblis::tblis_config_s *tblis_config) {
+                    const tblis::label_vector &lb, const tblis::label_vector &lc, const tblis::tblis_config_s *tblis_cntx) {
     const auto &ea_ref = static_cast<const ea_type &>(ea);
     const auto &eb_ref = static_cast<const eb_type &>(eb);
     auto       &ec_ref = static_cast<ec_type &>(ec);
@@ -43,8 +43,8 @@ void contract_tblis(const TensorRead<ea_type> &ea, const TensorRead<eb_type> &eb
     tblis::tblis_tensor B_s(tb);
     tblis::tblis_tensor C_s(beta, tc);
 
-    // tblis_tensor_mult(nullptr, tblis_config, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
-    tblis_tensor_mult(nullptr, tblis_config, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
+    // tblis_tensor_mult(nullptr, tblis_cntx, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
+    tblis_tensor_mult(nullptr, tblis_cntx, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
 }
 
 template<typename res_type, typename mps_type, typename env_type>

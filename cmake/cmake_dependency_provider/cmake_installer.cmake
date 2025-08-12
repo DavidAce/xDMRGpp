@@ -46,7 +46,8 @@ function(pkg_install_dependencies  package_name)
         pkg_install(primme)
 
         if(DMRG_ENABLE_TBLIS)
-            pkg_install(tblis)
+#            pkg_install(tblis)
+            pkg_install(TBLIS)
         endif()
 
         set(PKG_INSTALL_SUCCESS TRUE CACHE BOOL "PKG dependency install has been invoked and was successful")

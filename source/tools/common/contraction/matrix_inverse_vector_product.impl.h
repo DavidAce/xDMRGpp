@@ -51,7 +51,7 @@ tools::common::contraction::VectorType<Scalar> tools::common::contraction::matri
     auto               rhs = Eigen::Map<const VectorType<Scalar>>(rhs_ptr, MatrixOp.rows());
     VectorType<Scalar> res;
     auto               run = [&](auto &solver) {
-        auto t_jdop = tid::tic_token("jdop", tid::level::higher);
+        auto t_jdop = tid::tic_token("matinv", tid::level::higher);
         solver.setMaxIterations(cfg.maxiters);
         solver.setTolerance(cfg.tolerance);
         solver.preconditioner().attach(&MatrixOp, &cfg);

@@ -1,7 +1,9 @@
 #pragma once
 #include "IterativeLinearSolverConfig.h"
+#include "tid/tid.h"
 #include <chrono>
 #include <Eigen/Core>
+
 namespace settings {
     static constexpr bool debug_jcb = false;
 }
@@ -121,13 +123,14 @@ class IterativeLinearSolverPreconditioner {
     void apply_jacobi_blocks(const Rhs &b, Dest &x, const std::vector<std::tuple<long, int, std::unique_ptr<SolverType>>> *blocks) const {
         if(blocks == nullptr) return;
         if(blocks->empty()) return;
+        auto t_jcb = tid::tic_scope("jcb", tid::level::higher);
 #pragma omp parallel for
         for(size_t idx = 0; idx < blocks->size(); ++idx) {
             const auto &[offset, sign, solver] = blocks->at(idx);
-            long extent                         = solver->rows();
-            auto x_segment                      = Eigen::Map<VectorType>(x.data() + offset, extent);
-            auto b_segment                      = Eigen::Map<const VectorType>(b.data() + offset, extent);
-            x_segment.noalias() = solver->solve(b_segment*static_cast<RealScalar>(sign));
+            long extent                        = solver->rows();
+            auto x_segment                     = Eigen::Map<VectorType>(x.data() + offset, extent);
+            auto b_segment                     = Eigen::Map<const VectorType>(b.data() + offset, extent);
+            x_segment.noalias()                = solver->solve(b_segment * static_cast<RealScalar>(sign));
         }
         m_iterations++;
     }
@@ -149,7 +152,7 @@ class IterativeLinearSolverPreconditioner {
             // None of the block jacobi preconditioners were applied.
             auto invdiag = Eigen::Map<const VectorType>(config->jacobi.invdiag, rows());
             assert(invdiag.allFinite());
-            x.noalias()  = invdiag.array().cwiseProduct(y.array()).matrix();
+            x.noalias() = invdiag.array().cwiseProduct(y.array()).matrix();
             m_iterations++;
         }
         apply_jacobi_blocks(y, x, config->jacobi.lltJcbBlocks);

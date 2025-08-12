@@ -3,12 +3,14 @@
 #include "math/tenx.h"
 #include "tid/tid.h"
 #if defined(DMRG_ENABLE_TBLIS)
-    #include <tblis/util/configs.h>
-    #include <tblis/util/thread.h>
-    #include <tci/tci_config.h>
-    #if defined(TCI_USE_OPENMP_THREADS)
-        #include <omp.h>
-    #endif
+    // #include <tblis/util/configs.h>
+    // #include <tblis/util/thread.h>
+    // #include <tci/tci_config.h>
+    // #if defined(TCI_USE_OPENMP_THREADS)
+        // #include <omp.h>
+    // #endif
+    #include <tblis_config.h>
+    #include <tblis.h>
 #endif
 
 using namespace tools::common::contraction;
@@ -39,7 +41,7 @@ void tools::common::contraction::matrix_vector_product(      Scalar * res_ptr,
 
 #if defined(DMRG_ENABLE_TBLIS)
     if constexpr(std::is_same_v<Scalar, fp32> or std::is_same_v<Scalar, fp64>){
-        static const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(get_tblis_arch().data());
+        static const tblis::tblis_config *tblis_cfg = nullptr; //tblis::config(get_tblis_arch().data());
         #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
         tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
         #endif
@@ -48,21 +50,21 @@ void tools::common::contraction::matrix_vector_product(      Scalar * res_ptr,
             // Eigen::Tensor<Scalar, 4> mpsenvLmpo(mps.dimension(2), envL.dimension(1), mpo.dimension(1), mpo.dimension(3));
             Eigen::Tensor<Scalar, 4> mpsenvLmpo_alt(mpo.dimension(1), mpo.dimension(3), mps.dimension(2), envL.dimension(1));
 
-            // contract_tblis(mps, envL, mpsenvL, "afb", "fcd", "abcd", tblis_config);
-            // contract_tblis(mpo, mpsenvL, mpsenvLmpo_alt, "qhri", "rgjq", "higj", tblis_config);
-            // contract_tblis(mpsenvLmpo_alt, envR, res, "higj", "gkh", "ijk", tblis_config);
+            // contract_tblis(mps, envL, mpsenvL, "afb", "fcd", "abcd", tblis_cfg);
+            // contract_tblis(mpo, mpsenvL, mpsenvLmpo_alt, "qhri", "rgjq", "higj", tblis_cfg);
+            // contract_tblis(mpsenvLmpo_alt, envR, res, "higj", "gkh", "ijk", tblis_cfg);
             contract_tblis(mps.data(), mps.dimensions(),            //
                            envL.data(), envL.dimensions(),          //
                            mpsenvL.data(), mpsenvL.dimensions(),    //
-                           "afb", "fcd", "abcd", tblis_config);
+                           "afb", "fcd", "abcd", tblis_cfg);
             contract_tblis(mpo.data(), mpo.dimensions(),                       //
                            mpsenvL.data(), mpsenvL.dimensions(),               //
                            mpsenvLmpo_alt.data(), mpsenvLmpo_alt.dimensions(), //
-                           "qhri", "rgjq", "higj", tblis_config);              //
+                           "qhri", "rgjq", "higj", tblis_cfg);              //
             contract_tblis(mpsenvLmpo_alt.data(), mpsenvLmpo_alt.dimensions(), //
                             envR.data(), envR.dimensions(),                     //
                             res.data(), res.dimensions(),                      //
-                            "higj", "gkh", "ijk", tblis_config);
+                            "higj", "gkh", "ijk", tblis_cfg);
         }
         else{
             Eigen::Tensor<Scalar, 4> mpsenvR(mps.dimension(0), mps.dimension(1), envR.dimension(1), envR.dimension(2));
@@ -70,15 +72,15 @@ void tools::common::contraction::matrix_vector_product(      Scalar * res_ptr,
             contract_tblis(mps.data(), mps.dimensions(),           //
                            envR.data(), envR.dimensions(),         //
                            mpsenvR.data(), mpsenvR.dimensions(),   //
-                           "abf", "fcd", "abcd", tblis_config);
+                           "abf", "fcd", "abcd", tblis_cfg);
             contract_tblis(mpsenvR.data(), mpsenvR.dimensions(),       //
                            mpo.data(), mpo.dimensions(),               //
                            mpsenvRmpo.data(), mpsenvRmpo.dimensions(), //
-                           "qijk", "rkql", "ijrl", tblis_config);
+                           "qijk", "rkql", "ijrl", tblis_cfg);
             contract_tblis(mpsenvRmpo.data(), mpsenvRmpo.dimensions(),  //
                            envL.data(), envL.dimensions(),              //
                            res.data(), res.dimensions(),                //
-                           "qkri", "qjr", "ijk", tblis_config);
+                           "qkri", "qjr", "ijk", tblis_cfg);
         }
     }else{
         auto &threads = tenx::threads::get();
@@ -161,7 +163,7 @@ void tools::common::contraction::matrix_vector_product(Scalar * res_ptr,
 
     // Contract left to right
     #if defined(DMRG_ENABLE_TBLIS)
-    static const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(get_tblis_arch().data());
+    static const tblis::tblis_config *tblis_cfg = nullptr;//tblis::tblis_get_config(get_tblis_arch().data());
     #if defined(TCI_USE_OPENMP_THREADS)
     tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
     #endif
@@ -179,11 +181,11 @@ void tools::common::contraction::matrix_vector_product(Scalar * res_ptr,
     #if defined(DMRG_ENABLE_TBLIS)
     if constexpr(std::is_same_v<Scalar, fp32> or std::is_same_v<Scalar, fp64>) {
         auto mps_tmp1_map4 = Eigen::TensorMap<Eigen::Tensor<Scalar, 4>>(mps_tmp1.data(), std::array{d0 * d1, d2, d3, d4 * d5});
-        // contract_tblis(mps_in, envL, mps_tmp1_map4, "afb", "fcd", "abcd", tblis_config);
+        // contract_tblis(mps_in, envL, mps_tmp1_map4, "afb", "fcd", "abcd", tblis_cfg);
         contract_tblis(mps_in.data(),mps_in.dimensions(),                 //
                        envL.data(), envL.dimensions(),                    //
                        mps_tmp1_map4.data(), mps_tmp1_map4.dimensions(),  //
-                       "afb", "fcd", "abcd", tblis_config);
+                       "afb", "fcd", "abcd", tblis_cfg);
     } else
     #endif
     {
@@ -205,11 +207,11 @@ void tools::common::contraction::matrix_vector_product(Scalar * res_ptr,
             mps_tmp2.resize(new_shp6);
             auto map_shp6 = tenx::array6{md[1], md[2], md[3], md[4], mpo.dimension(1), mpo.dimension(3)};
             auto mps_tmp2_map = Eigen::TensorMap<Eigen::Tensor<Scalar,6>>(mps_tmp2.data(), map_shp6);
-            // contract_tblis(mps_tmp1, mpo, mps_tmp2_map, "qbcder", "qfrg", "bcdefg", tblis_config);
+            // contract_tblis(mps_tmp1, mpo, mps_tmp2_map, "qbcder", "qfrg", "bcdefg", tblis_cfg);
             contract_tblis(mps_tmp1.data(),mps_tmp1.dimensions(),          //
                            mpo.data(), mpo.dimensions(),                   //
                            mps_tmp2_map.data(), mps_tmp2_map.dimensions(), //
-                           "qbcder", "qfrg", "bcdefg", tblis_config);
+                           "qbcder", "qfrg", "bcdefg", tblis_cfg);
             mps_tmp1 = std::move(mps_tmp2);
         } else
         #endif
@@ -227,11 +229,11 @@ void tools::common::contraction::matrix_vector_product(Scalar * res_ptr,
     #if defined(DMRG_ENABLE_TBLIS)
     if constexpr(std::is_same_v<Scalar, fp32> or std::is_same_v<Scalar, fp64>) {
         auto mps_tmp1_map4 = Eigen::TensorMap<Eigen::Tensor<Scalar, 4>>(mps_tmp1.data(), std::array{d0, d1, d2, d3});
-        // contract_tblis(mps_tmp1_map4, envR, mps_out, "qjir", "qkr", "ijk", tblis_config);
+        // contract_tblis(mps_tmp1_map4, envR, mps_out, "qjir", "qkr", "ijk", tblis_cfg);
         contract_tblis(mps_tmp1_map4.data(), mps_tmp1_map4.dimensions(),
                        envR.data()         , envR.dimensions(),
                        mps_out.data()      , mps_out.dimensions(),
-                       "qjir", "qkr", "ijk", tblis_config);
+                       "qjir", "qkr", "ijk", tblis_cfg);
     } else
     #endif
     {

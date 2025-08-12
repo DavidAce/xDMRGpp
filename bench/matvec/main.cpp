@@ -14,8 +14,8 @@
 
 #if defined(DMRG_ENABLE_TBLIS)
     #include <tblis/tblis.h>
-    #include <tblis/util/thread.h>
-    #include <tci/tci_config.h>
+    // #include <tblis/util/thread.h>
+    // #include <tci/tci_config.h>
 #endif
 
 #include <cblas.h>
@@ -25,7 +25,7 @@ using namespace tools::common::contraction;
 #if defined(DMRG_ENABLE_TBLIS)
 template<typename ea_type, typename eb_type, typename ec_type>
 void contract_tblis(const TensorRead<ea_type> &ea, const TensorRead<eb_type> &eb, TensorWrite<ec_type> &ec, const tblis::label_vector &la,
-                    const tblis::label_vector &lb, const tblis::label_vector &lc, const tblis::tblis_config_s *tblis_config) {
+                    const tblis::label_vector &lb, const tblis::label_vector &lc, const tblis::tblis_config *tblis_cntx) {
     const auto &ea_ref = static_cast<const ea_type &>(ea);
     const auto &eb_ref = static_cast<const eb_type &>(eb);
     auto       &ec_ref = static_cast<ec_type &>(ec);
@@ -35,18 +35,18 @@ void contract_tblis(const TensorRead<ea_type> &ea, const TensorRead<eb_type> &eb
     db.assign(eb_ref.dimensions().begin(), eb_ref.dimensions().end());
     dc.assign(ec_ref.dimensions().begin(), ec_ref.dimensions().end());
 
-    auto                     ta    = tblis::varray_view<const typename ea_type::Scalar>(da, ea_ref.data(), tblis::COLUMN_MAJOR);
-    auto                     tb    = tblis::varray_view<const typename eb_type::Scalar>(db, eb_ref.data(), tblis::COLUMN_MAJOR);
-    auto                     tc    = tblis::varray_view<typename ec_type::Scalar>(dc, ec_ref.data(), tblis::COLUMN_MAJOR);
+    auto                     ta    = MArray::marray_view<const typename ea_type::Scalar>(da, ea_ref.data(), MArray::COLUMN_MAJOR);
+    auto                     tb    = MArray::marray_view<const typename eb_type::Scalar>(db, eb_ref.data(), MArray::COLUMN_MAJOR);
+    auto                     tc    = MArray::marray_view<typename ec_type::Scalar>(dc, ec_ref.data(), MArray::COLUMN_MAJOR);
     typename ea_type::Scalar alpha = 1.0;
     typename ec_type::Scalar beta  = 0.0;
 
-    tblis::tblis_tensor A_s(alpha, ta);
-    tblis::tblis_tensor B_s(tb);
-    tblis::tblis_tensor C_s(beta, tc);
+    tblis::tblis_tensor A_s(alpha, ta.data(), ta.dimension(), ta.lengths().data(), ta.strides().data());
+    tblis::tblis_tensor B_s(tb.data(), tb.dimension(), tb.lengths().data(), tb.strides().data());
+    tblis::tblis_tensor C_s(beta, tc.data(), tc.dimension(), tc.lengths().data(), tc.strides().data());
 
-    // tblis_tensor_mult(nullptr, tblis_config, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
-    tblis_tensor_mult(nullptr, tblis_config, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
+    // tblis_tensor_mult(nullptr, tblis_cntx, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
+    tblis_tensor_mult(nullptr, tblis_cntx, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
 }
 
 template<typename res_type, typename mps_type, typename env_type>
@@ -54,14 +54,14 @@ void mps_enL_tblis(TensorWrite<res_type> &res_, const TensorRead<mps_type> &mps_
     auto                         res          = tenx::asEval(res_);
     auto                         mps          = tenx::asEval(mps_);
     auto                         enL          = tenx::asEval(enL_);
-    const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(arch.data());
+    const tblis::tblis_config *tblis_cntx = nullptr;// tblis::tblis_get_config(arch.data());
     #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
     tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
     #endif
     if(mps.dimension(1) == enL.dimension(0)) {
-        contract_tblis(mps, enL, res, "afb", "fcd", "abcd", tblis_config);
+        contract_tblis(mps, enL, res, "afb", "fcd", "abcd", tblis_cntx);
     } else {
-        contract_tblis(mps, enL, res, "fab", "fcd", "abcd", tblis_config);
+        contract_tblis(mps, enL, res, "fab", "fcd", "abcd", tblis_cntx);
     }
 }
 
@@ -114,7 +114,7 @@ void matrix_vector_product_tblis(TensorWrite<res_type> &res_, const TensorRead<m
     auto enL = tenx::asEval(enL_);
     auto enR = tenx::asEval(enR_);
 
-    const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(arch.data());
+    const tblis::tblis_config *tblis_cntx = nullptr;//tblis::tblis_get_config(arch.data());
     #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
     tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
     #endif
@@ -122,11 +122,11 @@ void matrix_vector_product_tblis(TensorWrite<res_type> &res_, const TensorRead<m
     Eigen::Tensor<T, 4> mpsenvL(mps.dimension(0), mps.dimension(2), enL.dimension(1), enL.dimension(2));
     // Eigen::Tensor<T, 4> mpsenvLmpo(mps.dimension(2), enL.dimension(1), mpo.dimension(1), mpo.dimension(3));
     Eigen::Tensor<T, 4> mpsenvLmpo_alt(mpo.dimension(1), mpo.dimension(3), mps.dimension(2), enL.dimension(1));
-    contract_tblis(mps, enL, mpsenvL, "afb", "fcd", "abcd", tblis_config);
+    contract_tblis(mps, enL, mpsenvL, "afb", "fcd", "abcd", tblis_cntx);
     // contract_tblis(mpsenvL, mpo, mpsenvLmpo, "qijr", "rkql", "ijkl", tblis_config);
     // contract_tblis(mpsenvLmpo, enR, res, "qjri", "qkr", "ijk", tblis_config);
-    contract_tblis(mpo, mpsenvL, mpsenvLmpo_alt, "qhri", "rgjq", "higj", tblis_config);
-    contract_tblis(mpsenvLmpo_alt, enR, res, "higj", "gkh", "ijk", tblis_config);
+    contract_tblis(mpo, mpsenvL, mpsenvLmpo_alt, "qhri", "rgjq", "higj", tblis_cntx);
+    contract_tblis(mpsenvLmpo_alt, enR, res, "higj", "gkh", "ijk", tblis_cntx);
 }
 #endif
 #if defined(DMRG_ENABLE_TBLIS)
@@ -163,7 +163,7 @@ void matrix_vector_product(Scalar *res_ptr, const Scalar *const mps_ptr, std::ar
 #if defined(DMRG_ENABLE_TBLIS)
     if constexpr(std::is_same_v<Scalar, fp64>) {
         // auto                         arch         = get_arch();
-        const tblis::tblis_config_s *tblis_config = nullptr; // tblis::tblis_get_config(arch.data());
+        const tblis::tblis_config *tblis_cntx = nullptr; // tblis::tblis_get_config(arch.data());
         // #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
         // tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
         // #endif
@@ -171,19 +171,19 @@ void matrix_vector_product(Scalar *res_ptr, const Scalar *const mps_ptr, std::ar
             Eigen::Tensor<Scalar, 4> mpsenvL(mps.dimension(0), mps.dimension(2), envL.dimension(1), envL.dimension(2));
             // Eigen::Tensor<Scalar, 4> mpsenvLmpo(mps.dimension(2), envL.dimension(1), mpo.dimension(1), mpo.dimension(3));
             Eigen::Tensor<Scalar, 4> mpsenvLmpo_alt(mpo.dimension(1), mpo.dimension(3), mps.dimension(2), envL.dimension(1));
-            contract_tblis(mps, envL, mpsenvL, "afb", "fcd", "abcd", tblis_config);
+            contract_tblis(mps, envL, mpsenvL, "afb", "fcd", "abcd", tblis_cntx);
             // contract_tblis(mpsenvL, mpo, mpsenvLmpo, "qijr", "rkql", "ijkl", tblis_config);
             // contract_tblis(mpsenvLmpo, envR, res, "qjri", "qkr", "ijk", tblis_config);
-            contract_tblis(mpo, mpsenvL, mpsenvLmpo_alt, "qhri", "rgjq", "higj", tblis_config);
-            contract_tblis(mpsenvLmpo_alt, envR, res, "higj", "gkh", "ijk", tblis_config);
+            contract_tblis(mpo, mpsenvL, mpsenvLmpo_alt, "qhri", "rgjq", "higj", tblis_cntx);
+            contract_tblis(mpsenvLmpo_alt, envR, res, "higj", "gkh", "ijk", tblis_cntx);
             // contract_tblis(mpo, mpsenvL, mpsenvLmpo, "rkql", "qijr", "lkij", tblis_config);
             // contract_tblis(mpsenvLmpo, envR, res, "qirj", "rkq", "ijk", tblis_config);
         } else {
             Eigen::Tensor<Scalar, 4> mpsenvR(mps.dimension(0), mps.dimension(1), envR.dimension(1), envR.dimension(2));
             Eigen::Tensor<Scalar, 4> mpsenvRmpo(mps.dimension(1), envR.dimension(1), mpo.dimension(0), mpo.dimension(3));
-            contract_tblis(mps, envR, mpsenvR, "abf", "fcd", "abcd", tblis_config);
-            contract_tblis(mpsenvR, mpo, mpsenvRmpo, "qijk", "rkql", "ijrl", tblis_config);
-            contract_tblis(mpsenvRmpo, envL, res, "qkri", "qjr", "ijk", tblis_config);
+            contract_tblis(mps, envR, mpsenvR, "abf", "fcd", "abcd", tblis_cntx);
+            contract_tblis(mpsenvR, mpo, mpsenvRmpo, "qijk", "rkql", "ijrl", tblis_cntx);
+            contract_tblis(mpsenvRmpo, envL, res, "qkri", "qjr", "ijk", tblis_cntx);
             // contract_tblis(mpo, mpsenvR, mpsenvRmpo_alt, "qklr", "qijr", "lkij", tblis_config);
             // contract_tblis(mpsenvRmpo_alt, envL, res, "qirk", "rjq", "ijk", tblis_config);
         }
@@ -271,7 +271,7 @@ void matrix_vector_product_custom(Scalar *res_ptr, const Scalar *const mps_ptr, 
 
 // Contract left to right
 #if defined(DMRG_ENABLE_TBLIS)
-    const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(get_arch().data());
+    const tblis::tblis_config *tblis_cntx = nullptr;//tblis::tblis_get_config(get_arch().data());
     #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
     tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
     #endif
@@ -293,7 +293,7 @@ void matrix_vector_product_custom(Scalar *res_ptr, const Scalar *const mps_ptr, 
 #if defined(DMRG_ENABLE_TBLIS)
     if constexpr(std::is_same_v<Scalar, fp64>) {
         auto mps_tmp1_map4 = Eigen::TensorMap<Eigen::Tensor<Scalar, 4>>(mps_tmp1.data(), std::array{d0 * d1, d2, d3, d4 * d5});
-        contract_tblis(mps_in, envL, mps_tmp1_map4, "afb", "fcd", "abcd", tblis_config);
+        contract_tblis(mps_in, envL, mps_tmp1_map4, "afb", "fcd", "abcd", tblis_cntx);
     } else
 #endif
     {
@@ -316,7 +316,7 @@ void matrix_vector_product_custom(Scalar *res_ptr, const Scalar *const mps_ptr, 
             mps_tmp2.resize(new_shp6);
             auto map_shp6     = tenx::array6{md[1], md[2], md[3], md[4], mpo.dimension(1), mpo.dimension(3)};
             auto mps_tmp2_map = Eigen::TensorMap<Eigen::Tensor<Scalar, 6>>(mps_tmp2.data(), map_shp6);
-            contract_tblis(mps_tmp1, mpo, mps_tmp2_map, "qbcder", "qfrg", "bcdefg", tblis_config);
+            contract_tblis(mps_tmp1, mpo, mps_tmp2_map, "qbcder", "qfrg", "bcdefg", tblis_cntx);
             // tools::log->info("contracted {} | t = {:.3e} | tot = {:.3e} ", idx, t_mv->restart_lap(), t_mv->get_last_interval());
             mps_tmp1 = std::move(mps_tmp2);
         } else
@@ -335,7 +335,7 @@ void matrix_vector_product_custom(Scalar *res_ptr, const Scalar *const mps_ptr, 
 #if defined(DMRG_ENABLE_TBLIS)
     if constexpr(std::is_same_v<Scalar, fp64>) {
         auto mps_tmp1_map4 = Eigen::TensorMap<Eigen::Tensor<Scalar, 4>>(mps_tmp1.data(), std::array{d0, d1, d2, d3});
-        contract_tblis(mps_tmp1_map4, envR, mps_out, "qjir", "qkr", "ijk", tblis_config);
+        contract_tblis(mps_tmp1_map4, envR, mps_out, "qjir", "qkr", "ijk", tblis_cntx);
     } else
 #endif
     {
@@ -370,7 +370,7 @@ int main() {
     // long d     = 8 << (sites - 1);
     long d = 2;
     long m    = 12;
-    long chiL = 256;
+    long chiL = 128;
     long chiR = 256;
 
     tools::log->info("__builtin_cpu_supports(avx512f)    : {}", __builtin_cpu_supports("avx512f"));

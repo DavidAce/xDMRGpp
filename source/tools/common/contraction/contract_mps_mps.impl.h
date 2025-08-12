@@ -3,10 +3,10 @@
 #include "debug/exceptions.h"
 #include "math/tenx.h"
 // #include "tid/tid.h"
-#if defined(DMRG_ENABLE_TBLIS)
+// #if defined(DMRG_ENABLE_TBLIS)
     #include <tblis/tblis_config.h>
-    #include <tblis/util/configs.h>
-#endif
+    // #include <tblis/util/configs.h>
+// #endif
 
 /* clang-format off */
 using namespace tools::common::contraction;
@@ -30,12 +30,12 @@ void tools::common::contraction::contract_mps_mps(      Scalar * res_ptr       ,
         auto tmp = Eigen::Tensor<Scalar,4>(mpsL_dims[0], mpsL_dims[1], mpsR_dims[0], mpsR_dims[2]);
         #if defined(DMRG_ENABLE_TBLIS)
         auto arch =  get_tblis_arch();
-        const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(arch.data());
+        // const tblis::tblis_config *tblis_cfg = nullptr;// tblis::tblis_get_config(arch.data());
         // contract_tblis(mpsL, mpsR, tmp, "abe", "ced", "abcd", tblis_config);
         contract_tblis(mpsL.data(), mpsL.dimensions(),  //
                        mpsR.data(), mpsR.dimensions(),  //
                        tmp.data(), tmp.dimensions(),    //
-                       "abe", "ced", "abcd", tblis_config);
+                       "abe", "ced", "abcd", nullptr);
         res.device(*threads->dev)  = tmp.shuffle(shuffle_idx).reshape(res_dims);
         #else
         res.device(*threads->dev) = mpsL.contract(mpsR, contract_idx).shuffle(shuffle_idx).reshape(res_dims);
