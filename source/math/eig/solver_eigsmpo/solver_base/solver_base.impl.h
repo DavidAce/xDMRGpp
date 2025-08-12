@@ -65,6 +65,53 @@ solver_base<Scalar>::solver_base(Eigen::Index nev, Eigen::Index ncv, OptAlgo alg
     assert(mps_size == H1H2.rows());
     set_preconditioner_params();
 }
+//
+// template<typename Scalar>
+// solver_base<Scalar>::VectorReal solver_base<Scalar>::rnormTol(Eigen::Ref<VectorReal> evals) const {
+//     if(use_relative_rnorm_tolerance) {
+//         return get_op_norm_estimates(evals) * tol * RealScalar{2};
+//     }
+//
+//     else
+//         return VectorReal::Ones(evals.size()) * tol * RealScalar{2};
+// }
+
+template<typename Scalar>
+solver_base<Scalar>::RealScalar solver_base<Scalar>::rNormTol(Eigen::Index n) const {
+    if(n < 0 or n > nev) throw except::runtime_error("rNormTol: n == {} is out of bounds 0 <= n <= nev[{}]", n, nev);
+    RealScalar tol_eff = std::max(tol, 10 * orthTol);
+    RealScalar lambda  = std::abs(status.optVal(n));
+    if(use_relative_rnorm_tolerance) {
+        switch(algo) {
+            case OptAlgo::DMRG: [[fallthrough]];
+            case OptAlgo::DMRGX: [[fallthrough]];
+            case OptAlgo::HYBRID_DMRGX: {
+                RealScalar h1vnorm = std::max(RealScalar{1e-30}, H1V.col(n).norm());
+                return tol_eff * std::max({RealScalar{1}, h1vnorm, lambda});
+            }
+            case OptAlgo::XDMRG: {
+                RealScalar h2vnorm = std::max(RealScalar{1e-30}, H2V.col(n).norm());
+                return tol_eff * std::max({RealScalar{1}, h2vnorm, lambda});
+            }
+            case OptAlgo::GDMRG: {
+                RealScalar h1vnorm = std::max(RealScalar{1e-30}, H1V.col(n).norm());
+                RealScalar h2vnorm = std::max(RealScalar{1e-30}, H2V.col(n).norm());
+                RealScalar maxnorm = std::max({RealScalar{1}, h1vnorm, h2vnorm * lambda});
+                return tol_eff * maxnorm;
+            }
+            default: throw except::logic_error("rNormTol: unhandled algo");
+        }
+    } else {
+        return tol_eff;
+    }
+}
+
+template<typename Scalar>
+solver_base<Scalar>::VectorReal solver_base<Scalar>::rNormTols() const {
+    VectorReal rNormTols(nev);
+    for(Eigen::Index n = 0; n < nev; ++n) { rNormTols(n) = rNormTol(n); }
+    return rNormTols;
+}
 
 template<typename Scalar>
 void solver_base<Scalar>::set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize) {
@@ -364,7 +411,8 @@ bool solver_base<Scalar>::optVal_has_saturated(RealScalar threshold) {
     auto optVal_avg     = status.optVal.cwiseAbs().mean();
     auto optVal_std     = get_max_standard_deviation(status.optVals_history, false);
     auto optVal_std_rel = optVal_std / optVal_avg;
-    threshold           = std::max(threshold, rnormTol(status.optVal).maxCoeff() * 10 / optVal_avg);
+    // threshold           = std::max(threshold, rnormTol(status.optVal).maxCoeff() * 10 / optVal_avg);
+    threshold = std::max(threshold, rNormTols().maxCoeff() * 10 / optVal_avg);
     return optVal_std_rel < threshold;
 }
 
@@ -749,25 +797,37 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
 
         // Define the residual matrix-vector operator depending on the different DMRG algorithms
         auto ResidualOp = [this, th, &H](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+            auto       t_residualop = tid::tic_scope("ResidualOp", tid::level::higher);
             MatrixType HX(X.rows(), X.cols());
             switch(algo) {
                 case OptAlgo::DMRG: [[fallthrough]];
                 case OptAlgo::DMRGX: [[fallthrough]];
                 case OptAlgo::HYBRID_DMRGX: [[fallthrough]];
-                case OptAlgo::XDMRG:
+                case OptAlgo::XDMRG: {
                     HX.noalias() = H.MultAX(X) - th * X;
                     status.num_matvecs_inner += X.cols();
                     break;
-                case OptAlgo::GDMRG: // Generalized problem
+                }
+                case OptAlgo::GDMRG: {
+                    // Generalized problem
                     HX.noalias() = H1.MultAX(X) - th * H2.MultAX(X);
                     status.num_matvecs_inner += 2 * X.cols();
+                    auto t_h1 = tid::tic_token("H1X", tid::higher, H1.t_multAx->get_last_interval());
+                    auto t_h2 = tid::tic_token("H2X", tid::higher, H2.t_multAx->get_last_interval());
                     break;
+                }
                 default: throw except::runtime_error("unknown algorithm {}", enum2sv(algo));
             }
             return HX;
         };
-        auto ProjectOpL = [this, &v](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return X - v * (v.adjoint() * X).eval(); };
-        auto ProjectOpR = [this, &v](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return X - v * (v.adjoint() * X).eval(); };
+        auto ProjectOpL = [this, &v](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+            auto t_pl = tid::tic_token("ProjectOpL", tid::level::higher);
+            return X - v * (v.adjoint() * X).eval();
+        };
+        auto ProjectOpR = [this, &v](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+            auto t_pr = tid::tic_token("ProjectOpR", tid::level::higher);
+            return X - v * (v.adjoint() * X).eval();
+        };
 
         auto JDop = JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
 
@@ -1698,7 +1758,8 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
         bool orth_converged = m.orthError < m.orthTol;
         if(orth_converged or Y.cols() == 0) break;
     }
-    eiglog->trace("rep {} orthError after l2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
+    if constexpr(settings::debug_solver)
+        eiglog->trace("rep {} orthError after l2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
 
     assert_l2_orthogonal(X, Y, m);
 }
@@ -1744,7 +1805,8 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
         bool orth_converged = m.orthError < m.orthTol;
         if(orth_converged or Y.cols() == 0) break;
     }
-    eiglog->trace("rep {} orthError after l2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
+    if constexpr(settings::debug_solver)
+        eiglog->trace("rep {} orthError after l2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
 
     assert_l2_orthogonal(X, Y, m);
 }
@@ -1909,8 +1971,9 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType
         m.Gram      = RealScalar{0.5f} * (m.Gram + m.Gram.adjoint()); // The Gram matrix must be hermitian (and PSD)
         m.Rdiag     = m.Gram.diagonal().cwiseAbs().cwiseSqrt();       // Equivalent to diag(R), with R from QR
         m.orthError = (m.Gram.cwiseAbs() - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
-        eiglog->debug("block_h2_orthonormalize_dgks: dgks rep {}: orthError {:.3e} | H2Y.norm() = {:.3e} | Y.cols() {} | H2 norm {:.3e}", rep, fp(m.orthError),
-                      fp(H2Y.norm()), Y.cols(), fp(H2.get_op_norm()));
+        if constexpr(settings::debug_solver)
+            eiglog->debug("block_h2_orthonormalize_dgks: dgks rep {}: orthError {:.3e} | H2Y.norm() = {:.3e} | Y.cols() {} | H2 norm {:.3e}", rep,
+                          fp(m.orthError), fp(H2Y.norm()), Y.cols(), fp(H2.get_op_norm()));
 
         if(m.orthError < normTol) break;
     }
@@ -2113,7 +2176,8 @@ void solver_base<Scalar>::block_h2_orthonormalize_llt(MatrixType &Y, MatrixType 
 
         // eiglog->debug("block_h2_orthonormalize_llt: llt rep {}: orthError {:.5e} | tol {:.5e}", rep, fp(m.orthError), fp(normTol));
         // eiglog->debug("gram - I: \n{}", linalg::matrix::to_string(m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols()), 16));
-        eiglog->debug("block_h2_orthonormalize_llt: llt rep {}: orthError {:.5e} | tol {:.5e}", rep, fp(m.orthError), fp(normTol));
+        if constexpr(settings::debug_solver)
+            eiglog->debug("block_h2_orthonormalize_llt: llt rep {}: orthError {:.5e} | tol {:.5e}", rep, fp(m.orthError), fp(normTol));
         if(rep >= 1 and m.orthError < normTol) break;
     }
     // eiglog->debug("block_h2_orthonormalize_llt: llt rep {}: orthError {:.5e} | tol {:.5e}", rep, fp(m.orthError), fp(normTol));
@@ -2192,7 +2256,8 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
             if(orth_converged) break;
         }
     }
-    eiglog->trace("rep {} orthError after h2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
+    if constexpr(settings::debug_solver)
+        eiglog->trace("rep {} orthError after h2 orthonormalization: {:.3e} | orthTol {:.3e}", rep, fp(m.orthError), fp(m.orthTol));
 
     assert_h2_orthogonal(X, H2Y, m);
 }
@@ -2799,11 +2864,12 @@ void solver_base<Scalar>::updateStatus() {
     while(status.optVals_history.size() > status.max_history_size) status.optVals_history.pop_front();
     while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
 
-    constexpr auto beta         = RealScalar{0.5f};
-    VectorReal     rNorms       = status.rNorms.topRows(nev); // The current residual norms
-    RealScalar     relGap       = status.gap * status.op_norm_estimate;
-    status.rNorm_below_rnormTol = (rNorms.array() < rnormTol(status.optVal).array()).all(); // Residual norm condition
-    status.rNorm_below_gap      = rNorms.maxCoeff() < beta * relGap; // Gap condition for the currently selected operator (H1, H2, or H1/H2)
+    constexpr auto beta   = RealScalar{0.5f};
+    VectorReal     rNorms = status.rNorms.topRows(nev); // The current residual norms
+    RealScalar     relGap = status.gap * status.op_norm_estimate;
+    // status.rNorm_below_rnormTol = (rNorms.array() < rnormTol(status.optVal).array()).all(); // Residual norm condition
+    status.rNorm_below_rnormTol = (rNorms.array() < rNormTols().array()).all(); // Residual norm condition
+    status.rNorm_below_gap      = rNorms.maxCoeff() < beta * relGap;            // Gap condition for the currently selected operator (H1, H2, or H1/H2)
 
     if(status.rNorm_below_rnormTol and status.rNorm_below_gap) {
         std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", fp(status.gap), fp(relGap));
@@ -2813,7 +2879,7 @@ void solver_base<Scalar>::updateStatus() {
             }
         }
         status.stopMessage.emplace_back(fmt::format("converged rNorm {::.3e} < tol {::.3e}{} | iters {} | mv {} | {:.3e} s",
-                                                    fv(VectorReal(status.rNorms.topRows(nev))), fv(rnormTol(status.optVal)), msg_rnorm_gap, status.iter,
+                                                    fv(VectorReal(status.rNorms.topRows(nev))), fv(rNormTols()), msg_rnorm_gap, status.iter + 1,
                                                     status.num_matvecs_total, status.time_elapsed.get_time()));
         status.stopReason |= StopReason::converged_rNorm;
     }
@@ -2871,12 +2937,13 @@ void solver_base<Scalar>::printStatus() {
                       status.num_matvecs,                //
                       status.num_precond,                //
                       status.time_elapsed.restart_lap(), //
+                      // status.time_elapsed.get_time(),//
                       innerMsg,
                       fv(status.optVal),                          //
                       optValMsg,                                  //
                       fv(VectorReal(status.rNorms.topRows(nev))), //
                       rNormMsg,                                   //
-                      fv(rnormTol(status.optVal)),                //
+                      fv(rNormTols()),                            //
                       fp(tol),                                    //
                       fp(get_rNorms_log10_change_per_matvec()),   //
                       Q.cols(),                                   //
@@ -2885,4 +2952,6 @@ void solver_base<Scalar>::printStatus() {
                       fp(status.op_norm_estimate),                //
                       fp(status.condition),                       //
                       msg_rnorm_gap);
+
+    // status.time_elapsed.restart_lap();
 }

@@ -330,12 +330,10 @@ class solver_base {
 
     /*! Convergence tolerance of ritz-vector residuals.
      * Converged if rnorm < tol * opNorm. */
-    VectorReal rnormTol(Eigen::Ref<VectorReal> evals) const {
-        if(use_relative_rnorm_tolerance)
-            return get_op_norm_estimates(evals) * tol * RealScalar{2};
-        else
-            return VectorReal::Ones(evals.size()) * tol * RealScalar{2};
-    }
+    // VectorReal rnormTol(Eigen::Ref<VectorReal> evals) const;
+    RealScalar rNormTol(Eigen::Index n) const;
+    VectorReal rNormTols() const;
+
 
     /*! Norm tolerance of B-matrices.
      * Triggers the Lanczos recurrence breakdown. */

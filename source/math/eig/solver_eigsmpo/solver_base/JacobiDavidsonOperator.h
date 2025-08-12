@@ -107,6 +107,7 @@ namespace Eigen::internal {
             assert(rhs.size() == mat.rows());
             assert(dst.size() == mat.rows());
             EIGEN_ONLY_USED_FOR_DEBUG(alpha);
+            auto t_jcb = tid::tic_scope("jdop", tid::level::higher);
 
             {
                 const auto &ResidualOp = mat.ResidualOp; // (A - θB)
@@ -157,7 +158,7 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
 
     VectorType res;
     auto       run = [&](auto &solver) {
-        auto t_jdop = tid::tic_token("jdop", tid::level::higher);
+        auto t_jdop = tid::tic_scope("jdsolver", tid::level::higher);
 
         solver.setMaxIterations(cfg.maxiters);
         solver.setTolerance(cfg.tolerance);

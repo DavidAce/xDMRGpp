@@ -78,7 +78,6 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::hhqr;
     using solver_base<Scalar>::eps;
     using solver_base<Scalar>::tol;
-    using solver_base<Scalar>::rnormTol;
     using solver_base<Scalar>::normTol;
     using solver_base<Scalar>::orthTol;
     using solver_base<Scalar>::quotTolB;
