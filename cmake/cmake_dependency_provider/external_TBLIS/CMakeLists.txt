@@ -41,8 +41,8 @@ ExternalProject_Add(external_TBLIS
                     PREFIX ${CMAKE_BINARY_DIR}
                     INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
                     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+                    PATCH_COMMAND patch -p1 -i ${PROJECT_SOURCE_DIR}/tblis-develop-6f942957.patch || true
 
-#                    GIT_SUBMODULES "tblis/external/tci" "tblis/external/marray" "tblis/external/stl_ext"
                     #Give Ninja access to the terminal.
                     USES_TERMINAL_DOWNLOAD TRUE
                     USES_TERMINAL_UPDATE TRUE
