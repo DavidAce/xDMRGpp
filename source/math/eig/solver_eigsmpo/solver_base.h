@@ -146,7 +146,10 @@ class solver_base {
         std::deque<VectorReal>    rNorms_history;
         std::deque<VectorReal>    optVals_history;
         std::deque<Eigen::Index>  matvecs_history;
-        size_t                    max_history_size = 5;
+        size_t                    max_history_size        = 5;
+        size_t                    saturation_count_optVal = 0;
+        size_t                    saturation_count_rNorm  = 0;
+        size_t                    saturation_count_max    = 20;
         std::vector<Eigen::Index> nonZeroCols; // Nonzero Gram Schmidt columns
         Eigen::Index              numZeroRows   = 0;
         std::vector<std::string>  stopMessage   = {};
@@ -416,6 +419,9 @@ class solver_base {
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors();
+
+    std::pair<MatrixType, MatrixType> get_h2_normalizer_for_the_projected_pencil(const MatrixType &T2);
+    MatrixType get_optimal_rayleigh_ritz_matrix(const MatrixType &Z_rr, const MatrixType &Z_ref, const MatrixType &T1, const MatrixType &T2);
 
     MatrixType get_refined_ritz_eigenvectors_std(const Eigen::Ref<const MatrixType> &Z, const Eigen::Ref<const VectorReal> &Y, const MatrixType &Q,
                                                  const MatrixType &HQ);

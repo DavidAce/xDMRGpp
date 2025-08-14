@@ -91,6 +91,8 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::bIsOK;
     using solver_base<Scalar>::get_ritz_indices;
     using solver_base<Scalar>::extractRitzVectors;
+    using solver_base<Scalar>::get_h2_normalizer_for_the_projected_pencil;
+    using solver_base<Scalar>::get_optimal_rayleigh_ritz_matrix;
     using solver_base<Scalar>::get_refined_ritz_eigenvectors_gen;
     using solver_base<Scalar>::get_refined_ritz_eigenvectors_std;
 

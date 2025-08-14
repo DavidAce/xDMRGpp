@@ -204,40 +204,31 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
         }
 
         if(use_krylov_schur_gdplusk_restart) {
-            MatrixType T1 = Q.adjoint() * H1Q;
-            MatrixType T2 = Q.adjoint() * H2Q;
-            T1            = (T1 + T1.adjoint()) * half;
-            T2            = (T2 + T2.adjoint()) * half;
-
-            MatrixType W, WZ;
-
-            {
-                auto                      es = Eigen::SelfAdjointEigenSolver<MatrixType>(T2, Eigen::ComputeEigenvectors);
-                std::vector<Eigen::Index> valid_idx;
-                auto                      U = es.eigenvectors();
-                auto                      D = es.eigenvalues();
-
-                for(Eigen::Index k = 0; k < D.size(); ++k) {
-                    if(D(k) <= 0) { D(k) = eps; }
-                }
-                W = U * D.cwiseInverse().cwiseSqrt().asDiagonal() * U.adjoint();
-            }
-
+            MatrixType T1      = Q.adjoint() * H1Q;
+            MatrixType T2      = Q.adjoint() * H2Q;
+            T1                 = (T1 + T1.adjoint()) * half;
+            T2                 = (T2 + T2.adjoint()) * half;
+            auto [W, Winv]     = get_h2_normalizer_for_the_projected_pencil(T2);
             Eigen::Index nKeep = std::clamp(std::min(maxRetainBlocks * b, W.cols()), b, W.cols());
+
+            MatrixType WZ;
+
             {
                 MatrixType WT1W = W.adjoint() * T1 * W;
+                MatrixType WT2W = W.adjoint() * T2 * W;
                 WT1W            = (WT1W + WT1W.adjoint()) * half;
+                WT2W            = (WT2W + WT2W.adjoint()) * half;
 
-                auto es        = Eigen::SelfAdjointEigenSolver<MatrixType>(WT1W, Eigen::ComputeEigenvectors);
+                // auto es        = Eigen::SelfAdjointEigenSolver<MatrixType>(WT1W, Eigen::ComputeEigenvectors);
+                auto es        = Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType>(WT1W, WT2W, Eigen::Ax_lBx);
                 nKeep          = std::min(nKeep, es.eigenvalues().size());
                 auto selectIdx = get_ritz_indices(ritz, 0, nKeep, es.eigenvalues()); // Gets eigenvalue indices sorted according to enum ritz
-                auto Z         = es.eigenvectors()(Eigen::all, selectIdx);
-                // auto       Y         = es.eigenvalues()(selectIdx);
-                // MatrixType H1QW      = H1Q * W;
-                // MatrixType H2QW      = H2Q * W;
-                // MatrixType Z_ref     = get_refined_ritz_eigenvectors_gen(Z, Y, H1QW, H2QW);
-                // WZ                   = W * Z_ref; // Use this to compress in L2-space
-                WZ = W * Z; // Use this to compress in L2-space
+
+                auto Y     = es.eigenvalues()(selectIdx);
+                auto Z_rr  = es.eigenvectors()(Eigen::all, selectIdx);
+                auto Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, H1Q, H2Q);
+                auto Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, T1, T2);
+                WZ         = W * Z_opt; // Use this to compress in L2-space
             }
 
             MatrixType Q_keep   = Q * WZ;
@@ -248,8 +239,8 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
             MatrixType H1Q_res = H1Q_new;
             MatrixType H2Q_res = H2Q_new;
 
-            MatrixType Gram       = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-            RealScalar orthError0 = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
+            // MatrixType Gram       = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
+            // RealScalar orthError0 = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
 
             OrthMeta m;
             m.maskPolicy = MaskPolicy::COMPRESS;
@@ -273,17 +264,17 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
             H2Q.conservativeResize(N, H2Q_keep.cols() + H2Q_res.cols());
             H2Q.leftCols(H2Q_keep.cols()) = H2Q_keep;
             H2Q.rightCols(H2Q_res.cols()) = H2Q_res;
-            Gram                          = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-            RealScalar orthError1         = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
+            // Gram                          = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
+            // RealScalar orthError1         = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
 
             if(use_h2_inner_product) {
                 block_h2_orthonormalize_eig(Q, H1Q, H2Q, m);
             } else {
                 block_l2_orthonormalize(Q, H1Q, H2Q, m);
             }
-            Gram                  = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-            RealScalar orthError2 = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
-            eiglog->info("restart: ortherror {:.5e} -> {:.5e} -> {:.5e}", fp(orthError0), fp(orthError1), fp(orthError2));
+            // Gram                  = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
+            // RealScalar orthError2 = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
+            // eiglog->info("restart: ortherror {:.5e} -> {:.5e} -> {:.5e}", fp(orthError0), fp(orthError1), fp(orthError2));
 
         } else {
             Eigen::Index qCols_old = std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() - vBlocks * b + mBlocks * b, maxRetainBlocks * b));

@@ -85,13 +85,10 @@ solver_base<Scalar>::RealScalar solver_base<Scalar>::rNormTol(Eigen::Index n) co
         switch(algo) {
             case OptAlgo::DMRG: [[fallthrough]];
             case OptAlgo::DMRGX: [[fallthrough]];
-            case OptAlgo::HYBRID_DMRGX: {
-                RealScalar h1vnorm = std::max(RealScalar{1e-30}, H1V.col(n).norm());
-                return tol_eff * std::max({RealScalar{1}, h1vnorm, lambda});
-            }
+            case OptAlgo::HYBRID_DMRGX: [[fallthrough]];
             case OptAlgo::XDMRG: {
-                RealScalar h2vnorm = std::max(RealScalar{1e-30}, H2V.col(n).norm());
-                return tol_eff * std::max({RealScalar{1}, h2vnorm, lambda});
+                RealScalar hvnorm = std::max(RealScalar{1e-30}, HV.col(n).norm());
+                return tol_eff * std::max({RealScalar{1}, hvnorm, lambda});
             }
             case OptAlgo::GDMRG: {
                 RealScalar h1vnorm = std::max(RealScalar{1e-30}, H1V.col(n).norm());
@@ -3027,10 +3024,93 @@ solver_base<Scalar>::MatrixType solver_base<Scalar>::get_refined_ritz_eigenvecto
 }
 
 template<typename Scalar>
+std::pair<typename solver_base<Scalar>::MatrixType, typename solver_base<Scalar>::MatrixType>
+    solver_base<Scalar>::get_h2_normalizer_for_the_projected_pencil(const MatrixType &T2) {
+    static constexpr auto half = RealScalar{1} / RealScalar{2};
+    MatrixType            T2h  = (T2 + T2.adjoint()) * half;
+    auto                  es   = Eigen::SelfAdjointEigenSolver<MatrixType>(T2h, Eigen::ComputeEigenvectors);
+    if(es.info() != Eigen::Success) { throw except::runtime_error("get_h2_normalizer_for_the_projected_pencil: eigensolver failed"); }
+    auto U    = es.eigenvectors();
+    auto D    = es.eigenvalues();
+    auto Dmax = std::max<RealScalar>(1, D.maxCoeff());
+    for(Eigen::Index k = 0; k < D.size(); ++k) { D(k) = std::max(D(k), eps * Dmax); }
+    return {U * D.cwiseInverse().cwiseSqrt().asDiagonal() * U.adjoint(), U * D.cwiseSqrt().asDiagonal() * U.adjoint()};
+}
+
+template<typename Scalar>
+solver_base<Scalar>::MatrixType solver_base<Scalar>::get_optimal_rayleigh_ritz_matrix(const MatrixType &Z_rr, const MatrixType &Z_ref, const MatrixType &T1,
+                                                                                      const MatrixType &T2) {
+    assert(Z_rr.size() > 0);
+    assert(Z_rr.rows() == Z_ref.rows());
+    assert(Z_rr.cols() == Z_ref.cols());
+    assert(Z_rr.rows() == T1.rows());
+    assert(Z_rr.rows() == T2.rows());
+    static constexpr auto half = RealScalar{1} / RealScalar{2};
+    MatrixType            Z(Z_rr.rows(), Z_rr.cols());
+
+    // Symmetrize
+    MatrixType T1h = (T1.adjoint() + T1) * half;
+    MatrixType T2h = (T2.adjoint() + T2) * half;
+
+    auto [W, Winv] = get_h2_normalizer_for_the_projected_pencil(T2h);
+
+    MatrixType WT1W = W.adjoint() * T1h * W;
+    MatrixType WT2W = W.adjoint() * T2h * W; // Becomes approximately identity (whether we use h2 orthonormal basis or not)
+    MatrixType I    = MatrixType::Identity(2, 2);
+    for(Eigen::Index k = 0; k < Z.cols(); ++k) {
+        using M2Type = Eigen::Matrix<Scalar, 2, 2>;
+        M2Type     A(2, 2), B(2, 2);
+        VectorType z0 = Winv * Z_rr.col(k);
+        VectorType z1 = Winv * Z_ref.col(k);
+        A(0, 0)       = z0.adjoint() * WT1W * z0;
+        A(1, 0)       = z1.adjoint() * WT1W * z0;
+        A(0, 1)       = z0.adjoint() * WT1W * z1;
+        A(1, 1)       = z1.adjoint() * WT1W * z1;
+
+        B(0, 0) = z0.adjoint() * WT2W * z0;
+        B(1, 0) = z1.adjoint() * WT2W * z0;
+        B(0, 1) = z0.adjoint() * WT2W * z1;
+        B(1, 1) = z1.adjoint() * WT2W * z1;
+
+        // Make sure B is positive definite
+        // RealScalar tau = 10 * eps * std::max(RealScalar{1}, WT2W.norm());
+        RealScalar tau = 10 * eps * std::max(RealScalar{1}, std::real(B.trace()) * half);
+        B += I * tau;
+
+        // Symmetrize
+        A = (A.adjoint() + A) * half;
+        B = (B.adjoint() + B) * half;
+
+        auto ges = Eigen::GeneralizedSelfAdjointEigenSolver<M2Type>(A, B, Eigen::Ax_lBx);
+        if(ges.info() == Eigen::Success) {
+            auto select1 = get_ritz_indices(ritz, 0, 1, ges.eigenvalues());
+            // eiglog->trace("ges eigenvalues (select {}):   {::.5e}", select1, fv(ges.eigenvalues()));
+            // eiglog->trace("ges eigenvectors: \n{}", linalg::matrix::to_string(ges.eigenvectors(), 8));
+
+            auto v   = ges.eigenvectors().col(select1.at(0));
+            Z.col(k) = z0 * v(0) + z1 * v(1);
+        } else {
+            eiglog->warn("ges failed");
+            eiglog->warn("A \n{}", linalg::matrix::to_string(A, 8));
+            eiglog->warn("B \n{}", linalg::matrix::to_string(B, 8));
+            Z.col(k) = z0; // Default to RR in case of failure
+        }
+
+        RealScalar norm = std::sqrt(std::abs(Z.col(k).dot(WT2W * Z.col(k))));
+        if(norm > 0) {
+            Z.col(k) /= norm;
+        } else {
+            Z.col(k) = z0;
+        }
+    }
+    return W * Z; // Finish by transforming back to the original basis (if we were in h2 already, then W* is a no-op)
+}
+
+template<typename Scalar>
 solver_base<Scalar>::MatrixType solver_base<Scalar>::get_refined_ritz_eigenvectors_std(const Eigen::Ref<const MatrixType> &Z,
                                                                                        const Eigen::Ref<const VectorReal> &Y, const MatrixType &Q,
                                                                                        const MatrixType &HQ) {
-    assert(algo == OptAlgo::GDMRG);
+    assert(algo != OptAlgo::GDMRG);
     assert(Z.cols() == Y.size());
     Eigen::JacobiSVD<MatrixType> svd;
     MatrixType                   Z_ref(Z.rows(), Z.cols());
@@ -3060,68 +3140,15 @@ void solver_base<Scalar>::refinedRitzVectors(const std::vector<Eigen::Index> &op
                                              VectorReal &rNorms) {
     assert(algo == OptAlgo::GDMRG);
     assert(static_cast<size_t>(V.cols()) == optIdx.size());
-    Eigen::JacobiSVD<MatrixType> svd;
-    auto                         Z     = T_evecs(Eigen::all, optIdx);
-    auto                         Y     = T_evals(optIdx);
-    auto                         Z_ref = get_refined_ritz_eigenvectors_gen(Z, Y, H1Q, H2Q);
-    //
-    // MatrixType                   Z_ref(T_evecs.rows(), V.cols());
-    // MatrixType                   T2Z_ref = MatrixType::Zero(T_evecs.rows(), V.cols()); // cache H2*zj
-    // for(Eigen::Index j = 0; j < V.cols(); ++j) {
-    //     const auto &theta = Y(j);
-    //     MatrixType  M     = (H1Q - theta * H2Q);
-    //
-    //     svd.compute(M, Eigen::ComputeThinV);
-    //
-    //     Eigen::Index min_idx;
-    //     svd.singularValues().minCoeff(&min_idx);
-    //
-    //     if(svd.info() == Eigen::Success) {
-    //         // Accept the solution
-    //         auto zj   = Z_ref.col(j);
-    //         auto t2zj = T2Z_ref.col(j);
-    //         zj        = svd.matrixV().col(min_idx);
-    //
-    //         //----------------------------------------------------------------
-    //         // orthogonalise zj against previously accepted columns
-    //         //----------------------------------------------------------------
-    //         if(use_h2_inner_product) {
-    //             t2zj = T2 * zj; // T2 is b×b, cheap
-    //         } else {
-    //             t2zj = zj;
-    //         }
-    //         for(Eigen::Index i = 0; i < j; ++i) {
-    //             auto   zi   = Z_ref.col(i);
-    //             auto   t2zi = T2Z_ref.col(i);
-    //             Scalar proj = zi.dot(t2zj); // (z_i)† T2 zj
-    //             zj.noalias() -= zi * proj;
-    //             t2zj.noalias() -= t2zi * proj; // keep cache consistent
-    //         }
-    //
-    //         //----------------------------------------------------------------
-    //         // Normalize w.r.t. T2-norm  ‖z‖_{2} = sqrt(abs(zj.adjoint()*T2*zj))
-    //         //----------------------------------------------------------------
-    //         RealScalar norm = std::sqrt(std::abs(zj.dot(t2zj)));
-    //         if(norm < normTol) {
-    //             // Column numerically null → zero-out but keep slot
-    //             zj.setZero();
-    //             t2zj.setZero();
-    //             continue;
-    //         }
-    //         zj /= norm;
-    //         t2zj /= norm;
-    //
-    //     } else {
-    //         Z_ref.col(j)            = Z.col(j);
-    //         RealScalar refinedRnorm = svd.singularValues()(min_idx);
-    //         eiglog->warn("refinement failed on ritz vector {} | refined rnorm={:.5e} | info {} ", j, fp(refinedRnorm), static_cast<int>(svd.info()));
-    //     }
-    // }
+    VectorReal                   Y     = T_evals(optIdx);
+    MatrixType                   Z_rr  = T_evecs(Eigen::all, optIdx);
+    MatrixType                   Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, H1Q, H2Q);
+    MatrixType                   Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, T1, T2); // Gives an optimal combination of Z_rr and Z_ref
 
     // Transform
-    V.noalias()   = Q * Z_ref;
-    H1V.noalias() = H1Q * Z_ref;
-    H2V.noalias() = H2Q * Z_ref;
+    V.noalias()   = Q * Z_opt;
+    H1V.noalias() = H1Q * Z_opt;
+    H2V.noalias() = H2Q * Z_opt;
     if constexpr(settings::debug_solver) {
         MatrixType GramV      = V.adjoint() * (use_h2_inner_product ? H2V : V);
         RealScalar orthErrorV = (GramV.cwiseAbs() - MatrixType::Identity(GramV.rows(), GramV.cols())).norm();
@@ -3138,13 +3165,11 @@ void solver_base<Scalar>::refinedRitzVectors(const std::vector<Eigen::Index> &op
         RealScalar orthErrorV = (GramV.cwiseAbs() - MatrixType::Identity(GramV.rows(), GramV.cols())).norm();
         eiglog->trace("refinedRitzVectors: V orth error after : {}", fp(orthErrorV));
     }
-
-    if(use_rayleigh_quotients_instead_of_evals) {
-        // We replace the eigenvalues in T_evals by their rayleigh quotients
-        VectorReal rq1 = (V.adjoint() * H1V).diagonal().real();
-        VectorReal rq2 = use_h2_inner_product ? (V.adjoint() * H2V).diagonal().real() : (V.adjoint() * V).diagonal().real();
-        Y              = rq1.cwiseQuotient(rq2);
-    }
+    // We replace the eigenvalues in T_evals by their rayleigh quotients, to sync V and Y in the residual vector calculation
+    // VectorReal rq1  = (V.adjoint() * H1V).diagonal().real();
+    // VectorReal rq2  = (V.adjoint() * H2V).diagonal().real();
+    // T_evals(optIdx) = rq1.cwiseQuotient(rq2);
+    // Y               = T_evals(optIdx);
 
     S      = H1V - H2V * Y.asDiagonal();
     rNorms = S.colwise().norm();
@@ -3239,6 +3264,15 @@ void solver_base<Scalar>::updateStatus() {
     while(status.rNorms_history.size() > status.max_history_size) status.rNorms_history.pop_front();
     while(status.optVals_history.size() > status.max_history_size) status.optVals_history.pop_front();
     while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
+    if(optVal_has_saturated() or rNorm_has_saturated())
+        status.saturation_count_optVal++;
+    else
+        status.saturation_count_optVal = 0;
+
+    if(rNorm_has_saturated())
+        status.saturation_count_rNorm++;
+    else
+        status.saturation_count_rNorm = 0;
 
     constexpr auto beta   = RealScalar{0.5f};
     VectorReal     rNorms = status.rNorms.topRows(nev); // The current residual norms
@@ -3270,6 +3304,16 @@ void solver_base<Scalar>::updateStatus() {
             fmt::format("num_matvecs_total ({}) >= max_matvecs ({}) | {:.3e} s", status.num_matvecs_total, max_matvecs, status.time_elapsed.get_time()));
         status.stopReason |= StopReason::max_matvecs;
     }
+    if(status.saturation_count_optVal >= status.saturation_count_max) {
+        status.stopMessage.emplace_back(fmt::format("saturation_count_optVal ({}) >= saturation_count_max ({}) | {:.3e} s", status.saturation_count_optVal,
+                                                    status.saturation_count_max, status.time_elapsed.get_time()));
+        status.stopReason |= StopReason::saturated_optVal;
+    }
+    if(status.saturation_count_rNorm >= status.saturation_count_max) {
+        status.stopMessage.emplace_back(fmt::format("saturation_count_rNorm ({}) >= saturation_count_max ({}) | {:.3e} s", status.saturation_count_rNorm,
+                                                    status.saturation_count_max, status.time_elapsed.get_time()));
+        status.stopReason |= StopReason::saturated_rNorm;
+    }
 
     if(status.stopReason != StopReason::none) return;
 }
@@ -3281,8 +3325,8 @@ void solver_base<Scalar>::printStatus() {
         if(algo == OptAlgo::GDMRG) { msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e}", fp(status.T1_max_eval), fp(status.T2_max_eval)); }
     }
 
-    std::string optValMsg = optVal_has_saturated() ? "SAT" : "";
-    std::string rNormMsg  = rNorm_has_saturated() ? "SAT" : "";
+    // std::string optValMsg = optVal_has_saturated() ? "SAT" : "";
+    // std::string rNormMsg  = rNorm_has_saturated() ? "SAT" : "";
     std::string rCorrMsg;
     switch(residual_correction_type_internal) {
         case ResidualCorrectionType::NONE: rCorrMsg = "NO"; break;
@@ -3317,24 +3361,25 @@ void solver_base<Scalar>::printStatus() {
 
     if(log_low_maxiter or log_jacobi_prec or log_solve_prec)
         eiglog->debug("it {:3} mv {:3} pc {:3} t {:.1e}s {}"
-                      "optVal {::.16f}{}{} "
-                      "oErr {:.3e} rNorms {::.8e}{} rNormTol {::.3e} tol {:.2e} "
-                      "({:9.2e}/mv) col {:2} b {} ritz {} "
+                      "optVal {::.16f}{} "
+                      "oErr {:.3e} rNorms {::.8e} rNormTol {::.3e} tol {:.2e} "
+                      "({:9.2e}/mv) sat {}:{}/{} col {:2} b {} ritz {} "
                       "op norm {:.2e} cond {:.2e}{}",
-                      status.iter + 1,                   //
-                      status.num_matvecs,                //
-                      status.num_precond,                //
-                      status.time_elapsed.restart_lap(), //
-                      innerMsg,                          //
-                      fv(status.optVal),                 //
-                      optValMsg,                         //
-                      evMsg,
+                      status.iter + 1,                            //
+                      status.num_matvecs,                         //
+                      status.num_precond,                         //
+                      status.time_elapsed.restart_lap(),          //
+                      innerMsg,                                   //
+                      fv(status.optVal),                          //
+                      evMsg,                                      //
                       fp(orthError),                              //
                       fv(VectorReal(status.rNorms.topRows(nev))), //
-                      rNormMsg,                                   //
                       fv(rNormTols()),                            //
                       fp(tol),                                    //
                       fp(get_rNorms_log10_change_per_matvec()),   //
+                      status.saturation_count_optVal,             //
+                      status.saturation_count_rNorm,              //
+                      status.saturation_count_max,                //
                       Q.cols(),                                   //
                       b,                                          //
                       enum2sv(ritz),                              //

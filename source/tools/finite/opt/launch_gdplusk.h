@@ -71,7 +71,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
     solver.set_maxRitzResidualHistory(1);
     solver.set_maxExtraRitzHistory(1);
     solver.set_preconditioner_type(preconditioner_type);
-    solver.use_refined_rayleigh_ritz               = false;//true;
+    solver.use_refined_rayleigh_ritz               = true;
     solver.use_relative_rnorm_tolerance            = true;
     solver.use_adaptive_inner_tolerance            = true;
     solver.use_coarse_inner_preconditioner         = use_coarse_inner_preconditioner;
