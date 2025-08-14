@@ -1,0 +1,26 @@
+diff --git a/tblis/frame/1t/reduce.h b/tblis/frame/1t/reduce.h
+index 3726c28..c85884c 100644
+--- a/tblis/frame/1t/reduce.h
++++ b/tblis/frame/1t/reduce.h
+@@ -337,7 +337,7 @@ struct data_type_helper
+     #if defined(EIGEN_CXX11_TENSOR_TENSOR_FORWARD_DECLARATIONS_H)
+ 
+     template <typename D, int A>
+-    static std::decay_t<Eigen::TensorBase<D,A>::Scalar> check(Eigen::TensorBase<D,A>&);
++    static std::decay_t<typename Eigen::TensorBase<D,A>::Scalar> check(Eigen::TensorBase<D,A>&);
+ 
+     #endif
+ 
+diff --git a/tblis/frame/base/basic_types.h b/tblis/frame/base/basic_types.h
+index a4de0af..9962694 100644
+--- a/tblis/frame/base/basic_types.h
++++ b/tblis/frame/base/basic_types.h
+@@ -1026,7 +1026,7 @@ template <int N=1>
+ using viterator = MArray::index_iterator<MArray::DYNAMIC, N>;
+ 
+ using scalar = tblis_scalar;
+-
++using namespace MArray;
+ struct tensor_wrapper : tblis_tensor
+ {
+     len_vector len_buf;
