@@ -32,6 +32,7 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::use_refined_rayleigh_ritz;
     using solver_base<Scalar>::use_h2_inner_product;
     using solver_base<Scalar>::use_h1h2_preconditioner;
+    using solver_base<Scalar>::use_krylov_schur_gdplusk_restart;
     using solver_base<Scalar>::dev_orthogonalization_before_preconditioning;
     using solver_base<Scalar>::dev_append_extra_blocks_to_basis;
     using solver_base<Scalar>::residual_correction_type_internal;
@@ -90,6 +91,9 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::bIsOK;
     using solver_base<Scalar>::get_ritz_indices;
     using solver_base<Scalar>::extractRitzVectors;
+    using solver_base<Scalar>::get_refined_ritz_eigenvectors_gen;
+    using solver_base<Scalar>::get_refined_ritz_eigenvectors_std;
+
     using solver_base<Scalar>::MultH;
     using solver_base<Scalar>::MultH1;
     using solver_base<Scalar>::MultH2;
@@ -101,6 +105,7 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::block_l2_orthonormalize;
     using solver_base<Scalar>::block_h2_orthonormalize_dgks;
     using solver_base<Scalar>::block_h2_orthonormalize_llt;
+    using solver_base<Scalar>::block_h2_orthonormalize_eig;
     using solver_base<Scalar>::block_h2_orthogonalize;
     using solver_base<Scalar>::assert_l2_orthonormal;
     using solver_base<Scalar>::assert_l2_orthogonal;

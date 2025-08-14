@@ -116,6 +116,8 @@ class solver_base {
         RealScalar                gap              = std::numeric_limits<RealScalar>::infinity();
         RealScalar                gap_H1           = std::numeric_limits<RealScalar>::infinity();
         RealScalar                gap_H2           = std::numeric_limits<RealScalar>::infinity();
+        VectorReal                T1_evals;
+        VectorReal                T2_evals;
         std::vector<Eigen::Index> optIdx;
         Eigen::Index              iter                                          = 0;
         Eigen::Index              iter_last_restart                             = 0;
@@ -250,6 +252,7 @@ class solver_base {
 
     void block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     void block_h2_orthonormalize_llt(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
+    void block_h2_orthonormalize_eig(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     // void block_h2_orthonormalize_old(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     void block_h2_orthogonalize(const MatrixType &X, const MatrixType &H1X, const MatrixType &H2X, MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y,
                                 OrthMeta &m);
@@ -291,6 +294,7 @@ class solver_base {
     bool                        use_coarse_inner_preconditioner   = false;
     bool                        use_rayleigh_quotients_instead_of_evals      = false;
     bool                        use_h2_inner_product                         = false;
+    bool                        use_krylov_schur_gdplusk_restart             = false;
     bool                        use_h1h2_preconditioner                      = false;
     bool                        dev_thick_jd_projector                       = false;
     bool                        dev_orthogonalization_before_preconditioning = false;
@@ -333,7 +337,6 @@ class solver_base {
     // VectorReal rnormTol(Eigen::Ref<VectorReal> evals) const;
     RealScalar rNormTol(Eigen::Index n) const;
     VectorReal rNormTols() const;
-
 
     /*! Norm tolerance of B-matrices.
      * Triggers the Lanczos recurrence breakdown. */
@@ -413,6 +416,11 @@ class solver_base {
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors();
+
+    MatrixType get_refined_ritz_eigenvectors_std(const Eigen::Ref<const MatrixType> &Z, const Eigen::Ref<const VectorReal> &Y, const MatrixType &Q,
+                                                 const MatrixType &HQ);
+    MatrixType get_refined_ritz_eigenvectors_gen(const Eigen::Ref<const MatrixType> &Z, const Eigen::Ref<const VectorReal> &Y, const MatrixType &H1Q,
+                                                 const MatrixType &H2Q);
 
     void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
     void refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
