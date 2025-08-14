@@ -500,6 +500,10 @@ def get_xdmrg_batch_setup(projectname):
                            "The remaining digits reveal are the decimals of g.",
             'projectname': 'xdmrg6-gdplusk',
             'batch': {
+                'd-8.00|g0.500': {'seed_extent': [1000], 'seed_offset': [1_800_0500_000000], },
+                'd-7.50|g0.500': {'seed_extent': [1000], 'seed_offset': [1_750_0500_000000], },
+                'd-7.00|g0.500': {'seed_extent': [1000], 'seed_offset': [1_700_0500_000000], },
+                'd-6.50|g0.500': {'seed_extent': [1000], 'seed_offset': [1_650_0500_000000], },
                 'd-6.00|g0.500': {'seed_extent': [1000], 'seed_offset': [1_600_0500_000000], },
                 'd-5.50|g0.500': {'seed_extent': [1000], 'seed_offset': [1_550_0500_000000], },
                 'd-5.00|g0.500': {'seed_extent': [1000], 'seed_offset': [1_500_0500_000000], },
@@ -525,6 +529,10 @@ def get_xdmrg_batch_setup(projectname):
                 'd+5.00|g0.500': {'seed_extent': [1000], 'seed_offset': [2_500_0500_000000], },
                 'd+5.50|g0.500': {'seed_extent': [1000], 'seed_offset': [2_550_0500_000000], },
                 'd+6.00|g0.500': {'seed_extent': [1000], 'seed_offset': [2_600_0500_000000], },
+                'd+6.50|g0.500': {'seed_extent': [1000], 'seed_offset': [2_650_0500_000000], },
+                'd+7.00|g0.500': {'seed_extent': [1000], 'seed_offset': [2_700_0500_000000], },
+                'd+7.50|g0.500': {'seed_extent': [1000], 'seed_offset': [2_750_0500_000000], },
+                'd+8.00|g0.500': {'seed_extent': [1000], 'seed_offset': [2_800_0500_000000], },
 
             }
         },
