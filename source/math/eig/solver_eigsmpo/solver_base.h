@@ -76,7 +76,7 @@ class solver_base {
 
     private:
     struct Status {
-        VectorReal optVal;
+        VectorReal eigVal;
         VectorReal oldVal;
         VectorReal absDiff;
         VectorReal relDiff;
@@ -129,12 +129,12 @@ class solver_base {
 
         VectorReal                rNorms;
         std::deque<VectorReal>    rNorms_history;
-        std::deque<VectorReal>    optVals_history;
+        std::deque<VectorReal>    eigVals_history;
         std::deque<Eigen::Index>  matvecs_history;
         size_t                    max_history_size        = 5;
-        size_t                    saturation_count_optVal = 0;
+        size_t                    saturation_count_eigVal = 0;
         size_t                    saturation_count_rNorm  = 0;
-        size_t                    saturation_count_max    = 20;
+        size_t                    saturation_count_max    = 10;
         std::vector<Eigen::Index> nonZeroCols; // Nonzero Gram Schmidt columns
         Eigen::Index              numZeroRows   = 0;
         std::vector<std::string>  stopMessage   = {};
@@ -151,9 +151,9 @@ class solver_base {
     RealScalar   get_op_norm_estimate(std::optional<RealScalar> eigval = std::nullopt) const;
     VectorReal   get_op_norm_estimates(Eigen::Ref<VectorReal> eigvals) const;
 
-    static RealScalar get_max_standard_deviation(const std::deque<VectorReal> &v, bool apply_log10);
-    bool              rNorm_has_saturated();
-    bool              optVal_has_saturated(RealScalar threshold = 0);
+    static VectorReal get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10);
+    bool              rNorms_have_saturated();
+    bool              eigVals_have_saturated();
     void              adjust_preconditioner_tolerance(const Eigen::Ref<const MatrixType> &S);
     void              adjust_preconditioner_H1_limits();
     void              adjust_preconditioner_H2_limits();
@@ -228,7 +228,6 @@ class solver_base {
     void compress_rows(VectorReal &X, const VectorIdxT &mask);
 
     void compress_rows_and_cols(MatrixType &X, const VectorIdxT &mask);
-
 
     void balance_pair(Eigen::Ref<MatrixType> Y, Eigen::Ref<MatrixType> H2Y, Eigen::Index i, Eigen::Index j);
 

@@ -88,7 +88,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
 
     solver.run();
 
-    tools::log->debug("GD+k: status.stopReason = {}", solver.status.stopMessage);
+    if(solver.status.stopReason != StopReason::converged_rNorms) tools::log->info("GD+k: status.stopReason = {}", solver.status.stopMessage);
     auto res = std::vector<opt_mps<Scalar>>();
     extract_results(tensors, initial, opt_meta, solver, res);
 

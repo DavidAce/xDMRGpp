@@ -144,7 +144,7 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
     res.set_pc(solver.status.num_precond_total);
     res.set_iter(solver.status.iter);
     res.set_eigs_rnorm(solver.status.rNorms(0));
-    res.set_eigs_eigval(static_cast<fp64>(solver.status.optVal[0]));
+    res.set_eigs_eigval(static_cast<fp64>(solver.status.eigVal[0]));
     auto mpos    = tensors.get_model().get_mpo_active();
     auto enve    = tensors.get_edges().get_ene_active();
     auto envv    = tensors.get_edges().get_var_active();

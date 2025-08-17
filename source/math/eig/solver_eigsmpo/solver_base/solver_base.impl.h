@@ -55,7 +55,7 @@ solver_base<Scalar>::solver_base(Eigen::Index nev, Eigen::Index ncv, OptAlgo alg
     ncv       = std::min(std::max(nev, ncv), N);
     b         = std::min(std::max(nev, b), N / 2);
     status.rNorms.setOnes(nev);
-    status.optVal.setOnes(nev);
+    status.eigVal.setOnes(nev);
     status.oldVal.setOnes(nev);
     status.absDiff.setOnes(nev);
     status.relDiff.setOnes(nev);
@@ -80,7 +80,7 @@ template<typename Scalar>
 solver_base<Scalar>::RealScalar solver_base<Scalar>::rNormTol(Eigen::Index n) const {
     if(n < 0 or n > nev) throw except::runtime_error("rNormTol: n == {} is out of bounds 0 <= n <= nev[{}]", n, nev);
     RealScalar tol_eff = std::max(tol, 10 * orthTol);
-    RealScalar lambda  = std::abs(status.optVal(n));
+    RealScalar lambda  = std::abs(status.eigVal(n));
     if(use_relative_rnorm_tolerance) {
         switch(algo) {
             case OptAlgo::DMRG: [[fallthrough]];
@@ -375,8 +375,8 @@ typename solver_base<Scalar>::RealScalar solver_base<Scalar>::get_rNorms_log10_c
 }
 
 template<typename Scalar>
-typename solver_base<Scalar>::RealScalar solver_base<Scalar>::get_max_standard_deviation(const std::deque<VectorReal> &v, bool apply_log10) {
-    if(v.empty()) return std::numeric_limits<RealScalar>::quiet_NaN();
+typename solver_base<Scalar>::VectorReal solver_base<Scalar>::get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10) {
+    if(v.empty()) return {};
     auto       cols   = static_cast<Eigen::Index>(v.size());
     auto       rows   = static_cast<Eigen::Index>(v.front().size());
     MatrixReal matrix = MatrixReal::Zero(rows, cols);
@@ -389,31 +389,37 @@ typename solver_base<Scalar>::RealScalar solver_base<Scalar>::get_max_standard_d
     }
     VectorReal means  = matrix.rowwise().mean();
     VectorReal stddev = (((matrix.colwise() - means).array().square().rowwise().sum()) / static_cast<RealScalar>((matrix.cols() - 1))).sqrt();
-    return stddev.maxCoeff();
+    return stddev;
 }
 
 template<typename Scalar>
-bool solver_base<Scalar>::rNorm_has_saturated() {
+bool solver_base<Scalar>::rNorms_have_saturated() {
     // Check if there is less than 1% fluctuation in the (order of magnitude of) latest residual norms.
     Eigen::Index min_history_size = std::min<Eigen::Index>(status.max_history_size, 2);
-    return status.iter >= min_history_size and status.rNorms_history.size() >= static_cast<size_t>(min_history_size) and
-           get_max_standard_deviation(status.rNorms_history, true) < RealScalar{0.01f};
+    if(status.iter < min_history_size) return false;
+    if(status.rNorms_history.size() < static_cast<size_t>(min_history_size)) return false;
+
+    VectorReal &vals           = status.rNorms;
+    VectorReal  stds           = get_standard_deviations(status.rNorms_history, false);
+    VectorIdxT  stds_saturated = (stds.array() < vals.array()).template cast<Eigen::Index>(); // Saturated if the fluctuations are smaller than the value itself
+    // eiglog->info("rNorm stds {::.5e} {}", fv(stds), stds_saturated);
+
+    return stds_saturated.all();
 }
 
 template<typename Scalar>
-bool solver_base<Scalar>::optVal_has_saturated(RealScalar threshold) {
-    // Check if there is less than 1% fluctuation in the latest optVals.
+bool solver_base<Scalar>::eigVals_have_saturated() {
+    // Check if there is less than 1% fluctuation in the latest eigVals.
     Eigen::Index min_history_size = std::min<Eigen::Index>(status.max_history_size, 2);
-    if(status.optVals_history.size() < static_cast<size_t>(min_history_size)) return false;
-    auto optVal_avg = status.optVal.cwiseAbs().mean();
-    auto optVal_std = get_max_standard_deviation(status.optVals_history, false);
-    auto optVal_rel = optVal_std / optVal_avg;
-    // threshold           = std::max(threshold, rnormTol(status.optVal).maxCoeff() * 10 / optVal_avg);
-    threshold = std::max(threshold, rNormTols().maxCoeff() * 10 / optVal_avg);
-    // eiglog->info("optVal avg: {:.5e} std {:.5e} rel {:.5e}", fp(optVal_avg), fp(optVal_std), fp(optVal_rel));
-    bool std_saturated = optVal_std < std::max(threshold, RealScalar{1e-1f});
-    bool rel_saturated = optVal_rel < std::max(threshold, RealScalar{1e-4f});
-    return std_saturated or rel_saturated;
+    if(status.iter < min_history_size) return false;
+    if(status.eigVals_history.size() < static_cast<size_t>(min_history_size)) return false;
+    VectorReal vals           = status.eigVal.cwiseAbs().array() + eps;
+    VectorReal stds           = get_standard_deviations(status.eigVals_history, false);
+    VectorReal rels           = stds.cwiseQuotient(vals);
+    VectorIdxT stds_saturated = (stds.array() < RealScalar{1e-2f}).template cast<Eigen::Index>();
+    VectorIdxT rels_saturated = (rels.array() < RealScalar{1e-5f}).template cast<Eigen::Index>();
+    // eiglog->info("eigVal stds {::.5e} {} rels {::.5e} {}", fv(stds), stds_saturated, fv(rels), rels_saturated);
+    return stds_saturated.all() or rels_saturated.all();
 }
 
 template<typename Scalar>
@@ -2753,9 +2759,10 @@ void solver_base<Scalar>::init() {
     assert(H2.rows() == H2.cols() && "H2 must be square");
     assert(N == H1.rows() && "H1 and H2 must have same dimension");
     assert(N == H2.rows() && "H1 and H2 must have same dimension");
-    nev = std::min(nev, N);
-    ncv = std::min(std::max(nev, ncv), N);
-    b   = std::min(std::max(nev, b), N / 2);
+    nev                         = std::min(nev, N);
+    ncv                         = std::min(std::max(nev, ncv), N);
+    b                           = std::min(std::max(nev, b), N / 2);
+    status.saturation_count_max = ncv;
     Eigen::ColPivHouseholderQR<MatrixType> cpqr;
 
     // Step 0: Construct and orthonormalize the initial block V.
@@ -2835,7 +2842,7 @@ void solver_base<Scalar>::init() {
 
             S             = H1V - H2V * Y.asDiagonal();
             status.rNorms = S.colwise().norm();
-            status.optVal = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= b
+            status.eigVal = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= b
 
         } else {
             block_orthonormalize();
@@ -2853,7 +2860,7 @@ void solver_base<Scalar>::init() {
             HV                 = HQ * Z;
             S                  = HV - V * Y.asDiagonal();
             status.rNorms      = S.colwise().norm();
-            status.optVal      = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= b
+            status.eigVal      = Y.topRows(nev); // Make sure we only take nev values here. In general, nev <= b
             status.T1_evals    = es.eigenvalues();
             status.T2_evals    = es.eigenvalues();
             status.T1_min_eval = T_evals.minCoeff();
@@ -3144,24 +3151,24 @@ void solver_base<Scalar>::extractRitzVectors() {
     //     return s;
     // };
     // if(algo == OptAlgo::GDMRG) {
-        // auto get_S_fma = [&]() -> MatrixType {
-        //     MatrixType S_fma(N, S.cols());
-        //     auto       lambdas = T_evals(status.optIdx);
-        //     for(Eigen::Index i = 0; i < S.cols(); ++i) S_fma.col(i) = get_s_fma(H1V.col(i), H2V.col(i), lambdas[i]);
-        //     return S_fma;
-        // };
+    // auto get_S_fma = [&]() -> MatrixType {
+    //     MatrixType S_fma(N, S.cols());
+    //     auto       lambdas = T_evals(status.optIdx);
+    //     for(Eigen::Index i = 0; i < S.cols(); ++i) S_fma.col(i) = get_s_fma(H1V.col(i), H2V.col(i), lambdas[i]);
+    //     return S_fma;
+    // };
 
-        // VectorReal Qnorm      = Q.colwise().norm();
-        // VectorReal H2Qnorm    = H2Q.colwise().norm();
-        // VectorReal Vnorm      = V.colwise().norm();
-        // VectorReal H2Vnorm    = H2V.colwise().norm();
-        // MatrixType S_fma      = get_S_fma();
-        // VectorReal rnorm_fma  = S_fma.colwise().norm();
-        // VectorReal rnorm_diff = status.rNorms - rnorm_fma;
-        // eiglog->info("|V| = {::.5e} |H2V| = {::.5e}  |S| = {::.5e}  |S|_fma = {::.5e} (diff = {::.5e})", fv(Vnorm), fv(H2Vnorm), fv(status.rNorms),
-        //              fv(rnorm_fma), fv(rnorm_diff));
-        // eiglog->info("|Q|   = {::.5e}", fv(Qnorm));
-        // eiglog->info("|H2Q| = {::.5e}", fv(H2Qnorm));
+    // VectorReal Qnorm      = Q.colwise().norm();
+    // VectorReal H2Qnorm    = H2Q.colwise().norm();
+    // VectorReal Vnorm      = V.colwise().norm();
+    // VectorReal H2Vnorm    = H2V.colwise().norm();
+    // MatrixType S_fma      = get_S_fma();
+    // VectorReal rnorm_fma  = S_fma.colwise().norm();
+    // VectorReal rnorm_diff = status.rNorms - rnorm_fma;
+    // eiglog->info("|V| = {::.5e} |H2V| = {::.5e}  |S| = {::.5e}  |S|_fma = {::.5e} (diff = {::.5e})", fv(Vnorm), fv(H2Vnorm), fv(status.rNorms),
+    //              fv(rnorm_fma), fv(rnorm_diff));
+    // eiglog->info("|Q|   = {::.5e}", fv(Qnorm));
+    // eiglog->info("|H2Q| = {::.5e}", fv(H2Qnorm));
     // }
 }
 
@@ -3416,23 +3423,23 @@ void solver_base<Scalar>::updateStatus() {
     status.time_precond_total += status.time_precond.get_time() + status.time_precond_inner.get_time();
 
     // Eigenvalues are sorted in ascending order.
-    status.oldVal  = status.optVal.topRows(nev);
-    status.optVal  = T_evals(status.optIdx).topRows(nev); // Make sure we only take nev values here. In general, nev <= b
-    status.absDiff = (status.optVal - status.oldVal).cwiseAbs();
-    status.relDiff = status.absDiff.array() / (RealScalar{0.5} * (status.optVal + status.oldVal).array());
+    status.oldVal  = status.eigVal.topRows(nev);
+    status.eigVal  = T_evals(status.optIdx).topRows(nev); // Make sure we only take nev values here. In general, nev <= b
+    status.absDiff = (status.eigVal - status.oldVal).cwiseAbs();
+    status.relDiff = status.absDiff.array() / (RealScalar{0.5} * (status.eigVal + status.oldVal).array());
 
     status.rNorms_history.push_back(status.rNorms.topRows(nev));
-    status.optVals_history.push_back(status.optVal.topRows(nev));
+    status.eigVals_history.push_back(status.eigVal.topRows(nev));
     status.matvecs_history.push_back(status.num_matvecs + status.num_matvecs_inner);
     while(status.rNorms_history.size() > status.max_history_size) status.rNorms_history.pop_front();
-    while(status.optVals_history.size() > status.max_history_size) status.optVals_history.pop_front();
+    while(status.eigVals_history.size() > status.max_history_size) status.eigVals_history.pop_front();
     while(status.matvecs_history.size() > status.max_history_size) status.matvecs_history.pop_front();
-    if(optVal_has_saturated() or rNorm_has_saturated())
-        status.saturation_count_optVal++;
+    if(eigVals_have_saturated())
+        status.saturation_count_eigVal++;
     else
-        status.saturation_count_optVal = 0;
+        status.saturation_count_eigVal = 0;
 
-    if(rNorm_has_saturated())
+    if(rNorms_have_saturated())
         status.saturation_count_rNorm++;
     else
         status.saturation_count_rNorm = 0;
@@ -3440,7 +3447,7 @@ void solver_base<Scalar>::updateStatus() {
     constexpr auto beta   = RealScalar{0.5f};
     VectorReal     rNorms = status.rNorms.topRows(nev); // The current residual norms
     RealScalar     relGap = status.gap * status.op_norm_estimate;
-    // status.rNorm_below_rnormTol = (rNorms.array() < rnormTol(status.optVal).array()).all(); // Residual norm condition
+    // status.rNorm_below_rnormTol = (rNorms.array() < rnormTol(status.eigVal).array()).all(); // Residual norm condition
     status.rNorm_below_rnormTol = (rNorms.array() < rNormTols().array()).all(); // Residual norm condition
     status.rNorm_below_gap      = rNorms.maxCoeff() < beta * relGap;            // Gap condition for the currently selected operator (H1, H2, or H1/H2)
 
@@ -3454,7 +3461,7 @@ void solver_base<Scalar>::updateStatus() {
         status.stopMessage.emplace_back(fmt::format("converged rNorm {::.3e} < tol {::.3e}{} | iters {} | mv {} | {:.3e} s",
                                                     fv(VectorReal(status.rNorms.topRows(nev))), fv(rNormTols()), msg_rnorm_gap, status.iter + 1,
                                                     status.num_matvecs_total, status.time_elapsed.get_time()));
-        status.stopReason |= StopReason::converged_rNorm;
+        status.stopReason |= StopReason::converged_rNorms;
     }
 
     if(max_iters >= 0l and status.iter + 1 >= max_iters) {
@@ -3467,18 +3474,25 @@ void solver_base<Scalar>::updateStatus() {
             fmt::format("num_matvecs_total ({}) >= max_matvecs ({}) | {:.3e} s", status.num_matvecs_total, max_matvecs, status.time_elapsed.get_time()));
         status.stopReason |= StopReason::max_matvecs;
     }
-    // if(status.saturation_count_optVal >= status.saturation_count_max) {
-    //     status.stopMessage.emplace_back(fmt::format("saturation_count_optVal ({}) >= saturation_count_max ({}) | {:.3e} s", status.saturation_count_optVal,
-    //                                                 status.saturation_count_max, status.time_elapsed.get_time()));
-    //     status.stopReason |= StopReason::saturated_optVal;
-    // }
-    // if(status.saturation_count_rNorm >= status.saturation_count_max) {
-    //     status.stopMessage.emplace_back(fmt::format("saturation_count_rNorm ({}) >= saturation_count_max ({}) | {:.3e} s", status.saturation_count_rNorm,
-    //                                                 status.saturation_count_max, status.time_elapsed.get_time()));
-    //     status.stopReason |= StopReason::saturated_rNorm;
-    // }
 
-    if(status.stopReason != StopReason::none) return;
+    if(std::min(status.saturation_count_eigVal, status.saturation_count_rNorm) >= status.saturation_count_max) {
+        status.stopMessage.emplace_back(fmt::format("saturation_count (eigVal {} rNorm {}) >= saturation_count_max ({}) | it {} | mv {} | {:.3e} s",
+                                                    status.saturation_count_eigVal, status.saturation_count_rNorm, status.saturation_count_max, status.iter + 1,
+                                                    status.num_matvecs_total, status.time_elapsed.get_time()));
+        status.stopReason |= StopReason::saturated_eigVals;
+        status.stopReason |= StopReason::saturated_rNorms;
+    } else if(status.saturation_count_eigVal >= status.saturation_count_max * 2) {
+        status.stopMessage.emplace_back(fmt::format("saturation_count eigVal {} >= saturation_count_max ({}) * 2 | it {} | mv {} | {:.3e} s",
+                                                    status.saturation_count_eigVal, status.saturation_count_max, status.iter + 1, status.num_matvecs_total,
+                                                    status.time_elapsed.get_time()));
+        status.stopReason |= StopReason::saturated_eigVals;
+    } else if(status.saturation_count_eigVal > 0 and status.saturation_count_rNorm >= status.saturation_count_max * 2) {
+        // Probably eigVal is stuck in some kind of cycle.
+        status.stopMessage.emplace_back(fmt::format("saturation_count_rNorm {} >= saturation_count_max ({}) * 2 | it {} | mv {} | {:.3e} s",
+                                                    status.saturation_count_rNorm, status.saturation_count_max, status.iter + 1, status.num_matvecs_total,
+                                                    status.time_elapsed.get_time()));
+        status.stopReason |= StopReason::saturated_rNorms;
+    }
 }
 
 template<typename Scalar>
@@ -3488,8 +3502,6 @@ void solver_base<Scalar>::printStatus() {
         if(algo == OptAlgo::GDMRG) { msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e}", fp(status.T1_max_eval), fp(status.T2_max_eval)); }
     }
 
-    // std::string optValMsg = optVal_has_saturated() ? "SAT" : "";
-    // std::string rNormMsg  = rNorm_has_saturated() ? "SAT" : "";
     std::string rCorrMsg;
     switch(residual_correction_type_internal) {
         case ResidualCorrectionType::NONE: rCorrMsg = "NO"; break;
@@ -3511,7 +3523,6 @@ void solver_base<Scalar>::printStatus() {
     bool        log_low_maxiter = max_iters < 10;
     bool        log_jacobi_prec = preconditioner_type == eig::Preconditioner::JACOBI and status.iter % 100 == 0;
     bool        log_solve_prec  = preconditioner_type == eig::Preconditioner::SOLVE;
-    // eiglog->debug("rNorms: {::.3e}", fv(status.rNorms));
 
     MatrixType  Gram      = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
     RealScalar  orthError = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
@@ -3524,7 +3535,7 @@ void solver_base<Scalar>::printStatus() {
 
     if(log_low_maxiter or log_jacobi_prec or log_solve_prec)
         eiglog->debug("it {:3} mv {:3} pc {:3} t {:.1e}s {}"
-                      "optVal {::.16f}{} "
+                      "eigVal {::.16f}{} "
                       "oErr {:.3e} rNorms {::.8e} rNormTol {::.3e} tol {:.2e} "
                       "({:9.2e}/mv) sat {}:{}/{} col {:2} b {} ritz {} "
                       "op norm {:.2e} cond {:.2e}{}",
@@ -3533,7 +3544,7 @@ void solver_base<Scalar>::printStatus() {
                       status.num_precond,                //
                       status.time_elapsed.restart_lap(), //
                       innerMsg,                          //
-                      fv(status.optVal),                 //
+                      fv(status.eigVal),                 //
                       evMsg,                             //
                       fp(orthError),                     //
                       // fv(VectorReal(status.rNorms.topRows(nev))), //
@@ -3541,7 +3552,7 @@ void solver_base<Scalar>::printStatus() {
                       fv(rNormTols()),                          //
                       fp(tol),                                  //
                       fp(get_rNorms_log10_change_per_matvec()), //
-                      status.saturation_count_optVal,           //
+                      status.saturation_count_eigVal,           //
                       status.saturation_count_rNorm,            //
                       status.saturation_count_max,              //
                       Q.cols(),                                 //
