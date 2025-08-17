@@ -230,7 +230,7 @@ def write_batch_status(batch_filename):
                     # print(idx, seed, sfline)
                     sfseed, sfstatus = sfline.split('|', maxsplit=1)
                     if seed != int(sfseed):
-                        raise ValueError(f'seed mismatch [{seed=}] != [{sfseed=}]')
+                        print(f'WARNING: seed mismatch [{seed=}] != [{sfseed=}]')
                     if sfstatus != "FINISHED":
                         is_finished = False
                         break
