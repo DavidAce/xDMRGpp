@@ -121,6 +121,35 @@ def get_h5_status(filename, batch):
         return "MISSING"
 
 
+def replace_last_n(path: str, oldstring: str, newstring: str, n: int) -> int:
+    """
+    Replace the last n occurrences of `oldstring` with `newstring` across the file.
+    Reads all lines (fine for a few thousand lines), then writes back.
+    Returns how many replacements were made.
+    """
+    if n <= 0:
+        return 0
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    remain = n
+    for i in range(len(lines) - 1, -1, -1):
+        if remain == 0:
+            break
+        c = lines[i].count(oldstring)
+        if c:
+            k = min(c, remain)
+            # replace from the right within the line
+            lines[i] = newstring.join(lines[i].rsplit(oldstring, k))
+            remain -= k
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    return n - remain
+
+
+
+
 def write_batch_status(batch_filename):
     parser = argparse.ArgumentParser(description='SLURM batch generator')
     parser.add_argument('--update-status', action='store_true', help='Update status files', default=False)
@@ -130,6 +159,7 @@ def write_batch_status(batch_filename):
         output_prfx = f'{batch["output_prfx"]}'
         config_file = f'{batch["config_file"]}'
         status_file = f'{batch["status_dir"]}/{Path(config_file).stem}.status'
+        seed_max    = batch.get('seed_max')
         seed_status = copy(batch.get('seed_status'))  # Old one
         batch['seed_status'] = []
         if platform.node() != "neumann" and args.update_status:
@@ -144,31 +174,24 @@ def write_batch_status(batch_filename):
                 # First we check if there are any stray h5 files that have finished simulations
                 # This could happen for example if we reduced the batch size after we already ran some on the cluster.
                 # In that case we get these seeds for free.
-                num_seeds = 0
-                for h5file in sorted(Path(output_path).rglob('*.h5')):
-                    if 'save' in h5file.name:
-                        continue
-                    seed = int(re.split('_|\.', h5file.name)[1])
-                    # Collect if it has finished
-                    filename = f'{output_path}/{batch["output_stem"]}_{seed}.h5'
-                    h5status = get_h5_status(filename=filename, batch=batch)
-                    if "FINISHED" in h5status:
-                        print(f'{config_file}: {seed}|{h5status}')
-                        sf.write(f'{seed}|{h5status}\n')
-                        num_seeds += 1
-                # Now add missing and failed seeds
+                # for h5file in sorted(Path(output_path).rglob('*.h5')):
+                #     if 'save' in h5file.name:
+                #         continue
+                #     seed = int(re.split('_|\.', h5file.name)[1])
+                #     # Collect if it has finished
+                #     filename = f'{output_path}/{batch["output_stem"]}_{seed}.h5'
+                #     h5status = get_h5_status(filename=filename, batch=batch)
+                #     if "FINISHED" in h5status:
+                #         print(f'{config_file}: {seed}|{h5status}')
+                #         sf.write(f'{seed}|{h5status}\n')
+                #         num_seeds += 1
+                batch_is_finished = True
                 for sidx, (offset, extent) in enumerate(zip(batch['seed_offset'], batch['seed_extent'])):
-                    extent_size = len(batch['seed_extent'])
-                    offset_size = len(batch['seed_offset'])
-                    if offset_size != extent_size:
-                        raise ValueError(
-                            f"offset:{offset_size} and extent:{extent_size} are not equal lengths")
 
                     ## Start checking the h5 files
                     is_finished = True
-                    for seed in range(offset, offset + extent):
-                        if num_seeds >= extent:
-                            break
+                    max_extent = np.max([extent, seed_max]) if seed_max is not None else extent
+                    for seed in range(offset, offset + max_extent):
                         h5status = None
                         if seed_status is not None:
                             if seed_status[sidx] == "FINISHED":
@@ -177,18 +200,71 @@ def write_batch_status(batch_filename):
                             filename = f'{output_path}/{batch["output_stem"]}_{seed}.h5'
                             h5status = get_h5_status(filename=filename, batch=batch)
                         is_finished = "FINISHED" in h5status
-                        if is_finished:
-                            # We already included this
-                            continue
-                        num_seeds += 1
+                        is_included = offset <= seed < offset + extent
+
+                        if not is_included and not is_finished:
+                            # We can skip this seed. If it is not included, but finished, we got a sim for free
+                            h5status='SKIP'
+                        if batch_is_finished == True and "MISSING" in h5status:
+                            batch_is_finished = False
                         print(f'{config_file}: {seed}|{h5status}')
                         sf.write(f'{seed}|{h5status}\n')
 
 
-                    if is_finished:
-                        batch['seed_status'].append("FINISHED")
-                    else:
-                        batch['seed_status'].append("PENDING")
+
+
+                if batch_is_finished:
+                    batch['seed_status'].append("FINISHED")
+                else:
+                    batch['seed_status'].append("PENDING")
+
+            # FINISHED + MISSING seeds might exceed extent. In that case, we can SKIP some of the MISSING ones
+            # To do that we need to know how many simulations we need in total
+            total_extent = 0
+            for  extent in batch['seed_extent']:
+                total_extent += extent
+            with open(status_file, 'r') as sf:
+                missing   = sf.read().count('MISSING'); sf.seek(0)
+                finished  = sf.read().count('FINISHED'); sf.seek(0)
+            nreplace = np.max([0,missing- (total_extent-finished)])
+            print(f'{total_extent=} {missing=} {finished=} {nreplace}')
+            replace_last_n(status_file, oldstring="MISSING", newstring="SKIP",n=nreplace)
+
+
+
+
+
+            #
+                #
+                #
+                #
+                # for sidx, (offset, extent) in enumerate(zip(batch['seed_offset'], batch['seed_extent'])):
+                #
+                #     ## Start checking the h5 files
+                #     is_finished = True
+                #     for seed in range(offset, offset + extent):
+                #         if num_seeds >= extent:
+                #             break
+                #         h5status = None
+                #         if seed_status is not None:
+                #             if seed_status[sidx] == "FINISHED":
+                #                 h5status = seed_status[sidx]  # Short circuit
+                #         if h5status is None:
+                #             filename = f'{output_path}/{batch["output_stem"]}_{seed}.h5'
+                #             h5status = get_h5_status(filename=filename, batch=batch)
+                #         is_finished = "FINISHED" in h5status
+                #         if is_finished:
+                #             # We already included this
+                #             continue
+                #         num_seeds += 1
+                #         print(f'{config_file}: {seed}|{h5status}')
+                #         sf.write(f'{seed}|{h5status}\n')
+                #
+                #
+                #     if is_finished:
+                #         batch['seed_status'].append("FINISHED")
+                #     else:
+                #         batch['seed_status'].append("PENDING")
             # We can now check if there are stray simulations
             strays_file = f'strays/{Path(config_file).stem}.strays'
             Path(strays_file).parent.mkdir(parents=True, exist_ok=True)

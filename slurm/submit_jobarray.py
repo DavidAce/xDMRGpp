@@ -89,6 +89,7 @@ def parse(project_name):
     parser.add_argument('--maxseed', type=int, help='Maximum seed value to consider',default=None)
     parser.add_argument('--force-run', action='store_true', help='Force run of seeds with status failed|timeout|missing')
     parser.add_argument('--replace', action='store_true', help='Set --replace')
+    parser.add_argument('--ignore-seed-order', action='store_true', help='Do not require that the seeds in the .status file be ordered')
 
     args = parser.parse_args()
     if args.seedpath is None:
@@ -227,6 +228,9 @@ def generate_sbatch_commands(project_name, args):
     for cfg in cfgs:
         seedfile = '{}/{}.json'.format(Path(args.seedpath), Path(cfg).stem)
         statfile = '{}/{}.status'.format(Path(args.status), Path(cfg).stem)
+        donekeys = ['FINISHED', "SKIP"]
+        if not args.force_run:
+            donekeys.append('FAILED')
         with open(seedfile, 'r') as fp:
             seedjson = json.load(fp)
             for extent, offset, status in zip(seedjson['seed_extent'],seedjson['seed_offset'], seedjson['seed_status']):
@@ -236,8 +240,8 @@ def generate_sbatch_commands(project_name, args):
                 for ext,off in zip(extents,offsets):
                     step = min(ext, args.sims_per_task)
                     # We can now check in the statusfile if this sub-portion has actually finished
-                    all_finished = all([l.split('|')[1] == "FINISHED" for l in get_lines(statfile, off, ext) ])
-                    if all_finished:
+                    all_done = all([l.split('|')[1] in donekeys for l in get_lines(statfile, off, ext) ])
+                    if all_done:
                         continue
                     off_final = off
                     ext_final = ext

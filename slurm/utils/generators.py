@@ -61,6 +61,7 @@ def write_batch_files(batch_setup, configs, config_paths):
                 'output_stem': config_paths['output_stem'],
                 'output_prfx': config_paths['output_prfx'],
                 'status_dir': config_paths['status_dir'],
+                'seed_max' :  batch_setup['seed_max'],
                 'seed_extent': [],
                 'seed_offset': [],
                 # 'seed_status': [],
