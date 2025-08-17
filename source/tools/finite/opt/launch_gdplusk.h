@@ -56,7 +56,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.setLogger(spdlog::level::trace, fmt::format("gd+k{}", tag));
+    solver.setLogger(spdlog::level::debug, fmt::format("gd+k{}", tag));
     solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
