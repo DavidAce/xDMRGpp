@@ -1,4 +1,4 @@
-from utils.generators import get_config_product, write_config_file, write_batch_files, move_directories
+from utils.generators import get_config_product, write_config_file, write_batch_files, move_directories, summarize_files
 from utils.xdmrg import get_output_filepath, get_config_filename, update_batch_status
 from batches_xdmrg import get_xdmrg_batch_setup
 import os
@@ -42,3 +42,4 @@ batch_setup = get_xdmrg_batch_setup('xdmrg6-gdplusk')
 write_batch_files(batch_setup=batch_setup, configs=configs, config_paths=config_paths)
 update_batch_status(config_paths=config_paths)
 move_directories(batch_setup=batch_setup, config_paths=config_paths)
+summarize_files(batch_setup=batch_setup, config_paths=config_paths, configs = configs )

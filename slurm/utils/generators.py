@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import yaml
+from natsort import natsorted
 
 
 def get_config_product(config_ranges: dict, p: dict):
@@ -127,3 +128,59 @@ def move_directories(batch_setup, config_paths):
                 Path(tgt_file).parent.mkdir(parents=True, exist_ok=True)
                 print(f'moving {src_file} -> {tgt_file}')
                 shutil.move(src_file, tgt_file)
+
+
+
+def traverse_naturally_sorted(root_dir):
+    """
+    Traverses a directory recursively and yields file paths in natural sorted order.
+    """
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        # Sort directories and files within the current level naturally
+        natsorted_dirnames = natsorted(dirnames)
+        natsorted_filenames = natsorted(filenames)
+
+        # Process files in natural sorted order
+        for filename in natsorted_filenames:
+            file_path = os.path.join(dirpath, filename)
+            yield file_path
+
+        # Update dirnames for os.walk to follow the natural sorted order
+        # This is crucial for controlling the order of directory traversal
+        dirnames[:] = natsorted_dirnames
+
+
+def summarize_files(batch_setup, config_paths, configs):
+    if platform.node() != "neumann":
+        return
+
+    bases = [Path(cfg['filename']).stem for cfg in configs]
+
+    status_dir = os.path.join(config_paths['output_prfx'], batch_setup['projectname'], 'status')
+
+    print(status_dir)
+
+    if os.path.isdir(status_dir):
+        for file_path in traverse_naturally_sorted(status_dir):
+            file_base = Path(file_path).stem
+            if not file_base in bases:
+                continue
+
+            with open(file_path, "r") as file:
+                missing   = file.read().count('MISSING'); file.seek(0)
+                failed    = file.read().count('FAILED'); file.seek(0)
+                maxiter   = file.read().count('MAX_ITERS'); file.seek(0)
+                saturated = file.read().count('SATURATED'); file.seek(0)
+                finished  = file.read().count('FINISHED'); file.seek(0)
+                total=missing+finished+failed
+            print(f'{file_base}: {missing=:>5} \t {failed=:>5} \t [{maxiter=:>5} \t {saturated=:>5}] \t {finished=:>5} \t {total=:>5}')
+
+
+# for src_dir in src_dirs:
+    #     if os.path.isdir(src_dir):
+    #         for file in os.listdir(src_dir):
+    #             src_file = os.path.join(src_dir, file)
+    #             tgt_file = os.path.join(config_paths['output_prfx'], batch_setup['projectname'], src_file)
+    #             Path(tgt_file).parent.mkdir(parents=True, exist_ok=True)
+    #             print(f'moving {src_file} -> {tgt_file}')
+    #             shutil.move(src_file, tgt_file)
