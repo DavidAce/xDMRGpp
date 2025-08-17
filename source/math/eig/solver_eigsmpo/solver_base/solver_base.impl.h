@@ -3501,7 +3501,7 @@ void solver_base<Scalar>::printStatus() {
     if(eiglog->level() >= spdlog::level::info) return;
     if(eiglog->level() == spdlog::level::trace) printFreq = 1;
     if(eiglog->level() == spdlog::level::debug) printFreq = 5;
-    if(status.iter + 1 % printFreq != 0) return;
+    if((status.iter + 1) % printFreq != 0) return;
 
     std::string msg_rnorm_gap = fmt::format(" | gap {:.3e}", fp(status.gap));
     if constexpr(settings::debug_solver) {
