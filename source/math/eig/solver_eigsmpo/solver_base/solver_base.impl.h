@@ -3497,6 +3497,12 @@ void solver_base<Scalar>::updateStatus() {
 
 template<typename Scalar>
 void solver_base<Scalar>::printStatus() {
+    int printFreq = 1;
+    if(eiglog->level() >= spdlog::level::info) return;
+    if(eiglog->level() == spdlog::level::trace) printFreq = 1;
+    if(eiglog->level() == spdlog::level::debug) printFreq = 5;
+    if(status.iter + 1 % printFreq != 0) return;
+
     std::string msg_rnorm_gap = fmt::format(" | gap {:.3e}", fp(status.gap));
     if constexpr(settings::debug_solver) {
         if(algo == OptAlgo::GDMRG) { msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e}", fp(status.T1_max_eval), fp(status.T2_max_eval)); }
