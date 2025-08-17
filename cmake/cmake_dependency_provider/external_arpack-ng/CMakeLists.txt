@@ -49,4 +49,6 @@ externalproject_add(external_arpack-ng
                     -DTESTS=OFF
                     -DMPI=OFF
                     -DINTERFACE64=OFF
+
+                    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                     )

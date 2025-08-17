@@ -5,8 +5,8 @@ if(INIT_CACHE_FILE)
 endif()
 include(ExternalProject)
 ExternalProject_Add(external_LBFGSpp
-        URL  https://github.com/yixuan/LBFGSpp/archive/refs/tags/v0.3.0.tar.gz
-        URL_MD5 55fc04d23c3cc7f797da38a0f1b1ab92
+        URL  https://github.com/yixuan/LBFGSpp/archive/refs/tags/v0.4.0.tar.gz
+        URL_MD5 6edcda923aa0bfdbb2ef7f5fe7613944
         PREFIX      ${CMAKE_BINARY_DIR}
         INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
 

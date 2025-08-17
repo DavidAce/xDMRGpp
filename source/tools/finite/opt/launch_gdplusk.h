@@ -56,7 +56,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.setLogger(spdlog::level::debug, fmt::format("gd+k{}", tag));
+    solver.setLogger(spdlog::level::trace, fmt::format("gd+k{}", tag));
     solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
@@ -65,8 +65,9 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
     solver.set_chebyshevFilterDegree(0);
     solver.set_chebyshevFilterLambdaCutBias(0.1f);
     solver.set_chebyshevFilterRelGapThreshold(1e-3f);
-    solver.set_maxBasisBlocks(ncv / solver.b);
-    solver.set_maxRetainBlocks(3 * ncv / solver.b / 8);
+    solver.set_maxBasisBlocks(ncv);
+    solver.set_maxRetainBlocks(3 * ncv / 8);
+    solver.set_maxPrevBlocks(1);
     // solver.set_maxLanczosResidualHistory(0);
     solver.set_maxRitzResidualHistory(1);
     solver.set_maxExtraRitzHistory(1);
@@ -157,10 +158,12 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
     // auto result5 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, ResidualCorrectionType::CHEAP_OLSEN, crs, false, false, false, true, false, "CO L2 Identity", elog);
     // auto result6 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, ResidualCorrectionType::CHEAP_OLSEN, crs, false, true, true,  true,  false, "CO H2 Identity", elog);
 
-    auto resultA1 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, false, false,  false, false, 1, ncv * 1  , "" , elog); //A:JD b1 L2 h2
+    auto resultA1 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, false, false,  false, false, 1, ncv * 1  , "A:JD b1 L2 h2" , elog); //A:JD b1 L2 h2
+    // auto resultA4 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, false, false,  false, false, 4, ncv * 1  , "A:JD b4 L2 h2" , elog); //A:JD b1 L2 h2
     // auto resultB1 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, false, true,   false, false, 1, ncv * 1  , "B:JD b1 L2 h1-tau*h2"    , elog);
     // auto resultB2 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, false, true,   false, false, 4, ncv * 4  , "B:JD b4 L2 h1-tau*h2"    , elog);
-    // auto resultC1 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, true, false,   false, false, 1, ncv * 1  , "C:JD b1 H2 h2       "    , elog);
+    // auto resultC1 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, true, false,   false, false, 1, ncv * 1  , "C:JD b1 H2 h2"    , elog);
+    // auto resultC4 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, true, false,   false, false, 4, ncv * 1  , "C:JD b4 H2 h2"    , elog);
     // auto resultD1 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, true, true,    false, false, 1, ncv * 1  , "D:JD b1 H2 h1-tau*h2"     , elog);
     // auto resultD4 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, true, true,    false, false, 4, ncv * 4  , "D:JD b4 H2 h1-tau*h2"     , elog);
     // auto resultE1 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, false, false,  false, true, 1, ncv * 1   , "E:JD b1 L2 h2        th" , elog);
@@ -170,6 +173,9 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
     /* clang-format on */
 
     return resultA1;
+    // return resultA4;
+    // return resultC1;
+    // return resultC4;
     // auto result5 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, true, false, "JD b", elog);
     // auto result6 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, true, true, "JD b h1h2", elog);
     // auto result7 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, crs, false, false, true, "JD h1h2", elog);

@@ -12,7 +12,7 @@
 
 namespace settings {
 #if defined(NDEBUG)
-    constexpr bool debug_GD = false;
+    constexpr bool debug_gdplusk = false;
 #else
     constexpr bool debug_gdplusk = true;
 #endif
@@ -176,169 +176,153 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
     assert(HQ.colwise().norm().minCoeff() > eps);
 }
 
+
 template<typename Scalar>
 void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q, const MatrixType &Q_new, const MatrixType &H1Q_new,
                                    const MatrixType &H2Q_new) {
     if(status.stopReason != StopReason::none) return;
-    assert(Q_new.rows() == N);
     assert(algo == OptAlgo::GDMRG);
+    RealScalar half = RealScalar{1} / RealScalar{2};
 
-    // Append the enrichment for this iteration or restart
-    RealScalar half    = RealScalar{1} / RealScalar{2};
-    auto       oldCols = Q.cols();
-    auto       newCols = std::max<Eigen::Index>(1, std::min<Eigen::Index>({Q.cols() + Q_new.cols(), N}));
-    if(newCols > maxBasisBlocks * b or Q.cols() == 0 or Q_new.cols() == 0) {
-        // Restart triggered
-        if(Q_new.cols() == 0 and status.iter <= status.iter_last_restart + 2) {
-            // Failed to add a nonzero residual
-            status.stopReason |= StopReason::saturated_basis;
-            status.stopMessage.emplace_back(fmt::format("saturated basis: exhausted subspace search | iter {} | mv {} | {:.3e} s", status.iter,
-                                                        status.num_matvecs_total, status.time_elapsed.get_time()));
-            return;
+    if(Q_new.cols() == 0 and status.iter <= status.iter_last_restart + 2) {
+        // Failed to add a nonzero residual
+        status.stopReason |= StopReason::saturated_basis;
+        status.stopMessage.emplace_back(fmt::format("saturated basis: exhausted subspace search | iter {} | mv {} | {:.3e} s", status.iter,
+                                                    status.num_matvecs_total, status.time_elapsed.get_time()));
+        return;
+    }
+
+    auto restart_basis = [&]() {
+        // Here we simply reduce the block size of Q, down to maxRetainBlocks + maxPrevBlocks
+        MatrixType T1        = Q.adjoint() * H1Q;
+        MatrixType T2        = Q.adjoint() * H2Q;
+        T1                   = (T1 + T1.adjoint()) * half;
+        T2                   = (T2 + T2.adjoint()) * half;
+        auto [W, Winv]       = get_h2_normalizer_for_the_projected_pencil(T2);
+        Eigen::Index cols_ks = std::clamp(std::min(maxRetainBlocks * b, W.cols()), b, W.cols());
+
+        MatrixType Z;
+
+        {
+            // Use a metric-balanced krylov-shur compression: Use W to map to a basis where WT2W ~ I.
+            MatrixType WT1W = W.adjoint() * T1 * W;
+            MatrixType WT2W = W.adjoint() * T2 * W;
+            WT1W            = (WT1W + WT1W.adjoint()) * half;
+            WT2W            = (WT2W + WT2W.adjoint()) * half;
+
+            auto ges       = Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType>(WT1W, WT2W, Eigen::Ax_lBx);
+            cols_ks        = std::min(cols_ks, ges.eigenvalues().size());
+            auto selectIdx = get_ritz_indices(ritz, 0, cols_ks, ges.eigenvalues()); // Gets eigenvalue indices sorted according to enum ritz
+
+            auto Y     = ges.eigenvalues()(selectIdx);
+            auto Z_rr  = ges.eigenvectors()(Eigen::all, selectIdx);
+            auto Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, H1Q, H2Q);
+            auto Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, WT1W, WT2W);
+
+            Z = W * Z_opt; // Transorm back with W
+
+            orthonormalize_Z(Z, T2);
         }
 
-        status.iter_last_restart = status.iter;
-        if(Q.cols() == 0) {
-            Q = Q_new;
-            return;
-        }
+        MatrixType Q_ks   = Q * Z;   // Krylov-Shur compression down to cols_ks columns
+        MatrixType H1Q_ks = H1Q * Z; // Krylov-Shur compression down to cols_ks columns
+        MatrixType H2Q_ks = H2Q * Z; // Krylov-Shur compression down to cols_ks columns
 
-        if(use_krylov_schur_gdplusk_restart) {
-            MatrixType T1      = Q.adjoint() * H1Q;
-            MatrixType T2      = Q.adjoint() * H2Q;
-            T1                 = (T1 + T1.adjoint()) * half;
-            T2                 = (T2 + T2.adjoint()) * half;
-            auto [W, Winv]     = get_h2_normalizer_for_the_projected_pencil(T2);
-            Eigen::Index nKeep = std::clamp(std::min(maxRetainBlocks * b, W.cols()), b, W.cols());
+        MatrixType Gram_ks      = use_h2_inner_product ? Q_ks.adjoint() * H2Q_ks : Q_ks.adjoint() * Q_ks;
+        RealScalar orthError_ks = (Gram_ks - MatrixType::Identity(Gram_ks.rows(), Gram_ks.cols())).norm();
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q_ks (orthError = {:.5e})", fp(orthError_ks));
 
-            MatrixType WZ;
+        MatrixType H1K_prev, H2K_prev; // Calculated with matvecs in the orthogonalization/orthonormalization routines below
 
-            {
-                MatrixType WT1W = W.adjoint() * T1 * W;
-                MatrixType WT2W = W.adjoint() * T2 * W;
-                WT1W            = (WT1W + WT1W.adjoint()) * half;
-                WT2W            = (WT2W + WT2W.adjoint()) * half;
-
-                // auto es        = Eigen::SelfAdjointEigenSolver<MatrixType>(WT1W, Eigen::ComputeEigenvectors);
-                auto es        = Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType>(WT1W, WT2W, Eigen::Ax_lBx);
-                nKeep          = std::min(nKeep, es.eigenvalues().size());
-                auto selectIdx = get_ritz_indices(ritz, 0, nKeep, es.eigenvalues()); // Gets eigenvalue indices sorted according to enum ritz
-
-                auto Y     = es.eigenvalues()(selectIdx);
-                auto Z_rr  = es.eigenvectors()(Eigen::all, selectIdx);
-                auto Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, H1Q, H2Q);
-                auto Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, T1, T2);
-                WZ         = W * Z_opt; // Use this to compress in L2-space
-            }
-
-            MatrixType Q_keep   = Q * WZ;
-            MatrixType H1Q_keep = H1Q * WZ;
-            MatrixType H2Q_keep = H2Q * WZ;
-
-            MatrixType Q_res   = Q_new;
-            MatrixType H1Q_res = H1Q_new;
-            MatrixType H2Q_res = H2Q_new;
-
-            // MatrixType Gram       = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-            // RealScalar orthError0 = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
-
+        {
             OrthMeta m;
             m.maskPolicy = MaskPolicy::COMPRESS;
-
+            // Orthogonalize K_prev against Q_ks with DGKS, and orthonormalize K_prev internally
             if(use_h2_inner_product) {
-                block_h2_orthonormalize_eig(Q_keep, H1Q_keep, H2Q_keep, m);
-                block_h2_orthogonalize(Q_keep, H1Q_keep, H2Q_keep, Q_res, H1Q_res, H2Q_res, m);
+                block_h2_orthogonalize(Q_ks, H1Q_ks, H2Q_ks, K_prev, H1K_prev, H2K_prev, m);
             } else {
-                block_l2_orthonormalize(Q_keep, H1Q_keep, H2Q_keep, m);
-                block_l2_orthogonalize(Q_keep, H1Q_keep, H2Q_keep, Q_res, H1Q_res, H2Q_res, m);
-            }
-
-            Q.conservativeResize(N, Q_keep.cols() + Q_res.cols());
-            Q.leftCols(Q_keep.cols()) = Q_keep;
-            Q.rightCols(Q_res.cols()) = Q_res;
-
-            H1Q.conservativeResize(N, H1Q_keep.cols() + H1Q_res.cols());
-            H1Q.leftCols(H1Q_keep.cols()) = H1Q_keep;
-            H1Q.rightCols(H1Q_res.cols()) = H1Q_res;
-
-            H2Q.conservativeResize(N, H2Q_keep.cols() + H2Q_res.cols());
-            H2Q.leftCols(H2Q_keep.cols()) = H2Q_keep;
-            H2Q.rightCols(H2Q_res.cols()) = H2Q_res;
-            // Gram                          = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-            // RealScalar orthError1         = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
-
-            if(use_h2_inner_product) {
-                block_h2_orthonormalize_eig(Q, H1Q, H2Q, m);
-            } else {
-                block_l2_orthonormalize(Q, H1Q, H2Q, m);
-            }
-            // Gram                  = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-            // RealScalar orthError2 = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
-            // eiglog->info("restart: ortherror {:.5e} -> {:.5e} -> {:.5e}", fp(orthError0), fp(orthError1), fp(orthError2));
-
-        } else {
-            Eigen::Index qCols_old = std::max<Eigen::Index>(0, std::min<Eigen::Index>(Q.cols() - vBlocks * b + mBlocks * b, maxRetainBlocks * b));
-            Eigen::Index vCols     = V.cols(); // Number of ritz vectors (equal to the block size b)
-            Eigen::Index mCols = use_extra_ritz_vectors_in_the_next_basis and T_evals.size() >= 2 * b ? b : 0; // Extra ritz vectors from the latest iteration
-            Eigen::Index kCols = qCols_old;                                                                    // Number of columns to keep from the old basis Q
-            Eigen::Index qCols = Q_new.cols(); // The number of columns from recently preconditioned residuals
-
-            auto vOffset = 0;
-            auto mOffset = vCols;
-            auto kOffset = vCols + mCols;
-            auto qOffset = vCols + mCols + kCols;
-
-            MatrixType Q_keep = Q.rightCols(kCols);
-
-            if(mCols > 0) M = get_mBlock(); // Generates M, H1M, H2M before modifying Q
-            Q.conservativeResize(N, vCols + mCols + kCols + Q_new.cols());
-
-            if(vCols > 0) Q.middleCols(vOffset, vCols) = V;
-            if(mCols > 0) Q.middleCols(mOffset, mCols) = M;
-            if(kCols > 0) Q.middleCols(kOffset, kCols) = Q_keep;
-            if(qCols > 0) Q.middleCols(qOffset, qCols) = Q_new;
-
-            OrthMeta m;
-            m.maskPolicy = MaskPolicy::COMPRESS;
-            H1Q          = MatrixType(); // Is rebuilt from scratch during orthonormalization
-            H2Q          = MatrixType(); // Is rebuilt from scratch during orthonormalization
-            if(use_h2_inner_product) {
-                block_h2_orthonormalize_eig(Q, H1Q, H2Q, m);
-            } else {
-                block_l2_orthonormalize(Q, H1Q, H2Q, m);
+                block_l2_orthogonalize(Q_ks, H1Q_ks, H2Q_ks, K_prev, H1K_prev, H2K_prev, m);
             }
         }
 
-    } else if(oldCols != newCols) {
-        // Append enrichment
-        Q.conservativeResize(N, newCols);
-        H1Q.conservativeResize(N, newCols);
-        H2Q.conservativeResize(N, newCols);
+        MatrixType Gram_K      = use_h2_inner_product ? K_prev.adjoint() * H2K_prev : K_prev.adjoint() * K_prev;
+        RealScalar orthError_K = (Gram_K - MatrixType::Identity(Gram_K.rows(), Gram_K.cols())).norm();
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of K after orthogonalization against Q_ks (orthError = {:.5e})", fp(orthError_K));
 
-        auto copyCols           = std::min<Eigen::Index>(newCols, Q_new.cols());
-        Q.rightCols(copyCols)   = Q_new.leftCols(copyCols);
-        H1Q.rightCols(copyCols) = H1Q_new.leftCols(copyCols);
-        H2Q.rightCols(copyCols) = H2Q_new.leftCols(copyCols);
-        //
         OrthMeta m;
         m.maskPolicy = MaskPolicy::COMPRESS;
-        m.Gram       = Q.adjoint() * H2Q;
-        m.Gram       = (m.Gram + m.Gram.adjoint()) * half;
-        m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
-        if(m.orthError > normTol * std::sqrt(status.op_norm_estimate)) {
-            // MatrixType Gram               = Q.adjoint() * H2Q;
-            // RealScalar orthError0          = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
 
-            if(use_h2_inner_product) {
-                block_h2_orthonormalize_eig(Q, H1Q, H2Q, m);
-            } else {
-                block_l2_orthonormalize(Q, H1Q, H2Q, m);
-            }
-            // Gram = Q.adjoint() * H2Q;
-            // RealScalar orthError1 = (Gram - MatrixType::Identity(Gram.cols(), Gram.rows())).norm();
-            // eiglog->info("append: ortherror {:.5e} -> {:.5e}", fp(orthError0), fp(orthError1));
+        Q.conservativeResize(N, Q_ks.cols() + K_prev.cols());
+        Q.leftCols(Q_ks.cols())    = Q_ks;
+        Q.rightCols(K_prev.cols()) = K_prev;
+
+        H1Q.conservativeResize(N, H1Q_ks.cols() + H1K_prev.cols());
+        H1Q.leftCols(H1Q_ks.cols())    = H1Q_ks;
+        H1Q.rightCols(H1K_prev.cols()) = H1K_prev;
+
+        H2Q.conservativeResize(N, H2Q_ks.cols() + H2K_prev.cols());
+        H2Q.leftCols(H2Q_ks.cols())    = H2Q_ks;
+        H2Q.rightCols(H2K_prev.cols()) = H2K_prev;
+
+        m.Gram      = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
+        m.Gram      = (m.Gram + m.Gram.adjoint()) * half;
+        m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after composition: orthError: {:.5e}", fp(m.orthError));
+
+        // Orthonormalize the resulting Q
+        if(use_h2_inner_product) {
+            block_h2_orthonormalize_eig(Q, H1Q, H2Q, m);
+        } else {
+            block_l2_orthonormalize(Q, H1Q, H2Q, m);
+        }
+        if constexpr(settings::debug_gdplusk) eiglog->info("Gram of Q after orthonorm : orthError: {:.5e}", fp(m.orthError));
+
+        status.iter_last_restart = status.iter;
+    };
+
+    auto newCols = std::min<Eigen::Index>({Q.cols() + Q_new.cols(), N});
+    if(newCols > maxBasisBlocks * b or Q_new.cols() == 0) { restart_basis(); }
+    if(Q_new.cols() == 0) return;
+
+    assert(Q_new.rows() == N);
+
+    newCols = Q.cols() + Q_new.cols();
+
+    // Append the enrichment block Q_new
+    Q.conservativeResize(N, newCols);
+    H1Q.conservativeResize(N, newCols);
+    H2Q.conservativeResize(N, newCols);
+
+    auto copyCols           = std::min<Eigen::Index>(newCols, Q_new.cols());
+    Q.rightCols(copyCols)   = Q_new.leftCols(copyCols);
+    H1Q.rightCols(copyCols) = H1Q_new.leftCols(copyCols);
+    H2Q.rightCols(copyCols) = H2Q_new.leftCols(copyCols);
+    //
+
+    OrthMeta m;
+    m.maskPolicy = MaskPolicy::COMPRESS;
+    m.Gram       = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
+    m.Gram       = (m.Gram + m.Gram.adjoint()) * half;
+    m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+
+    if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after appen: orthError: {:.5e}", fp(m.orthError));
+
+    m.Gram      = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
+    m.Gram      = (m.Gram + m.Gram.adjoint()) * half;
+    m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+
+    bool basis_was_restarted = status.iter_last_restart == status.iter;
+    if(basis_was_restarted or m.orthError > normTol * std::sqrt(status.op_norm_estimate)) {
+        if(use_h2_inner_product) {
+            block_h2_orthonormalize_eig(Q, H1Q, H2Q, m);
+        } else {
+            block_l2_orthonormalize(Q, H1Q, H2Q, m);
         }
     }
+
+    if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after ortho: orthError: {:.5e}", fp(m.orthError));
+
     if(use_h2_inner_product) {
         assert_h2_orthonormal(Q, H2Q);
     } else {

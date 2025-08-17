@@ -144,7 +144,7 @@ class IterativeLinearSolverPreconditioner {
         VectorType y = b;
         if constexpr(matrix->has_projector_op) {
             // Project out an operator if present here
-            y = matrix->ProjectOpR(b);
+            y = matrix->ProjectOpL(b);
         }
 
         auto old_iterations = m_iterations;
@@ -169,7 +169,7 @@ class IterativeLinearSolverPreconditioner {
 
         if constexpr(matrix->has_projector_op) {
             // Project out an operator if present here
-            x = matrix->ProjectOpL(x);
+            x = matrix->ProjectOpR(x);
         }
     }
     template<typename Rhs, typename Dest>

@@ -93,7 +93,7 @@ bool MpsSite<Scalar>::is_normalized(RealScalar prec) const {
     }
     constexpr auto eps  = std::numeric_limits<RealScalar>::epsilon();
     const auto     size = static_cast<RealScalar>(get_M_bare().size());
-    prec                = std::max(prec, eps * std::sqrt(size)*100);
+    prec                = std::max(prec, eps * std::sqrt(size) * 100);
     auto t_dbg          = tid::tic_token("is_normalized", tid::level::highest);
     if(isCenter() or get_label() == "AC") {
         auto norm      = tools::common::contraction::contract_mps_norm(get_M());
@@ -381,7 +381,8 @@ void MpsSite<Scalar>::fuse_mps(const MpsSite &other) {
 template<typename Scalar>
 void MpsSite<Scalar>::apply_mpo(const Eigen::Tensor<Scalar, 4> &mpo, bool adjoint) {
     auto t_mpo = tid::tic_token("apply_mpo", tid::level::higher);
-    tools::log->trace("MpsSite({})::apply_mpo: Applying mpo (dims {})", get_tag(), mpo.dimensions());
+    if constexpr(settings::debug_apply_mpo or settings::verbose_apply_mpo)
+        tools::log->trace("MpsSite({})::apply_mpo: Applying mpo (dims {})", get_tag(), mpo.dimensions());
     if constexpr(settings::verbose_apply_mpo) {
         tools::log->trace("L({}):\n{}\n", get_position(), linalg::tensor::to_string(get_L(), 16, 18));
         tools::log->trace("M({}):\n{}\n", get_position(), linalg::tensor::to_string(get_M_bare(), 4, 6));

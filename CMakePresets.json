@@ -117,6 +117,22 @@
       }
     },
     {
+      "name": "profdebug",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_SHARED_LIBS": "TRUE",
+        "CMAKE_VERBOSE_MAKEFILE": "TRUE",
+        "CMAKE_MESSAGE_LOG_LEVEL": "VERBOSE",
+        "DMRG_CMAKE_DEBUG": "TRUE",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "FALSE",
+        "CMAKE_C_FLAGS_DEBUG_INIT": "-O1 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_DEBUG_INIT": "-O1 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CUDA_FLAGS_DEBUG_INIT": "-O1 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_Fortran_FLAGS_DEBUG_INIT": "-O1 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always"
+      }
+    },
+    {
       "name": "profiling",
       "hidden": true,
       "cacheVariables": {
@@ -334,6 +350,17 @@
       ]
     },
     {
+      "name": "profdebug-conan-flexiblas-native",
+      "displayName": "profdebug|conan|flexiblas|native",
+      "inherits": [
+        "native",
+        "flexiblas",
+        "conan",
+        "profdebug",
+        "default"
+      ]
+    },
+    {
       "name": "profiling-conan-flexiblas-native",
       "displayName": "profiling|conan|flexiblas|native",
       "inherits": [
@@ -530,6 +557,10 @@
     {
       "name": "release-conan-openblas-native",
       "configurePreset": "release-conan-openblas-native"
+    },
+    {
+      "name": "profdebug-conan-flexiblas-native",
+      "configurePreset": "profdebug-conan-flexiblas-native"
     },
     {
       "name": "profiling-conan-flexiblas-native",

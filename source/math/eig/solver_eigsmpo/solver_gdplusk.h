@@ -103,6 +103,8 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::MultP1;
     using solver_base<Scalar>::MultP2;
 
+    using solver_base<Scalar>::balance_columns_sweep;
+    using solver_base<Scalar>::orthonormalize_Z;
     using solver_base<Scalar>::block_l2_orthogonalize;
     using solver_base<Scalar>::block_l2_orthonormalize;
     using solver_base<Scalar>::block_h2_orthonormalize_dgks;
@@ -119,6 +121,9 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::qr_and_chebyshevFilter;
     using solver_base<Scalar>::compress_col_blocks;
     using solver_base<Scalar>::compress_rows_and_cols;
+    using solver_base<Scalar>::set_maxPrevBlocks;
+    using solver_base<Scalar>::maxPrevBlocks;
+    using solver_base<Scalar>::K_prev;
 
     private:
     using solver_base<Scalar>::use_extra_ritz_vectors_in_the_next_basis;
@@ -128,14 +133,15 @@ class solver_gdplusk : public solver_base<Scalar> {
 
     Eigen::Index max_mBlocks     = 1;
     Eigen::Index max_sBlocks     = 1;
-    Eigen::Index vBlocks         = 0;
-    Eigen::Index mBlocks         = 0;
-    Eigen::Index sBlocks         = 0;
-    Eigen::Index kBlocks         = 0;
-    Eigen::Index maxBasisBlocks  = 8;
-    Eigen::Index maxRetainBlocks = 1;
-    MatrixType   Q_new, HQ_new, H1Q_new, H2Q_new;
-    MatrixType   G;
+    Eigen::Index vBlocks         = 0; /*!< Current ritz vector blocks */
+    Eigen::Index mBlocks         = 0; /*!< "Extra" ritz vector blocks */
+    Eigen::Index sBlocks         = 0; /*!< Preconditioned residual vector blocks */
+    Eigen::Index kBlocks         = 0; /*!< Kept blocks? */
+    Eigen::Index maxBasisBlocks  = 8; /*!< Maximum number of blocks in Q (m_max/b in PRIMME) */
+    Eigen::Index maxRetainBlocks = 1; /*!< Maximum number of blocks to keep from old Q after thick restarts (m_min/b in PRIMME) */
+                                      /*!< restarts (m_min/b in PRIMME) */
+    MatrixType Q_new, HQ_new, H1Q_new, H2Q_new;
+    MatrixType G;
 
     void selective_orthonormalize(const Eigen::Ref<const MatrixType> X,            // (N, xcols)
                                   Eigen::Ref<MatrixType>             Y,            // (N, ycols)
@@ -144,6 +150,7 @@ class solver_gdplusk : public solver_base<Scalar> {
     );
 
     void make_new_Q_block(fMultP_t fMultP);
+
 
     public:
     bool inject_randomness = false;

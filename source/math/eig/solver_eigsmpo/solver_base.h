@@ -60,21 +60,6 @@ class solver_base {
 
     struct OrthMeta {
         // By convention, H2Y is the matrix that we modify, while H2X is const.
-        // private:
-        // MatrixType cacheH2X;
-        // MatrixType cacheH2Y;
-        // fMultH_t   fMultH2;
-
-        public:
-        // const MatrixType                   &get_H2X() const { return cacheH2X; }
-        // const Eigen::Ref<const MatrixType> &get_H2X(const Eigen::Ref<const MatrixType> &X) const;
-        // MatrixType                         &get_H2Y() { return cacheH2X; }
-        // Eigen::Ref<MatrixType>             &get_H2Y(Eigen::Ref<MatrixType> Y);
-        // void                                set_cache_H2X(const Eigen::Ref<const MatrixType> &H2X) { cacheH2X = H2X; }
-        // void                                set_cache_H2Y(Eigen::Ref<MatrixType> H2Y) { cacheH2Y = H2Y; }
-        // void                                has_cache_H2X(Eigen::Index rows, Eigen::Index cols) { return cacheH2X.rows() == rows && cacheH2X.cols() == cols;
-        // } void                                has_cache_H2Y(Eigen::Index rows, Eigen::Index cols) { return cacheH2Y.rows() == rows && cacheH2Y.cols() ==
-        // cols; } void                                set_MultH2(fMultH_t fMultH2_) { fMultH2 = fMultH2_; }
         MatrixType Gram;
         VectorReal Rdiag;
         RealScalar maskTol   = 10 * std::numeric_limits<RealScalar>::epsilon();
@@ -85,8 +70,6 @@ class solver_base {
         VectorReal proj_sum_h2;
         VectorReal scale_log;
         VectorIdxT mask;
-        // bool       compress_cols       = true;
-        // bool       randomize_tiny_cols = true;
         bool       force_refresh_h = false;
         MaskPolicy maskPolicy      = MaskPolicy::RANDOMIZE;
     };
@@ -124,8 +107,10 @@ class solver_base {
         Eigen::Index              iter_last_preconditioner_tolerance_adjustment = 0;
         Eigen::Index              iter_last_preconditioner_H1_limit_adjustment  = 0;
         Eigen::Index              iter_last_preconditioner_H2_limit_adjustment  = 0;
+        Eigen::Index              num_iters_inner                               = 0; /*!< Number of iterations in the inner solve */
+        Eigen::Index              num_iters_inner_prev                          = 0; /*!< Number of iterations in the previous inner solve */
         Eigen::Index              num_matvecs                                   = 0; /*!< Number of matvecs this iteration */
-        Eigen::Index              num_matvecs_inner                             = 0; /*!< Number of matvecs over all iterations */
+        Eigen::Index              num_matvecs_inner                             = 0; /*!< Number of matvecs in the inner solve */
         Eigen::Index              num_matvecs_total                             = 0; /*!< Number of matvecs over all iterations */
         Eigen::Index              num_precond                                   = 0;
         Eigen::Index              num_precond_inner                             = 0;
@@ -178,8 +163,7 @@ class solver_base {
     spdlog::level::level_enum       logLevel = spdlog::level::warn;
     std::shared_ptr<spdlog::logger> eiglog;
 
-    Eigen::Index qBlocks = 0;
-
+    Eigen::Index      qBlocks = 0;
     MatrixType        get_wBlock(fMultP_t MultP);
     MatrixType        get_mBlock();
     MatrixType        get_sBlock(const MatrixType &S_in, fMultP_t MultP);
@@ -245,8 +229,18 @@ class solver_base {
 
     void compress_rows_and_cols(MatrixType &X, const VectorIdxT &mask);
 
+
+    void balance_pair(Eigen::Ref<MatrixType> Y, Eigen::Ref<MatrixType> H2Y, Eigen::Index i, Eigen::Index j);
+
+    void balance_columns_sweep(Eigen::Ref<MatrixType>                  Y,                        //
+                               Eigen::Ref<MatrixType>                  H2Y,                      //
+                               Eigen::Index                            num_sweeps          = 2,  //
+                               Eigen::Index                            max_pairs_per_sweep = -1, //
+                               typename Eigen::NumTraits<Scalar>::Real target_ratio        = 2.0);
+
     void assert_allFinite(const Eigen::Ref<const MatrixType> &X, const std::source_location &location = std::source_location::current());
 
+    void orthonormalize_Z(Eigen::Ref<MatrixType> Z, const Eigen::Ref<const MatrixType> &T2);
     void block_l2_orthonormalize(MatrixType &Y, MatrixType &HY, OrthMeta &m);
     void block_l2_orthonormalize(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     void block_l2_orthogonalize(const MatrixType &X, const MatrixType &HX, MatrixType &Y, MatrixType &HY, OrthMeta &m);
@@ -320,6 +314,7 @@ class solver_base {
     MatrixType             H1V;             /*!< Holds the current top ritz eigenvectors multiplied by H1 (for GDMRG). */
     MatrixType             H2V;             /*!< Holds the current top ritz eigenvectors multiplied by H2 (for GDMRG). */
     MatrixType             V_prev;          /*!< Holds the previous top ritz eigenvectors */
+    MatrixType             K, K_prev;       /*!< Holds the "k >= b" top ritz vectors from the two previous iterations (used for "k" in GD+k) */
     MatrixType             S, S1, S2;       /*!< The residual vectors for the top b ritz vectors, also for H1 and H2 (for GDMRG) */
     MatrixType             M, HM, H1M, H2M; /*!< The b next best residual vectors M, and with the applied operators */
     VectorReal             T_evals;
@@ -327,13 +322,12 @@ class solver_base {
 
     Eigen::HouseholderQR<MatrixType> hhqr;
 
-    const RealScalar eps = std::numeric_limits<RealScalar>::epsilon();
-    RealScalar       tol = std::numeric_limits<RealScalar>::epsilon() * 10000;
-    /* clang-format off */
-    RealScalar       normTol   = std::numeric_limits<RealScalar>::epsilon() * 10;   /*!< Normalization tolerance for columns in Q. */
-    RealScalar       orthTol   = std::numeric_limits<RealScalar>::epsilon() * 100; /*!< Orthonormality tolerance between columns in Q. Orthonormality can be improved with extra DGKS passes */
-    RealScalar       quotTolB  = RealScalar{1e-10f};                                 /*!< Quotient tolerance for |B|/|A|. Triggers the Lanczos recurrence breakdown. */
-    /* clang-format on */
+    static constexpr auto eps      = std::numeric_limits<RealScalar>::epsilon();
+    static constexpr auto half     = RealScalar{1} / RealScalar{2};
+    RealScalar            tol      = eps * 10000;
+    RealScalar            normTol  = eps * 10;  /*!< Normalization tolerance for columns in Q. */
+    RealScalar            orthTol  = eps * 100; /*!< Orthonormality tolerance between columns in Q. Orthonormality can be improved with extra DGKS passes */
+    RealScalar            quotTolB = RealScalar{1e-10f}; /*!< Quotient tolerance for |B|/|A|. Triggers the Lanczos recurrence breakdown. */
 
     /*! Convergence tolerance of ritz-vector residuals.
      * Converged if rnorm < tol * opNorm. */
@@ -419,6 +413,7 @@ class solver_base {
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &HV, MatrixType &S, VectorReal &rNorms);
     void extractRitzVectors();
+    void extractPrevVectors(Eigen::Index k);
 
     std::pair<MatrixType, MatrixType> get_h2_normalizer_for_the_projected_pencil(const MatrixType &T2);
     MatrixType get_optimal_rayleigh_ritz_matrix(const MatrixType &Z_rr, const MatrixType &Z_ref, const MatrixType &T1, const MatrixType &T2);
@@ -455,4 +450,6 @@ class solver_base {
             if(status.stopReason != StopReason::none) break;
         }
     }
+    Eigen::Index maxPrevBlocks = 1; /*!< Maximum number of previous ritz vector blocks to append (in addition to maxRetainBlocks (k in "GD+k" PRIMME) */
+    void         set_maxPrevBlocks(Eigen::Index pb);
 };
