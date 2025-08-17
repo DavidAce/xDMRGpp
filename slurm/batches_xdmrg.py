@@ -536,6 +536,56 @@ def get_xdmrg_batch_setup(projectname):
 
             }
         },
+        'xdmrg6-gdplusk-L18': {
+            'description': "Batch in 2025 for xDMRG with the new GD+k, JD correction equation"
+                           "solved with MINRES with internal block-jacobi preconditioner."
+                           "We also have a new eigensolver-based environment expansion routine."
+                           ""
+                           "The seeds encode the Hamiltonian parameters"
+                           " Eg:  1|600|0000|00000"
+                           "     +-| d | g  | extra "
+                           "The seeds start with 1 for negative delta, and 2 for positive."
+                           "The second digit represents the d-value."
+                           "The remaining digits reveal are the decimals of g.",
+            'projectname': 'xdmrg6-gdplusk',
+            'batch': {
+                'd-8.00|g0.500': {'seed_extent': [1000], 'seed_offset': [1_800_0500_000000], },
+                'd-7.50|g0.500': {'seed_extent': [1000], 'seed_offset': [1_750_0500_000000], },
+                'd-7.00|g0.500': {'seed_extent': [1000], 'seed_offset': [1_700_0500_000000], },
+                'd-6.50|g0.500': {'seed_extent': [1000], 'seed_offset': [1_650_0500_000000], },
+                'd-6.00|g0.500': {'seed_extent': [1000], 'seed_offset': [1_600_0500_000000], },
+                'd-5.50|g0.500': {'seed_extent': [1000], 'seed_offset': [1_550_0500_000000], },
+                'd-5.00|g0.500': {'seed_extent': [ 400], 'seed_offset': [1_500_0500_000000], },
+                'd-4.50|g0.500': {'seed_extent': [ 400], 'seed_offset': [1_450_0500_000000], },
+                'd-4.00|g0.500': {'seed_extent': [ 100], 'seed_offset': [1_400_0500_000000], },
+                'd-3.50|g0.500': {'seed_extent': [  50], 'seed_offset': [1_350_0500_000000], },
+                'd-3.00|g0.500': {'seed_extent': [  50], 'seed_offset': [1_300_0500_000000], },
+                'd-2.50|g0.500': {'seed_extent': [  50], 'seed_offset': [1_250_0500_000000], },
+                'd-2.00|g0.500': {'seed_extent': [  10], 'seed_offset': [1_200_0500_000000], },
+                'd-1.50|g0.500': {'seed_extent': [  10], 'seed_offset': [1_150_0500_000000], },
+                'd-1.00|g0.500': {'seed_extent': [  10], 'seed_offset': [1_100_0500_000000], },
+                'd-0.50|g0.500': {'seed_extent': [  10], 'seed_offset': [1_050_0500_000000], },
+                'd+0.00|g0.500': {'seed_extent': [  10], 'seed_offset': [2_000_0500_000000], },
+                'd+0.50|g0.500': {'seed_extent': [  10], 'seed_offset': [2_050_0500_000000], },
+                'd+1.00|g0.500': {'seed_extent': [  10], 'seed_offset': [2_100_0500_000000], },
+                'd+1.50|g0.500': {'seed_extent': [  10], 'seed_offset': [2_150_0500_000000], },
+                'd+2.00|g0.500': {'seed_extent': [  10], 'seed_offset': [2_200_0500_000000], },
+                'd+2.50|g0.500': {'seed_extent': [  50], 'seed_offset': [2_250_0500_000000], },
+                'd+3.00|g0.500': {'seed_extent': [  50], 'seed_offset': [2_300_0500_000000], },
+                'd+3.50|g0.500': {'seed_extent': [  50], 'seed_offset': [2_350_0500_000000], },
+                'd+4.00|g0.500': {'seed_extent': [ 100], 'seed_offset': [2_400_0500_000000], },
+                'd+4.50|g0.500': {'seed_extent': [ 400], 'seed_offset': [2_450_0500_000000], },
+                'd+5.00|g0.500': {'seed_extent': [ 400], 'seed_offset': [2_500_0500_000000], },
+                'd+5.50|g0.500': {'seed_extent': [1000], 'seed_offset': [2_550_0500_000000], },
+                'd+6.00|g0.500': {'seed_extent': [1000], 'seed_offset': [2_600_0500_000000], },
+                'd+6.50|g0.500': {'seed_extent': [1000], 'seed_offset': [2_650_0500_000000], },
+                'd+7.00|g0.500': {'seed_extent': [1000], 'seed_offset': [2_700_0500_000000], },
+                'd+7.50|g0.500': {'seed_extent': [1000], 'seed_offset': [2_750_0500_000000], },
+                'd+8.00|g0.500': {'seed_extent': [1000], 'seed_offset': [2_800_0500_000000], },
+
+            }
+        },
+
     }
 
     return batch_setup[projectname]

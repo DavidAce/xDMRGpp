@@ -38,7 +38,7 @@ for config in configs:
     config['filename'] = get_config_filename(config, config_ranges, config_paths)
     config['template'] = config_paths['config_template']
 
-batch_setup = get_xdmrg_batch_setup('xdmrg6-gdplusk')
+batch_setup = get_xdmrg_batch_setup('xdmrg6-gdplusk-L18')
 write_batch_files(batch_setup=batch_setup, configs=configs, config_paths=config_paths)
 update_batch_status(config_paths=config_paths)
 move_directories(batch_setup=batch_setup, config_paths=config_paths)

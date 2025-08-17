@@ -141,6 +141,22 @@ def write_batch_status(batch_filename):
             print(f"Updating status: {status_file}")
             with open(status_file, 'w') as sf:
                 status_count = 0
+                # First we check if there are any stray h5 files that have finished simulations
+                # This could happen for example if we reduced the batch size after we already ran some on the cluster.
+                # In that case we get these seeds for free.
+                num_seeds = 0
+                for h5file in sorted(Path(output_path).rglob('*.h5')):
+                    if 'save' in h5file.name:
+                        continue
+                    seed = int(re.split('_|\.', h5file.name)[1])
+                    # Collect if it has finished
+                    filename = f'{output_path}/{batch["output_stem"]}_{seed}.h5'
+                    h5status = get_h5_status(filename=filename, batch=batch)
+                    if "FINISHED" in h5status:
+                        print(f'{config_file}: {seed}|{h5status}')
+                        sf.write(f'{seed}|{h5status}\n')
+                        num_seeds += 1
+                # Now add missing and failed seeds
                 for sidx, (offset, extent) in enumerate(zip(batch['seed_offset'], batch['seed_extent'])):
                     extent_size = len(batch['seed_extent'])
                     offset_size = len(batch['seed_offset'])
@@ -151,6 +167,8 @@ def write_batch_status(batch_filename):
                     ## Start checking the h5 files
                     is_finished = True
                     for seed in range(offset, offset + extent):
+                        if num_seeds >= extent:
+                            break
                         h5status = None
                         if seed_status is not None:
                             if seed_status[sidx] == "FINISHED":
@@ -158,10 +176,15 @@ def write_batch_status(batch_filename):
                         if h5status is None:
                             filename = f'{output_path}/{batch["output_stem"]}_{seed}.h5'
                             h5status = get_h5_status(filename=filename, batch=batch)
-                        if not "FINISHED" in h5status:
-                            print(f'{config_file}: {seed}|{h5status}')
-                            is_finished = False
+                        is_finished = "FINISHED" in h5status
+                        if is_finished:
+                            # We already included this
+                            continue
+                        num_seeds += 1
+                        print(f'{config_file}: {seed}|{h5status}')
                         sf.write(f'{seed}|{h5status}\n')
+
+
                     if is_finished:
                         batch['seed_status'].append("FINISHED")
                     else:

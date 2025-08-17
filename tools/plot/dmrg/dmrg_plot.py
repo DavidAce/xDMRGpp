@@ -81,10 +81,10 @@ def dmrg_plot(args):
     #     f = plot_infomasscenter_fig_sub_line(db=db, meta=meta['infomasscenter-dLg'], figs=f)
     # save_figure(f)
 
-    # f = None
-    # for idx, (db, meta) in enumerate(zip(dbs, metas)):
-    #     f = plot_infomasscenter_fig_sub_line(db=db, meta=meta['infomasscenter-gLd'], figs=f)
-    # save_figure(f)
+    f = None
+    for idx, (db, meta) in enumerate(zip(dbs, metas)):
+        f = plot_infomasscenter_fig_sub_line(db=db, meta=meta['infomasscenter-gLd'], figs=f)
+    save_figure(f)
 
     # f = None
     # for idx, (db, meta) in enumerate(zip(dbs, metas)):
@@ -105,16 +105,16 @@ def dmrg_plot(args):
     # for idx, (db, meta) in enumerate(zip(dbs, metas)):
     #     f = plot_opdm_fig_sub_line(db=db, meta=meta['opdm-spectrum-d'], figs=f)
     # save_figure(f)
-    #
+
     # f = None
     # for idx, (db, meta) in enumerate(zip(dbs, metas)):
     #     f = plot_opdm_gap_fig_sub_line(db=db, meta=meta['opdm-gapsize-d-L'], figs=f)
     # save_figure(f)
 
-    f = None
-    for idx, (db, meta) in enumerate(zip(dbs, metas)):
-        f = plot_dist_fig_sub_line(db=db, meta=meta['var-dist-g'], figs=f)
-    save_figure(f)
+    # f = None
+    # for idx, (db, meta) in enumerate(zip(dbs, metas)):
+    #     f = plot_dist_fig_sub_line(db=db, meta=meta['var-dist-g'], figs=f)
+    # save_figure(f)
 
     plt.show()
     exit(0)
