@@ -100,7 +100,9 @@ def write_batch_files(batch_setup, configs, config_paths):
             if offset_index < 0:
                 batchjson['seed_extent'].append(extent)
                 batchjson['seed_offset'].append(offset)
-            elif batchjson['seed_extent'][offset_index] != extent:
+                continue
+            seed_max = batchjson.get('seed_max', extent)
+            if batchjson['seed_extent'][offset_index] > seed_max:
                 raise ValueError(f"{batch_filename} has {offset=} at index {offset_index} with "
                                  f"extent {batchjson['seed_extent'][offset_index]}.\n"
                                  f"The new extent {extent} is incompatible")
