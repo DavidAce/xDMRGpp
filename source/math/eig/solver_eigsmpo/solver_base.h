@@ -292,6 +292,7 @@ class solver_base {
     bool                        use_h2_inner_product                         = false;
     bool                        use_krylov_schur_gdplusk_restart             = false;
     bool                        use_h1h2_preconditioner                      = false;
+    bool                        use_shifted_jd_eigenvalue                    = false;
     bool                        dev_thick_jd_projector                       = false;
     bool                        dev_orthogonalization_before_preconditioning = false;
     bool                        dev_cheap_olsen_as_jd_initial_guess          = false;
@@ -373,7 +374,7 @@ class solver_base {
     Eigen::Index get_jcbMaxBlockSize() const;
     void         set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize);
     void         set_preconditioner_type(eig::Preconditioner preconditioner_type_);
-    void         set_preconditioner_params(Eigen::Index maxiters = 20000, RealScalar initialTol = RealScalar{1e-1f}, Eigen::Index jcbMaxBlockSize = -1ul);
+    void         set_preconditioner_params(Eigen::Index maxiters = 1000, RealScalar initialTol = RealScalar{0.25f}, Eigen::Index jcbMaxBlockSize = -1ul);
     void         set_chebyshevFilterRelGapThreshold(RealScalar threshold);
     void         set_chebyshevFilterLambdaCutBias(RealScalar bias);
     void         set_chebyshevFilterDegree(Eigen::Index degree);

@@ -31,8 +31,8 @@ def replace_value(line, pos, val):
 
 def write_config_file(config, config_template, config_filename):
     Path(config_filename).parent.mkdir(parents=True, exist_ok=True)
-    print(config_filename)
-    print(yaml.dump(config, allow_unicode=True))
+    # print(config_filename)
+    # print(yaml.dump(config, allow_unicode=True))
 
     with open(config_template, 'r') as template:
         with open(config_filename, 'w') as file:
@@ -83,8 +83,8 @@ def write_batch_files(batch_setup, configs, config_paths):
         write_config_file(config, config['template'], config['filename'])
 
         batch = batch_setup['batch'][seed_keys[0]]
-        print(batch)
-        print(batchjson)
+        # print(batch)
+        # print(batchjson)
         if 'time_steps' in batch:
             batchjson['time_steps'] = batch['time_steps']
 
@@ -108,7 +108,7 @@ def write_batch_files(batch_setup, configs, config_paths):
                                  f"The new extent {extent} is incompatible")
 
         batchjson['seed_counts'] = int(np.sum(batchjson['seed_extent']))
-        print(json.dumps(batchjson, sort_keys=True, indent=4))
+        # print(json.dumps(batchjson, sort_keys=True, indent=4))
 
         with open(batch_filename, 'w') as fp:
             json.dump(batchjson, fp, sort_keys=True, indent=4)
@@ -129,7 +129,7 @@ def move_directories(batch_setup, config_paths):
                 src_file = os.path.join(src_dir, file)
                 tgt_file = os.path.join(config_paths['output_prfx'], batch_setup['projectname'], src_file)
                 Path(tgt_file).parent.mkdir(parents=True, exist_ok=True)
-                print(f'moving {src_file} -> {tgt_file}')
+                # print(f'moving {src_file} -> {tgt_file}')
                 shutil.move(src_file, tgt_file)
 
 

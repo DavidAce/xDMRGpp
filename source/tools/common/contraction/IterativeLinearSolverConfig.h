@@ -33,7 +33,7 @@ struct IterativeLinearSolverConfig {
         MatrixType               deflationEigVecs = {};
         VectorType               deflationEigInvs = {};
         MatrixType               coarseZ          = {};
-        MatrixType               coarseHZ         = {};
+        MatrixType               coarseBZ         = {};
         bool                     skipjcb          = false;
     };
 
@@ -107,8 +107,8 @@ struct IterativeLinearSolverConfig {
     };
 
     public:
-    long                          maxiters     = 10000;
-    Real                          tolerance    = Real{1e-1f};
+    long                          maxiters     = 1000;
+    Real                          tolerance    = Real{0.25f};
     MatDef                        matdef       = MatDef::DEF; /*! Whether the matrix is indefinite or (semi) definite*/
     PreconditionerType            precondType  = PreconditionerType::JACOBI;
     MatrixType                    initialGuess = {};

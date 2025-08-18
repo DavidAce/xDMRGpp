@@ -204,7 +204,7 @@ class MatVecMPOS {
     void         set_jcbMaxBlockSize(std::optional<long> jcbSize); // the llt preconditioner bandwidth (default 8) (tridiagonal has bandwidth == 1)
 
     void set_iterativeLinearSolverConfig(const IterativeLinearSolverConfig<Scalar> &cfg);
-    void set_iterativeLinearSolverConfig(long maxiters = 1000, RealScalar tolerance = RealScalar{1e-5f}, MatDef matdef = MatDef::DEF);
+    void set_iterativeLinearSolverConfig(long maxiters = 1000, RealScalar tolerance = RealScalar{0.25f}, MatDef matdef = MatDef::DEF);
 
     [[nodiscard]] Scalar                                       get_shift() const;
     [[nodiscard]] eig::Form                                    get_form() const;

@@ -207,7 +207,7 @@ def write_batch_status(batch_filename):
                             h5status='SKIP'
                         if batch_is_finished == True and "MISSING" in h5status:
                             batch_is_finished = False
-                        print(f'{config_file}: {seed}|{h5status}')
+                        # print(f'{config_file}: {seed}|{h5status}')
                         sf.write(f'{seed}|{h5status}\n')
 
 
@@ -227,7 +227,7 @@ def write_batch_status(batch_filename):
                 missing   = sf.read().count('MISSING'); sf.seek(0)
                 finished  = sf.read().count('FINISHED'); sf.seek(0)
             nreplace = np.max([0,missing- (total_extent-finished)])
-            print(f'{total_extent=} {missing=} {finished=} {nreplace}')
+            # print(f'{total_extent=} {missing=} {finished=} {nreplace}')
             replace_last_n(status_file, oldstring="MISSING", newstring="SKIP",n=nreplace)
 
 
@@ -278,7 +278,7 @@ def write_batch_status(batch_filename):
                         if offset <= seed_found < offset + extent:
                             seed_stray = False
                     if seed_stray is True:
-                        print(f"Stray seed found for {batch['config_file']}: {seed_found}")
+                        # print(f"Stray seed found for {batch['config_file']}: {seed_found}")
                         st.write(f'{h5file}\n')
         else:
             if platform.node() == "neumann":

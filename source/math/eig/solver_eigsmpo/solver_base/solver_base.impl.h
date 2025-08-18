@@ -433,20 +433,33 @@ void solver_base<Scalar>::adjust_preconditioner_tolerance(const Eigen::Ref<const
 
     if(!use_adaptive_inner_tolerance) return;
     auto Snorm = S.leftCols(nev).colwise().norm().minCoeff();
-    if(dev_thick_jd_projector) Snorm = std::pow(Snorm, RealScalar{2});
 
     auto set_cfg = [&](IterativeLinearSolverConfig<Scalar> &cfg) {
         auto oldtol = std::max(eps, cfg.tolerance);
         auto oldits = status.num_iters_inner_prev;
 
         cfg.tolerance = oldtol; // std::min<RealScalar>({oldtol, std::sqrt(Snorm)});
+        if(status.iter > 0) {
+            if(oldits < 100l) cfg.tolerance *= std::sqrt(half);
+            if(oldits > cfg.maxiters / 2) cfg.tolerance *= std::sqrt(RealScalar{2});
+        }
 
-        if(oldits > 0 and oldits < 200l) cfg.tolerance *= half;
-        if(oldits > 1000l) cfg.tolerance *= RealScalar{2};
-
-        cfg.tolerance = std::clamp(cfg.tolerance, eps, RealScalar{5e-1f});
+        cfg.tolerance = std::clamp(cfg.tolerance, eps, RealScalar{0.75f});
         // RealScalar maxiters = RealScalar{50l} / cfg.tolerance;
-        cfg.maxiters = 2000l; // std::clamp(safe_cast<long>(maxiters), 50l, 200l);
+        cfg.maxiters = 10000l; // std::clamp(safe_cast<long>(maxiters), 50l, 200l);
+
+        RealScalar tol_rnorm = std::pow(Snorm, RealScalar{0.5f});
+        // RealScalar tol_old   = cfg.tolerance;
+        RealScalar tol_min = std::sqrt(eps);
+        RealScalar tol_max = RealScalar{0.3f};
+
+        // if(status.iter > 0) {
+        //     if(oldits < 50) cfg.tolerance = std::min(cfg.tolerance, oldtol * half);
+        //     if(oldits > cfg.maxiters / 2) cfg.tolerance *= RealScalar{2};
+        // }
+        cfg.tolerance      = std::clamp(tol_rnorm, tol_min, tol_max);
+
+        // cfg.tolerance = RealScalar{1e-2f};
         // eiglog->info("tol {:.2e} maxit {} oldtol {:.2e} oldits {}", fp(cfg.tolerance), cfg.maxiters, fp(oldtol), oldits);
     };
 
@@ -807,8 +820,75 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
     for(Eigen::Index i = 0; i < S.cols(); ++i) { // We use block size b
         // v: current Ritz vector, s: current residual, Bv: either I*v (Euclidean) or H2*v (H2-orthonormal)
         auto              d   = D.col(i);   // The solution vector i
-        const RealScalar &th  = evals(i);   // The ritz value for this ritz vector
+        RealScalar        th  = evals(i);   // The ritz value for this ritz vector
         const VectorType &rhs = RHS.col(i); // Right-hand side (projected)
+
+        if(use_shifted_jd_eigenvalue) {
+            // Find the index k that minimizes |T_evals(k) - th|. We expect T_evals(k) == th.
+            Eigen::Index k      = 0;
+            RealScalar   mingap = std::abs(T_evals(k) - th);
+            for(Eigen::Index j = 0; j < T_evals.size(); ++j) {
+                RealScalar gap = std::abs(T_evals(j) - th);
+                if(gap < mingap) {
+                    k      = j;
+                    mingap = gap;
+                }
+            }
+
+            auto kappa_small = [&](RealScalar tau) {
+                RealScalar alpha = std::numeric_limits<RealScalar>::infinity();
+                RealScalar beta  = RealScalar(0);
+                for(Eigen::Index j = 0; j < T_evals.size(); ++j) {
+                    if(j == k) continue;
+                    RealScalar diff = std::abs(T_evals(j) - tau);
+                    beta            = std::max(beta, diff);
+                    alpha           = std::min(alpha, diff);
+                }
+                // guard
+                if(!(alpha > RealScalar(0))) alpha = RealScalar(1);
+                // eiglog->debug("alpha={:.3e}", "beta={:.3e}", alpha,beta);
+                return beta / alpha;
+            };
+
+            // Build exvals = T_evals \ {th}
+            std::vector<RealScalar> exvals;
+            exvals.reserve(T_evals.size() - 1);
+            exvals.assign(T_evals.data(), T_evals.data() + T_evals.size());
+
+            exvals.erase(exvals.begin() + k); // Remove the closest (k points to the active theta)
+
+            // Guard tiny/degenerate cases
+            RealScalar tau = th;
+            if(!exvals.empty()) {
+                // nearest-neighbor gap g and hull center c
+                RealScalar g    = std::numeric_limits<RealScalar>::infinity();
+                RealScalar smin = exvals.front(), smax = exvals.front();
+                for(const auto &mu : exvals) {
+                    smin = std::min(smin, mu);
+                    smax = std::max(smax, mu);
+                    g    = std::min(g, std::abs(mu - th));
+                }
+                if(!std::isfinite(g) || g == RealScalar(0)) g = RealScalar(1); // fallback
+                const RealScalar c = RealScalar(0.5) * (smin + smax);
+
+                // blend + clip
+                constexpr RealScalar eta   = RealScalar(0.5); // pull halfway toward c
+                constexpr RealScalar alpha = RealScalar(0.5); // stay within 0.5 * gap
+                RealScalar           delta = eta * (c - th);
+                const RealScalar     bound = alpha * g;
+                if(delta > bound) delta = bound;
+                if(delta < -bound) delta = -bound;
+
+                tau = th + delta;
+            }
+            // Before/after
+            const RealScalar kappa_at_theta = kappa_small(th);
+            const RealScalar kappa_at_tau   = kappa_small(tau);
+            eiglog->debug("T_evals: {::.3e}, k = {}", fv(T_evals), k);
+            eiglog->debug("[JD] kappa_small(theta)={:.3e}, kappa_small(tau)={:.3e}, theta={:.6e}, tau={:.6e}", fp(kappa_at_theta), fp(kappa_at_tau), fp(th),
+                          fp(tau));
+            th = tau;
+        }
 
         if(i > 0) {
             // This residual is not in the "active" set. Default to Cheap Olsen + CG instead
@@ -3008,40 +3088,79 @@ void solver_base<Scalar>::diagonalizeT1T2() {
             H2.get_iterativeLinearSolverConfig().jacobi.deflationEigInvs = VectorType();
         }
     }
-    if(use_coarse_inner_preconditioner and status.iter >= 1) {
-        Eigen::Index              nCoarse    = std::min(5l, es2.eigenvalues().size());
-        MatrixType                Z          = es2.eigenvectors().leftCols(nCoarse);
-        VectorReal                Y          = es2.eigenvalues().topRows(nCoarse);
-        MatrixType                coarseZ    = Q * Z;
-        MatrixType                coarseHZ   = algo == OptAlgo::GDMRG ? H2Q * Z : HQ * Z;
-        VectorReal                rnorms     = (coarseHZ - coarseZ * Y.asDiagonal()).colwise().norm();
-        std::vector<Eigen::Index> nCoarseIdx = {};
-        for(Eigen::Index idx = 0; idx < nCoarse; ++idx) {
-            if(rnorms(idx) < RealScalar{1e-5f}) nCoarseIdx.emplace_back(idx);
-        }
-        auto &jcbCfg = algo == OptAlgo::DMRG ? H1.get_iterativeLinearSolverConfig().jacobi : H2.get_iterativeLinearSolverConfig().jacobi;
+    if(use_coarse_inner_preconditioner and status.iter >= 1 and T_evals.size() > 5l) {
+        // We add a coarse preconditioning term to the block jacobi solver:
+        //      M^{-1}_2lvl = M^{-1}_BJ + Z(Z*BZ)^{-1}Z*   (* means adjoint)
+        // where
+        //      - M^{-1}_BJ is the curren block jacobi preconditioner.
+        //      - Z(Z*BZ)^{-1}Z* is the B-pseudo-inverse on span(Z)
+        //      - Z is a tall B-orthonormal coarse basis that captures slow modes in the eigenvalue problem.
+        //      - B is the matrix out of which you made the block jacobi: H2 in GDMRG, else H.
+        //
+        //
+        const auto &BQ         = algo == OptAlgo::GDMRG ? H2Q : HQ;
+        const auto &BV         = algo == OptAlgo::GDMRG ? H2V : HV;
+        auto        nCoarse    = std::min(5l, T_evals.size());
+        auto        nCoarseIdx = get_ritz_indices(ritz, 1, nCoarse, T_evals);
 
+        auto &jcbCfg    = algo == OptAlgo::DMRG ? H1.get_iterativeLinearSolverConfig().jacobi : H2.get_iterativeLinearSolverConfig().jacobi;
+        jcbCfg.coarseZ  = {};
+        jcbCfg.coarseBZ = {};
         if(nCoarseIdx.size() > 0) {
-            eiglog->trace("coarsening idx {} | eigv {} | rnorms {}", nCoarseIdx, fv(Y), fv(rnorms));
-            // one-time B-orthonormalisation of Z
-            Z                             = Z(Eigen::all, nCoarseIdx).eval();
-            coarseZ                       = coarseZ(Eigen::all, nCoarseIdx).eval();
-            coarseHZ                      = coarseHZ(Eigen::all, nCoarseIdx).eval();
-            rnorms                        = rnorms(nCoarseIdx).eval();
-            MatrixType             GramH2 = coarseZ.adjoint() * coarseHZ; // small p×p matrix
-            Eigen::LLT<MatrixType> llt(GramH2);
-            coarseZ         = (coarseZ * llt.matrixL().solve(MatrixType::Identity(GramH2.rows(), GramH2.cols()))).eval(); // now Zᵀ B Z = I
-            jcbCfg.coarseZ  = coarseZ;
-            jcbCfg.coarseHZ = coarseHZ;
+            MatrixType Z = T_evecs(Eigen::all, nCoarseIdx);
+            VectorReal Y = T_evals(Eigen::all, nCoarseIdx);
 
-        } else {
-            jcbCfg.coarseZ  = {};
-            jcbCfg.coarseHZ = {};
+            eiglog->trace("coarsening idx {} | eigv {}", nCoarseIdx, fv(Y));
+
+            MatrixType coarseZ  = Q * Z;
+            MatrixType coarseBZ = BQ * Z;
+
+            // Build Gv = Vᵀ B V and RHS = Vᵀ B Z
+            MatrixType Gv  = V.adjoint() * BV;
+            MatrixType RHS = V.adjoint() * coarseBZ;
+
+            Eigen::LLT<MatrixType> lltV(Gv);
+            if(lltV.info() == Eigen::Success) {
+                MatrixType coeffs = lltV.solve(RHS); // (VᵀBV)^{-1} (VᵀBZ)
+                coarseZ.noalias() -= V * coeffs;     // Z ← Z − V (VᵀBV)^{-1} Vᵀ B Z
+                coarseBZ.noalias() -= BV * coeffs;   // BZ ← BZ − BV (VᵀBV)^{-1} Vᵀ B Z
+            } else {
+                eiglog->warn("LLTV failed to create the coarse operator from Gv");
+                return;
+            }
+            MatrixType Gram = coarseZ.adjoint() * coarseBZ; // small p×p matrix
+
+            Eigen::LLT<MatrixType> llt(Gram);
+            if(llt.info() != Eigen::Success) {
+                // tiny diagonal bump; skip coarse if it still fails
+                Gram.diagonal().array() += RealScalar(1e-12);
+                llt.compute(Gram);
+                if(llt.info() != Eigen::Success) {
+                    eiglog->warn("LLT failed to create the coarse operator from Gram");
+                    jcbCfg.coarseZ  = {};
+                    jcbCfg.coarseBZ = {};
+                    return;
+                }
+            }
+            const MatrixType Rinv = llt.matrixU().solve(MatrixType::Identity(Gram.rows(), Gram.cols()));
+            jcbCfg.coarseZ        = coarseZ * Rinv;  // now Zᵀ B Z ≈ I
+            jcbCfg.coarseBZ       = coarseBZ * Rinv; // keep BZ = B·Z consistent
+
+            if constexpr(settings::debug_solver) {
+                // Sanity checks
+                MatrixType VtBZ = V.adjoint() * jcbCfg.coarseBZ; // Vᵀ B Z
+                RealScalar leak = VtBZ.norm();
+                eiglog->debug("[coarse] ‖VᵀBVZ‖    = {:.3e}", fp(leak));
+
+                MatrixType Id        = jcbCfg.coarseZ.adjoint() * jcbCfg.coarseBZ; // Zᵀ B Z
+                RealScalar ortho_err = (Id - MatrixType::Identity(Id.rows(), Id.cols())).norm();
+                eiglog->debug("[coarse] ‖ZᵀBZ - I‖ = {:.3e}", fp(ortho_err));
+            }
         }
     } else {
         auto &jcbCfg    = algo == OptAlgo::DMRG ? H1.get_iterativeLinearSolverConfig().jacobi : H2.get_iterativeLinearSolverConfig().jacobi;
         jcbCfg.coarseZ  = {};
-        jcbCfg.coarseHZ = {};
+        jcbCfg.coarseBZ = {};
     }
 }
 
@@ -3497,11 +3616,11 @@ void solver_base<Scalar>::updateStatus() {
 
 template<typename Scalar>
 void solver_base<Scalar>::printStatus() {
-    int printFreq = 1;
-    if(eiglog->level() >= spdlog::level::info) return;
-    if(eiglog->level() == spdlog::level::trace) printFreq = 1;
-    if(eiglog->level() == spdlog::level::debug) printFreq = 5;
-    if((status.iter + 1) % printFreq != 0) return;
+    // int printFreq = 1;
+    // if(eiglog->level() >= spdlog::level::info) return;
+    // if(eiglog->level() == spdlog::level::trace) printFreq = 1;
+    // if(eiglog->level() == spdlog::level::debug) printFreq = 5;
+    // if((status.iter + 1) % printFreq != 0) return;
 
     std::string msg_rnorm_gap = fmt::format(" | gap {:.3e}", fp(status.gap));
     if constexpr(settings::debug_solver) {

@@ -12,6 +12,7 @@
 #include <complex>
 #include <Eigen/IterativeLinearSolvers>
 #include <unsupported/Eigen/IterativeSolvers>
+#include "third_party/eigen/MINRES_ST.h"
 #include <variant>
 
 template<typename Scalar_>
@@ -135,7 +136,7 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
     using IndSolverType      = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                    //
                                                   Eigen::BiCGSTAB<JacobiDavidsonOperator<Scalar>, PreconditionerType>, //
                                                   // Eigen::BiCGSTAB<JacobiDavidsonOperator<Scalar>, PreconditionerType> //
-                                                  Eigen::MINRES<JacobiDavidsonOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>
+                                                  Eigen::MINRES_ST<JacobiDavidsonOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>
                                                   // Eigen::GMRES<JacobiDavidsonOperator<Scalar>, PreconditionerType>
                                                   >;
     std::variant<IndSolverType, DefSolverType> solverVariant;

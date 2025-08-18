@@ -198,19 +198,37 @@ class IterativeLinearSolverPreconditioner {
 
     template<typename Rhs, typename Dest>
     void solve_coarse_jacobi(const Rhs &b, Dest &x) const {
-        // x = b;
-        // return;
         // Step 1: Apply the jacobi preconditioner
-        solve_jacobi(b, x); // x = M_BJ⁻¹ * b
+        solve_jacobi(b, x); // x = P_R M⁻¹ P_L * b
         const MatrixType &Z  = config->jacobi.coarseZ;
-        const MatrixType &HZ = config->jacobi.coarseHZ;
-        if(Z.cols() == 0 || HZ.cols() == 0) return; // no coarse space
+        const MatrixType &BZ = config->jacobi.coarseBZ;
+        if(Z.cols() == 0 || BZ.cols() == 0) return; // no coarse space
 
         // Step 2: Apply the coarse solve
-        if(m_iterations == 1) std::printf("coarse solve\n");
-        if(C.size() == 0) { C = (Z.adjoint() * HZ).ldlt().solve(MatrixType::Identity(Z.cols(), Z.cols())); }
-        VectorType alpha = C * (HZ.adjoint() * b); //  p×1
-        x.noalias() += Z * alpha;
+        // if(m_iterations == 1) std::printf("coarse solve\n");
+        if(C.size() == 0 || C.cols() != Z.cols()) {
+            MatrixType             G = Z.adjoint() * BZ;
+            Eigen::LLT<MatrixType> llt(G);
+            if(llt.info() == Eigen::Success) {
+                C = llt.solve(MatrixType::Identity(Z.cols(), Z.cols()));
+            } else {
+                // std::printf("coarse solve failed at iteration %ld\n", m_iterations);
+                return;
+            }
+        }
+
+        VectorType Zalpha = Z * C * (Z.adjoint() * b);
+
+        // VectorType r    = VectorType::Random(Z.rows());
+        // VectorType y    = Z * (C * (Z.adjoint() * r));
+        // RealScalar quad = std::real(r.dot(y));
+        // if constexpr(std::is_same_v<RealScalar, double>) std::printf("[coarse] quadratic form rᵀ(Z C Zᵀ) r = %.3e\n", quad);
+
+        if constexpr(matrix->has_projector_op) {
+            x.noalias() += matrix->ProjectOpR(Zalpha);
+        } else {
+            x.noalias() += Zalpha;
+        }
     }
 
     /** \internal */
