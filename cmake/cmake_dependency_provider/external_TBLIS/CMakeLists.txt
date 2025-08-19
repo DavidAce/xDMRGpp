@@ -34,14 +34,14 @@ set(ENV LDFLAGS ${ldflags})
 
 ExternalProject_Add(external_TBLIS
                     GIT_REPOSITORY https://github.com/devinamatthews/tblis.git
-                    GIT_TAG 6f9429574f6dab8941c4d9480fe3e4a76127cfe0 # develop on 2025-08-11
+                    GIT_TAG 9b95712966cb8804be51c62bfd6207957f62bc6f # develop on 2025-08-19
                     GIT_PROGRESS TRUE
                     GIT_SHALLOW TRUE
                     GIT_SUBMODULES_RECURSE TRUE
                     PREFIX ${CMAKE_BINARY_DIR}
                     INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
                     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-                    PATCH_COMMAND patch -p1 -i ${PROJECT_SOURCE_DIR}/tblis-develop-6f942957.patch || true
+                    PATCH_COMMAND patch -p1 -i ${PROJECT_SOURCE_DIR}/tblis-develop-9b95712.patch || true
 
                     #Give Ninja access to the terminal.
                     USES_TERMINAL_DOWNLOAD TRUE
