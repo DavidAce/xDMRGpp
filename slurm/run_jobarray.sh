@@ -200,7 +200,7 @@ run_sim_id() {
           return 0
     fi
     echodate "STATUS                   : $model_seed $id $status"
-    if [ "$status" =~ FINISHED|SKIP  ]; then
+    if [[ "$status" =~ FINISHED|SKIP  ]]; then
       # Copy results back to remote
       # We do this in case there are remnant files on disk that need to be moved.
       # The rclone command has --update, so only newer files get moved.
