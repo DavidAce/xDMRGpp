@@ -23,7 +23,7 @@ config_ranges = {
     "storage::temp_dir": [config_paths['temp_dir']],
     "strategy::initial_state": ["PRODUCT_STATE_NEEL_SHUFFLED"],
     "model::model_type": ['ising_majorana'],
-    "model::model_size": ['18'],
+    "model::model_size": ['20'],
     "model::ising_majorana::g": ['0.500'],
     "model::ising_majorana::delta": ['-8.00', '-7.50', '-7.00', '-6.50', '-6.00', '-5.50', '-5.00', '-4.50', '-4.00', '-3.50', '-3.00', '-2.50', '-2.00', '-1.50', '-1.00', '-0.50',
                                      '+0.00',
@@ -38,7 +38,7 @@ for config in configs:
     config['filename'] = get_config_filename(config, config_ranges, config_paths)
     config['template'] = config_paths['config_template']
 
-batch_setup = get_xdmrg_batch_setup('xdmrg6-gdplusk-L18')
+batch_setup = get_xdmrg_batch_setup('xdmrg6-gdplusk-L20')
 write_batch_files(batch_setup=batch_setup, configs=configs, config_paths=config_paths)
 update_batch_status(config_paths=config_paths)
 move_directories(batch_setup=batch_setup, config_paths=config_paths)
