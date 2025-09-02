@@ -166,8 +166,8 @@ namespace Eigen {
                     auto [avg, sdv, rel] = get_stats(error_history);
                     // auto tol_error_prev = error_history[error_history.size()-2];
                     // auto relnow = std::abs(tol_error -tol_error_prev)/tol_error;
-                    //std::printf("tol_error: %.5e  avg: %.5e  sdv: %.5e  rel: %.5e relnow: %.5e\n", error_history.back(),  avg, sdv, rel, relnow);
-                    if (rel < RealScalar{0.0001}) break;
+                    // std::printf("tol_error: %.5e  avg: %.5e  sdv: %.5e  rel: %.5e relnow: %.5e\n", error_history.back(),  avg, sdv, rel, relnow);
+                    if (rel < RealScalar{1e-2f}) break;
                 }
                 // END MINRES -> MINRES_ST
 

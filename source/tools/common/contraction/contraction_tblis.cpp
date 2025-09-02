@@ -2,35 +2,34 @@
 #include "math/tenx.h"
 #if defined(DMRG_ENABLE_TBLIS)
     #include <tblis/tblis.h>
-
-std::string tools::common::contraction::get_tblis_arch() {
-    #if defined(__GNUC__)
-    if(__builtin_cpu_supports("x86-64-v4")) return "skx";
-    if(__builtin_cpu_is("znver3") or __builtin_cpu_is("znver2") or __builtin_cpu_is("znver1")) return "zen";
-    if(__builtin_cpu_supports("x86-64-v3")) return "haswell";
-    #endif
-    return "haswell";
-}
+//
+// std::string tools::common::contraction::get_tblis_arch() {
+//     #if defined(__GNUC__)
+//     if(__builtin_cpu_supports("x86-64-v4")) return "skx";
+//     if(__builtin_cpu_is("znver3") or __builtin_cpu_is("znver2") or __builtin_cpu_is("znver1")) return "zen";
+//     if(__builtin_cpu_supports("x86-64-v3")) return "haswell";
+//     #endif
+//     return "haswell";
+// }
 
 template<typename Scalar>
 void tools::common::contraction::contract_tblis(const Scalar *aptr, dimlist adim,                              //
                                                 const Scalar *bptr, dimlist bdim,                              //
                                                 Scalar *cptr, dimlist cdim,                                    //
                                                 std::string_view la, std::string_view lb, std::string_view lc, //
-                                                const void *cntx_ptr) {
-    auto  *cntx  = static_cast<const tblis::tblis_config *>(cntx_ptr);
-    auto   ta    = MArray::marray_view<const Scalar>(adim, aptr, MArray::COLUMN_MAJOR);
-    auto   tb    = MArray::marray_view<const Scalar>(bdim, bptr, MArray::COLUMN_MAJOR);
-    auto   tc    = MArray::marray_view<Scalar>(cdim, cptr, MArray::COLUMN_MAJOR);
-    Scalar alpha = 1.0;
-    Scalar beta  = 0.0;
+                                                [[maybe_unused]] const void *cntx_ptr) {
+    auto                  ta    = MArray::marray_view<const Scalar>(adim, aptr, MArray::COLUMN_MAJOR);
+    auto                  tb    = MArray::marray_view<const Scalar>(bdim, bptr, MArray::COLUMN_MAJOR);
+    auto                  tc    = MArray::marray_view<Scalar>(cdim, cptr, MArray::COLUMN_MAJOR);
+    Scalar                alpha = 1.0;
+    Scalar                beta  = 0.0;
+    tblis::tensor_wrapper A_s(ta);
+    tblis::tensor_wrapper B_s(tb);
+    tblis::tensor_wrapper C_s(tc);
 
-    tblis::tblis_tensor A_s(alpha, ta.data(), ta.dimension(), ta.lengths().data(), ta.strides().data());
-    tblis::tblis_tensor B_s(tb.data(), tb.dimension(), tb.lengths().data(), tb.strides().data());
-    tblis::tblis_tensor C_s(beta, tc.data(), tc.dimension(), tc.lengths().data(), tc.strides().data());
-
-    tblis_tensor_mult(nullptr, cntx, &A_s, la.data(), &B_s, lb.data(), &C_s, lc.data());
+    tblis::mult(alpha, A_s, la.data(), B_s, lb.data(), beta, C_s, lc.data());
 }
+
 template void tools::common::contraction::contract_tblis(const fp32 *aptr, dimlist adim,                                //
                                                          const fp32 *bptr, dimlist bdim,                                //
                                                          fp32 *cptr, dimlist cdim,                                      //

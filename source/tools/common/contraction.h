@@ -26,7 +26,7 @@ namespace tools::common::contraction {
         dimlist(std::array<long, rank> arr) : base_t(arr.begin(), arr.end()) {}
     };
 
-    std::string get_tblis_arch();
+    // std::string get_tblis_arch();
 
     template<typename Scalar>
     void contract_tblis(const Scalar *aptr, dimlist adim,         //

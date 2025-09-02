@@ -739,6 +739,36 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
         return;
     }
 
+    if(settings::strategy::trnc_increase_vtol >= 0) {
+        // Attempt to increase the truncation error limit while retaining the precision (energy variance) within vtol.
+        auto evar_new = tools::finite::measure::energy_variance(tensors);
+        auto evar_lim = evar_new * RealScalar{1.0f + static_cast<RealScalar>(settings::strategy::trnc_increase_vtol)};
+        // auto bond_min = tensors.state->get_largest_bond() / 4;
+        auto trials   = 0;
+        while(trials++ < 200 and status.trnc_lim < settings::precision::svd_truncation_max and tensors.get_state().get_largest_bond() > 16) {
+            TensorsFinite tensors_temp = tensors;
+            auto trnc_temp = status.trnc_lim*2.0;
+            tensors.clear_measurements();
+            auto        svd_cfg    = svd::config(status.bond_lim, trnc_temp);
+            tensors.normalize_state(svd_cfg, NormPolicy::ALWAYS);
+            tensors.rebuild_edges();
+            evar_new = tools::finite::measure::energy_variance(tensors);
+            tools::log->debug("update_truncation_error_limit: Trial {} trnc_lim {:.3e} var {:.8e} (lim: {:.8e})", trials, trnc_temp, fp(evar_new), fp(evar_lim));
+
+            if(evar_new > evar_lim) break;
+            if(tensors.get_state().get_largest_bond() < 16) break;
+
+            bool reject = evar_new > evar_lim;
+            if(reject) {
+                tensors = tensors_temp;
+            }else {
+                status.trnc_lim = trnc_temp;
+            }
+        }
+    }
+
+    status.trnc_limit_has_reached_min = status.trnc_lim <= status.trnc_min;
+
     if(status.trnc_limit_has_reached_min) return;
     auto tic = tid::tic_scope("trnc_down", tid::level::higher);
 
@@ -1361,11 +1391,10 @@ void AlgorithmFinite<Scalar>::check_convergence() {
 
     bool trnc_has_saturated = status.trnc_limit_has_reached_min or not tensors.get_state().is_truncated(status.trnc_lim);
     bool bond_has_saturated = status.bond_limit_has_reached_max or
-                                (tensors.get_state().num_bonds_at_limit(status.bond_lim) == 0 and not tensors.get_state().is_truncated(status.trnc_lim));
+                              (tensors.get_state().num_bonds_at_limit(status.bond_lim) == 0 and not tensors.get_state().is_truncated(status.trnc_lim));
 
     status.algorithm_has_succeeded = status.algorithm_converged_for > settings::strategy::iter_min_converged;
-    status.algorithm_has_to_stop =
-       trnc_has_saturated and bond_has_saturated and status.algorithm_has_stuck_for >= settings::strategy::iter_max_stuck;
+    status.algorithm_has_to_stop   = trnc_has_saturated and bond_has_saturated and status.algorithm_has_stuck_for >= settings::strategy::iter_max_stuck;
 
     tools::log->info("Algorithm report: converged {} (σ² {} spin {}) | saturated {} (E {} σ² {} Sₑ {} iₗ {}) | stuck {} | succeeded {} | has to stop {} | var "
                      "prec limit {:8.2e}",

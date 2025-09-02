@@ -249,6 +249,7 @@ namespace settings {
         inline double              bond_increase_rate          = 8;                                      /*!< Bond dimension growth rate. Factor if 1<x<=2, constant shift if x > 2, otherwise invalid. */
         inline UpdatePolicy        trnc_decrease_when          = UpdatePolicy::NEVER;                    /*!< If and when to decrease SVD truncation error limit {NEVER, WARMUP, HALFSWEEP, FULLSWEEP, TRUNCATED, SAT_EVAR, SAT_ALGO, STK_ALGO} */
         inline double              trnc_decrease_rate          = 1e-1;                                   /*!< Decrease SVD truncation error limit by this factor. Valid if 0 < x < 1 */
+        inline double              trnc_increase_vtol          = 1e-3;                                   /*!< Increase SVD truncation error limit, allowing the energy variance to increase by this factor. Valid if x >= 0  */
         inline UpdatePolicy        etol_decrease_when          = UpdatePolicy::NEVER;                    /*!< If and when to decrease EIGS tolerance {NEVER, WARMUP, HALFSWEEP, FULLSWEEP, TRUNCATED, SAT_EVAR, SAT_ALGO, STK_ALGO} */
         inline double              etol_decrease_rate          = 1e-1;                                   /*!< Decrease EIGS tolerance by this factor. Valid if 0 < x < 1 */
     }

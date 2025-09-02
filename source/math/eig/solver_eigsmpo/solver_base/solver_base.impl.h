@@ -450,14 +450,14 @@ void solver_base<Scalar>::adjust_preconditioner_tolerance(const Eigen::Ref<const
 
         RealScalar tol_rnorm = std::pow(Snorm, RealScalar{0.5f});
         // RealScalar tol_old   = cfg.tolerance;
-        RealScalar tol_min = std::sqrt(eps);
-        RealScalar tol_max = RealScalar{0.3f};
+        RealScalar tol_min = RealScalar{0.1f}; // std::sqrt(eps);
+        RealScalar tol_max = RealScalar{0.5f};
 
         // if(status.iter > 0) {
         //     if(oldits < 50) cfg.tolerance = std::min(cfg.tolerance, oldtol * half);
         //     if(oldits > cfg.maxiters / 2) cfg.tolerance *= RealScalar{2};
         // }
-        cfg.tolerance      = std::clamp(tol_rnorm, tol_min, tol_max);
+        cfg.tolerance = std::clamp(tol_rnorm, tol_min, tol_max);
 
         // cfg.tolerance = RealScalar{1e-2f};
         // eiglog->info("tol {:.2e} maxit {} oldtol {:.2e} oldits {}", fp(cfg.tolerance), cfg.maxiters, fp(oldtol), oldits);

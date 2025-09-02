@@ -215,6 +215,7 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("strategy::bond_increase_rate"                       , strategy::bond_increase_rate);
     dmrg_config.load_parameter("strategy::trnc_decrease_when"                       , strategy::trnc_decrease_when);
     dmrg_config.load_parameter("strategy::trnc_decrease_rate"                       , strategy::trnc_decrease_rate);
+    dmrg_config.load_parameter("strategy::trnc_increase_vtol"                       , strategy::trnc_increase_vtol);
     dmrg_config.load_parameter("strategy::etol_decrease_when"                       , strategy::etol_decrease_when);
     dmrg_config.load_parameter("strategy::etol_decrease_rate"                       , strategy::etol_decrease_rate);
 

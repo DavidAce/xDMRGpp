@@ -29,7 +29,7 @@ void tools::common::contraction::contract_mps_mps(      Scalar * res_ptr       ,
     if constexpr(std::is_same_v<Scalar, fp32> or std::is_same_v<Scalar, fp64>){
         auto tmp = Eigen::Tensor<Scalar,4>(mpsL_dims[0], mpsL_dims[1], mpsR_dims[0], mpsR_dims[2]);
         #if defined(DMRG_ENABLE_TBLIS)
-        auto arch =  get_tblis_arch();
+        // auto arch =  get_tblis_arch();
         // const tblis::tblis_config *tblis_cfg = nullptr;// tblis::tblis_get_config(arch.data());
         // contract_tblis(mpsL, mpsR, tmp, "abe", "ced", "abcd", tblis_config);
         contract_tblis(mpsL.data(), mpsL.dimensions(),  //

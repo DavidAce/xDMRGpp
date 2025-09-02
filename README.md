@@ -98,6 +98,7 @@ The conan-dmrg remote is needed to download the latest version of [**h5pp**](htt
 - Some BLAS, LAPACK and Lapacke implementation. Choose either [FlexiBLAS](https://www.mpi-magdeburg.mpg.de/projects/flexiblas) with reference Lapacke,  [Intel MKL](https://software.intel.com/en-us/mkl)
   or [OpenBLAS](https://github.com/xianyi/OpenBLAS). Set the [`BLA_VENDOR`](https://cmake.org/cmake/help/latest/module/FindBLAS.html) variable to guide CMake. 
 - [**Eigen**](http://eigen.tuxfamily.org) for tensor and matrix and linear algebra (tested with version >= 3.3).
+- [**TBLIS**](https://github.com/MatthewsResearchGroup/tblis) for tensor contractions.
 - [**Arpack**](https://github.com/opencollab/arpack-ng) Eigenvalue solver based on Fortran. Note that this in turn
   requires LAPACK and BLAS libraries, both of which are included in OpenBLAS.
 - [**Arpackpp**](https://github.com/m-reuter/eigsolver_properties) C++ frontend for Arpack.
