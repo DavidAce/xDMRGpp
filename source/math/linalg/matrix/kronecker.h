@@ -13,8 +13,9 @@ namespace linalg::matrix {
     }
 
     template<typename DA, typename DB>
-    using KroneckerResultType = Eigen::Matrix<cplx_or_real_t<typename DA::Scalar, typename DB::Scalar>, multiply<DA::RowsAtCompileTime, DB::RowsAtCompileTime>(),
-                                              multiply<DA::ColsAtCompileTime, DB::ColsAtCompileTime>(), Eigen::ColMajor>;
+    using KroneckerResultType =
+        Eigen::Matrix<cplx_or_real_t<typename DA::Scalar, typename DB::Scalar>, multiply<DA::RowsAtCompileTime, DB::RowsAtCompileTime>(),
+                      multiply<DA::ColsAtCompileTime, DB::ColsAtCompileTime>(), Eigen::ColMajor>;
 
     template<typename DerivedA, typename DerivedB>
     KroneckerResultType<DerivedA, DerivedB> kronecker(const Eigen::PlainObjectBase<DerivedA> &A, const Eigen::PlainObjectBase<DerivedB> &B, bool mirror) {

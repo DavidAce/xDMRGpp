@@ -3,8 +3,6 @@
 #include "math/linalg/matrix/kronecker.h"
 #include <Eigen/Core>
 
-
-
 Eigen::MatrixXcd qm::spin::gen_embedded_spin_operator(const Eigen::MatrixXcd &s, size_t at, size_t sites, bool mirror)
 /*
  * Returns a spin operator embedded in a larger Hilbert space. For instance, if at == 1 and sites == 4:

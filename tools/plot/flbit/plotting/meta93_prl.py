@@ -5,8 +5,8 @@ from matplotlib.ticker import LogLocator, \
 import numpy as np
 from pathlib import Path
 
-mplstyle = '../common/stylesheets/prl.mplstyle'
-# mplstyle = '../common/stylesheets/slack.mplstyle'
+# mplstyle = 'common/stylesheets/prl.mplstyle'
+mplstyle = 'common/stylesheets/slack.mplstyle'
 prl = 'prl' in mplstyle
 
 
@@ -56,6 +56,23 @@ def get_meta(plotdir, cachedir):
         'constrained_layout': False,
         'axtitle': False,
         'figsize': figsize1x1_halfcol,
+        'subplots': subplots1x1,
+        'cachedir': Path(cachedir),
+        'plotdir': Path(plotdir, Path(mplstyle).stem),
+    }
+    large = {
+        'box_aspect': 2.0/3,
+        'top': 1.0,
+        'bottom': 0.35,
+        'left': 0.25,  # 0.17,#0.02,
+        'right': 1.0,  # 1.0,
+        'subspec_title': False,
+        'figspec_title': False,
+        'legendoutside': False,
+        'legendcollect': False,
+        'constrained_layout': False,
+        'axtitle': False,
+        'figsize': (3.404 * 4, 3.404*3.2),
         'subplots': subplots1x1,
         'cachedir': Path(cachedir),
         'plotdir': Path(plotdir, Path(mplstyle).stem),
@@ -182,11 +199,11 @@ def get_meta(plotdir, cachedir):
                 # 'x': ['x_0.5000', 'x_1.0000'],
                 # 'f': ['f_0.0125', 'f_0.0250', 'f_0.0500','f_0.0750'],
                 # 'f': ['f_0.1000', 'f_0.1250', 'f_0.1500','f_0.1750','f_0.2000'],
-                'f': [0.2],
-                # 'f': [0.4],
+                # 'f': [0.2],
+                'f': [0.4],
                 # 'f': [0.2, 0.4],
                 # 'f': [0.2, 0.3, 0.4],
-                'L': [12, 16, 20, 24, 28],
+                'L': [24],
                 # 'L': [28],
                 # 'f': [0.05, 0.1, 0.2, 0.4],
                 # 'L': [12, 16, 20, 24, 28, 32],
@@ -2338,7 +2355,46 @@ def get_meta(plotdir, cachedir):
             'legendlocation': ['upper right', 'upper right', 'lower right', 'lower right'],
             # 'bbox_to_anchor': [(1.05, 1.05)],  # Use with loc 'upper right'
         },
-
+        'pn-dist': {
+            'default': large,
+            'groupname': 'state_real',
+            'dsetname': 'number_probabilities',
+            'normpage': False,
+            'titlename': 'Midchain Number Probability (Log-spaced times)',
+            # 'figsize': (3.375, 3.00),
+            'ylabel': '$p_{L/2}(n)$',
+            # 'yscale': 'log',
+            # 'xscale': 'log',
+            # 'yformat': '%.2f',
+            'sharex': 'all',
+            'sharey': 'all',
+            # 'tidx': [0, 10, 50],  # Time indices for which to plot the distribution
+            'tidx': [-1],  # Time indices for which to plot the distribution
+            'tfracs' : [0.0, 0.02, 0.04, 0.06, 0.08, 0.1, 0.15, 0.2,0.25, 0.4, 1.0],
+            'bins': 100,
+            'xlabel': '$n$',
+            'density': True,
+            'plotprefix': 'pn',
+            'plotdir': Path(plotdir, Path(mplstyle).stem),
+            # 'ymin': 0.41,
+            # 'ymax': 0.45,
+            # 'xmin': 1,
+            'xmin': 0,
+            'xmax': 12,
+            'findsaturation': False,  # Instead of taking the last value, take the average of the plateau
+            'findloglogwindow': False,
+            'markloglogwindow': False,
+            'fitloglogwindow': False,
+            # 'timeselection': 'lnt',
+            'mplstyle': mplstyle,
+            # 'legendcols': ['f', 'x', 'num', 'bmax:.0f', 'bavg:.0f', 'tsim', 't:.1e'],  # Choose 'num', 'bmax','tsim'
+            # 'legendcols': ['L', 'f', 'w', 't:<8.1e'],  # Choose 'num', 'bmax','tsim'
+            'legendcols': ['L'],  # Choose 'num', 'bmax','tsim'
+            # 'legendcols': ['f', 'x', 'w', 'num', 't:<8.1e'],  # Choose 'num', 'bmax','tsim'
+            'legendoutside': False,
+            'legendcollect': False,
+            'legendlocation': 'upper right',
+        },
         'dist-tsim': {
             'default': default,
             'groupname': 'measurements',
@@ -2406,7 +2462,7 @@ def get_meta(plotdir, cachedir):
             'mplstyle': mplstyle,
             # 'legendcols': ['f', 'x', 'num', 'bmax:.0f', 'bavg:.0f', 'tsim', 't:.1e'],  # Choose 'num', 'bmax','tsim'
             # 'legendcols': ['L', 'f', 'w', 't:<8.1e'],  # Choose 'num', 'bmax','tsim'
-            'legendcols': ['L', 'tsim'],  # Choose 'num', 'bmax','tsim'
+            'legendcols': ['L'],  # Choose 'num', 'bmax','tsim'
             # 'legendcols': ['f', 'x', 'w', 'num', 't:<8.1e'],  # Choose 'num', 'bmax','tsim'
             'legendoutside': False,
             'legendcollect': False,

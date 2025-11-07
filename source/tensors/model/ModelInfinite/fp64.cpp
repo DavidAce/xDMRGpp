@@ -3,4 +3,3 @@
 using Scalar = fp64;
 
 template class ModelInfinite<Scalar>;
-

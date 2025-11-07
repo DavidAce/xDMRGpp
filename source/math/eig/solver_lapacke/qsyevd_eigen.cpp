@@ -9,8 +9,8 @@ using namespace eig;
 
 int eig::solver::qsyevd_eigen(fp128 *matrix, size_type L) {
     eig::log->trace("Starting eig qsyevd_eigen");
-    using Scalar                      = fp128;
-    using Real       = typename Eigen::NumTraits<Scalar>::Real;
+    using Scalar = fp128;
+    using Real   = typename Eigen::NumTraits<Scalar>::Real;
     // using Cplx       = std::complex<Real>;
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     // using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
@@ -37,8 +37,7 @@ int eig::solver::qsyevd_eigen(fp128 *matrix, size_type L) {
             auto evecs_map = Eigen::Map<MatrixReal>(eigvecs.data(), L, L);
             evecs_map      = solver.eigenvectors();
         }
-    }
-    else{
+    } else {
         throw std::runtime_error("Eigen qsyevd_eigen failed with error: " + std::to_string(solver.info()));
     }
 

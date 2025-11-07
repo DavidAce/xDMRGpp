@@ -160,7 +160,7 @@ namespace tid {
     [[nodiscard]] std::vector<internal::ur_ref_t> get_tree(std::string_view prefix = "", level l = level::normal);
     [[nodiscard]] std::vector<internal::ur_ref_t> search(const tid::ur &u, std::string_view match);
     [[nodiscard]] std::vector<internal::ur_ref_t> search(std::string_view match);
-    void                                                 set_level(level l);
+    void                                          set_level(level l);
     //    void                                                 merge_thread_enries();
     void print_tree(const tid::ur &u, std::string_view prefix = "", level l = level::normal);
     void print_tree(std::string_view prefix = "", level l = level::normal);

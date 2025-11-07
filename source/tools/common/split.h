@@ -1,9 +1,9 @@
 #pragma once
 #include "math/float.h"
 #include "math/svd/config.h"
-#include "math/tenx/fwd_decl.h"
 #include <complex>
 #include <deque>
+#include <Eigen/Core>
 #include <optional>
 #include <tuple>
 #include <vector>

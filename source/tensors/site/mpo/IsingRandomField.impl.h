@@ -1,14 +1,13 @@
 #pragma once
-#include "IsingRandomField.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
+#include "IsingRandomField.h"
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/tenx.h"
 #include "qm/spin.h"
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
-
 
 template<typename Scalar>
 IsingRandomField<Scalar>::IsingRandomField(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {
@@ -153,7 +152,6 @@ Eigen::Tensor<Scalar, 4> IsingRandomField<Scalar>::get_mpo(Scalar energy_shift_p
     Eigen::Tensor<Scalar, 4> mpo_build;
     mpo_build.resize(3, 3, h5tb.param.spin_dim, h5tb.param.spin_dim);
     mpo_build.setZero();
-
 
     mpo_build.slice(std::array<long, 4>{0, 0, 0, 0}, extent4).reshape(extent2) = id;
     mpo_build.slice(std::array<long, 4>{1, 0, 0, 0}, extent4).reshape(extent2) = sz;

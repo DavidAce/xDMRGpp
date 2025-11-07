@@ -2,10 +2,10 @@
 #include "config/enums.h"
 #include "math/float.h"
 #include "math/svd/config.h"
-#include "math/tenx/fwd_decl.h"
 #include "measure/MeasurementsTensorsInfinite.h"
 #include <complex>
 #include <memory>
+#include <unsupported/Eigen/CXX11/Tensor>
 
 template<typename Scalar>
 class StateInfinite;

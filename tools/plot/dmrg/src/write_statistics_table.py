@@ -9,6 +9,7 @@ from numba import njit
 from tables import NaturalNameWarning
 from decimal import Decimal
 from .h5ops import *
+import scipy as sc
 
 warnings.filterwarnings('ignore', category=NaturalNameWarning)
 
@@ -46,6 +47,7 @@ def write_statistics_table(meta, props, h5_tgt):
         tgt_node.create_dataset(name='std', data=std)
         tgt_node.create_dataset(name='ste', data=std / np.sqrt(np.shape(data)[0]))
         tgt_node.create_dataset(name='med', data=np.nanmedian(data, axis=0))
+        tgt_node.create_dataset(name='typ', data=sc.stats.gmean(data, axis=0))
         tgt_node.create_dataset(name='max', data=np.nanmax(data, axis=0))
         tgt_node.create_dataset(name='min', data=np.nanmin(data, axis=0))
         tgt_node.create_dataset(name='q25', data=np.nanpercentile(data, 0.25, axis=0))
@@ -89,6 +91,7 @@ def write_statistics_crono(meta, props, h5_tgt):
             tgt_node.create_dataset(name='std', data=std)
             tgt_node.create_dataset(name='ste', data=std / np.sqrt(np.shape(data)[0]))
             tgt_node.create_dataset(name='med', data=np.nanmedian(data, axis=0))
+            tgt_node.create_dataset(name='typ', data=sc.stats.gmean(data, axis=0))
             tgt_node.create_dataset(name='max', data=np.nanmax(data, axis=0))
             tgt_node.create_dataset(name='min', data=np.nanmin(data, axis=0))
             tgt_node.create_dataset(name='q25', data=np.nanpercentile(data, 0.25, axis=0))
@@ -137,6 +140,7 @@ def write_statistics_crono2(meta, props, h5_tgt):
             tgt_node.create_dataset(name='std', data=std)
             tgt_node.create_dataset(name='ste', data=std / np.sqrt(np.shape(data)[0]))
             tgt_node.create_dataset(name='med', data=np.nanmedian(data, axis=0))
+            tgt_node.create_dataset(name='typ', data=sc.stats.gmean(data, axis=0))
             tgt_node.create_dataset(name='max', data=np.nanmax(data, axis=0))
             tgt_node.create_dataset(name='min', data=np.nanmin(data, axis=0))
             # tgt_node.create_dataset(name='q25', data=np.nanpercentile(data, 0.25, axis=0))
@@ -165,6 +169,7 @@ stattables = {
     'std': (lambda data, std, num: std),
     'ste': (lambda data, std, num: std / np.sqrt(num)),
     'med': (lambda data, std, num: np.nanmedian(data, axis=0)),
+    'typ': (lambda data, std, num: sc.stats.gmean(data, axis=0)),
     'max': (lambda data, std, num: np.nanmax(data, axis=0)),
     'min': (lambda data, std, num: np.nanmin(data, axis=0)),
 }
@@ -190,6 +195,8 @@ def get_stat(data, colname, statkey):
             result = np.std(data) / np.sqrt(num)
         elif statkey == 'med':
             result = np.median(data)
+        elif statkey == 'typ':
+            result = sc.stats.gmean(data)
         elif statkey == 'max':
             result = np.max(data)
         elif statkey == 'min':
@@ -211,9 +218,10 @@ def get_stats(data):
     std = np.std(data)
     avg = np.mean(data)
     med = np.median(data)
+    typ = np.exp(np.mean(np.log(np.abs(data))))
     min = np.min(data)
     max = np.max(data)
-    return avg, std, std / np.sqrt(num), med, max, min
+    return avg, std, std / np.sqrt(num), med, typ, max, min
 
 
 # @overload(get_stats, jit_options={'nogil':False, 'parallel':True, 'cache':True})
@@ -365,9 +373,9 @@ def write_statistics_table2(nodemeta, tablereqs, tgt):
         for col, (dtype, offset) in dt.fields.items():
             # print("getting stats for table {} | col {} | dtype {}".format(tablepath, col,dtype))
             if col == 'num':
-                stats = np.full(6, num)
+                stats = np.full(7, num)
             elif col in constant_cols:
-                stats = np.full(6, tablenode.fields(col)[0])
+                stats = np.full(7, tablenode.fields(col)[0])
             else:
                 t_gets_start = timer()
                 stats = get_stats(data=tablenode.fields(col)[()])
@@ -567,7 +575,7 @@ def write_statistics_crono4(nodemeta, crono_tables, h5f: tb.File, nodecache):
         statemid = int(statelen / 2)
 
         # Create the tables/datasets
-        for statkey in ['avg', 'std', 'ste', 'med', 'max', 'min']:
+        for statkey in ['avg', 'std', 'ste', 'med', 'typ', 'max', 'min']:
             t_crt_start = timer()
             statpath = '{}/{}/{}'.format(point_path, tablename, statkey)
             stattitle = '{} {}'.format(tablename, statkey)

@@ -1,8 +1,8 @@
 #include "../spin.impl.h"
 
 using Scalar = fp32;
-using Real = fp32;
-using Cplx = cx32;
+using Real   = fp32;
+using Cplx   = cx32;
 /* clang-format off */
 
 template std::array<RealScalar<Scalar>, 3>  tools::finite::measure::spin_components(const StateFinite<Scalar> &state);

@@ -15,3 +15,4 @@ from .plot_slope import *
 from .plot_rise import *
 from .plot_dset import *
 from .plot_csup import *
+from .plot_pn import *

@@ -1,9 +1,8 @@
 #pragma once
 
 #include "config/enums.h"
-#include "math/tenx/fwd_decl.h"
 #include <complex>
-#include <math/float.h>
+#include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 
 template<typename Scalar>

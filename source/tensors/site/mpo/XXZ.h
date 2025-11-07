@@ -1,7 +1,7 @@
 #pragma once
 
-#include "math/tenx/fwd_decl.h"
 #include "MpoSite.h"
+#include <Eigen/Core>
 #include <h5pp/details/h5ppHid.h>
 
 namespace h5pp::hid {
@@ -28,8 +28,8 @@ class XXZ : public MpoSite<Scalar> {
 
     private:
     h5tb_xxz                 h5tb;
-    [[nodiscard]] RealScalar     get_coupling() const;
-    [[nodiscard]] RealScalar     get_field() const;
+    [[nodiscard]] RealScalar get_coupling() const;
+    [[nodiscard]] RealScalar get_field() const;
     Eigen::Tensor<Scalar, 4> get_mpo(Scalar energy_shift_per_site, std::optional<std::vector<size_t>> nbody = std::nullopt,
                                      std::optional<std::vector<size_t>> skip = std::nullopt) const final;
 

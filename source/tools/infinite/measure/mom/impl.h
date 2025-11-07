@@ -93,4 +93,3 @@ RealScalar<Scalar> tools::infinite::measure::energy_variance_per_site_mom(const 
     tensors.measurements.energy_per_site_mom = tools::infinite::measure::energy_per_site_mom(tensors);
     return tensors.measurements.energy_variance_per_site_mom.value();
 }
-

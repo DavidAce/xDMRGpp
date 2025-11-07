@@ -31,7 +31,7 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::use_preconditioner;
     using solver_base<Scalar>::use_refined_rayleigh_ritz;
     using solver_base<Scalar>::use_h2_inner_product;
-    using solver_base<Scalar>::use_h1h2_preconditioner;
+    using solver_base<Scalar>::use_h1h2_jcb_preconditioner;
     using solver_base<Scalar>::use_krylov_schur_gdplusk_restart;
     using solver_base<Scalar>::dev_orthogonalization_before_preconditioning;
     using solver_base<Scalar>::dev_append_extra_blocks_to_basis;
@@ -78,7 +78,7 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::T_evecs;
     using solver_base<Scalar>::hhqr;
     using solver_base<Scalar>::eps;
-    using solver_base<Scalar>::tol;
+    using solver_base<Scalar>::abstol;
     using solver_base<Scalar>::normTol;
     using solver_base<Scalar>::orthTol;
     using solver_base<Scalar>::quotTolB;
@@ -150,7 +150,6 @@ class solver_gdplusk : public solver_base<Scalar> {
     );
 
     void make_new_Q_block(fMultP_t fMultP);
-
 
     public:
     bool inject_randomness = false;

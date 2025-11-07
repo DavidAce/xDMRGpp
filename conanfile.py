@@ -74,22 +74,21 @@ class DMRGConan(ConanFile):
 
         # Use backtrace because this doesn't invoke any further dependencies that break easily on CI.
         # We take care of linking with system libdw instead, if needed.
-        self.options["backward-cpp"].stack_walking = "backtrace"
-        self.options["backward-cpp"].stack_details = "backtrace_symbol"
+        # self.options["backward-cpp"].stack_walking = "backtrace"
+        # self.options["backward-cpp"].stack_details = "backtrace_symbol"
 
 
 
     def requirements(self):
-        self.requires("h5pp/[>=1.11.3 <1.12]@davidace/dev")
-        self.requires("spdlog/[>=1.15.1 <1.16]")
-        self.requires("fmt/[>=11 <12]")
-        self.requires("eigen/3.4.0")
-        self.requires("ceres-solver/2.2.0")
-        self.requires("cli11/2.3.2")
+        self.requires("h5pp/[>=1.11.3 <2]")
+        self.requires("spdlog/[>=1.16.0 <2]")
+        self.requires("fmt/[>=12 <13]")
+        self.requires("eigen/5.0.0")
+        # self.requires("ceres-solver/2.2.0")
+        self.requires("cli11/2.6.0")
         self.requires("backward-cpp/1.6")
         self.requires("pcg-cpp/cci.20220409")
-        # self.requires("tomlplusplus/3.4.0")
-        self.requires("toml11/4.2.0")
+        self.requires("toml11/4.4.0")
 
 
 

@@ -9,7 +9,6 @@ from matplotlib.ticker import FormatStrFormatter
 from matplotlib import rcParams, legend
 from copy import deepcopy
 import itertools
-import pkg_resources
 from packaging import version
 import logging
 import matplotlib.gridspec as gs
@@ -25,12 +24,11 @@ from random import choices
 import json
 
 logger = logging.getLogger('tools')
-import tikzplotlib
 from pathlib import Path
 
-matplotlib_version = pkg_resources.get_distribution("matplotlib").version
-if version.parse(matplotlib_version) == version.parse("3.5"):
-    logger.warning("Matplotlib version {} may not work correctly with gridspec".format(matplotlib_version))
+# matplotlib_version = pkg_resources.get_distribution("matplotlib").version
+# if version.parse(matplotlib_version) == version.parse("3.5"):
+#     logger.warning("Matplotlib version {} may not work correctly with gridspec".format(matplotlib_version))
 
 
 def get_markerlist():
@@ -148,8 +146,11 @@ def match_datanodes(db, meta, specs, vals):
         if dname is not None:
             if isinstance(dname, Iterable) and not any([d in dsetpath for d in dname]):
                 continue
-            elif not dname in dset['node']['data'].name and not dname in dset['node']['data']:
-                continue
+            # print(f'{dname=}')
+            # print(f'{dset=}')
+            # if not dname in dset['node']['data'].name and not dname in dset['node']['data']:
+            if not dname in dset['node']['data'].name:
+                    continue
         equal = True
         for s, v in zip(specs, vals):
             s_noformat = s.split(':')[0]
@@ -1056,7 +1057,7 @@ def find_entropy_inftime_saturation_value_from_bootstrap(sdata, tdata, nbs=100):
     # For each bootstrap set of realizations from ydata, this calculates the saturation time
     # and saturation value of individual realizations before averaging.
     if len(np.shape(sdata)) != 2:
-        raise "sdata must be 2d matrix (time, realization), eg (200 x 80000)"
+        raise Exception("sdata must be 2d matrix (time, realization), eg (200 x 80000)")
     print(f'bootstrapping {nbs=} ...')
     esb = get_entropy_saturation_from_bootstrap(sdata=sdata, tdata=tdata, nbs=nbs)
     print(f'bootstrapping {nbs=} ... done:')
@@ -1652,7 +1653,7 @@ def get_legend_row(db, datanode, legend_col_keys):
             print(legend_col_keys)
             print(legendrow)
             print(dbval['tex'])
-            raise
+            raise Exception("Failed to get legend row")
     legendrow = [key for key in legendrow if key is not None]
     return legendrow
 
@@ -1988,9 +1989,9 @@ def get_formatted_columns(columns):
             c = columns[icol][irow]  # An entry at irow,icol
             # Let n == len(str(c)) and m == phantom_length[i] be the number of characters in the longest column word
             # Then we need to print c padded with a phantom word of length m-n
-            zerolen_string = '\makebox[0pt][l]{{{}}}'.format(
+            zerolen_string = '\\makebox[0pt][l]{{{}}}'.format(
                 str(c))  # Put in text in left-aligned box that does not consume width
-            phantom_string = '\hphantom{{{}}}'.format(
+            phantom_string = '\\hphantom{{{}}}'.format(
                 column_phantom[icol])  # Let the phantom string consume width instead
             colsep_string = ' ' if icol + 1 < num_cols else ''
             fmt_label += '{}{}{}'.format(zerolen_string, phantom_string, colsep_string)

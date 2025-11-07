@@ -7,8 +7,8 @@
 #include <unistd.h>
 
 std::string debug::datetime() {
-    char buf[32] = {0};
-    std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    char        buf[32] = {0};
+    std::time_t now     = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     return buf;
 }

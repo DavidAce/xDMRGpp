@@ -3,4 +3,3 @@
 using Scalar = cx128;
 
 template class fdmrg<Scalar>;
-

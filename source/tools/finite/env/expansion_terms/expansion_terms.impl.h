@@ -1,4 +1,6 @@
 #pragma once
+#include "math/float_eigen.h"
+//
 #include "../../env.h"
 #include "../assertions.h"
 #include "../BondExpansionConfig.h"
@@ -6,7 +8,7 @@
 #include "../expansion_terms.h"
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"
-#include <config/settings.h>
+#include "config/settings.h"
 #include <Eigen/Core>
 #include <Eigen/QR>
 
@@ -127,7 +129,7 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> tools::finite::env::internal
                                                                                                             const Eigen::Tensor<T, 3>    &N,   // Gets padded
                                                                                                             const Eigen::Tensor<T, 3>    &P1,  //
                                                                                                             const Eigen::Tensor<T, 3>    &P2,  //
-                                                                                                            const BondExpansionResult<T> &res, //
+                                                                                                            [[maybe_unused]] const BondExpansionResult<T> &res, //
                                                                                                             Eigen::Index                  bond_lim, //
                                                                                                             T                             pad_value) {
     /*

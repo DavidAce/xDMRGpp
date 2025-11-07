@@ -63,6 +63,8 @@ class MatVecMPOS {
     std::optional<RealScalar> jcbShift        = std::nullopt;
     long                      jcbBlockSize    = 0l; // Jacobi block size.
     long                      jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
+    long                      jcbOverlapSize  = 0l; // By how many indices each block
+    long                      jcbNumPasses    = 1l; // Number of times to apply block jacobi
     VectorType                jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
     VectorType                invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
     mutable VectorType        invJcbDiagB;          // Used with spectra
@@ -75,6 +77,7 @@ class MatVecMPOS {
     std::vector<std::tuple<long, int, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
     std::vector<std::tuple<long, int, std::unique_ptr<LUType>>>   luJcbBlocks;   // Solvers for the block Jacobi preconditioner
     std::vector<std::tuple<long, int, std::unique_ptr<QRType>>>   qrJcbBlocks;   // Solvers for the block Jacobi preconditioner
+    VectorReal jcbInvSqrtMultiplicity;                                           // Counts how many times each diagonal index is covered by a jacobi block
 
     // using BICGType = Eigen::BiCGSTAB<SparseRowM, Eigen::IncompleteLUT<Scalar>>;
     // std::vector<std::tuple<long, std::unique_ptr<SparseRowM>, std::unique_ptr<BICGType>>> bicgstabJcbBlocks; // Solvers for the block Jacobi preconditioner
@@ -161,6 +164,8 @@ class MatVecMPOS {
                const env_pair<const EnvTypeB &>                            &envb  /*!< The left and right environments.  */
     );
 
+    bool low_prec = true;
+
     // Functions used in Arpack++ solver
     [[nodiscard]] int rows() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
     [[nodiscard]] int cols() const; /*!< Linear size\f$d^2 \times \chi_L \times \chi_R \f$  */
@@ -202,9 +207,11 @@ class MatVecMPOS {
     void         set_mode(eig::Form form_);
     void         set_side(eig::Side side_);
     void         set_jcbMaxBlockSize(std::optional<long> jcbSize); // the llt preconditioner bandwidth (default 8) (tridiagonal has bandwidth == 1)
+    void         set_jcbOverlapSize(std::optional<long> size);
+    void         set_jcbNumPasses(std::optional<long> size);
 
     void set_iterativeLinearSolverConfig(const IterativeLinearSolverConfig<Scalar> &cfg);
-    void set_iterativeLinearSolverConfig(long maxiters = 1000, RealScalar tolerance = RealScalar{0.25f}, MatDef matdef = MatDef::DEF);
+    void set_iterativeLinearSolverConfig(long maxiters = 1000, RealScalar tolerance = RealScalar{0.1f}, MatDef matdef = MatDef::IND);
 
     [[nodiscard]] Scalar                                       get_shift() const;
     [[nodiscard]] eig::Form                                    get_form() const;
@@ -228,6 +235,8 @@ class MatVecMPOS {
     [[nodiscard]] double                                       get_sparsity() const;
     [[nodiscard]] long                                         get_non_zeros() const;
     [[nodiscard]] long                                         get_jcbMaxBlockSize() const;
+    [[nodiscard]] long                                         get_jcbOverlapSize() const;
+    [[nodiscard]] long                                         get_jcbNumPasses() const;
     [[nodiscard]] const IterativeLinearSolverConfig<Scalar>   &get_iterativeLinearSolverConfig() const;
     [[nodiscard]] IterativeLinearSolverConfig<Scalar>         &get_iterativeLinearSolverConfig();
     [[nodiscard]] bool                                         isReadyShift() const;
@@ -240,7 +249,7 @@ class MatVecMPOS {
     std::unique_ptr<tid::ur> t_multPc; // Preconditioner time
     std::unique_ptr<tid::ur> t_multAx; // Matvec time
 
-    RealScalar get_op_norm(Eigen::Index max_op_norm_iters = 5, RealScalar reltol = RealScalar{1e-3f});
+    RealScalar get_op_norm(Eigen::Index max_op_norm_iters = 10, RealScalar reltol = RealScalar{1e-3f});
 
     private:
     mutable Eigen::Index op_norm_iters;

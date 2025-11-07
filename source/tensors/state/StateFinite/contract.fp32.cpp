@@ -23,5 +23,3 @@ template void contract_trf_Mconj_M_2_1_23_10(TN<Scalar, 4> &trf_temp4, const TN<
 template void contract_M_trf_2_1(TN<Scalar, 5> &trf_tmp5, const TN<Scalar, 3> &M, const TN<Scalar, 4> &trf_temp, const ThreadPtr &threads);
 
 template void contract_Mconj_trf5_02_02(TN<Scalar, 4> &trf_temp, const TN<Scalar, 3> &M, const TN<Scalar, 5> &trf_tmp5, const ThreadPtr &threads);
-
-

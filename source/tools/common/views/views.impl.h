@@ -1,5 +1,5 @@
-#include "../views.h"
 #include "../log.h"
+#include "../views.h"
 #include "math/cast.h"
 #include "math/eig.h"
 #include "math/num.h"
@@ -7,8 +7,6 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tensors/state/StateInfinite.h"
-
-
 
 template<eig::Side side, typename Scalar>
 auto dominant_eig(const Eigen::Tensor<Scalar, 2> &transfer_mat, int L, int ncv) {

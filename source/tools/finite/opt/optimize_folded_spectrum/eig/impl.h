@@ -22,11 +22,11 @@ void optimize_folded_spectrum_eig_executor(const TensorsFinite<Scalar> &tensors,
     // Solve the folded spectrum problem H²v=E²x (H² is positive definite)
     if(meta.optRitz == OptRitz::NONE) return;
     eig::solver solver;
-    using R = decltype(std::real(std::declval<CalcType>()));
-    auto        matrix = tensors.template get_effective_hamiltonian_squared<CalcType>();
-    auto        nev    = std::min<int>(static_cast<int>(matrix.dimension(0)), meta.eigs_nev.value_or(1));
-    auto        il     = 1;
-    auto        iu     = nev;
+    using R     = decltype(std::real(std::declval<CalcType>()));
+    auto matrix = tensors.template get_effective_hamiltonian_squared<CalcType>();
+    auto nev    = std::min<int>(static_cast<int>(matrix.dimension(0)), meta.eigs_nev.value_or(1));
+    auto il     = 1;
+    auto iu     = nev;
     switch(meta.optRitz) {
         case OptRitz::LR: [[fallthrough]];
         case OptRitz::LM: {
@@ -38,12 +38,11 @@ void optimize_folded_spectrum_eig_executor(const TensorsFinite<Scalar> &tensors,
     }
     solver.eig(matrix.data(), matrix.dimension(0), 'I', il, iu, R{0}, R{1});
     extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true);
-
 }
 
 template<typename Scalar>
 opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum_eig(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                             [[maybe_unused]]  OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+                                                                           [[maybe_unused]] OptMeta &meta, reports::eigs_log<Scalar> &elog) {
     if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
     }
@@ -75,8 +74,8 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum_eig(const
             case OptType::FP32: optimize_folded_spectrum_eig_executor<fp32>(tensors, initial_mps, results, meta); break;
             case OptType::FP64: optimize_folded_spectrum_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
             case OptType::FP128: optimize_folded_spectrum_eig_executor<fp128>(tensors, initial_mps, results, meta); break;
-            case OptType::CX32:  throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
-            case OptType::CX64:  throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
+            case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
+            case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
             case OptType::CX128: throw except::logic_error("Cannot run OptType::CX128 with Scalar type {}", sfinae::type_name<Scalar>());
             default: throw except::runtime_error("optimize_folded_spectrum_eig(): not implemented for type {}", enum2sv(meta.optType));
         }

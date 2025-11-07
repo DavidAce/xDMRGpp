@@ -1,9 +1,9 @@
 #pragma once
-#include "residual.h"
 #include "debug/exceptions.h"
 #include "math/float.h"
 #include "math/num.h"
 #include "math/tenx.h"
+#include "residual.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/env/EnvEne.h"
@@ -25,8 +25,6 @@ RealScalar<Scalar> tools::finite::measure::residual_norm(const Eigen::Tensor<Sca
     return (tenx::VectorMap(Hv) - E * tenx::VectorMap(mps)).norm();
 }
 
-
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm(const Eigen::Tensor<Scalar, 3> &mps, const std::vector<Eigen::Tensor<Scalar, 4>> &mpos,
                                                          const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR) {
@@ -35,7 +33,6 @@ RealScalar<Scalar> tools::finite::measure::residual_norm(const Eigen::Tensor<Sca
     auto E  = tools::common::contraction::contract_mps_overlap(mps, Hv);
     return (tenx::VectorMap(Hv) - E * tenx::VectorMap(mps)).norm();
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm(const Eigen::Tensor<Scalar, 3>                                   &mps,
@@ -76,7 +73,6 @@ RealScalar<Scalar> tools::finite::measure::residual_norm_H1(const TensorsFinite<
     return residual_norm_H1<Scalar>(tensors.active_sites, tensors.get_state(), tensors.get_model(), tensors.get_edges());
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm_H2(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
                                                             const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {
@@ -85,7 +81,6 @@ RealScalar<Scalar> tools::finite::measure::residual_norm_H2(const std::vector<si
     const auto &env = edges.get_multisite_env_var(sites);
     return residual_norm(mps, mpo, env);
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm_H2(const std::vector<size_t> &sites, const TensorsFinite<Scalar> &tensors) {
@@ -109,7 +104,6 @@ RealScalar<Scalar> tools::finite::measure::residual_norm_full(const StateFinite<
     const auto &env   = edges.get_multisite_env_ene(sites);
     return residual_norm<Scalar>(mps, mpo, env);
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm_full(const TensorsFinite<Scalar> &tensors) {

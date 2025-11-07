@@ -185,7 +185,7 @@ Eigen::Tensor<scalar_t, 2> qm::Gate::exp_internal(const Eigen::Tensor<scalar_t, 
     if(exp_diagonal and op_map.imag().isZero() and std::real(alpha) == 0) {
         using namespace std::complex_literals;
         auto diag = op_map.diagonal()
-                        .unaryViewExpr([&alpha](const scalar_t &h) -> scalar_t {
+                        .unaryExpr([&alpha](const scalar_t &h) -> scalar_t {
                             // 6.28318530717958623199592693708837032318115234375
                             // Now the same with mpfr
                             //                            scalar_t exp_ialpha_h_mph;
@@ -211,7 +211,7 @@ Eigen::Tensor<scalar_t, 2> qm::Gate::exp_internal(const Eigen::Tensor<scalar_t, 
                                 fp128 two_pi_128       = acosq(-1.0) * fp128(2.0);
                                 fp128 alpha_h_128      = fp128(-alpha.imag()) * fp128(h.real());
                                 fp128 fmod_alpha_h_128 = fmodq(alpha_h_128, two_pi_128);
-                                exp_ialpha_t            = std::exp(-1.0i * static_cast<fp64>(fmod_alpha_h_128));
+                                exp_ialpha_t           = std::exp(-1.0i * static_cast<fp64>(fmod_alpha_h_128));
                                 //                                tools::log->info("fmod: a {0} * h {1} = {2} | 2pi {3} | fmod {4} | exp {5}", -alpha.imag(),
                                 //                                h.real(), alpha_h_128, two_pi_128,
                                 //                                                 fmod_alpha_h_128, exp_ialpha_t);
@@ -221,7 +221,7 @@ Eigen::Tensor<scalar_t, 2> qm::Gate::exp_internal(const Eigen::Tensor<scalar_t, 
                                 fp128 two_pi_ld       = std::acos(fp128(-1.0)) * fp128(2.0);
                                 fp128 alpha_h_ld      = static_cast<fp128>(std::imag(-alpha)) * static_cast<fp128>(std::real(h));
                                 fp128 fmod_alpha_h_ld = std::fmod(alpha_h_ld, two_pi_ld);
-                                exp_ialpha_t           = std::exp(-1.0i * static_cast<fp64>(fmod_alpha_h_ld));
+                                exp_ialpha_t          = std::exp(-1.0i * static_cast<fp64>(fmod_alpha_h_ld));
                                 if(std::isnan(fmod_alpha_h_ld)) { throw except::runtime_error("fmod gave nan"); }
                                 //                                tools::log->info("fmod: a {0} ({0:a}) * h {1} ({1:a}) = {2} ({2:a}) | 2pi {3} ({3:a}) | fmod
                                 //                                {4}({4: a}) | exp{5}({4: 5})",
@@ -232,6 +232,7 @@ Eigen::Tensor<scalar_t, 2> qm::Gate::exp_internal(const Eigen::Tensor<scalar_t, 
                             return exp_ialpha_t;
                         })
                         .asDiagonal();
+
         return tenx::TensorMap(diag.toDenseMatrix());
     } else {
         tools::log->error("The given matrix is not diagonal!");
@@ -254,8 +255,8 @@ Eigen::Tensor<scalar_t, 2> qm::Gate::exp_internal(const Eigen::Tensor<scalar_t, 
     }
 }
 
-template Eigen::Tensor<cx64, 2>   qm::Gate::exp_internal(const Eigen::Tensor<cx64, 2> &op_, cx64 alpha) const;
-template Eigen::Tensor<cx64, 2>   qm::Gate::exp_internal(const Eigen::Tensor<cx64, 2> &op_, cx128 alpha) const;
+template Eigen::Tensor<cx64, 2>  qm::Gate::exp_internal(const Eigen::Tensor<cx64, 2> &op_, cx64 alpha) const;
+template Eigen::Tensor<cx64, 2>  qm::Gate::exp_internal(const Eigen::Tensor<cx64, 2> &op_, cx128 alpha) const;
 template Eigen::Tensor<cx128, 2> qm::Gate::exp_internal(const Eigen::Tensor<cx128, 2> &op_, cx64 alpha) const;
 template Eigen::Tensor<cx128, 2> qm::Gate::exp_internal(const Eigen::Tensor<cx128, 2> &op_, cx128 alpha) const;
 
@@ -286,8 +287,7 @@ qm::Gate::Gate(const Eigen::Tensor<cx128, 2> &op_, std::vector<size_t> pos_, std
     op = op_t.unaryExpr([](auto z) { return std::complex<fp64>(static_cast<fp64>(z.real()), static_cast<fp64>(z.imag())); });
 }
 
-qm::Gate::Gate(const Eigen::Tensor<cx128, 2> &op_, std::vector<size_t> pos_, std::vector<long> dim_, cx128 alpha)
-    : pos(std::move(pos_)), dim(std::move(dim_)) {
+qm::Gate::Gate(const Eigen::Tensor<cx128, 2> &op_, std::vector<size_t> pos_, std::vector<long> dim_, cx128 alpha) : pos(std::move(pos_)), dim(std::move(dim_)) {
     auto dim_prod = std::accumulate(std::begin(dim), std::end(dim), 1, std::multiplies<>());
     if(dim_prod != op_.dimension(0) or dim_prod != op_.dimension(1))
         throw except::logic_error("dim {} not compatible with matrix dimensions {} x {}", dim, op_.dimension(0), op_.dimension(1));

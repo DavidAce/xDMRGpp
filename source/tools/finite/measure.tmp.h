@@ -42,5 +42,4 @@ template<typename Scalar>
 class EnvVar;
 enum class RDM;
 
-
 /* clang-format on */

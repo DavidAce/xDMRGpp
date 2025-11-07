@@ -21,8 +21,8 @@
 #include <spdlog/spdlog.h>
 
 #if !defined(FMT_USE_COMPLEX) && FMT_VERSION > 110000
-#define FMT_USE_COMPLEX 1
-#include <complex>
+    #define FMT_USE_COMPLEX 1
+    #include <complex>
 // #include <type_traits>
 
 // template<typename T, typename Char>
@@ -41,15 +41,16 @@
 // };
 
 #elif !defined(FMT_USE_COMPLEX) && FMT_VERSION > 90000
-        #define FMT_USE_COMPLEX 1
-        #include <complex>
-        #include <type_traits>
+    #define FMT_USE_COMPLEX 1
+    #include <complex>
+    #include <type_traits>
 
 template<typename T, typename Char>
 struct fmt::formatter<std::complex<T>, Char> : fmt::formatter<T, Char> {
     private:
-    typedef fmt::formatter<T, Char> base;
+    typedef fmt::formatter<T, Char>         base;
     fmt::detail::dynamic_format_specs<Char> specs_;
+
     public:
     template<typename FormatCtx>
     auto format(const std::complex<T> &x, FormatCtx &ctx) const -> decltype(ctx.out()) {
@@ -61,25 +62,25 @@ struct fmt::formatter<std::complex<T>, Char> : fmt::formatter<T, Char> {
 };
 #endif
 
-//#if defined(FMT_FORMAT_H_) && !defined(FMT_USE_COMPLEX)
-//    #define FMT_USE_COMPLEX 1
-//    #include <complex>
-//    #include <type_traits>
-//template<typename T, typename Char>
-//struct fmt::formatter<std::complex<T>, Char> : fmt::formatter<T, Char> {
-//    private:
-//    typedef fmt::formatter<T, Char> base;
-//    fmt::detail::dynamic_format_specs<Char> specs_;
-//    public:
-//    template<typename FormatCtx>
-//    auto format(const std::complex<T> &x, FormatCtx &ctx) const -> decltype(ctx.out()) {
-//        base::format(x.real(), ctx);
-//        if(x.imag() >= 0 && specs_.sign != sign::plus) format_to(ctx.out(), "+");
-//        base::format(x.imag(), ctx);
-//        return format_to(ctx.out(), "i");
-//    }
-//};
-//#endif
+// #if defined(FMT_FORMAT_H_) && !defined(FMT_USE_COMPLEX)
+//     #define FMT_USE_COMPLEX 1
+//     #include <complex>
+//     #include <type_traits>
+// template<typename T, typename Char>
+// struct fmt::formatter<std::complex<T>, Char> : fmt::formatter<T, Char> {
+//     private:
+//     typedef fmt::formatter<T, Char> base;
+//     fmt::detail::dynamic_format_specs<Char> specs_;
+//     public:
+//     template<typename FormatCtx>
+//     auto format(const std::complex<T> &x, FormatCtx &ctx) const -> decltype(ctx.out()) {
+//         base::format(x.real(), ctx);
+//         if(x.imag() >= 0 && specs_.sign != sign::plus) format_to(ctx.out(), "+");
+//         base::format(x.imag(), ctx);
+//         return format_to(ctx.out(), "i");
+//     }
+// };
+// #endif
 
 namespace eig {
     inline auto log = spdlog::get("eig") == nullptr ? spdlog::stdout_color_mt("eig", spdlog::color_mode::always) : spdlog::get("eig");

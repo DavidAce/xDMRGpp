@@ -62,8 +62,8 @@ class solver_base {
         // By convention, H2Y is the matrix that we modify, while H2X is const.
         MatrixType Gram;
         VectorReal Rdiag;
-        RealScalar maskTol   = 10 * std::numeric_limits<RealScalar>::epsilon();
-        RealScalar orthTol   = 100 * std::numeric_limits<RealScalar>::epsilon();
+        RealScalar maskTol   = std::numeric_limits<RealScalar>::quiet_NaN();
+        RealScalar orthTol   = std::numeric_limits<RealScalar>::quiet_NaN();
         RealScalar orthError = std::numeric_limits<RealScalar>::quiet_NaN();
         VectorReal proj_sum_h;
         VectorReal proj_sum_h1;
@@ -91,7 +91,10 @@ class solver_base {
         RealScalar                max_eval_estimate() const;
         RealScalar                min_eval_estimate() const;
         RealScalar                condition        = RealScalar{1};
+        RealScalar                sensitivity      = RealScalar{1};
         RealScalar                op_norm_estimate = RealScalar{1};
+        RealScalar                T_min_eval       = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
+        RealScalar                T_max_eval       = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
         RealScalar                T1_max_eval      = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
         RealScalar                T2_max_eval      = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
         RealScalar                T1_min_eval      = std::numeric_limits<RealScalar>::quiet_NaN(); // Used for preconditioning
@@ -128,6 +131,7 @@ class solver_base {
         bool rNorm_below_gap      = false;
 
         VectorReal                rNorms;
+        VectorReal                rNorms_init; // The initial residual norms
         std::deque<VectorReal>    rNorms_history;
         std::deque<VectorReal>    eigVals_history;
         std::deque<Eigen::Index>  matvecs_history;
@@ -152,6 +156,7 @@ class solver_base {
     VectorReal   get_op_norm_estimates(Eigen::Ref<VectorReal> eigvals) const;
 
     static VectorReal get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10);
+    static VectorReal get_slopes(const std::deque<VectorReal> &v, bool apply_log10);
     bool              rNorms_have_saturated();
     bool              eigVals_have_saturated();
     void              adjust_preconditioner_tolerance(const Eigen::Ref<const MatrixType> &S);
@@ -194,12 +199,12 @@ class solver_base {
 
     auto get_masked_blocks(const Eigen::Ref<const MatrixType> &Y, const VectorIdxT &mask) const {
         assert(mask.size() == Y.cols() / b);
-        return Y(Eigen::all, blockMask2ColIndex(mask, b));
+        return Y(Eigen::placeholders::all, blockMask2ColIndex(mask, b));
     }
 
     auto get_masked_cols(const Eigen::Ref<const MatrixType> &Y, const VectorIdxT &mask) const {
         assert(mask.size() == Y.cols());
-        return Y(Eigen::all, colMask2ColIndex(mask));
+        return Y(Eigen::placeholders::all, colMask2ColIndex(mask));
     }
 
     [[nodiscard]] MatrixType cheap_Olsen_correction(const MatrixType &V, const MatrixType &S);
@@ -277,28 +282,31 @@ class solver_base {
 
     public:
     Status                      status = {};
-    Eigen::Index                N;                                         /*!< The size of the underlying state tensor */
-    Eigen::Index                mps_size;                                  /*!< The size of the underlying state tensor in mps representation (equal to N!) */
-    std::array<Eigen::Index, 3> mps_shape;                                 /*!< The shape of the underlying state tensor in mps representation */
-    Eigen::Index                nev                               = 1;     /*!< Number of eigenvalues to find */
-    Eigen::Index                ncv                               = 8;     /*!< Krylov dimension, i.e. {V, H1V..., H2V...} ( minimum 2, recommend 3 or more) */
-    Eigen::Index                b                                 = 2;     /*!< The block size */
-    bool                        use_refined_rayleigh_ritz         = false; /*!< Refined ritz extraction uses 1 matvec per nev */
-    bool                        use_relative_rnorm_tolerance      = true;
-    bool                        use_adaptive_inner_tolerance      = true;
-    bool                        use_deflated_inner_preconditioner = false;
-    bool                        use_coarse_inner_preconditioner   = false;
-    bool                        use_rayleigh_quotients_instead_of_evals      = false;
-    bool                        use_h2_inner_product                         = false;
-    bool                        use_krylov_schur_gdplusk_restart             = false;
-    bool                        use_h1h2_preconditioner                      = false;
-    bool                        use_shifted_jd_eigenvalue                    = false;
-    bool                        dev_thick_jd_projector                       = false;
-    bool                        dev_orthogonalization_before_preconditioning = false;
-    bool                        dev_cheap_olsen_as_jd_initial_guess          = false;
-    bool                        dev_append_extra_blocks_to_basis             = false;
-    bool                        dev_skipjcb                                  = false;
-    std::string                 tag;
+    Eigen::Index                N;                                 /*!< The size of the underlying state tensor */
+    Eigen::Index                mps_size;                          /*!< The size of the underlying state tensor in mps representation (equal to N!) */
+    std::array<Eigen::Index, 3> mps_shape;                         /*!< The shape of the underlying state tensor in mps representation */
+    Eigen::Index                nev                       = 1;     /*!< Number of eigenvalues to find */
+    Eigen::Index                ncv                       = 8;     /*!< Krylov dimension, i.e. {V, H1V..., H2V...} ( minimum 2, recommend 3 or more) */
+    Eigen::Index                b                         = 2;     /*!< The block size */
+    bool                        use_refined_rayleigh_ritz = false; /*!< Refined ritz extraction uses 1 matvec per nev */
+    bool        use_relative_rnorm_tolerance = false; /*!< Use rnorm tolerance relative to the initial value (e.g tol = 1e-2 means "improve rnorm 2 decades" */
+    bool        use_adaptive_inner_tolerance = true;
+    bool        use_deflated_inner_preconditioner            = false;
+    bool        use_coarse_inner_preconditioner              = false;
+    bool        use_rayleigh_quotients_instead_of_evals      = false;
+    bool        use_h2_inner_product                         = false;
+    bool        use_krylov_schur_gdplusk_restart             = false;
+    bool        use_jd_initial_guess                         = false;
+    bool        use_jd_h2_only                               = false;
+    bool        use_jd_def_solver                            = false;
+    bool        use_h1h2_jcb_preconditioner                  = false;
+    bool        use_shifted_jd_eigenvalue                    = false;
+    bool        dev_thick_jd_projector                       = false;
+    bool        dev_orthogonalization_before_preconditioning = false;
+    bool        dev_cheap_olsen_as_jd_initial_guess          = false;
+    bool        dev_append_extra_blocks_to_basis             = false;
+    bool        dev_skipjcb                                  = false;
+    std::string tag;
 
     ResidualCorrectionType residual_correction_type = ResidualCorrectionType::NONE;
     OptAlgo                algo;           /*!< Selects the current DMRG algorithm */
@@ -316,6 +324,8 @@ class solver_base {
     MatrixType             V_prev;          /*!< Holds the previous top ritz eigenvectors */
     MatrixType             K, K_prev;       /*!< Holds the "k >= b" top ritz vectors from the two previous iterations (used for "k" in GD+k) */
     MatrixType             S, S1, S2;       /*!< The residual vectors for the top b ritz vectors, also for H1 and H2 (for GDMRG) */
+    MatrixType             D;               /*!< The solutions to the jacobi davidson correction equations */
+    VectorReal             jd_rhs_norms;    /*!< The rhs norms in the JD correction equation */
     MatrixType             M, HM, H1M, H2M; /*!< The b next best residual vectors M, and with the applied operators */
     VectorReal             T_evals;
     MatrixType             T1, T2, T_evecs;
@@ -324,14 +334,20 @@ class solver_base {
 
     static constexpr auto eps      = std::numeric_limits<RealScalar>::epsilon();
     static constexpr auto half     = RealScalar{1} / RealScalar{2};
-    RealScalar            tol      = eps * 10000;
+    RealScalar            abstol   = eps * 10000;
+    RealScalar            reltol   = 0;
     RealScalar            normTol  = eps * 10;  /*!< Normalization tolerance for columns in Q. */
     RealScalar            orthTol  = eps * 100; /*!< Orthonormality tolerance between columns in Q. Orthonormality can be improved with extra DGKS passes */
     RealScalar            quotTolB = RealScalar{1e-10f}; /*!< Quotient tolerance for |B|/|A|. Triggers the Lanczos recurrence breakdown. */
 
+    /*! Gets the residual vector and residual norms scaled by the operator norms */
+    std::pair<MatrixType, VectorReal> get_residuals(const Eigen::Ref<VectorReal> &Y /*!< Eigenvalues */,
+                                                    const Eigen::Ref<MatrixType> &H1V, /*!< H1 times the ritz vector V */
+                                                    const Eigen::Ref<MatrixType> &H2V  /*!< GDMRG: H2 times the ritz vector V, OTHERS: just V */
+    );
+
     /*! Convergence tolerance of ritz-vector residuals.
      * Converged if rnorm < tol * opNorm. */
-    // VectorReal rnormTol(Eigen::Ref<VectorReal> evals) const;
     RealScalar rNormTol(Eigen::Index n) const;
     VectorReal rNormTols() const;
 
@@ -372,7 +388,11 @@ class solver_base {
     RealScalar relDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000;
 
     Eigen::Index get_jcbMaxBlockSize() const;
+    Eigen::Index get_jcbOverlapSize() const;
+    Eigen::Index get_jcbNumPasses() const;
     void         set_jcbMaxBlockSize(Eigen::Index jcbMaxBlockSize);
+    void         set_jcbOverlapSize(Eigen::Index jcbOverlapSize);
+    void         set_jcbNumPasses(Eigen::Index jcbNumPasses);
     void         set_preconditioner_type(eig::Preconditioner preconditioner_type_);
     void         set_preconditioner_params(Eigen::Index maxiters = 1000, RealScalar initialTol = RealScalar{0.25f}, Eigen::Index jcbMaxBlockSize = -1ul);
     void         set_chebyshevFilterRelGapThreshold(RealScalar threshold);
@@ -445,6 +465,7 @@ class solver_base {
         auto token_elapsed = status.time_elapsed.tic_token();
         init();
         printStatus();
+        status.iter++;
         while(true) {
             step();
             if(status.stopReason != StopReason::none) break;

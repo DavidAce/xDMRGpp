@@ -38,7 +38,6 @@ Scalar tools::common::contraction::expectation_value(const Scalar * const mps_pt
     return result;
 }
 
-
 /* clang-format on */
 
 /* clang-format off */

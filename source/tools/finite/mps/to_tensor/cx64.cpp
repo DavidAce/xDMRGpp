@@ -1,6 +1,6 @@
 #include "impl.h"
 
-using Scalar = cx64;
+using Scalar   = cx64;
 using RealType = fp64;
 using CplxType = cx64;
 /* clang-format off */

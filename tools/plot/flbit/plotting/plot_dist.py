@@ -81,11 +81,13 @@ def plot_dist_v3_fig_sub_line(db, meta, figspec, subspec, linspec, algo_filter=N
                     continue
                 for datanode in datanodes:
                     dbval = db['dsets'][datanode.name]
-                    ndata = datanode['avg']['num'][()]
+
+                    mmntnode = datanode.parent
+                    ndata = mmntnode['avg']['num'][()]
                     if meta.get('dsetname') and meta.get('colname'):
-                        ydata = datanode[meta['dsetname']][meta['colname']]
+                        ydata = mmntnode[meta['dsetname']][meta['colname']]
                     elif meta.get('dsetname') and meta.get('tidx'):
-                        ydata = datanode[meta['dsetname']][meta['tidx']]
+                        ydata = mmntnode[meta['dsetname']][meta['tidx']]
                     else:
                         raise LookupError('Unhandled dataset type')
                     if meta.get('normpage'):

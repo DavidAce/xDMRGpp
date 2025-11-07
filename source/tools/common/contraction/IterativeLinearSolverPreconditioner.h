@@ -5,7 +5,11 @@
 #include <Eigen/Core>
 
 namespace settings {
+#if defined(NDEBUG)
     static constexpr bool debug_jcb = false;
+#else
+    static constexpr bool debug_jcb = true;
+#endif
 }
 
 template<typename MatrixLikeType>
@@ -17,9 +21,11 @@ class IterativeLinearSolverPreconditioner {
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
     protected:
-    mutable Eigen::Index m_iterations    = 0;
-    mutable double       m_time          = 0.0;
-    bool                 m_isInitialized = false;
+    mutable Eigen::Index m_iterations     = 0;
+    mutable double       m_time_elapsed   = 0.0;
+    mutable double       m_time_jcb       = 0.0;
+    mutable double       m_time_chebyshev = 0.0;
+    bool                 m_isInitialized  = false;
 
     const MatrixLikeType                      *matrix = nullptr;
     const IterativeLinearSolverConfig<Scalar> *config = nullptr;
@@ -46,10 +52,12 @@ class IterativeLinearSolverPreconditioner {
 
     template<typename MatType>
     explicit IterativeLinearSolverPreconditioner(const MatType &) {}
-    Eigen::Index    iterations() { return m_iterations; }
-    double          elapsed_time() { return m_time; }
-    EIGEN_CONSTEXPR Eigen::Index rows() const EIGEN_NOEXCEPT { return matrix->rows(); }
-    EIGEN_CONSTEXPR Eigen::Index cols() const EIGEN_NOEXCEPT { return matrix->cols(); }
+    Eigen::Index    iterations() const { return m_iterations; }
+    double          elapsed_time() const { return m_time_elapsed; }
+    double          time_jacobi() const { return m_time_jcb; }
+    double          time_chebyshev() const { return m_time_jcb; }
+    EIGEN_CONSTEXPR Eigen::Index rows() const noexcept { return matrix->rows(); }
+    EIGEN_CONSTEXPR Eigen::Index cols() const noexcept { return matrix->cols(); }
 
     template<typename MatType>
     IterativeLinearSolverPreconditioner &analyzePattern(const MatType &) {
@@ -78,6 +86,7 @@ class IterativeLinearSolverPreconditioner {
             x = b;
             return;
         }
+        auto t_start = std::chrono::high_resolution_clock::now();
 
         RealScalar   lmin_eff = std::max<RealScalar>(lambda_min, lambda_max * RealScalar{1e-3f});
         RealScalar   rho      = (lambda_max - lmin_eff) / (lambda_max + lmin_eff);
@@ -117,22 +126,43 @@ class IterativeLinearSolverPreconditioner {
         }
         x = y_new;
         m_iterations++;
+        auto t_end = std::chrono::high_resolution_clock::now();
+        m_time_chebyshev += std::chrono::duration<double>(t_end - t_start).count();
     }
 
     template<typename Rhs, typename Dest, typename SolverType>
     void apply_jacobi_blocks(const Rhs &b, Dest &x, const std::vector<std::tuple<long, int, std::unique_ptr<SolverType>>> *blocks) const {
         if(blocks == nullptr) return;
         if(blocks->empty()) return;
-        auto t_jcb = tid::tic_scope("jcb", tid::level::higher);
-#pragma omp parallel for
-        for(size_t idx = 0; idx < blocks->size(); ++idx) {
-            const auto &[offset, sign, solver] = blocks->at(idx);
-            long extent                        = solver->rows();
-            auto x_segment                     = Eigen::Map<VectorType>(x.data() + offset, extent);
-            auto b_segment                     = Eigen::Map<const VectorType>(b.data() + offset, extent);
-            x_segment.noalias()                = solver->solve(b_segment * static_cast<RealScalar>(sign));
+        auto t_jcb   = tid::tic_scope("jcb", tid::level::higher);
+        auto t_start = std::chrono::high_resolution_clock::now();
+        auto pass    = [&](int color, const VectorType &in, VectorType &out) {
+#pragma omp parallel for schedule(static)
+            for(std::size_t idx = color; idx < blocks->size(); idx += config->jacobi.jcbMaxMultiplicity) {
+                const auto &[offset, sign, solver] = blocks->at(idx);
+                const long extent                  = solver->rows();
+
+                // Non-overlapping segments within a color => safe to Map into x
+                auto out_segment = Eigen::Map<VectorType>(out.data() + offset, extent);
+                auto in_segment  = Eigen::Map<const VectorType>(in.data() + offset, extent);
+                // Additive Schwarz: accumulate (+=), do not overwrite
+                out_segment.noalias() += solver->solve(in_segment * static_cast<RealScalar>(sign));
+            }
+        };
+
+        // Apply the jacobi preconditioner up to jcbNumPasses
+        VectorType tmp = b;
+        for(Eigen::Index jcbPass = 0; jcbPass < config->jacobi.jcbNumPasses; ++jcbPass) {
+            // Handle overlapping blocks with "coloring": strided passes to make sure we
+            // don't add up overlapping blocks in parallel (which would cause a data race)
+            x.setZero(b.size());
+            for(Eigen::Index color = 0; color < config->jacobi.jcbMaxMultiplicity; ++color) { pass(color, tmp, x); }
+            if(jcbPass + 1 < config->jacobi.jcbNumPasses) tmp.swap(x);
         }
+
         m_iterations++;
+        auto t_end = std::chrono::high_resolution_clock::now();
+        m_time_jcb += std::chrono::duration<double>(t_end - t_start).count();
     }
 
     template<typename Rhs, typename Dest>
@@ -142,11 +172,13 @@ class IterativeLinearSolverPreconditioner {
             return;
         }
         VectorType y = b;
+        assert(y.allFinite());
         if constexpr(matrix->has_projector_op) {
             // Project out an operator if present here
             y = matrix->ProjectOpL(b);
         }
 
+        x.setZero(y.size()); // Clear
         auto old_iterations = m_iterations;
         if(config->jacobi.invdiag != nullptr) {
             // None of the block jacobi preconditioners were applied.
@@ -155,10 +187,18 @@ class IterativeLinearSolverPreconditioner {
             x.noalias() = invdiag.array().cwiseProduct(y.array()).matrix();
             m_iterations++;
         }
+        if(config->jacobi.jcbInvSqrtMultiplicity != nullptr and config->jacobi.jcbInvSqrtMultiplicity->size() == y.size()) {
+            y.array() *= config->jacobi.jcbInvSqrtMultiplicity->array();
+        }
+
         apply_jacobi_blocks(y, x, config->jacobi.lltJcbBlocks);
         apply_jacobi_blocks(y, x, config->jacobi.ldltJcbBlocks);
         apply_jacobi_blocks(y, x, config->jacobi.luJcbBlocks);
         apply_jacobi_blocks(y, x, config->jacobi.qrJcbBlocks);
+
+        if(config->jacobi.jcbInvSqrtMultiplicity != nullptr and config->jacobi.jcbInvSqrtMultiplicity->size() == x.size()) {
+            x.array() *= config->jacobi.jcbInvSqrtMultiplicity->array();
+        }
 
         if(m_iterations == old_iterations) {
             // No blocks given (all are nullptr or size 0)
@@ -170,6 +210,12 @@ class IterativeLinearSolverPreconditioner {
         if constexpr(matrix->has_projector_op) {
             // Project out an operator if present here
             x = matrix->ProjectOpR(x);
+        }
+        assert(x.allFinite());
+
+        if(config->matdef == MatDef::DEF) {
+            auto beta_new2 = std::real(b.dot(x));
+            eigen_assert(beta_new2 >= RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
         }
     }
     template<typename Rhs, typename Dest>
@@ -237,14 +283,16 @@ class IterativeLinearSolverPreconditioner {
         auto t_start = std::chrono::high_resolution_clock::now();
         if(config->precondType == PreconditionerType::CHEBYSHEV) { solve_chebyshev(b, x); }
         if(config->precondType == PreconditionerType::JACOBI) { solve_coarse_jacobi(b, x); }
+
         auto t_end = std::chrono::high_resolution_clock::now();
-        m_time += std::chrono::duration<double>(t_end - t_start).count();
+        m_time_elapsed += std::chrono::duration<double>(t_end - t_start).count();
     }
 
     template<typename Rhs>
     inline const Eigen::Solve<IterativeLinearSolverPreconditioner, Rhs> solve(const Eigen::MatrixBase<Rhs> &b) const {
         eigen_assert(m_isInitialized && "IterativeLinearSolverPreconditioner is not initialized.");
         eigen_assert(b.rows() == rows() && "Size mismatchs");
+        eigen_assert(b.allFinite() && "All elements in b must be finite");
         return Eigen::Solve<IterativeLinearSolverPreconditioner, Rhs>(*this, b.derived());
     }
 

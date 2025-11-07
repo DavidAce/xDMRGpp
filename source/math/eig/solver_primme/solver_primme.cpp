@@ -323,7 +323,7 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     using Scalar  = typename MatrixProductType::Scalar;
     auto t_primme = tid::tic_scope("primme", tid::level::higher);
     auto t_prep   = tid::tic_scope("prep");
-    using Real = decltype(std::real(std::declval<Scalar>()));
+    using Real    = decltype(std::real(std::declval<Scalar>()));
     if constexpr(MatrixProductType::can_shift) {
         if(config.sigma) {
             auto t_shift = tid::tic_scope("shift", tid::level::highest);

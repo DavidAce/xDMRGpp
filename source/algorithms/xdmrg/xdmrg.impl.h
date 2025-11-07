@@ -323,6 +323,7 @@ void xdmrg<Scalar>::run_algorithm() {
         set_parity_shift_mpo_squared();  // Shifts the energy-squared spectrum of states with opposite parity up by 1 (makes sense with ritz == SM)
         rebuild_tensors();               // Rebuilds mpos (and compresses them) and edges, only if they were modified.
         try_projection();                // Tries to project the state to the nearest global spin parity sector along settings::strategy::target_axis
+        try_mps_compression();           // Tries to compress all the MPS bond dimensions without sacrificing too much precision
 
         // Perform the step
         update_state();
@@ -379,7 +380,7 @@ void xdmrg<Scalar>::update_state() {
     /* clang-format off */
     opt_meta.optExit = OptExit::SUCCESS;
     if(opt_state.get_grad_max()       > static_cast<RealScalar>(1.000)                            ) opt_meta.optExit |= OptExit::FAIL_GRADIENT;
-    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::precision::eigs_tol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
+    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::precision::eigs_abstol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
     if(opt_state.get_eigs_nev()       == 0 and
        opt_meta.optSolver             == OptSolver::EIGS                                          ) opt_meta.optExit |= OptExit::FAIL_RESIDUAL; // No convergence
     if(opt_state.get_overlap()        < static_cast<RealScalar>(0.010)                            ) opt_meta.optExit |= OptExit::FAIL_OVERLAP;
@@ -403,8 +404,6 @@ void xdmrg<Scalar>::update_state() {
                           fmt::format("[{}][{}]", enum2sv(opt_state.get_optalgo()), enum2sv(opt_state.get_optsolver())), flag2str(opt_state.get_optexit()),
                           opt_state.get_time());
     }
-
-    tensors.state->tag_active_sites_normalized(false);
 
     // Do the truncation with SVD
     auto logPolicy = LogPolicy::SILENT;
@@ -447,6 +446,7 @@ void xdmrg<Scalar>::update_state() {
 
     if constexpr(settings::debug) {
         if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
+        if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors());
         tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", fp(initial_state.get_variance()),
                           initial_state.get_tensor().dimensions());
         tools::log->debug("After  optimization      : variance {:8.2e} | mps dims {}", fp(opt_state.get_variance()), opt_state.get_tensor().dimensions());

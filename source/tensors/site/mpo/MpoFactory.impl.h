@@ -1,10 +1,10 @@
 #pragma once
-#include "MpoFactory.h"
 #include "debug/exceptions.h"
 #include "IsingMajorana.h"
 #include "IsingRandomField.h"
 #include "IsingSelfDual.h"
 #include "LBit.h"
+#include "MpoFactory.h"
 #include "MpoSite.h"
 #include <memory>
 

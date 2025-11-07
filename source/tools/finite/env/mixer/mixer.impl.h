@@ -79,7 +79,8 @@ void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar
     optm.eigs_residual_correction_type        = "CHEAP_OLSEN";
     optm.eigs_preconditioner_type             = "SOLVE";
     optm.eigs_nev                             = 1;
-    optm.eigs_tol                             = settings::precision::eigs_tol_max;
+    optm.eigs_abstol                          = settings::precision::eigs_abstol_max;
+    optm.eigs_reltol                          = settings::precision::eigs_reltol_max;
     optm.eigs_blk                             = settings::precision::eigs_blk_min;
     optm.eigs_ncv                             = settings::precision::eigs_ncv_min;
     optm.eigs_jcbMaxBlockSize                 = std::min(1l, settings::precision::eigs_jcb_blocksize_min);
@@ -109,11 +110,11 @@ void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar
     auto config = svd::config(bcfg.bond_lim, bcfg.trnc_lim);
     auto solver = svd::solver(config);
     if(posP < pos0) {
-        auto                     dL = mpsP.dimensions();
+        // auto                     dL = mpsP.dimensions();
         auto                     dR = mps0.dimensions();
         Eigen::Tensor<Scalar, 2> N2 = N0_opt.shuffle(std::array{1, 0, 2}).reshape(std::array{dR[1], dR[0] * dR[2]});
-        Eigen::Tensor<double, 2> A  = mpsP.template get_M_bare_as<double>().reshape(std::array{dL[0] * dL[1], dL[2]});
-        Eigen::Tensor<double, 2> B  = mps0.template get_M_as<double>().shuffle(std::array{1, 0, 2}).reshape(std::array{dR[1], dR[0] * dR[2]});
+        // Eigen::Tensor<double, 2> A  = mpsP.template get_M_bare_as<double>().reshape(std::array{dL[0] * dL[1], dL[2]});
+        // Eigen::Tensor<double, 2> B  = mps0.template get_M_as<double>().shuffle(std::array{1, 0, 2}).reshape(std::array{dR[1], dR[0] * dR[2]});
         // tools::log->info("N2 before svd \n{}", linalg::tensor::to_string(N2, 8));
         // tools::log->info("A  before svd \n{}", linalg::tensor::to_string(A, 8));
         // tools::log->info("B  before svd \n{}", linalg::tensor::to_string(B, 8));
@@ -129,10 +130,10 @@ void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar
         mps0.stash_U(U, posP);
         mpsP.take_stash(mps0);
 
-        dL                          = mpsP.dimensions();
-        dR                          = mps0.dimensions();
-        A                           = mpsP.template get_M_bare_as<double>().reshape(std::array{dL[0] * dL[1], dL[2]});
-        B                           = mps0.template get_M_as<double>().shuffle(std::array{1, 0, 2}).reshape(std::array{dR[1], dR[0] * dR[2]});
+        // dL                          = mpsP.dimensions();
+        dR = mps0.dimensions();
+        // A                           = mpsP.template get_M_bare_as<double>().reshape(std::array{dL[0] * dL[1], dL[2]});
+        // B                           = mps0.template get_M_as<double>().shuffle(std::array{1, 0, 2}).reshape(std::array{dR[1], dR[0] * dR[2]});
         auto                     dU = U.dimensions();
         auto                     dV = V.dimensions();
         Eigen::Tensor<Scalar, 2> U2 = U.reshape(std::array{dU[0] * dU[1], dU[2]});

@@ -1,7 +1,7 @@
 #include "time.impl.h"
 
 using Scalar = fp32;
-using T = cx32;
+using T      = cx32;
 /* clang-format off */
 
 template std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd);

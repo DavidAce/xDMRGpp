@@ -12,7 +12,6 @@
 
 // Explicit instantiations
 
-
 template<typename Scalar>
 using MatrixType = typename MatVecDense<Scalar>::MatrixType;
 template<typename Scalar>

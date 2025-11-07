@@ -3,4 +3,3 @@
 using Scalar = fp32;
 
 template class EdgesInfinite<Scalar>;
-

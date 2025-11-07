@@ -23,9 +23,9 @@ struct fmt::formatter<f128_t, Char> : fmt::formatter<f128_t::format_type, Char> 
         // std::printf("format\n");
         char prsnt = 'g';
 
-        if(specs_.type() == fmt::presentation_type::exp) {prsnt = 'e';}
-        if(specs_.type() == fmt::presentation_type::fixed) {prsnt = 'f';}
-        if(specs_.type() == fmt::presentation_type::general) {prsnt = 'g';}
+        if(specs_.type() == fmt::presentation_type::exp) { prsnt = 'e'; }
+        if(specs_.type() == fmt::presentation_type::fixed) { prsnt = 'f'; }
+        if(specs_.type() == fmt::presentation_type::general) { prsnt = 'g'; }
         return fmt::format_to(
             ctx.out(), "{}",
             num.string(specs_.precision, specs_.width, prsnt, specs_.align() == fmt::align::left ? "<" : ">", specs_.sign() == fmt::sign::plus ? "+" : ""));

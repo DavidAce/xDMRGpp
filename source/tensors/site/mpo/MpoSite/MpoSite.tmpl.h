@@ -10,48 +10,76 @@
 #include <config/settings.h>
 #include <utility>
 
+// template<typename Scalar>
+// template<typename T>
+// Eigen::Tensor<T, 4> MpoSite<Scalar>::get_parity_projected_mpo(const Eigen::Tensor<T, 4> &mpo_build) const {
+//     /*! We can multiply Π(±)=(I ± σ)/2 onto the "ket" physical leg of each mpo.
+//      * This basically projects every H2 *  psi multiplication to one of the sectors.
+//      * In other words, we replace H² -> H²Π_global(±).
+//      * Recall the convention of indices
+//      *      2
+//      *      |
+//      *  0---H---1
+//      *      |
+//      *      3
+//      */
+//     if(std::abs(parity_projector_sign) != 1) return mpo_build;
+//     if(parity_projector_axus.empty()) return mpo_build;
+//     using Real = decltype(std::real(std::declval<T>()));
+//
+//     auto id = tenx::asScalarType<T>(qm::spin::half::tensor::id);
+//     auto pl = tenx::asScalarType<T>(qm::spin::half::tensor::get_pauli(parity_projector_axus));
+//     auto pm = parity_projector_sign;
+//
+//     Eigen::Tensor<T, 2> pi = (id + pm * pl);
+//     pi                     = Eigen::Tensor<T, 2>(pi * pi.constant(Real(0.5f))); // Π(±)=(I ± σ)/2
+//
+//     return mpo_build.contract(pi, tenx::idx({2}, {0})).shuffle(std::array<Eigen::Index, 4>{0, 1, 3, 2});
+// }
+
 template<typename Scalar>
 template<typename T>
 Eigen::Tensor<T, 4> MpoSite<Scalar>::get_parity_shifted_mpo(const Eigen::Tensor<T, 4> &mpo_build) const {
+    /*! This redefines H --> H - r*Q(σ), where
+     *      * Q(σ) = 0.5 * ( I - q*prod(σ) )
+     *      * σ is a pauli matrix (usually σ^z)
+     *      * 0.5 is a scalar that we multiply on the left edge as well.
+     *      * r is the shift direction depending on the ritz (target energy): ground state energy (r = -1, SR) or maximum energy state (r = +1, LR).
+     *        We multiply r just once on the left edge.
+     *      * q == parity_shift_sign_mpo is the sign of the parity sector we want to shift away from the target sector we are interested in.
+     *        Often this is done to resolve a degeneracy. We multiply q just once on the left edge.
+     * We add (I - q*prod(σ)) along the diagonal of the MPO
+     *        MPO = |1  0  0  0|
+     *              |h  1  0  0|
+     *              |0  0  1  0|
+     *              |0  0  0  σ|
+     *
+     * Example 1: Let q == +1 (e.g. because target_axis=="+z"), then
+     *            Q(σ)|ψ+⟩ = 0.5*(1 - q *(+1)) |ψ+⟩ = 0|ψ+⟩
+     *            Q(σ)|ψ-⟩ = 0.5*(1 - q *(-1)) |ψ-⟩ = 1|ψ-⟩
+     *
+     * Example 2: For fDMRG with r == -1 (ritz == SR: min energy state)  we can add the projection on H directly, as
+     *                  H --> (H - r*Q(σ))
+     *            Then, if q == +1 we get and
+     *                  (H - r*Q(σ)) |ψ+⟩ = (E + 0.5(1-1)) |ψ+⟩ = (E + 0) |ψ+⟩ <--- min energy state
+     *                  (H - r*Q(σ)) |ψ-⟩ = (E + 0.5(1+1)) |ψ-⟩ = (E + 1) |ψ-⟩
+     *            If q == -1 instead we get
+     *                  (H - r*Q(σ)) |ψ+⟩ = (E + 0.5(1+1)) |ψ+⟩ = (E + 1) |ψ+⟩
+     *                  (H - r*Q(σ)) |ψ-⟩ = (E + 0.5(1-1)) |ψ-⟩ = (E + 0) |ψ-⟩ <--- min energy state
+     *
+     * Example 3: For fDMRG with r == +1 (ritz == LR: max energy state) we can add the projection on H directly, as
+     *                  H --> (H - r*Q(σ))
+     *            Then, if q == +1 we get
+     *                  (H - r*Q(σ)) |ψ+⟩ = (E - 0.5(1-1)) |ψ+⟩ = (E - 0) |ψ+⟩ <--- max energy state
+     *                  (H - r*Q(σ)) |ψ-⟩ = (E - 0.5(1+1)) |ψ-⟩ = (E - 1) |ψ-⟩
+     *            If q == -1 instead we get
+     *                  (H - r*Q(σ)) |ψ+⟩ = (E - 0.5(1+1)) |ψ+⟩ = (E - 1) |ψ+⟩
+     *                  (H - r*Q(σ)) |ψ-⟩ = (E - 0.5(1-1)) |ψ-⟩ = (E - 0) |ψ-⟩ <--- max energy state
+     *
+     */
     if(std::abs(parity_shift_sign_mpo) != 1) return mpo_build;
     if(parity_shift_axus_mpo.empty()) return mpo_build;
-    // This redefines H --> H - r*Q(σ), where
-    //      * Q(σ) = 0.5 * ( I - q*prod(σ) )
-    //      * σ is a pauli matrix (usually σ^z)
-    //      * 0.5 is a scalar that we multiply on the left edge as well.
-    //      * r is the shift direction depending on the ritz (target energy): ground state energy (r = -1, SR) or maximum energy state (r = +1, LR).
-    //        We multiply r just once on the left edge.
-    //      * q == parity_shift_sign_mpo is the sign of the parity sector we want to shift away from the target sector we are interested in.
-    //        Often this is done to resolve a degeneracy. We multiply q just once on the left edge.
-    // We add (I - q*prod(σ)) along the diagonal of the MPO
-    //        MPO = |1  0  0  0|
-    //              |h  1  0  0|
-    //              |0  0  1  0|
-    //              |0  0  0  σ|
-    //
-    // Example 1: Let q == +1 (e.g. because target_axis=="+z"), then
-    //            Q(σ)|ψ+⟩ = 0.5*(1 - q *(+1)) |ψ+⟩ = 0|ψ+⟩
-    //            Q(σ)|ψ-⟩ = 0.5*(1 - q *(-1)) |ψ-⟩ = 1|ψ-⟩
-    //
-    // Example 2: For fDMRG with r == -1 (ritz == SR: min energy state)  we can add the projection on H directly, as
-    //                  H --> (H - r*Q(σ))
-    //            Then, if q == +1 we get and
-    //                  (H - r*Q(σ)) |ψ+⟩ = (E + 0.5(1-1)) |ψ+⟩ = (E + 0) |ψ+⟩ <--- min energy state
-    //                  (H - r*Q(σ)) |ψ-⟩ = (E + 0.5(1+1)) |ψ-⟩ = (E + 1) |ψ-⟩
-    //            If q == -1 instead we get
-    //                  (H - r*Q(σ)) |ψ+⟩ = (E + 0.5(1+1)) |ψ+⟩ = (E + 1) |ψ+⟩
-    //                  (H - r*Q(σ)) |ψ-⟩ = (E + 0.5(1-1)) |ψ-⟩ = (E + 0) |ψ-⟩ <--- min energy state
-    //
-    // Example 3: For fDMRG with r == +1 (ritz == LR: max energy state) we can add the projection on H directly, as
-    //                  H --> (H - r*Q(σ))
-    //            Then, if q == +1 we get
-    //                  (H - r*Q(σ)) |ψ+⟩ = (E - 0.5(1-1)) |ψ+⟩ = (E - 0) |ψ+⟩ <--- max energy state
-    //                  (H - r*Q(σ)) |ψ-⟩ = (E - 0.5(1+1)) |ψ-⟩ = (E - 1) |ψ-⟩
-    //            If q == -1 instead we get
-    //                  (H - r*Q(σ)) |ψ+⟩ = (E - 0.5(1+1)) |ψ+⟩ = (E - 1) |ψ+⟩
-    //                  (H - r*Q(σ)) |ψ-⟩ = (E - 0.5(1-1)) |ψ-⟩ = (E - 0) |ψ-⟩ <--- max energy state
-    //
-    //
+
     auto d0 = mpo_build.dimension(0);
     auto d1 = mpo_build.dimension(1);
     auto d2 = mpo_build.dimension(2);

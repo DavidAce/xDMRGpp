@@ -27,6 +27,7 @@
 #include "tools/finite/multisite.h"
 #include "tools/finite/ops.h"
 #include "tools/finite/opt_meta.h"
+#include <tools/common/contraction.h>
 
 template<typename T>
 Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &envL, const Eigen::Tensor<T, 3> &envR) {
@@ -153,12 +154,12 @@ void TensorsFinite<Scalar>::initialize_state(ResetReason reason, StateInit state
     tools::log->debug("Initializing state [{}] to [{}] | Reason [{}] | Type [{}] | Sector [{}] | bond_lim {} | eigspinors {} | pattern {}", state->get_name(),
                       enum2sv(state_init), enum2sv(reason), enum2sv(state_type), axis, bond_lim, use_eigenspinors, pattern);
 
-    tools::log->debug("Initializing state - Before: norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm(get_state())),
+    tools::log->debug("Initializing state - Before: norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm_state(get_state())),
                       fv(tools::finite::measure::spin_components(get_state())));
 
     tools::finite::mps::initialize_state(get_state(), state_init, state_type, axis, use_eigenspinors, bond_lim, pattern);
     state->assert_validity();
-    tools::log->debug("Initializing state - After : norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm(get_state())),
+    tools::log->debug("Initializing state - After : norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm_state(get_state())),
                       fv(tools::finite::measure::spin_components(get_state())));
 }
 
@@ -571,6 +572,8 @@ void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &
         throw except::runtime_error("All active sites are not equal: tensors {} | state {} | model {} | edges {}", active_sites, state->active_sites,
                                     model->active_sites, edges->active_sites);
     clear_measurements(log_policy);
+    RealScalar norm = std::real(tools::common::contraction::contract_mps_norm(multisite_tensor));
+    tools::log->info("merging multisite_tensor with norm: direct {:.16f} contract {:.16f}", fp(tenx::norm(multisite_tensor)), fp(norm));
     tools::finite::mps::merge_multisite_mps(get_state(), multisite_tensor, active_sites, get_position<long>(), mevent, svd_cfg, log_policy);
     normalize_state(svd_cfg, NormPolicy::IFNEEDED);
 }

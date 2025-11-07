@@ -44,7 +44,6 @@ namespace settings {
                 /* clang-format on */
         }
 
-
         tools::log->info("OpenMP | omp_max_threads {} | omp_max_active_levels {} | omp_dynamic {} | omp_proc_bind [{}] | omp_num_procs {}",
                          omp_get_max_threads(), omp_get_max_active_levels(), omp_get_dynamic(), omp_proc_bind, omp_get_num_procs());
 

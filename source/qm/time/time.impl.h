@@ -2,6 +2,7 @@
 #include "debug/exceptions.h"
 #include "general/iter.h"
 #include "io/fmt_custom.h"
+#include "math/float.h"
 #include "math/linalg/tensor/to_string.h"
 #include "math/tenx.h"
 #include "qm/time.h"

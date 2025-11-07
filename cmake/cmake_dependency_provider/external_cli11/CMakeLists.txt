@@ -5,9 +5,11 @@ if(INIT_CACHE_FILE)
 endif()
 include(ExternalProject)
 ExternalProject_Add(external_cli11
-                    URL https://github.com/CLIUtils/CLI11/archive/refs/tags/v2.3.2.tar.gz
-                    #        URL_MD5 86607d04f99045d8596be0376b27fc18 # v2.1.1
-                    URL_MD5 b80cb645dee25982110b068b426363ff # v2.3.2
+#                    URL https://github.com/CLIUtils/CLI11/archive/refs/tags/v2.3.2.tar.gz
+                    URL https://github.com/CLIUtils/CLI11/archive/refs/tags/v2.6.0.tar.gz
+                    # URL_MD5 86607d04f99045d8596be0376b27fc18 # v2.1.1
+                    # URL_MD5 b80cb645dee25982110b068b426363ff # v2.3.2
+                    URL_MD5 ae448d3184dd6906aee2ab97d6e39c9a # v2.6.0
                     PREFIX ${CMAKE_BINARY_DIR}
                     INSTALL_DIR ${CMAKE_INSTALL_PREFIX}
 

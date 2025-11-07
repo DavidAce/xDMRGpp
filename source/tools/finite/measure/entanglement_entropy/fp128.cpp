@@ -22,6 +22,3 @@ template std::vector<Real>  tools::finite::measure::renyi_entropies(const StateF
 template Real  tools::finite::measure::renyi_entropy_midchain(const StateFinite<Scalar> &, double);
 
 /* clang-format on */
-
-
-

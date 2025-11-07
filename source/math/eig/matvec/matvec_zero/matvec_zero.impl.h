@@ -27,7 +27,6 @@ namespace eig {
 #endif
 }
 
-
 template<typename T>
 template<typename S, typename EnvType>
 MatVecZero<T>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<S>>> &mpss_, /*!< The MPS sites  */

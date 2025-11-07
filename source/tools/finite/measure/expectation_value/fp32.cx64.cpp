@@ -2,8 +2,8 @@
 
 using CalcType = fp32;
 using Scalar   = cx64;
-using OpType = cx64;
-using MpoType = Scalar;
+using OpType   = cx64;
+using MpoType  = Scalar;
 
 /* clang-format off */
 

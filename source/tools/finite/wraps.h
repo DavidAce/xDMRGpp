@@ -21,7 +21,7 @@ namespace tools::finite {
         AlgorithmStatus &status;
         h5pp::File      &file;
         mwrap(StateFinite &state, ModelFinite &model, EdgesFinite &edges, AlgorithmStatus &status, h5pp::File &file)
-            : state(state), model(model), edges(edges), status(status), file(file){};
+            : state(state), model(model), edges(edges), status(status), file(file) {};
     };
 
     class cwrap {
@@ -33,7 +33,7 @@ namespace tools::finite {
         const AlgorithmStatus &status;
         const h5pp::File      &file;
         cwrap(const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges, const AlgorithmStatus &status, const h5pp::File &file)
-            : state(state), model(model), edges(edges), status(status), file(file){};
+            : state(state), model(model), edges(edges), status(status), file(file) {};
     };
 
     class wwrap {
@@ -45,7 +45,7 @@ namespace tools::finite {
         const AlgorithmStatus &status;
         h5pp::File            &file;
         wwrap(const StateFinite &state, const ModelFinite &model, const EdgesFinite &edges, const AlgorithmStatus &status, h5pp::File &file)
-            : state(state), model(model), edges(edges), status(status), file(file){};
+            : state(state), model(model), edges(edges), status(status), file(file) {};
     };
 
 }

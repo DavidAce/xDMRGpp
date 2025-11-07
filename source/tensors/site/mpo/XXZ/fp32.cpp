@@ -2,4 +2,3 @@
 
 using Scalar = fp32;
 template class XXZ<Scalar>;
-

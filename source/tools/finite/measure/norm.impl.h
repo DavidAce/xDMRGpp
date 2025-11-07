@@ -16,41 +16,52 @@
 using tools::finite::measure::RealScalar;
 
 template<typename Scalar>
-RealScalar<Scalar> tools::finite::measure::norm(const StateFinite<Scalar> &state, bool full) {
-    if(state.measurements.norm) return state.measurements.norm.value();
-    Scalar norm;
-    auto   t_norm = tid::tic_scope("norm", tid::level::highest);
-    if(not full) {
-        // We know the all sites are normalized. We can check that the current position is normalized
-        const auto  pos = std::clamp(state.template get_position<long>(), 0l, state.template get_length<long>());
-        const auto &mps = state.get_mps_site(pos);
-        tools::log->trace("Measuring norm using site {} with dimensions {}", pos, mps.dimensions());
-        norm = tools::common::contraction::contract_mps_norm(mps.get_M());
-    } else {
-        tools::log->trace("Measuring norm on full chain");
-        Eigen::Tensor<Scalar, 2> chain;
-        Eigen::Tensor<Scalar, 2> temp;
-        bool                     first   = true;
-        auto                    &threads = tenx::threads::get();
+RealScalar<Scalar> tools::finite::measure::norm_1site(const StateFinite<Scalar> &state) {
+    // if(state.measurements.norm) return state.measurements.norm.value();
 
-        for(const auto &mps : state.mps_sites) {
-            const auto &M = mps->get_M();
-            if(first) {
-                chain = tools::common::contraction::contract_mps_partial<std::array{0l, 1l}>(M);
-                first = false;
-                continue;
-            }
-            temp.resize(tenx::array2{M.dimension(2), M.dimension(2)});
-            temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
+    auto t_norm = tid::tic_scope("norm", tid::level::highest);
+    // We know the all sites are normalized. We can check that the current position is normalized
+    const auto  pos = std::clamp(state.template get_position<long>(), 0l, state.template get_length<long>());
+    const auto &mps = state.get_mps_site(pos);
+    tools::log->trace("Measuring norm using site {} with dimensions {}", pos, mps.dimensions());
+    Scalar norm = tools::common::contraction::contract_mps_norm(mps.get_M());
 
-            chain = std::move(temp);
-        }
-        norm = tenx::MatrixMap(chain).trace();
-    }
     auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
     auto normErr = std::abs(norm - RealScalar<Scalar>{1});
 
-    if(normErr > normTol) tools::log->debug("norm: far from unity: {:.5e}", fp(normErr));
+    if(normErr > normTol) tools::log->debug("norm_1site: far from unity: {:.5e}", fp(normErr));
+    state.measurements.norm = std::abs(norm);
+    return state.measurements.norm.value();
+}
+
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::norm_state(const StateFinite<Scalar> &state) {
+    if(state.measurements.norm) return state.measurements.norm.value();
+    auto t_norm = tid::tic_scope("norm", tid::level::highest);
+    tools::log->trace("Measuring norm on the full chain");
+    Eigen::Tensor<Scalar, 2> chain;
+    Eigen::Tensor<Scalar, 2> temp;
+    bool                     first   = true;
+    auto                    &threads = tenx::threads::get();
+
+    for(const auto &mps : state.mps_sites) {
+        const auto &M = mps->get_M();
+        if(first) {
+            chain = tools::common::contraction::contract_mps_partial<std::array{0l, 1l}>(M);
+            first = false;
+            continue;
+        }
+        temp.resize(tenx::array2{M.dimension(2), M.dimension(2)});
+        temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
+
+        chain = std::move(temp);
+    }
+    Scalar norm = tenx::MatrixMap(chain).trace();
+
+    auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
+    auto normErr = std::abs(norm - RealScalar<Scalar>{1});
+
+    if(normErr > normTol) tools::log->debug("norm_state: far from unity: {:.5e}", fp(normErr));
     state.measurements.norm = std::abs(norm);
     return state.measurements.norm.value();
 }

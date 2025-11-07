@@ -1,9 +1,9 @@
 #pragma once
-#include "TensorsInfinite.h"
 #include "tensors/edges/EdgesInfinite.h"
 #include "tensors/model/ModelInfinite.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateInfinite.h"
+#include "TensorsInfinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
 #include "tools/infinite/env.h"

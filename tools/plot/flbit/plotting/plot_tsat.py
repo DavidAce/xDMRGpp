@@ -120,11 +120,14 @@ def plot_v3_tsat_fig_sub_line(db, meta, figspec, subspec, linspec, xaxspec, algo
                         # print(f'found datanode: {datanode}')
                         dbval = db['dsets'][datanode.name]
                         L = dbval['vals']['L']
-                        mmntnode = datanode.parent['measurements']
+                        # print(datanode)
+                        # print(datanode.parent)
+                        mmntnode = datanode.parent
                         # Get this datapoint
                         t = mmntnode['avg']['physical_time'][()].astype(float)
-                        s = datanode[meta['dsetname']][()] # Should be an entropy
-                        n = datanode['avg']['num'][()][0]
+                        # s = datanode[meta['dsetname']][()] # Should be an entropy
+                        s = mmntnode[meta['dsetname']][()] # Should be an entropy
+                        n = mmntnode['avg']['num'][()][0]
                         if meta.get('normpage'):
                             s /= midchain_page_entropy(dbval['vals']['L'])
                         elif meta.get('normsize'):

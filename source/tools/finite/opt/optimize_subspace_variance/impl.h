@@ -81,8 +81,7 @@ namespace settings {
  */
 template<typename Scalar>
 opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                                                         [[maybe_unused]]  OptMeta &meta,
-                                                                         reports::eigs_log<Scalar> &elog) {
+                                                                         [[maybe_unused]] OptMeta &meta, reports::eigs_log<Scalar> &elog) {
     tools::log->trace("Optimizing subspace");
     auto t_sub = tid::tic_scope("subspace");
     initial_mps.validate_initial_mps();
@@ -252,4 +251,3 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const T
     for(const auto &mps : results) elog.eigs_add_entry(mps, spdlog::level::debug);
     return results.front();
 }
-

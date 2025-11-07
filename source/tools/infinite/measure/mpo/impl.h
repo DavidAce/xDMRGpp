@@ -1,5 +1,4 @@
 #pragma once
-#include "tools/infinite/measure.h"
 #include "math/tenx.h"
 #include "tensors/edges/EdgesInfinite.h"
 #include "tensors/model/ModelInfinite.h"
@@ -8,6 +7,7 @@
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
+#include "tools/infinite/measure.h"
 using tools::infinite::measure::RealScalar;
 
 template<typename state_or_mps_type, typename Scalar>
@@ -26,7 +26,6 @@ RealScalar<Scalar> tools::infinite::measure::energy_minus_energy_shift(const sta
     }
 }
 
-
 template<typename state_or_mps_type, typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_mpo(const state_or_mps_type &state, const ModelInfinite<Scalar> &model,
                                                         const EdgesInfinite<Scalar> &edges) {
@@ -37,14 +36,12 @@ RealScalar<Scalar> tools::infinite::measure::energy_mpo(const state_or_mps_type 
                std::real(model.get_energy_shift_per_site()) * static_cast<RealScalar<Scalar>>(edges.get_length());
 }
 
-
 template<typename state_or_mps_type, typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_per_site_mpo(const state_or_mps_type &state, const ModelInfinite<Scalar> &model,
                                                                  const EdgesInfinite<Scalar> &edges) {
     tools::log->warn("energy_per_site_mpo: CHECK DIVISION");
     return tools::infinite::measure::energy_mpo(state, model, edges) / RealScalar<Scalar>{2};
 }
-
 
 template<typename state_or_mps_type, typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_variance_mpo(const state_or_mps_type &state, const ModelInfinite<Scalar> &model,
@@ -79,7 +76,6 @@ RealScalar<Scalar> tools::infinite::measure::energy_variance_mpo(const state_or_
     }
 }
 
-
 template<typename state_or_mps_type, typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_variance_per_site_mpo(const state_or_mps_type &state, const ModelInfinite<Scalar> &model,
                                                                           const EdgesInfinite<Scalar> &edges) {
@@ -94,7 +90,6 @@ RealScalar<Scalar> tools::infinite::measure::energy_mpo(const TensorsInfinite<Sc
     return tensors.measurements.energy_mpo.value();
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_per_site_mpo(const TensorsInfinite<Scalar> &tensors) {
     if(tensors.measurements.energy_per_site_mpo) return tensors.measurements.energy_per_site_mpo.value();
@@ -104,14 +99,12 @@ RealScalar<Scalar> tools::infinite::measure::energy_per_site_mpo(const TensorsIn
     return tensors.measurements.energy_per_site_mpo.value();
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_variance_mpo(const TensorsInfinite<Scalar> &tensors) {
     if(tensors.measurements.energy_variance_mpo) return tensors.measurements.energy_variance_mpo.value();
     tensors.measurements.energy_variance_mpo = tools::infinite::measure::energy_variance_mpo(*tensors.state, *tensors.model, *tensors.edges);
     return tensors.measurements.energy_variance_mpo.value();
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_variance_per_site_mpo(const TensorsInfinite<Scalar> &tensors) {
@@ -121,24 +114,20 @@ RealScalar<Scalar> tools::infinite::measure::energy_variance_per_site_mpo(const 
     return tensors.measurements.energy_variance_per_site_mpo.value();
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_mpo(const Eigen::Tensor<Scalar, 3> &mps, const TensorsInfinite<Scalar> &tensors) {
     return tools::infinite::measure::energy_mpo(mps, *tensors.model, *tensors.edges);
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_per_site_mpo(const Eigen::Tensor<Scalar, 3> &mps, const TensorsInfinite<Scalar> &tensors) {
     return tools::infinite::measure::energy_per_site_mpo(mps, *tensors.model, *tensors.edges);
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_variance_mpo(const Eigen::Tensor<Scalar, 3> &mps, const TensorsInfinite<Scalar> &tensors) {
     return tools::infinite::measure::energy_variance_mpo(mps, *tensors.model, *tensors.edges);
 }
-
 
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_variance_per_site_mpo(const Eigen::Tensor<Scalar, 3> &mps, const TensorsInfinite<Scalar> &tensors) {

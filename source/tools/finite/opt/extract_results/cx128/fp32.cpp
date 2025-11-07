@@ -1,7 +1,7 @@
 #include "../impl.h"
 
 using Scalar = cx128;
-using T = fp32;
+using T      = fp32;
 
 /* clang-format off */
 

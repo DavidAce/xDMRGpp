@@ -9,7 +9,7 @@ using namespace eig;
 
 int eig::solver::wgeev_eigen(cx128 *matrix, size_type L) {
     eig::log->trace("Starting eig wgeev_eigen");
-    using Scalar                      = cx128;
+    using Scalar     = cx128;
     using Real       = typename Eigen::NumTraits<Scalar>::Real;
     using Cplx       = std::complex<Real>;
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
@@ -22,7 +22,7 @@ int eig::solver::wgeev_eigen(cx128 *matrix, size_type L) {
     int  info       = 0;
     auto t_prep     = std::chrono::high_resolution_clock::now();
 
-    auto solver = Eigen::ComplexEigenSolver<MatrixType>(matrix_map, config.compute_eigvecs == Vecs::ON );
+    auto solver = Eigen::ComplexEigenSolver<MatrixType>(matrix_map, config.compute_eigvecs == Vecs::ON);
     if(solver.info() == Eigen::ComputationInfo::Success) {
         auto &eigvals = result.get_eigvals<Scalar, Form::NSYM>();
         eigvals.resize(safe_cast<size_t>(L));
@@ -35,8 +35,7 @@ int eig::solver::wgeev_eigen(cx128 *matrix, size_type L) {
             auto evecs_map = Eigen::Map<MatrixCplx>(eigvecs.data(), L, L);
             evecs_map      = solver.eigenvectors();
         }
-    }
-    else{
+    } else {
         throw std::runtime_error("Eigen wgeev_eigen failed with error: " + std::to_string(solver.info()));
     }
 

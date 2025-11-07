@@ -1,6 +1,6 @@
 #pragma once
 
-#include "math/tenx/fwd_decl.h"
+#include <Eigen/Core>
 // Eigen goes first
 #include "math/float.h"
 #include "math/tenx/eval.h"

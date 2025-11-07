@@ -2,8 +2,8 @@ import glob
 import os.path
 
 import matplotlib.pyplot as plt
-from dmrg_plot.common.io.h5ops import *
-from dmrg_plot.common.io.parse import parse
+from common.io.h5ops import *
+from common.io.parse import parse
 
 from database.database import *
 from lbit_avg import lbit_avg
@@ -26,19 +26,23 @@ def lbit_plot(args):
     metas = []
     metas_lbit = []
     for batch in batches:
+        if not os.path.isdir(projdir):
+            raise Exception(f'Not a directory: {projdir}')
         batchglob = glob.glob(f'{projdir}/{batch}*')
+        if not batchglob:
+            raise Exception(f'Nothing to glob in:: {projdir}/{batch}*')
         batchnum = int(''.join(i for i in batch if i.isdigit()))
         version2 = batchnum <= 59
         version3 = batchnum >= 60
         batchglob = [dir for dir in batchglob if not "test" in dir]
         if batchglob:
-            print(f"globbed: {batchglob}")
             batchdir = batchglob[0]
             # avgfile = f'{batchdir}/analysis/data-epstest/averaged-epstest.h5'
             plotdir = f'{batchdir}/analysis/plots'
             cachedir = f'{batchdir}/analysis/cache'
             for avgfile in [
-                            f'{batchdir}/analysis/data/averaged.h5',
+                            f'{batchdir}/analysis/data/averaged-pn.h5',
+                            # f'{batchdir}/analysis/data/averaged.h5',
                             # f'{batchdir}/analysis/data/averaged-hartley-1e-8.h5',
                             # f'{batchdir}/analysis/data/averaged-hartley-1e-10.h5',
                             # f'/mnt/WDB-AN1500/mbl_transition/lbit93-precision/analysis/data/averaged.h5',
@@ -148,13 +152,30 @@ def lbit_plot(args):
     figspec_lbit = ['J', 'w', 'r']
     subspec_lbit = ['u']
     linspec_lbit = ['f','L']
+
+
+
+
+
+
+
+
+
+    f = None
+    for db, meta, palette in zip(dbs, metas, palettes):
+        f = plot_pn_fig_sub_line(db=db, meta=meta['pn-dist'], figspec=figspec, subspec=subspec, linspec=linspec,
+                                   figs=f,
+                                   palette_name=palette)
+    save_figure(f)
+
+
     # f = None
     # for idx, (db, meta, palette) in enumerate(zip(dbs, metas, palettes)):
     #     f = plot_tsat_fig_sub_line(db=db, meta=meta['ent-sat'], figspec=figspec_Lf, subspec=subspec_Lf,
     #                                linspec=linspec_Lf, xaxspec=xaxspec_Lf, figs=f, palette_name=palette, dbidx=idx,
     #                                dbnum=len(dbs))
-    # # # save_figure(f)
-    # # # f = None
+    # # save_figure(f)
+    # # f = None
     # for idx, (db, meta, palette) in enumerate(zip(dbs, metas, palettes)):
     #     f = plot_tsat_fig_sub_line(db=db, meta=meta['num-sat'], figspec=figspec_Lf, subspec=subspec_Lf,
     #                                linspec=linspec_Lf, xaxspec=xaxspec_Lf, figs=f, palette_name=palette, dbidx=idx,
@@ -978,7 +999,7 @@ def lbit_plot(args):
 
 
 if __name__ == '__main__':
-    args = parse('fLBIT', ['lbit93'],)# basedir='/mnt/wdpool/backup/lbit')
+    args = parse('fLBIT', ['lbit93'], basedir='/mnt/S990PRO/mbl_transition')
     #lbit_avg(args)
     lbit_plot(args)
 

@@ -11,7 +11,6 @@
 
 #endif
 
-
 /*! \brief Performs SVD on a matrix
  *  This function is defined in cpp to avoid long compilation times when having Eigen::BDCSVD included everywhere in headers.
  *  Performs rigorous checks to ensure stability of DMRG.
@@ -108,7 +107,6 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     throw std::logic_error("Unrecognized svd library");
 }
 
-
 template<typename Scalar>
 void svd::solver::print_matrix([[maybe_unused]] const Scalar *mat_ptr, [[maybe_unused]] long rows, [[maybe_unused]] long cols,
                                [[maybe_unused]] std::string_view tag, [[maybe_unused]] long dec) const {
@@ -121,7 +119,6 @@ void svd::solver::print_matrix([[maybe_unused]] const Scalar *mat_ptr, [[maybe_u
     }
 #endif
 }
-
 
 template<typename Scalar>
 void svd::solver::print_vector([[maybe_unused]] const Scalar *vec_ptr, [[maybe_unused]] long size, [[maybe_unused]] std::string_view tag,
@@ -231,10 +228,10 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
     auto Smin                          = S.real().minCoeff();
     auto Smax                          = S.real().maxCoeff();
     // Stabilize by inserting avgS *  1/avgS
-    auto avgS = num::next_power_of_two<Real>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
+    Eigen::Index nonZeros = (S.cwiseAbs().array() > 0).count();
+    auto avgS = num::next_power_of_two<Real>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
     if(avgS > 1) {
         S /= avgS;
-        // std::tie(rank, truncation_error) = get_rank_from_truncation_error(S.head(S.nonZeros()));
         std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
         U                                = U.leftCols(rank).eval();
         S                                = S.head(rank).eval();
@@ -252,7 +249,6 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
             tenx::TensorMap(VT).template cast<Scalar>());
     /* clang-format on */
 }
-
 
 template<typename Scalar>
 std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::split_mpo_r2l(const Eigen::Tensor<Scalar, 4> &mpo, const svd::config &svd_cfg) {
@@ -306,7 +302,8 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
 
     // Stabilize by inserting avgS *  1/avgS
     using R   = RealScalar<Scalar>;
-    auto avgS = num::next_power_of_two<R>(S.head(S.nonZeros()).real().mean()); // Nearest power of two larger than S.mean()
+    Eigen::Index nonZeros = (S.cwiseAbs().array() > 0).count();
+    auto avgS = num::next_power_of_two<R>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
     if(avgS > 1) {
         S /= avgS;
         std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);

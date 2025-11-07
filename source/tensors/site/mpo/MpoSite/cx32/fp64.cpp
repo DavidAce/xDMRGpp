@@ -1,8 +1,7 @@
 #include "../MpoSite.tmpl.h"
 
 using Scalar = cx32;
-using T = fp64;
-
+using T      = fp64;
 
 /* clang-format off */
 template Eigen::Tensor<T, 4>  MpoSite<Scalar>::apply_edge_left(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 1> &edgeL) const;

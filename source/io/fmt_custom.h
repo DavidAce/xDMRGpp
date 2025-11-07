@@ -166,9 +166,9 @@ struct fmt::formatter<fp<T>> {
             using V = std::remove_cvref_t<decltype(v)>;
             static_assert(std::is_floating_point_v<V>);
 
-            constexpr auto bsize = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
-            char           buffer[bsize]; // Temporary buffer for conversion
-            size_t         off = 0;
+            constexpr auto   bsize = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
+            char             buffer[bsize]; // Temporary buffer for conversion
+            size_t           off           = 0;
             std::string_view sign_internal = specs_.sign() == fmt::sign::plus ? "+" : "";
 
             if(!sign_internal.empty() and v >= V{0}) {

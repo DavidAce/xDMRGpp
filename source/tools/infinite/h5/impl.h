@@ -18,7 +18,7 @@
 using namespace tools::infinite::h5::save;
 
 void inline bootstrap_save_log(std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> &save_log, const h5pp::File &h5file,
-                        const std::vector<std::string> &links) {
+                               const std::vector<std::string> &links) {
     if(save_log.empty()) {
         try {
             for(auto &link : links) {
@@ -106,7 +106,8 @@ void tools::infinite::h5::save::mpo(h5pp::File &h5file, const StorageInfo &sinfo
 }
 
 template<typename Scalar>
-void tools::infinite::h5::save::measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<Scalar> &tensors, const AlgorithmStatus &status) {
+void tools::infinite::h5::save::measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsInfinite<Scalar> &tensors,
+                                             const AlgorithmStatus &status) {
     auto table_path = fmt::format("{}/measurements", sinfo.get_state_prefix());
     // Check if the current entry has already been appended
     static std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> save_log;
@@ -117,7 +118,7 @@ void tools::infinite::h5::save::measurements(h5pp::File &h5file, const StorageIn
     if(not h5file.linkExists(table_path)) h5file.createTable(h5pp_table_measurements_infinite<Scalar>::get_h5t(), table_path, "measurements");
 
     typename h5pp_table_measurements_infinite<Scalar>::table measurement_entry{};
-    const auto                                     &state = *tensors.state;
+    const auto                                              &state = *tensors.state;
 
     measurement_entry.step                 = safe_cast<uint64_t>(sinfo.step);
     measurement_entry.iter                 = safe_cast<uint64_t>(sinfo.iter);

@@ -1,6 +1,6 @@
 #include "impl.h"
 
-using Scalar = fp128;
+using Scalar   = fp128;
 using CalcType = fp128;
 /* clang-format off */
 

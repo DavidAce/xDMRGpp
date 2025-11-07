@@ -21,7 +21,7 @@ namespace flbit_tmpl {
     // const std::vector<std::vector<qm::SwapGate>> &ham_swap_gates);
 
     inline std::vector<std::vector<qm::SwapGate>> get_time_evolution_gates(const cx128                                  &time_point,
-                                                                                       const std::vector<std::vector<qm::SwapGate>> &ham_swap_gates) {
+                                                                           const std::vector<std::vector<qm::SwapGate>> &ham_swap_gates) {
         auto t_upd = tid::tic_scope("gen_swap_gates", tid::level::normal);
         tools::log->debug("Updating time evolution swap gates to t = {:.2e}", fp(time_point));
         auto time_swap_gates = std::vector<std::vector<qm::SwapGate>>();

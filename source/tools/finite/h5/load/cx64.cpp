@@ -2,7 +2,6 @@
 
 using Scalar = cx64;
 
-
 /* clang-format off */
 template void tools::finite::h5::load::simulation(const h5pp::File &h5file, std::string_view state_prefix, TensorsFinite<Scalar> &tensors, AlgorithmStatus &status,AlgorithmType algo_type);
 

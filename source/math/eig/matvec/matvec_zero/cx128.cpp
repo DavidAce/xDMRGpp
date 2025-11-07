@@ -2,5 +2,3 @@
 
 using Scalar = cx128;
 template class MatVecZero<Scalar>;
-
-

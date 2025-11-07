@@ -68,6 +68,7 @@ class xdmrg : public AlgorithmFinite<Scalar> {
     using AlgorithmFinite<Scalar>::print_status_full;
     using AlgorithmFinite<Scalar>::print_status;
 
+    using AlgorithmFinite<Scalar>::try_mps_compression;
     using AlgorithmFinite<Scalar>::try_projection;
     using AlgorithmFinite<Scalar>::move_center_point;
     using AlgorithmFinite<Scalar>::var_delta;

@@ -73,7 +73,7 @@ namespace tools::finite::opt::reports {
                                          .rnorm_H1    = mps.get_rnorm_H(),
                                          .rnorm_H2    = mps.get_rnorm_H2(),
                                          .grad        = mps.get_grad_max(),
-                                         .tol         = mps.get_eigs_tol(),
+                                         .tol         = mps.get_eigs_abstol(),
                                          .iter        = mps.get_iter(),
                                          .mv          = mps.get_mv(),
                                          .pc          = mps.get_pc(),

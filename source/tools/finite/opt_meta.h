@@ -33,12 +33,14 @@ namespace tools::finite::opt {
         std::optional<double>      subspace_tol                         = std::nullopt;
         std::optional<double>      eigv_target                          = std::nullopt; // AKA shift
         std::optional<int>         eigs_iter_max                        = std::nullopt;
-        std::optional<double>      eigs_tol                             = std::nullopt;
+        std::optional<double>      eigs_abstol                          = std::nullopt;
+        std::optional<double>      eigs_reltol                          = std::nullopt;
         std::optional<int>         eigs_nev                             = std::nullopt;
         std::optional<int>         eigs_ncv                             = std::nullopt;
         std::optional<long>        eigs_blk                             = std::nullopt;
         std::optional<double>      eigs_time_max                        = std::nullopt;
         std::optional<long>        eigs_jcbMaxBlockSize                 = std::nullopt; // maximum  Jacobi block size (preconditioner)
+        std::optional<long>        eigs_jcbOverlapSize                  = std::nullopt; // Jacobi block overlap size (preconditioner)
         std::optional<std::string> eigs_preconditioner_type             = std::nullopt;
         std::optional<std::string> eigs_residual_correction_type        = std::nullopt;
         std::optional<bool>        eigs_use_coarse_inner_preconditioner = std::nullopt;

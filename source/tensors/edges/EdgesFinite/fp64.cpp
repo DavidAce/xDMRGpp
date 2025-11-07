@@ -3,4 +3,3 @@
 using Scalar = fp64;
 
 template class EdgesFinite<Scalar>;
-

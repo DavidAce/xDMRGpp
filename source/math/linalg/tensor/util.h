@@ -1,8 +1,8 @@
 #pragma once
 #include "../common.h"
+#include <algorithm>
 #include <array>
 #include <iterator>
-#include <algorithm>
 #include <unsupported/Eigen/CXX11/Tensor>
 
 namespace linalg::tensor {

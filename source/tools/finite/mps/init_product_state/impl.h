@@ -97,7 +97,6 @@ void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<Scala
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 
@@ -142,7 +141,6 @@ void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<Sca
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
     tools::log->debug("Initial state: {}", bitfield);
 }
 
@@ -180,7 +178,6 @@ void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<Scalar>
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 
@@ -216,7 +213,6 @@ void tools::finite::mps::init::set_product_state_aligned(StateFinite<Scalar> &st
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
     tools::log->debug("Initial state: {}", bitfield);
 }
 
@@ -260,7 +256,6 @@ void tools::finite::mps::init::set_product_state_neel(StateFinite<Scalar> &state
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
     tools::log->debug("Initial state: {}", bitfield);
 }
 
@@ -285,7 +280,6 @@ void tools::finite::mps::init::set_random_product_state_with_random_spinors(Stat
     pattern.clear();
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 
@@ -324,7 +318,6 @@ void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFini
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 
@@ -348,7 +341,6 @@ void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<Scal
 
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 
@@ -397,7 +389,6 @@ void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspino
     state.popcount = static_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 
@@ -431,6 +422,5 @@ void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<Scal
     pattern.clear();
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 

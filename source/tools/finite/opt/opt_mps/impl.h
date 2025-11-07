@@ -10,8 +10,6 @@
 
 using namespace tools::finite::opt;
 
-
-
 template<typename Scalar>
 bool opt_mps<Scalar>::is_initialized() const {
     return tensor and name and sites and energy and variance and length;

@@ -7,8 +7,10 @@ include(GNUInstallDirs)
 include(ExternalProject)
 
 ExternalProject_Add(external_toml11
-        URL https://github.com/ToruNiina/toml11/archive/refs/tags/v4.3.0.tar.gz
-        URL_MD5 0235d45af6aa3ef4e70f22d99598b92e
+#        URL https://github.com/ToruNiina/toml11/archive/refs/tags/v4.3.0.tar.gz
+        URL https://github.com/ToruNiina/toml11/archive/refs/tags/v4.4.0.tar.gz
+#        URL_MD5 0235d45af6aa3ef4e70f22d99598b92e
+        URL_MD5 b576218153c21742e54920c061ff33cb
         BUILD_ALWAYS TRUE
         PREFIX ${CMAKE_BINARY_DIR}
         INSTALL_DIR ${CMAKE_INSTALL_PREFIX}

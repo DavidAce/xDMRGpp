@@ -83,10 +83,10 @@ class StateFinite {
         /* clang-format on */
     }
 
-    mutable std::vector<bool> tag_normalized_sites;
-    std::string               name;
-    AlgorithmType             algo = AlgorithmType::ANY;
-    std::vector<double>       convrates;
+    // mutable std::vector<bool> tag_normalized_sites;
+    std::string         name;
+    AlgorithmType       algo = AlgorithmType::ANY;
+    std::vector<double> convrates;
 
     template<typename T>
     using optional_tensor4ref = std::optional<std::reference_wrapper<const Eigen::Tensor<T, 4>>>;
@@ -268,13 +268,11 @@ class StateFinite {
     void   clear_cache(LogPolicy logPolicy = LogPolicy::SILENT) const;
     void   shrink_cache() const;
 
-    void                     tag_active_sites_normalized(bool tag) const;
-    void                     tag_all_sites_normalized(bool tag) const;
-    void                     tag_site_normalized(size_t pos, bool tag) const;
-    const std::vector<bool> &get_normalization_tags() const;
-    bool                     is_normalized_on_all_sites(RealScalar prec = std::numeric_limits<RealScalar>::epsilon() * 100) const;
-    bool                     is_normalized_on_any_sites() const;
-    bool                     is_normalized_on_active_sites() const;
-    bool                     is_normalized_on_non_active_sites() const;
-    std::vector<size_t>      get_active_ids() const;
+    RealScalar              get_norm_error(size_t pos) const;
+    std::vector<RealScalar> get_norm_errors(const std::vector<size_t> &sites) const;
+    std::vector<RealScalar> get_norm_errors() const;
+    bool                    is_normalized(RealScalar tol) const;
+    bool                    is_normalized_on_all_sites(RealScalar tol) const;
+    bool                    is_normalized_on_active_sites(RealScalar tol) const;
+    std::vector<size_t>     get_active_ids() const;
 };

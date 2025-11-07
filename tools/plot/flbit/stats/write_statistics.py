@@ -4,7 +4,7 @@ import scipy.stats as sc
 from plotting.tools import get_timepoints
 from .write_statistics_table import *
 from numba import njit,prange, float64,int64
-from line_profiler_pycharm import profile
+# from line_profiler_pycharm import profile
 from cProfile import Profile
 from pstats import SortKey, Stats
 

@@ -1,7 +1,7 @@
 #pragma once
-#include "IsingMajorana.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
+#include "IsingMajorana.h"
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/tenx.h"
@@ -9,8 +9,6 @@
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
 #include <tools/infinite/mps.h>
-
-
 
 // double delta_to_J_mean(double delta) { return ;  }
 // double delta_to_h_mean(double delta) { return ;  }

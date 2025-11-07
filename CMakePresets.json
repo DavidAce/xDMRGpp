@@ -37,11 +37,11 @@
         "CMAKE_CUDA_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG -g -fdiagnostics-color=always",
         "CMAKE_Fortran_FLAGS_RELEASE_INIT": "-O3 -DNDEBUG -g -fdiagnostics-color=always",
         "CMAKE_C_FLAGS_DEBUG_INIT": "-O0 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CXX_FLAGS_DEBUG_INIT": "-O0 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_DEBUG_INIT": "-O0 -g -ftemplate-backtrace-limit=0 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_CUDA_FLAGS_DEBUG_INIT": "-O0 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_Fortran_FLAGS_DEBUG_INIT": "-O0 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_C_FLAGS_RELWITHDEBINFO_INIT": "-O3 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT": "-O3 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO_INIT": "-O3 -g -ftemplate-backtrace-limit=0 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_CUDA_FLAGS_RELWITHDEBINFO_INIT": "-O3-g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_Fortran_FLAGS_RELWITHDEBINFO_INIT": "-O3 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "TRUE",
@@ -127,7 +127,7 @@
         "DMRG_CMAKE_DEBUG": "TRUE",
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "FALSE",
         "CMAKE_C_FLAGS_DEBUG_INIT": "-O1 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
-        "CMAKE_CXX_FLAGS_DEBUG_INIT": "-O1 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_DEBUG_INIT": "-O1 -g -ftemplate-backtrace-limit=0 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_CUDA_FLAGS_DEBUG_INIT": "-O1 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
         "CMAKE_Fortran_FLAGS_DEBUG_INIT": "-O1 -g -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always"
       }

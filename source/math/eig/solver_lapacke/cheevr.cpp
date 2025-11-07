@@ -63,14 +63,14 @@ int eig::solver::cheevr(cx32 *matrix /*!< gets destroyed */, size_type L, char r
     eig::log->trace(" lwork  = {}", lwork);
     eig::log->trace(" lrwork = {}", lrwork);
     eig::log->trace(" liwork = {}", liwork);
-    std::vector<cx32>   work(static_cast<size_t>(lwork));
+    std::vector<cx32> work(static_cast<size_t>(lwork));
     std::vector<fp32> rwork(static_cast<size_t>(lrwork));
-    std::vector<int>    iwork(static_cast<size_t>(liwork));
-    auto                t_prep = std::chrono::high_resolution_clock::now();
-    info                       = LAPACKE_cheevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', lda, matrix, lda, //
-                                                     vl, vu, il, iu, 2 * LAPACKE_slamch('S'),              //
-                                                     &m_found, eigvals.data(), eigvecs.data(),             //
-                                                     ldz, isuppz.data(), lwork_query, lwork, rwork_query, lrwork, iwork_query, liwork);
+    std::vector<int>  iwork(static_cast<size_t>(liwork));
+    auto              t_prep = std::chrono::high_resolution_clock::now();
+    info                     = LAPACKE_cheevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', lda, matrix, lda, //
+                                                   vl, vu, il, iu, 2 * LAPACKE_slamch('S'),              //
+                                                   &m_found, eigvals.data(), eigvecs.data(),             //
+                                                   ldz, isuppz.data(), lwork_query, lwork, rwork_query, lrwork, iwork_query, liwork);
 
     auto t_total = std::chrono::high_resolution_clock::now();
     if(info != 0) throw std::runtime_error("LAPACK cheevr failed with error: " + std::to_string(info));

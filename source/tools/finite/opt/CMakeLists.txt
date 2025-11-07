@@ -109,6 +109,29 @@ add_source_target(xdmrg++-tools-finite-opt
             optimize_subspace_variance/fp64.cpp
             optimize_subspace_variance/fp128.cpp
 
+
+            precond/common/common.fp32.cpp
+            precond/common/common.fp64.cpp
+            precond/common/common.fp128.cpp
+            precond/common/common.cx32.cpp
+            precond/common/common.cx64.cpp
+            precond/common/common.cx128.cpp
+
+            precond/standard_basis_change/standard_basis_change.fp32.cpp
+            precond/standard_basis_change/standard_basis_change.fp64.cpp
+            precond/standard_basis_change/standard_basis_change.fp128.cpp
+            precond/standard_basis_change/standard_basis_change.cx32.cpp
+            precond/standard_basis_change/standard_basis_change.cx64.cpp
+            precond/standard_basis_change/standard_basis_change.cx128.cpp
+
+
+            precond/generalized_basis_change/generalized_basis_change.fp32.cpp
+            precond/generalized_basis_change/generalized_basis_change.fp64.cpp
+            precond/generalized_basis_change/generalized_basis_change.fp128.cpp
+            precond/generalized_basis_change/generalized_basis_change.cx32.cpp
+            precond/generalized_basis_change/generalized_basis_change.cx64.cpp
+            precond/generalized_basis_change/generalized_basis_change.cx128.cpp
+
 #            ../../../math/eig/solver_eigsmpo/cx32.cpp
 #            ../../../math/eig/solver_eigsmpo/cx64.cpp
 #            ../../../math/eig/solver_eigsmpo/cx128.cpp

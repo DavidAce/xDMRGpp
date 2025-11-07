@@ -1,8 +1,8 @@
 #pragma once
-#include "fwd_decl.h"
 #include <array>
 #include <complex>
 #include <utility>
+#include <Eigen/Core>
 
 /*!
  * \brief A collection of type-detection and type-analysis utilities using SFINAE on Eigen types
@@ -102,9 +102,12 @@ namespace tenx::sfinae {
     concept is_eigen_tensorN = std::is_base_of_v<Eigen::TensorBase<std::remove_cvref_t<T>, Eigen::ReadOnlyAccessors>, std::remove_cvref_t<T>> && //
                                std::remove_cvref_t<T>::NumDimensions == rank;
 
-    template<typename T> concept is_eigen_tensor1 = is_eigen_tensorN<T, 1>;
-    template<typename T> concept is_eigen_tensor2 = is_eigen_tensorN<T, 2>;
-    template<typename T> concept is_eigen_tensor3 = is_eigen_tensorN<T, 3>;
+    template<typename T>
+    concept is_eigen_tensor1 = is_eigen_tensorN<T, 1>;
+    template<typename T>
+    concept is_eigen_tensor2 = is_eigen_tensorN<T, 2>;
+    template<typename T>
+    concept is_eigen_tensor3 = is_eigen_tensorN<T, 3>;
 
     template<typename T, typename = std::void_t<>>
     struct has_NumIndices : public std::false_type {};

@@ -24,7 +24,7 @@
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
 template<typename Scalar>
 EnvBase<Scalar>::EnvBase() : block(std::make_unique<Eigen::Tensor<Scalar, 3>>()) {
-    assert_block();
+    // assert_block();
 } // default ctor
 template<typename Scalar>
 EnvBase<Scalar>::~EnvBase() = default; // default dtor

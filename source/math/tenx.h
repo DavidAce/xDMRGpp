@@ -7,7 +7,7 @@
 #endif
 
 #include "math/cast.h"
-#include "math/float.h"
+#include "math/float_eigen.h"
 #include "tenx/eval.h"
 #include "tenx/sfinae.h"
 #include "tenx/span.h"
@@ -17,29 +17,6 @@
 #include <Eigen/Core>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
-
-namespace Eigen {
-#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
-    template<>
-    struct NumTraits<fp128> : NumTraits<double> // permits to get the epsilon, dummy_precision, lowest, highest functions
-    {
-        typedef fp128 Real;
-        typedef fp128 NonInteger;
-        typedef fp128 Nested;
-
-        enum { IsComplex = 0, IsInteger = 0, IsSigned = 1, RequireInitialization = 1, ReadCost = 1, AddCost = 3, MulCost = 3 };
-    };
-
-    template<>
-    struct NumTraits<cx128> : NumTraits<cx64> // permits to get the epsilon, dummy_precision, lowest, highest functions
-    {
-        typedef fp128 Real;
-        typedef fp128 NonInteger;
-        typedef fp128 Nested;
-        enum { IsComplex = 1, IsInteger = 0, IsSigned = 1, RequireInitialization = 1, ReadCost = 1, AddCost = 6, MulCost = 6 };
-    };
-#endif
-}
 
 /*! \brief **tenx**: "Tensor Extra". Provides extra functionality to Eigen::Tensor.*/
 
@@ -665,7 +642,7 @@ namespace tenx {
                 Scalar inv_phase     = Scalar(0.0, -1.0) * angles.back();
                 Scalar exp_inv_phase = std::exp(inv_phase);
                 v.col(i) *= exp_inv_phase;
-                v.col(i) = (v.col(i).array().imag().cwiseAbs() > 1e-15).select(v.col(i), v.col(i).real());
+                v.col(i) = (v.col(i).array().imag().cwiseAbs() > 1e-15).select(v.col(i), v.col(i).real().template cast<Scalar>());
             }
         }
         return angles;

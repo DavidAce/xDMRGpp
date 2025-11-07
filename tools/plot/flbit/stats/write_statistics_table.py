@@ -8,7 +8,7 @@ import tables.parameters
 from numba import njit
 from tables import NaturalNameWarning
 from decimal import Decimal
-from dmrg_plot.common.io.h5ops import *
+from common.io.h5ops import *
 
 warnings.filterwarnings('ignore', category=NaturalNameWarning)
 

@@ -1,6 +1,5 @@
 #pragma once
 
-
 template<typename Scalar> class StateFinite;
 template<typename Scalar> class TensorsFinite;
 class AlgorithmStatus;
@@ -12,6 +11,6 @@ namespace tools::finite::opt::reports {
 }
 
 namespace tools::finite::ed {
-    template<typename Scalar>  StateFinite<Scalar> find_exact_state(const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status,
-                                                                          tools::finite::opt::reports::eigs_log<Scalar> &elog);
+    template<typename Scalar> StateFinite<Scalar> find_exact_state(const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status,
+                                                                   tools::finite::opt::reports::eigs_log<Scalar> &elog);
 }

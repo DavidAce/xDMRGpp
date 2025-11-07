@@ -99,7 +99,7 @@ void tools::finite::h5::save::measurements(h5pp::File &h5file, const StorageInfo
         measurement_entry.energy_variance        = tools::finite::measure::energy_variance(state, model, edges);
         measurement_entry.energy_variance_lowest = static_cast<RealScalar<Scalar>>(status.energy_variance_lowest);
     }
-    measurement_entry.norm             = tools::finite::measure::norm(state);
+    measurement_entry.norm             = tools::finite::measure::norm_state(state);
     measurement_entry.truncation_error = state.get_truncation_error_midchain();
     measurement_entry.bond_lim         = sinfo.bond_lim;
     measurement_entry.bond_max         = sinfo.bond_max;

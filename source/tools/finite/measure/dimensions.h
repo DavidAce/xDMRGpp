@@ -1,7 +1,7 @@
 #pragma once
-#include <vector>
 #include <utility>
-template<typename Scalar>  class StateFinite;
+#include <vector>
+template<typename Scalar> class StateFinite;
 
 namespace tools::finite::measure {
     /* clang-format off */

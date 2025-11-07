@@ -57,7 +57,6 @@ std::optional<size_t> tools::finite::opt::internal::subspace::get_idx_to_eigvec_
     return idx;
 }
 
-
 template<typename Scalar>
 std::optional<size_t> tools::finite::opt::internal::subspace::get_idx_to_eigvec_with_lowest_variance(const std::vector<opt_mps<Scalar>> &eigvecs) {
     if(eigvecs.empty()) return std::nullopt;
@@ -137,7 +136,6 @@ VectorReal<Scalar> tools::finite::opt::internal::subspace::get_eigvals(const std
     eigvals.conservativeResize(idx);
     return eigvals;
 }
-
 
 template<typename Scalar>
 VectorReal<Scalar> tools::finite::opt::internal::subspace::get_energies(const std::vector<opt_mps<Scalar>> &eigvecs) {
@@ -240,7 +238,6 @@ VectorType<Scalar> tools::finite::opt::internal::subspace::get_vector_in_subspac
     return subspace_vector.normalized();
 }
 
-
 template<typename Scalar>
 VectorType<Scalar> tools::finite::opt::internal::subspace::get_vector_in_fullspace(const std::vector<opt_mps<Scalar>> &eigvecs,
                                                                                    const VectorType<Scalar>           &subspace_vector) {
@@ -262,11 +259,9 @@ VectorType<Scalar> tools::finite::opt::internal::subspace::get_vector_in_fullspa
     return fullspace_vector.normalized();
 }
 
-
 template<typename Scalar>
 Eigen::Tensor<Scalar, 3> tools::finite::opt::internal::subspace::get_tensor_in_fullspace(const std::vector<opt_mps<Scalar>> &eigvecs,
                                                                                          const VectorType<Scalar>           &subspace_vector,
                                                                                          const std::array<Eigen::Index, 3>  &dims) {
     return Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(subspace::get_vector_in_fullspace(eigvecs, subspace_vector).data(), dims);
 }
-

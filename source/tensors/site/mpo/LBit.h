@@ -1,7 +1,7 @@
 #pragma once
 
-#include "math/tenx/fwd_decl.h"
 #include "MpoSite.h"
+#include <Eigen/Core>
 #include <general/sfinae.h>
 #include <h5pp/details/h5ppHid.h>
 

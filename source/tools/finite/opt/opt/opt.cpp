@@ -1,7 +1,6 @@
 #include "../opt-internal.h"
 #include "math/num.h"
 
-
 double tools::finite::opt::internal::windowed_func_abs(double x, double window) {
     if(std::abs(x) >= window)
         return std::abs(x) - window;

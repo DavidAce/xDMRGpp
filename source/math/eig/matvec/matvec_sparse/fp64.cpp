@@ -3,4 +3,3 @@
 using Scalar = fp64;
 template class MatVecSparse<Scalar, false>;
 template class MatVecSparse<Scalar, true>;
-

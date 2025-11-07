@@ -1,11 +1,11 @@
 #pragma once
 #include "config/enums.h"
 #include "math/float.h"
-#include "math/tenx/fwd_decl.h"
 #include "tensors/site/env/EnvPair.h"
 #include <complex>
 #include <memory>
 #include <optional>
+#include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 
 template<typename Scalar> class EnvEne;

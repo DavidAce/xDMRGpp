@@ -50,10 +50,10 @@ namespace svd {
 
     class solver {
         private:
-        std::shared_ptr<spdlog::logger>      log              = nullptr;
-        mutable double                       truncation_error = 0; // Stores the last truncation error
-        mutable long                         rank             = 0; // Stores the last rank
-        inline static long long              count            = 0; // Count the number of svd invocations for this execution
+        std::shared_ptr<spdlog::logger> log              = nullptr;
+        mutable double                  truncation_error = 0; // Stores the last truncation error
+        mutable long                    rank             = 0; // Stores the last rank
+        inline static long long         count            = 0; // Count the number of svd invocations for this execution
 
         public:
         long   rank_max       = -1;                                     /*!< -1 means determine from given matrix */
@@ -86,7 +86,9 @@ namespace svd {
         template<typename T>
         [[nodiscard]] std::pair<long, fp64> get_rank_from_truncation_error(const T &S) const {
             VectorType<fp64> truncation_errors(S.size() + 1);
-            for(long s = 0; s <= S.size(); s++) { truncation_errors[s] = static_cast<fp64>(S.bottomRows(S.size() - s).norm()); } // Last one should be zero, i.e. no truncation
+            for(long s = 0; s <= S.size(); s++) {
+                truncation_errors[s] = static_cast<fp64>(S.bottomRows(S.size() - s).norm());
+            } // Last one should be zero, i.e. no truncation
             auto rank_    = (truncation_errors.array() >= truncation_lim).count();
             auto rank_lim = S.size();
             if(rank_max > 0) rank_lim = std::min(S.size(), rank_max);
@@ -99,6 +101,8 @@ namespace svd {
                                truncation_errors[rank_]);
                 throw std::logic_error("rank <= 0");
             }
+            // log->info("Truncation error: {:.5e} limit {:.5e} | Smallest kept singular value: {:.5e} ({} in total)",
+            // fp(truncation_errors[rank_]),fp(truncation_lim), fp(S[rank_-1]), S.size());
             return {rank_, truncation_errors[rank_]};
         }
 

@@ -1,10 +1,10 @@
 #pragma once
-#include "truncation.h"
 #include "debug/exceptions.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
+#include "truncation.h"
 
 template<typename Scalar>
 std::vector<fp64> tools::finite::measure::truncation_errors(const StateFinite<Scalar> &state) {
@@ -23,7 +23,7 @@ std::vector<fp64> tools::finite::measure::truncation_errors(const StateFinite<Sc
 
 template<typename Scalar>
 std::vector<fp64> tools::finite::measure::truncation_errors_active(const StateFinite<Scalar> &state) {
-    // Here we get the truncation erros of the bonds that were merged into the full state in the last step
+    // Here we get the truncation errors of the bonds that were merged into the full state in the last step
     // For instance, if the active sites are {2, 3, 4, 5, 6}, this returns the 4 bonds connecting {2,3}, {3,4}, {4,5} and {5,6}
     // If active_sites is just {4}, it returns the bond between {4,5} when going right, and {3,4} when going left.
     if(state.active_sites.empty()) throw except::logic_error("truncation_errors_active(): active_sites is empty");
@@ -31,10 +31,12 @@ std::vector<fp64> tools::finite::measure::truncation_errors_active(const StateFi
         // In single-site DMRG the active site is a center "AC" site:
         // If we do forward expansion:
         //  * Going left-to-right, we update AC whose right bond (LC) is truncated after optimization
-        //  * Going right-to-left, we update B whose left  bond (LC) is truncated after optimization.
-        // if(state.get_direction() == +1) return {state.get_mps_site(state.active_sites[0]).get_truncation_error_LC()};
-        // if(state.get_direction() == -1) return {state.get_mps_site(state.active_sites[0]).get_truncation_error()};
-        return {state.get_mps_site(state.active_sites[0]).get_truncation_error_last()};
+        //  * Going right-to-left, we update B whose left  bond (LC) is truncated after optimization, but this bond lives on the AC site to its left.
+        //  * In other words, we should always extract LC that lives in AC at the current position.
+        if(state.template get_position<long>() >= 0)
+            return {state.get_truncation_error_LC()};
+        else
+            return {0};
     }
     if(state.active_sites.size() == 2) return {state.get_mps_site(state.active_sites[0]).get_truncation_error_LC()};
     std::vector<fp64> truncation_errors;

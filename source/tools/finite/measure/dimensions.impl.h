@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include "dimensions.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
@@ -46,7 +45,6 @@ std::vector<long> tools::finite::measure::bond_dimensions(const StateFinite<Scal
     return state.measurements.bond_dimensions.value();
 }
 
-
 template<typename Scalar>
 std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFinite<Scalar> &state) {
     // Here we get the bond dimensions of the bonds that were merged into the full state in the last step
@@ -78,4 +76,3 @@ std::vector<long> tools::finite::measure::spin_dimensions(const StateFinite<Scal
     for(const auto &mps : state.mps_sites) { spin_dimensions.emplace_back(mps->spin_dim()); }
     return spin_dimensions;
 }
-

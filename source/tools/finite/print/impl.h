@@ -28,10 +28,8 @@ void tools::finite::print::dimensions(const TensorsFinite<Scalar> &tensors) {
     tools::log->info("Direction: {}", tensors.state->get_direction());
 }
 
-
 template<typename Scalar>
 void tools::finite::print::model(const ModelFinite<Scalar> &model) {
     model.get_mpo(0).print_parameter_names();
     for(size_t pos = 0; pos < model.get_length(); pos++) model.get_mpo(pos).print_parameter_values();
 }
-

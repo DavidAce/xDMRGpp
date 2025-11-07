@@ -151,10 +151,10 @@ def dmrg_plot(args):
     save_figure(f)
     plt.show()
     exit(0)
-    # f = None
-    # for idx, (db, meta) in enumerate(zip(dbs, metas)):
-    #     f = plot_opdm_gap_fig_sub_line(db=db, meta=meta['opdm-gapsize-d-L'], figs=f)
-    # save_figure(f)
+    f = None
+    for idx, (db, meta) in enumerate(zip(dbs, metas)):
+        f = plot_opdm_gap_fig_sub_line(db=db, meta=meta['opdm-gapsize-d-L'], figs=f)
+    save_figure(f)
 
     f = None
     for idx, (db, meta) in enumerate(zip(dbs, metas)):

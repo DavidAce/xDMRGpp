@@ -265,8 +265,10 @@ namespace settings {
         inline size_t             eigs_iter_max                   = 100000;                 /*!< Maximum number of iterations for eigenvalue solver. */
         inline double             eigs_iter_gain                  = 2     ;                 /*!< Increase number of iterations on OptSolver::EIGS by gain^(iters without progress) */
         inline GainPolicy         eigs_iter_gain_policy           = GainPolicy::SAT_ALGO;   /*!< Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC] */
-        inline double             eigs_tol_min                    = 1e-14 ;                 /*!< Precision tolerance for halting the eigenvalue solver. */
-        inline double             eigs_tol_max                    = 1e-8 ;                  /*!< Precision tolerance for halting the eigenvalue solver. */
+        inline double             eigs_abstol_min                    = 1e-14 ;                 /*!< Precision tolerance for halting the eigenvalue solver. */
+        inline double             eigs_abstol_max                    = 1e-8  ;                  /*!< Precision tolerance for halting the eigenvalue solver. */
+        inline double             eigs_reltol_min                 = 1e-2  ;                  /*!< If != 0, eigensolver success when the residual norm has decreased by this much. */
+        inline double             eigs_reltol_max                 = 1e-1  ;                  /*!< If != 0, eigensolver success when the residual norm has decreased by this much. */
         inline int                eigs_ncv_min                    = 0     ;                 /*!< Minimum krylov subspace size in the eigensolver. Set ncv <= 0 for automatic selection */
         inline int                eigs_ncv_max                    = 0     ;                 /*!< Minimum krylov subspace size in the eigensolver. Set ncv <= 0 for automatic selection */
         inline int                eigs_nev_min                    = 1     ;                 /*!< The minimum number of eigenpairs to request on OptSolver::EIGS */
@@ -274,8 +276,8 @@ namespace settings {
         inline long               eigs_blk_min                    = 1;                      /*!< Minimum block size in the eigenvalue solver (ritz vectors and residuals in block size chunks) */
         inline long               eigs_blk_max                    = 2;                      /*!< Maximum block size in the eigenvalue solver (ritz vectors and residuals in block size chunks) */
         inline long               eigs_jcb_blocksize_min          = 128   ;                 /*!< Minimum block size used in the block-jacobi preconditioner */
-        inline long               eigs_jcb_blocksize_max          = 4096  ;                 /*!< Maximum block size used in the block-jacobi preconditioner (increases up to max when stuck) */
-
+        inline long               eigs_jcb_blocksize_max          = 256   ;                 /*!< Maximum block size used in the block-jacobi preconditioner (increases up to max when stuck) */
+        inline long               eigs_jcb_overlap_size           = 32    ;                 /*!< Jacobi block overlap size */
         inline double             svd_truncation_min              = 1e-14 ;                 /*!< Truncation error limit, i.e. discard singular values while the truncation error is lower than this */
         inline double             svd_truncation_max              = 1e-6  ;                 /*!< If truncation error limit is updated (trnc_decrease_when != NEVER), start from this value */
         inline size_t             svd_switchsize_bdc              = 16    ;                 /*!< Linear size of a matrix, below which SVD will use slower but more precise JacobiSVD instead of BDC (default is 16 , good could be ~64) */

@@ -7,10 +7,10 @@
     // #include <tblis/util/thread.h>
     // #include <tci/tci_config.h>
     // #if defined(TCI_USE_OPENMP_THREADS)
-        // #include <omp.h>
+    // #include <omp.h>
     // #endif
-    #include <tblis_config.h>
     #include <tblis.h>
+    #include <tblis_config.h>
 #endif
 
 using namespace tools::common::contraction;

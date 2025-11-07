@@ -43,7 +43,6 @@ RealScalar<Scalar> tools::infinite::measure::energy_per_site_ham(const TensorsIn
     return tensors.measurements.energy_per_site_ham.value();
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::energy_variance_per_site_ham(const TensorsInfinite<Scalar> &tensors) {
     if(tensors.measurements.energy_variance_per_site_ham) return tensors.measurements.energy_variance_per_site_ham.value();
@@ -168,6 +167,7 @@ RealScalar<Scalar> tools::infinite::measure::energy_variance_per_site_ham(const 
     Scalar e2lrpbaba = E2LRP_BABA(0);
     Scalar e2lrpbaab = E2LRP_BAAB(0);
     tensors.measurements.energy_variance_per_site_ham =
-        std::real((e2ab + e2ba)/RealScalar<Scalar>{2} + (e2aba_1 + e2bab_1 + e2aba_2 + e2bab_2)/RealScalar<Scalar>{2} + e2lrpabab + e2lrpabba + e2lrpbaba + e2lrpbaab);
+        std::real((e2ab + e2ba) / RealScalar<Scalar>{2} + (e2aba_1 + e2bab_1 + e2aba_2 + e2bab_2) / RealScalar<Scalar>{2} + e2lrpabab + e2lrpabba + e2lrpbaba +
+                  e2lrpbaab);
     return tensors.measurements.energy_variance_per_site_ham.value();
 }

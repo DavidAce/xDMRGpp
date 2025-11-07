@@ -1,9 +1,9 @@
 #pragma once
 #include "../common.h"
-#include <array>
 #include <algorithm>
-#include <utility>
+#include <array>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <utility>
 
 namespace linalg::tensor {
     template<typename Scalar, int rank, auto npair>

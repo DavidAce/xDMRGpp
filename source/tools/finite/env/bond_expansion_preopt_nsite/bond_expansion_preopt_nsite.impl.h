@@ -1,3 +1,5 @@
+#include "math/float_eigen.h"
+//
 #include "../../env.h"
 #include "../assertions.h"
 #include "../BondExpansionConfig.h"
@@ -66,7 +68,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
 
     R                  optVal = std::numeric_limits<R>::quiet_NaN();
     long               optIdx = 0;
-    R                  tol    = static_cast<R>(settings::precision::eigs_tol_max);
+    R                  tol    = static_cast<R>(settings::precision::eigs_abstol_max);
     R                  absTol = std::numeric_limits<R>::epsilon() * 100;
     R                  relTol = R{1e-4f};
     R                  rnorm  = R{1};
@@ -91,7 +93,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
             auto t_mgs  = tid::tic_token("mgs");
             auto mgs    = linalg::matrix::modified_gram_schmidt(V);
             nonZeroCols = std::move(mgs.nonZeroCols);
-            V           = mgs.Q(Eigen::all, nonZeroCols);
+            V           = mgs.Q(Eigen::placeholders::all, nonZeroCols);
             numMGS++;
             if(nonZeroCols.size() == static_cast<size_t>(mgs.Q.cols())) break;
         }
@@ -409,11 +411,15 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_preopt_nsite(StateFi
     res.dims_new = state.get_mps_dims(pos_active_and_expanded);
     res.bond_new = state.get_bond_dims(pos_active_and_expanded);
 
-    tools::log->debug("Bond expansion pos {} | {} {} | svd_ε {:.2e} | χlim {} | χ {} -> {}", pos_active_and_expanded,
-                      enum2sv(bcfg.optAlgo), enum2sv(bcfg.optRitz), bcfg.trnc_lim, bcfg.bond_lim, res.bond_old, res.bond_new);
+    tools::log->debug("Bond expansion pos {} | {} {} | svd_ε {:.2e} | χlim {} | χ {} -> {}", pos_active_and_expanded, enum2sv(bcfg.optAlgo),
+                      enum2sv(bcfg.optRitz), bcfg.trnc_lim, bcfg.bond_lim, res.bond_old, res.bond_new);
     state.clear_cache();
     state.clear_measurements();
-    for(const auto &mps : state.get_mps(pos_active_and_expanded)) mps.get().assert_normalized();
+    using RealScalar = decltype(std::real(std::declval<Scalar>()));
+    static constexpr auto eps     = std::numeric_limits<RealScalar>::epsilon();
+    const auto            slack   = settings ::precision::max_norm_slack;
+    auto                  normtol = eps * slack;
+    for(const auto &mps : state.get_mps(pos_active_and_expanded)) mps.get().assert_normalized(normtol);
     env::rebuild_edges(state, model, edges);
 
     res.dimL_new = mpsL.dimensions();

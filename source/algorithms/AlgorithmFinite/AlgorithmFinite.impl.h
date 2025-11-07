@@ -39,14 +39,16 @@ template<typename Scalar>
 AlgorithmFinite<Scalar>::AlgorithmFinite(OptRitz opt_ritz, AlgorithmType algo_type) : AlgorithmBase(opt_ritz, algo_type) {
     tools::log->trace("Constructing class_algorithm_finite");
     tensors.initialize(algo_type, settings::model::model_type, settings::model::model_size, 0);
-    dmrg_eigs_tol = settings::precision::eigs_tol_max;
+    dmrg_eigs_abstol = settings::precision::eigs_abstol_max;
+    dmrg_eigs_reltol = settings::precision::eigs_reltol_max;
 }
 template<typename Scalar>
 AlgorithmFinite<Scalar>::AlgorithmFinite(std::shared_ptr<h5pp::File> h5ppFile_, OptRitz opt_ritz, AlgorithmType algo_type)
     : AlgorithmBase(std::move(h5ppFile_), opt_ritz, algo_type) {
     tools::log->trace("Constructing class_algorithm_finite");
     tensors.initialize(algo_type, settings::model::model_type, settings::model::model_size, 0);
-    dmrg_eigs_tol = settings::precision::eigs_tol_max;
+    dmrg_eigs_abstol = settings::precision::eigs_abstol_max;
+    dmrg_eigs_reltol = settings::precision::eigs_reltol_max;
 }
 
 // We need to make a destructor manually for the enclosing class "ModelFinite"
@@ -264,10 +266,13 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     m1.optRitz = status.opt_ritz;
     m1.optAlgo = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
     if(status.algo_type == AlgorithmType::xDMRG) {
-        // auto h2 = tools::finite::measure::expval_hamiltonian_squared(tensors);
         if(status.algorithm_has_stuck_for > 1) {
             m1.optAlgo = settings::xdmrg::algo_stuck;
             m1.optRitz = settings::xdmrg::ritz_stuck;
+            if(m1.optAlgo == OptAlgo::GDMRG and status.iter % 3 == 0) {
+                m1.optAlgo = settings::xdmrg::algo_warmup;
+                m1.optRitz = settings::xdmrg::ritz_warmup;
+            }
         }
         if(status.iter < settings::strategy::iter_max_warmup /* or std::abs(h2) > 1e-3 */) {
             m1.optAlgo = settings::xdmrg::algo_warmup;
@@ -308,24 +313,11 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
         m1.eigs_blk = settings::precision::eigs_blk_max;
     }
     m1.eigs_iter_max = get_eigs_iter_max() * m1.eigs_nev.value();
-    m1.eigs_tol      = dmrg_eigs_tol;
-
-    if(settings::strategy::etol_decrease_when == UpdatePolicy::NEVER) {
-        // Increase the precision of the eigenvalue solver as variance decreases, and when stuck
-        double matrix_norm = std::max<double>(1.0, static_cast<double>(eigval_upper_bound));
-        double target_tol  = static_cast<double>(var_latest) / matrix_norm;
-        if(status.algorithm_saturated_for > 0) { target_tol = static_cast<double>(var_latest) / matrix_norm; }
-        if(status.algorithm_has_stuck_for > 0) { target_tol = status.energy_variance_lowest / matrix_norm; }
-        if(status.algorithm_has_stuck_for > 2) target_tol = settings::precision::eigs_tol_min;
-        target_tol  = std::clamp(target_tol, settings::precision::eigs_tol_min, settings::precision::eigs_tol_max);
-        m1.eigs_tol = target_tol;
-    }
-    // if(m1.optAlgo == OptAlgo::GDMRG) {
-    // m1.eigs_tol = std::sqrt(m1.eigs_tol.value_or(settings::precision::eigs_tol_min)); // GDMRG seems happy with higher tol
-    // m1.eigs_tol = settings::precision::eigs_tol_max;
-    // }
+    m1.eigs_abstol   = dmrg_eigs_abstol;
+    m1.eigs_reltol   = dmrg_eigs_reltol;
 
     m1.eigs_jcbMaxBlockSize = settings::precision::eigs_jcb_blocksize_min;
+    m1.eigs_jcbOverlapSize  = settings::precision::eigs_jcb_overlap_size;
     if(status.algorithm_saturated_for + status.algorithm_has_stuck_for > 0) {
         using namespace settings::precision;
         double jcbBlockSizeLog2_20pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_blocksize_min), std::log2(eigs_jcb_blocksize_max), 0.20));
@@ -355,7 +347,7 @@ BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionO
     bcfg.nkrylov       = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
     bcfg.bond_factor   = order == BondExpansionOrder::PREOPT ? settings::strategy::dmrg_bond_expansion::preopt::bond_factor : 1.0f;
     bcfg.bond_lim      = static_cast<long>(std::ceil(bcfg.bond_factor * status.bond_lim));
-    bcfg.trnc_lim      = status.trnc_lim;
+    bcfg.trnc_lim      = status.trnc_min;
     bcfg.blocksize     = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
     bcfg.mixing_factor = status.mixing_factor;
     bcfg.optAlgo       = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
@@ -366,6 +358,10 @@ BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionO
         if(status.algorithm_has_stuck_for > 1) {
             bcfg.optAlgo = settings::xdmrg::algo_stuck;
             bcfg.optRitz = settings::xdmrg::ritz_stuck;
+            if(bcfg.optAlgo == OptAlgo::GDMRG and status.iter % 3 == 0) {
+                bcfg.optAlgo = settings::xdmrg::algo_warmup;
+                bcfg.optRitz = settings::xdmrg::ritz_warmup;
+            }
         }
         if(status.iter < settings::strategy::iter_max_warmup /* or std::abs(h2) > 1e-3 */) {
             bcfg.optAlgo = settings::xdmrg::algo_warmup;
@@ -506,82 +502,6 @@ void AlgorithmFinite<Scalar>::rebuild_tensors() {
 }
 
 template<typename Scalar>
-void AlgorithmFinite<Scalar>::try_moving_sites() {
-    if(not settings::strategy::move_sites_when_stuck) return;
-    if(not tensors.position_is_inward_edge()) return;
-    if(status.algorithm_has_stuck_for == 0) return;
-    // Definitions:
-    //  pos : the index of a slot on the lattice, which can not be moved. (long)
-    //  site: the index of a particle on the lattice, which can be moved. (size_t)
-    //  dir : Direction on which to move the position: +1l = right, -1l = left.
-    auto eigs_iter_max_backup = settings::precision::eigs_iter_max;
-    auto eigs_tol_min_backup  = settings::precision::eigs_tol_min;
-    auto eigs_ncv_min_backup  = settings::precision::eigs_ncv_min;
-    auto eigs_ncv_max_backup  = settings::precision::eigs_ncv_max;
-
-    auto dmrg_blocksize_backup         = dmrg_blocksize;
-    settings::precision::eigs_iter_max = 100;
-    settings::precision::eigs_tol_min  = std::min(1e-14, settings::precision::eigs_tol_min);
-    settings::precision::eigs_ncv_min  = std::max(35, settings::precision::eigs_ncv_min);
-    settings::precision::eigs_ncv_max  = std::max(35, settings::precision::eigs_ncv_max);
-
-    auto len      = tensors.template get_length<long>();
-    auto pos      = tensors.template get_position<long>();
-    auto dir      = pos > len / 2 ? -1l : 1l;
-    auto site_seq = dir > 0 ? num::range<long>(0, len - 1, 1) : num::range<long>(1, len, -1);
-
-    tensors.activate_sites({tensors.get_position()});
-    tensors.rebuild_edges();
-    tools::log->info("Trying to move sites | pos {} | dir {}", pos, dir);
-    std::vector<std::string> report;
-    auto                     ene_old = tools::finite::measure::energy(tensors);
-    auto                     var_old = tools::finite::measure::energy_variance(tensors);
-    for(const auto &site : site_seq) {
-        std::vector<long> tgt_pos_seq = dir > 0 ? num::range<long>(site + 1, len - 1, 1) : num::range<long>(0, site, -1);
-        std::vector<long> tgt_pos_req = dir > 0 ? num::range<long>(site, len - 2, -1) : num::range<long>(1, site + 1, 1);
-        tgt_pos_seq.insert(tgt_pos_seq.end(), tgt_pos_req.begin(), tgt_pos_req.end());
-        tools::log->debug("Moving site {} dir {} | seq: {}", site, dir, tgt_pos_seq);
-        for(const auto &tgt_pos : tgt_pos_seq) {
-            update_state();
-            print_status();
-            if(sites_mps)
-                report.emplace_back(fmt::format("sites [{:2}, {:2}] @ pos [{:2}, {:2}] | variance {:.5e}", sites_mps->at(tensors.active_sites.front()),
-                                                sites_mps->at(tensors.active_sites.back()), tensors.active_sites.front(), tensors.active_sites.back(),
-                                                fp(tools::finite::measure::energy_variance(tensors))));
-            status.step += 1;
-            tensors.move_site_to_pos(safe_cast<size_t>(site), tgt_pos, sites_mps, sites_mpo, tgt_pos);
-            tools::log->debug("Labels    : {}", tensors.state->get_labels());
-            tools::log->debug("Sites mps : {}", sites_mps.value());
-            tools::log->debug("Sites mpo : {}", sites_mpo.value());
-        }
-        tools::log->info("Resetting MPO's");
-        tensors.rebuild_mpo();
-        tensors.rebuild_mpo_squared();
-        tensors.move_center_point_to_inward_edge();
-        tensors.activate_sites();
-        tensors.rebuild_edges();
-        sites_mpo = std::nullopt;
-        sites_mps = std::nullopt;
-        status.iter += 1;
-        check_convergence();
-        if(status.variance_mpo_converged_for > 0) break;
-    }
-    clear_convergence_status();
-    tools::log->info("Finished moving sites");
-    for(const auto &r : report) tools::log->info("{}", r);
-    tools::log->info("Energy    {:.16f} --> {:.16f}", fp(ene_old), fp(tools::finite::measure::energy(tensors)));
-    tools::log->info("Variance  {:9.3e} --> {:9.3e}", fp(var_old), fp(tools::finite::measure::energy_variance(tensors)));
-
-    if(not tensors.position_is_inward_edge())
-        throw except::logic_error("Position {} and direction {} is not an inward edge", tensors.get_position(), tensors.state->get_direction());
-    settings::precision::eigs_iter_max = eigs_iter_max_backup;
-    settings::precision::eigs_tol_min  = eigs_tol_min_backup;
-    settings::precision::eigs_ncv_min  = eigs_ncv_min_backup;
-    settings::precision::eigs_ncv_max  = eigs_ncv_max_backup;
-    dmrg_blocksize                     = dmrg_blocksize_backup;
-}
-
-template<typename Scalar>
 void AlgorithmFinite<Scalar>::update_precision_limit(std::optional<double> energy_upper_bound) {
     if(not tensors.position_is_inward_edge()) return;
     // The variance precision limit depends on the Hamiltonian operator norm ~ largest eigenvalue.
@@ -605,8 +525,8 @@ void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
     status.bond_limit_has_reached_max = status.bond_lim >= status.bond_max;
 
     if(status.iter < settings::strategy::iter_max_warmup and not has_flag(settings::strategy::bond_increase_when, UpdatePolicy::WARMUP)) {
-        tools::log->debug("Kept bond dimension limit: {} | warmup", status.bond_min);
-        status.bond_lim = status.bond_min;
+        status.bond_lim = std::min({status.bond_min, status.bond_max});
+        tools::log->debug("Kept bond dimension limit: {} | warmup", status.bond_lim);
         return;
     }
     if(settings::strategy::bond_increase_when == UpdatePolicy::NEVER or settings::strategy::bond_increase_rate <= 1) {
@@ -640,7 +560,7 @@ void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
     // If we got here we want to increase the bond dimension limit progressively during the simulation
     // bool                          is_on_warmup      = status.iter < settings::strategy::iter_max_warmup;
 
-    bool is_truncated = tensors.state->is_truncated(status.trnc_lim);
+    bool is_truncated = tensors.state->is_truncated(status.trnc_lim * 1e-2);
     bool is_saturated = status.algorithm_saturated_for > 0; // Allow one round while saturated so that extra efforts get a chance.
     bool is_has_stuck = status.algorithm_has_stuck_for > 0;
     bool is_next_iter = true; // Should be checked
@@ -723,6 +643,56 @@ void AlgorithmFinite<Scalar>::reduce_bond_dimension_limit(double rate, UpdatePol
 }
 
 template<typename Scalar>
+void AlgorithmFinite<Scalar>::try_mps_compression() {
+    if(not tensors.position_is_inward_edge()) return;
+    if(settings::strategy::trnc_increase_vtol < 0) return;
+    tools::log->trace("try_mps_compression: vtol {:.5e} | trnc lim {:.5e} max {:.5e} min {:.5e} | bond dims: {}", settings::strategy::trnc_increase_vtol,
+                      status.trnc_lim, settings::precision::svd_truncation_max, settings::precision::svd_truncation_min,
+                      tools::finite::measure::bond_dimensions(tensors.get_state()));
+    // Attempt to increase the truncation error limit while retaining the precision (energy variance) within vtol.
+    constexpr auto eps     = std::numeric_limits<RealScalar>::epsilon();
+    auto           ene_old = tools::finite::measure::energy(tensors);
+    auto           var_old = tools::finite::measure::energy_variance(tensors);
+    // auto evar_new = tools::finite::measure::energy_variance(tensors);
+    // auto evar_lim = evar_new * RealScalar{1.0f + static_cast<RealScalar>(settings::strategy::trnc_increase_vtol)};
+    // auto bond_min = tensors.state->get_largest_bond() / 4;
+    auto trials   = 0;
+    auto trnc_prv = status.trnc_lim;
+    auto trnc_try = status.trnc_lim;
+    while(trials++ < 200 and trnc_try < settings::precision::svd_truncation_max and tensors.get_state().get_largest_bond() > 16) {
+        TensorsFinite tensors_tmp = tensors;
+        trnc_prv                  = trnc_try;
+        trnc_try                  = std::clamp(trnc_try * 2.0, settings::precision::svd_truncation_min, settings::precision::svd_truncation_max);
+        tensors.clear_measurements();
+        tensors.normalize_state(svd::config(status.bond_lim, trnc_try), NormPolicy::ALWAYS);
+        tensors.rebuild_edges();
+        auto ene_new = tools::finite::measure::energy(tensors);
+        auto var_new = tools::finite::measure::energy_variance(tensors);
+
+        auto ene_err = std::abs(ene_old - ene_new) / std::max(eps, std::abs(ene_old));
+        auto var_err = std::abs(var_old - var_new) / std::max(eps, std::abs(var_old));
+
+        bool reject_bond_too_small  = tensors.get_state().get_largest_bond() < 16;
+        bool reject_error_too_large = std::max(var_err, ene_err) > settings::strategy::trnc_increase_vtol;
+        if(reject_bond_too_small or reject_error_too_large) {
+            tools::log->info("try_mps_compression: Rejected trial {} trnc try {:.3e} prv {:.3e}  | var {:.5e} -> {:.5e} (err {:.5e}) | ene {:.5e} -> {:.5e} "
+                             "(err {:.5e}) | bond dims: {}",
+                             trials, trnc_try, trnc_prv, fp(var_old), fp(var_new), fp(var_err), fp(ene_old), fp(ene_new), fp(ene_err),
+                             tools::finite::measure::bond_dimensions(tensors.get_state()));
+            tensors = tensors_tmp;
+            break;
+        }
+        tools::log->info("try_mps_compression: Accepted trial {} trnc try {:.3e} prv {:.3e} | var {:.5e} -> {:.5e} (err {:.5e}) | ene {:.5e} -> {:.5e} (err "
+                         "{:.5e}) | bond dims: {}",
+                         trials, trnc_try, trnc_prv, fp(var_old), fp(var_new), fp(var_err), fp(ene_old), fp(ene_new), fp(ene_err),
+                         tools::finite::measure::bond_dimensions(tensors.get_state()));
+    }
+    auto trnc_old   = status.trnc_lim;
+    status.trnc_lim = std::clamp(trnc_try * 0.1, status.trnc_lim, settings::precision::svd_truncation_max);
+    if(status.trnc_lim != trnc_old) tools::log->info("try_mps_compression: updated truncation error: {:.5e} -> {:.5e}", trnc_old, status.trnc_lim);
+}
+
+template<typename Scalar>
 void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if(not tensors.position_is_inward_edge()) return;
     if(status.trnc_lim == 0.0) throw std::runtime_error("trnc_lim is zero!");
@@ -739,33 +709,38 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
         return;
     }
 
-    if(settings::strategy::trnc_increase_vtol >= 0) {
-        // Attempt to increase the truncation error limit while retaining the precision (energy variance) within vtol.
-        auto evar_new = tools::finite::measure::energy_variance(tensors);
-        auto evar_lim = evar_new * RealScalar{1.0f + static_cast<RealScalar>(settings::strategy::trnc_increase_vtol)};
-        // auto bond_min = tensors.state->get_largest_bond() / 4;
-        auto trials   = 0;
-        while(trials++ < 200 and status.trnc_lim < settings::precision::svd_truncation_max and tensors.get_state().get_largest_bond() > 16) {
-            TensorsFinite tensors_temp = tensors;
-            auto trnc_temp = status.trnc_lim*2.0;
-            tensors.clear_measurements();
-            auto        svd_cfg    = svd::config(status.bond_lim, trnc_temp);
-            tensors.normalize_state(svd_cfg, NormPolicy::ALWAYS);
-            tensors.rebuild_edges();
-            evar_new = tools::finite::measure::energy_variance(tensors);
-            tools::log->debug("update_truncation_error_limit: Trial {} trnc_lim {:.3e} var {:.8e} (lim: {:.8e})", trials, trnc_temp, fp(evar_new), fp(evar_lim));
-
-            if(evar_new > evar_lim) break;
-            if(tensors.get_state().get_largest_bond() < 16) break;
-
-            bool reject = evar_new > evar_lim;
-            if(reject) {
-                tensors = tensors_temp;
-            }else {
-                status.trnc_lim = trnc_temp;
-            }
-        }
-    }
+    // if(settings::strategy::trnc_increase_vtol >= 0) {
+    //     tools::log->trace("update_truncation_error_limit: try MPS compression with vtol {:.5e} | bond dims: {}", settings::strategy::trnc_increase_vtol,
+    //                       tools::finite::measure::bond_dimensions(tensors.get_state()));
+    //     // Attempt to increase the truncation error limit while retaining the precision (energy variance) within vtol.
+    //     auto evar_new = tools::finite::measure::energy_variance(tensors);
+    //     auto evar_lim = evar_new * RealScalar{1.0f + static_cast<RealScalar>(settings::strategy::trnc_increase_vtol)};
+    //     // auto bond_min = tensors.state->get_largest_bond() / 4;
+    //     auto trials = 0;
+    //     while(trials++ < 200 and status.trnc_lim < settings::precision::svd_truncation_max and tensors.get_state().get_largest_bond() > 16) {
+    //         TensorsFinite tensors_temp = tensors;
+    //         auto          trnc_temp    = std::clamp(status.trnc_lim * 2.0, settings::precision::svd_truncation_min, settings::precision::svd_truncation_max);
+    //         if(trnc_temp > status.trnc_lim) {
+    //             tensors.clear_measurements();
+    //             auto svd_cfg = svd::config(status.bond_lim, trnc_temp);
+    //             tensors.normalize_state(svd_cfg, NormPolicy::ALWAYS);
+    //             tensors.rebuild_edges();
+    //             evar_new = tools::finite::measure::energy_variance(tensors);
+    //             tools::log->info("update_truncation_error_limit: Trial {} trnc_lim {:.3e} var {:.8e} (lim: {:.8e}): bond dims: {}", trials, trnc_temp,
+    //                              fp(evar_new), fp(evar_lim), tools::finite::measure::bond_dimensions(tensors.get_state()));
+    //
+    //             if(evar_new > evar_lim) break;
+    //             if(tensors.get_state().get_largest_bond() < 16) break;
+    //
+    //             bool reject = evar_new > evar_lim;
+    //             if(reject) {
+    //                 tensors = tensors_temp;
+    //             } else {
+    //                 status.trnc_lim = trnc_temp;
+    //             }
+    //         }
+    //     }
+    // }
 
     status.trnc_limit_has_reached_min = status.trnc_lim <= status.trnc_min;
 
@@ -786,7 +761,7 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
 
     // If we got here we want to decrease the truncation error limit progressively during the simulation
     // Note that "is_truncated" it is special, as it is an additional requirement on the other conditions if enabled (drop_if_truncated)
-    bool is_truncated      = tensors.state->is_truncated(0.707 * status.trnc_lim);
+    bool is_truncated      = tensors.state->is_truncated(status.trnc_lim * 1e-2);
     bool is_saturated      = status.algorithm_saturated_for > 0; // Allow one round while saturated so that extra efforts get a chance.
     bool is_has_stuck      = status.algorithm_has_stuck_for > 0;
     bool is_next_iter      = true; // Should be checked
@@ -797,6 +772,13 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     bool drop_if_next_iter = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::HALFSWEEP);
     bool drop_if_even_iter = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::FULLSWEEP);
 
+    std::vector<std::string_view> condition;
+    if(drop_if_truncated) condition.emplace_back("if_truncated");
+    if(drop_if_saturated) condition.emplace_back("if_saturated");
+    if(drop_if_has_stuck) condition.emplace_back("if_has_stuck");
+    if(drop_if_next_iter) condition.emplace_back("if_next_iter");
+    if(drop_if_even_iter) condition.emplace_back("if_even_iter");
+
     std::vector<std::string_view> reason;
     bool                          truncated_ok = drop_if_truncated ? is_truncated : true;
     if(drop_if_truncated and is_truncated) reason.emplace_back("truncated");
@@ -805,7 +787,7 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if(drop_if_next_iter and is_next_iter and truncated_ok) reason.emplace_back("next iter");
     if(drop_if_even_iter and is_even_iter and truncated_ok) reason.emplace_back("even iter");
     if(reason.empty()) {
-        tools::log->debug("Kept truncation error limit:  {:8.2e} | no reason to update", status.trnc_lim);
+        tools::log->debug("Kept truncation error limit:  {:8.2e} | conditions: {} | no reason to update", status.trnc_lim, fmt::join(condition, " | "));
         tools::log->trace("Truncation errors {::.3e}", tensors.get_state().get_truncation_errors());
 
         return;
@@ -821,7 +803,8 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     auto trnc_new = std::max(status.trnc_min, status.trnc_lim * rate);
     if(trnc_new < status.trnc_min / rate) trnc_new = status.trnc_min; // If the truncation error is close enough to reaching min, just set min.
 
-    tools::log->info("Updated truncation error limit: {:8.2e} -> {:8.2e} | reasons: {}", status.trnc_lim, trnc_new, fmt::join(reason, " | "));
+    tools::log->info("Updated truncation error limit: {:8.2e} -> {:8.2e} | conditions: {} | reasons: {}", status.trnc_lim, trnc_new,
+                     fmt::join(condition, " | "), fmt::join(reason, " | "));
     tools::log->info("Truncation errors {::8.2e}", tensors.get_state().get_truncation_errors());
 
     status.trnc_lim                   = trnc_new;
@@ -979,19 +962,20 @@ template<typename Scalar>
 void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     using namespace settings::precision;
     if(not tensors.position_is_inward_edge()) return;
-    dmrg_eigs_tol = std::clamp(dmrg_eigs_tol, eigs_tol_min, eigs_tol_max);
+    dmrg_eigs_abstol = std::clamp(dmrg_eigs_abstol, eigs_abstol_min, eigs_abstol_max);
+    dmrg_eigs_reltol = std::clamp(dmrg_eigs_reltol, eigs_reltol_min, eigs_reltol_max);
 
-    if(dmrg_eigs_tol == 0.0) throw std::runtime_error("dmrg_eigs_tol is zero!");
+    if(dmrg_eigs_abstol == 0.0) throw std::runtime_error("dmrg_eigs_abstol is zero!");
     if(status.iter < settings::strategy::iter_max_warmup and not has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::WARMUP)) {
-        dmrg_eigs_tol = eigs_tol_max;
+        dmrg_eigs_abstol = eigs_abstol_max;
+        dmrg_eigs_reltol = eigs_reltol_max;
         return;
     }
 
     if(settings::strategy::etol_decrease_when == UpdatePolicy::NEVER or settings::strategy::etol_decrease_rate == 0.0) {
-        dmrg_eigs_tol = eigs_tol_min;
+        dmrg_eigs_abstol = eigs_abstol_min;
         return;
     }
-    auto tic = tid::tic_scope("etol_down", tid::level::higher);
 
     // If we got here we want to decrease the eigs tolerance progressively during the simulation
     bool                          is_sat_evar  = status.variance_mpo_saturated_for > 0; // Allow one round while saturated so that extra efforts get a chance.
@@ -1007,45 +991,49 @@ void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     bool                          vary_dynamically  = has_flag(settings::strategy::etol_decrease_when, UpdatePolicy::DYNAMIC);
     std::vector<std::string_view> reason;
     if(drop_if_sat_evar and is_sat_evar) reason.emplace_back("variance saturated");
-    if(drop_if_sat_algo and is_sat_algo) reason.emplace_back("algo saturated");
-    if(drop_if_stk_algo and is_stk_algo) reason.emplace_back("stuck");
-    if(drop_if_next_iter and is_next_iter) reason.emplace_back("next iter");
-    if(drop_if_even_iter and is_even_iter) reason.emplace_back("even iter");
-    if(vary_dynamically) reason.emplace_back("vary dynamically");
+    if(drop_if_sat_algo and is_sat_algo) reason.emplace_back("algo saturated"); // Can only go down
+    if(drop_if_stk_algo and is_stk_algo) reason.emplace_back("stuck");          // Can only go down
+    if(drop_if_next_iter and is_next_iter) reason.emplace_back("next iter");    // Can only go down
+    if(drop_if_even_iter and is_even_iter) reason.emplace_back("even iter");    // Can only go down
+    if(vary_dynamically) reason.emplace_back("vary dynamically");               // Can go up or down
     if(reason.empty()) {
-        tools::log->trace("Kept eigs tolerance:  {:8.2e} | no reason to update", dmrg_eigs_tol);
+        dmrg_eigs_abstol = eigs_abstol_max;
+        dmrg_eigs_reltol = eigs_reltol_max;
+        tools::log->trace("Reset eigs absolute tolerance: {:8.2e} | no reason to decrease", dmrg_eigs_abstol);
+        tools::log->trace("Reset eigs relative tolerance: {:8.2e} | no reason to decrease", dmrg_eigs_reltol);
         return;
     }
 
-    // Write current results before updating
-    // write_to_file(StorageEvent::ETOL_UPDATE);
-
     // If we got to this point we will update by a factor
-    auto etol_new = dmrg_eigs_tol;
-    auto rate     = settings::strategy::etol_decrease_rate;
+    static constexpr auto eps = std::numeric_limits<double>::epsilon();
+
+    auto eigs_abstol_new = dmrg_eigs_abstol;
+    auto eigs_reltol_new = dmrg_eigs_reltol;
+    auto rate            = settings::strategy::etol_decrease_rate;
+    if(rate != std::clamp(rate, eps, 1.0 - eps)) throw except::runtime_error("Expected etol_decrease_rate in [0,1]. Got: {:.3e}", rate);
 
     if(vary_dynamically) {
-        auto eps = std::numeric_limits<double>::epsilon();
-        if(rate != std::clamp(rate, eps, 1.0 - eps)) throw except::runtime_error("Expected rate in [0,1]. Got: {:.3e}", rate);
-        if(is_sat_evar) {
-            etol_new *= rate;
+        if(is_sat_algo) {
+            eigs_abstol_new *= rate;
+            eigs_reltol_new *= rate;
         } else {
-            etol_new /= rate;
+            eigs_abstol_new = eigs_abstol_max;
+            eigs_reltol_new = eigs_reltol_max;
         }
-
     } else {
-        if(rate > 1.0 or rate < 0) throw except::runtime_error("Error: etol_decrease_rate == {:8.2e} | must be in [0, 1]");
-
-        etol_new = std::max(eigs_tol_min, dmrg_eigs_tol * rate);
-        if(etol_new < eigs_tol_min / rate) etol_new = eigs_tol_min; // If the tolerance is close enough to reaching min, just set min.
+        eigs_abstol_new = std::max(eigs_abstol_min, dmrg_eigs_abstol * rate);
+        eigs_reltol_new = std::max(eigs_reltol_min, dmrg_eigs_reltol * rate);
+        if(eigs_abstol_new < eigs_abstol_min / rate) eigs_abstol_new = eigs_abstol_min; // If the tolerance is close enough to reaching min, just set min.
     }
-    etol_new = std::clamp(etol_new, eigs_tol_min, eigs_tol_max);
+    eigs_abstol_new = std::clamp(eigs_abstol_new, eigs_abstol_min, eigs_abstol_max);
+    eigs_reltol_new = std::clamp(eigs_reltol_new, eigs_reltol_min, eigs_reltol_max);
 
-    if(dmrg_eigs_tol != etol_new)
-        tools::log->info("Updated eigs tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_tol, etol_new, fmt::join(reason, " | "));
-    dmrg_eigs_tol = etol_new;
-    // Last sanity check before leaving here
-    if(dmrg_eigs_tol < eigs_tol_min) throw except::logic_error("dmrg_eigs_tol is smaller than eigs_tol_min ! {:8.2e} > {:8.2e}", dmrg_eigs_tol, eigs_tol_min);
+    if(dmrg_eigs_abstol != eigs_abstol_new)
+        tools::log->info("Updated eigs absolute tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_abstol, eigs_abstol_new, fmt::join(reason, " | "));
+    if(dmrg_eigs_reltol != eigs_reltol_new)
+        tools::log->info("Updated eigs relative tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_reltol, eigs_reltol_new, fmt::join(reason, " | "));
+    dmrg_eigs_abstol = eigs_abstol_new;
+    dmrg_eigs_reltol = eigs_reltol_new;
 }
 
 template<typename Scalar>
@@ -1083,7 +1071,7 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
     tensors.get_state().assert_validity();
     if(has_flag(settings::strategy::projection_policy, ProjectionPolicy::INIT) and qm::spin::half::is_valid_axis(axis.value())) {
         tools::log->info("Projecting state | target sector {} | norm {:.16f} | spin components: {::+.16f}", axis.value(),
-                         fp(tools::finite::measure::norm(tensors.get_state())), fv(tools::finite::measure::spin_components(tensors.get_state())));
+                         fp(tools::finite::measure::norm_state(tensors.get_state())), fv(tools::finite::measure::spin_components(tensors.get_state())));
         tensors.project_to_nearest_axis(axis.value(), svd::config(bond_lim, trnc_lim));
         tensors.rebuild_edges();
         // Note! After running this function we should rebuild edges! However, there are usually no sites active at this point, so we do it further down.
@@ -1111,7 +1099,7 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
     tools::log->info("-- axis            : {}", axis.value());
     tools::log->info("-- pattern         : {}", settings::strategy::initial_pattern);
     tools::log->info("-- labels          : {}", tensors.state->get_labels());
-    tools::log->info("-- norm            : {:.16f}", fp(tools::finite::measure::norm(tensors.get_state())));
+    tools::log->info("-- norm            : {:.16f}", fp(tools::finite::measure::norm_state(tensors.get_state())));
     tools::log->info("-- spin (X,Y,Z)    : {::.16f}", fv(tools::finite::measure::spin_components(tensors.get_state())));
     tools::log->info("-- bond dimensions : {}", tools::finite::measure::bond_dimensions(tensors.get_state()));
 

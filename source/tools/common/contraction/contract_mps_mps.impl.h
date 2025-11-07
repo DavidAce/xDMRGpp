@@ -4,8 +4,8 @@
 #include "math/tenx.h"
 // #include "tid/tid.h"
 // #if defined(DMRG_ENABLE_TBLIS)
-    #include <tblis/tblis_config.h>
-    // #include <tblis/util/configs.h>
+#include <tblis/tblis_config.h>
+// #include <tblis/util/configs.h>
 // #endif
 
 /* clang-format off */

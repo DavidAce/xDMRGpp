@@ -1,8 +1,8 @@
 #pragma once
 
-#include "math/tenx/fwd_decl.h"
 #include "MpoSite.h"
 #include <h5pp/details/h5ppHid.h>
+#include <Eigen/Core>
 
 namespace h5pp::hid {
     class h5t;

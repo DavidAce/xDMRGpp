@@ -49,7 +49,6 @@ bool cmp_t(Lhs lhs, Rhs rhs) {
         return lhs == rhs;
 }
 
-
 // template<typename T>
 // auto abs_t(T val) -> fp128 {
 //     if constexpr(std::is_arithmetic_v<T>) return std::abs(val);
@@ -66,7 +65,6 @@ bool cmp_t(Lhs lhs, Rhs rhs) {
 //         return std::abs(val);
 // #endif
 // }
-
 
 #if defined(DMRG_USE_QUADMATH)
 
@@ -109,6 +107,18 @@ inline fp128 ceil(const fp128 &x) { return ceilq(x); }
 // f128_base<T> operator*(const T &v) const {
 // return val * v;
 // }
+
+template<class U>
+requires(std::is_arithmetic_v<U> && !std::is_same_v<U, fp128>)
+constexpr bool operator==(const std::complex<fp128> &a, U b) noexcept {
+    return a == std::complex<fp128>(static_cast<fp128>(b));
+}
+
+template<class U>
+requires(std::is_arithmetic_v<U> && !std::is_same_v<U, fp128>)
+constexpr bool operator==(U a, const std::complex<fp128> &b) noexcept {
+    return std::complex<fp128>(static_cast<fp128>(a)) == b;
+}
 
 #endif
 

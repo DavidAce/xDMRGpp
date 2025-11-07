@@ -6,6 +6,8 @@
 #include <memory>
 #include <optional>
 
+
+
 /*! \brief Base environment class for environment blocks och type Left or Right corresponding to a single site.
  */
 

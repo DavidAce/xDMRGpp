@@ -1,10 +1,10 @@
 #pragma once
 #include "math/float.h"
-#include "math/tenx/fwd_decl.h"
 #include "tools/common/log.h"
 #include "tools/finite/opt.h"
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_mps.h"
+#include <Eigen/Core>
 
 template<typename Scalar> class solver_gdplusk;
 

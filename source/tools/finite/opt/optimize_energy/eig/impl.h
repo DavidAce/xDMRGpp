@@ -61,8 +61,8 @@ void optimize_energy_eig_executor(const TensorsFinite<Scalar> &tensors, const op
 }
 
 template<typename Scalar>
-opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                   OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, OptMeta &meta,
+                                              reports::eigs_log<Scalar> &elog) {
     if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_energy_eig(): not implemented for type {}", enum2sv(meta.optType));
     }
@@ -71,8 +71,7 @@ opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tenso
 
     const auto problem_size = tensors.active_problem_size();
     if(problem_size > settings::precision::eig_max_size)
-        throw except::logic_error("optimize_energy_eig: the problem size is too large for eig: {} > {}(max)", problem_size,
-                                  settings::precision::eig_max_size);
+        throw except::logic_error("optimize_energy_eig: the problem size is too large for eig: {} > {}(max)", problem_size, settings::precision::eig_max_size);
 
     tools::log->debug("optimize_energy_eig: ritz {} | type {} | algo {}", enum2sv(meta.optRitz), enum2sv(meta.optType), enum2sv(meta.optAlgo));
 
@@ -106,4 +105,3 @@ opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tenso
     for(const auto &mps : results) elog.eigs_add_entry(mps, spdlog::level::debug);
     return results.front();
 }
-

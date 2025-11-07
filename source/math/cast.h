@@ -14,16 +14,16 @@ inline To
 #else
     safe_cast(From f) {
     // static_assert(!std::is_same_v<To, From> and "unnecessary safe_cast");
-    if constexpr(std::is_same_v<From, To>) { return f; }
-    else if constexpr(std::integral<To> && std::integral<From>) {
+    if constexpr(std::is_same_v<From, To>) {
+        return f;
+    } else if constexpr(std::integral<To> && std::integral<From>) {
         auto constexpr tmin = std::numeric_limits<To>::min();
         auto constexpr fmin = std::numeric_limits<From>::min();
         auto constexpr tmax = std::numeric_limits<To>::max();
         auto constexpr fmax = std::numeric_limits<From>::max();
         if constexpr(std::cmp_greater_equal(tmin, fmin) and std::cmp_less_equal(tmax, fmax)) return static_cast<To>(f);
         if(!std::in_range<To>(f)) throw std::runtime_error("integral to integral cast out of range");
-    }
-    else if constexpr(std::integral<To> && std::floating_point<From>) { // Cast from floating point to integral
+    } else if constexpr(std::integral<To> && std::floating_point<From>) { // Cast from floating point to integral
         auto constexpr tmin = std::numeric_limits<To>::min();
         auto constexpr tmax = std::numeric_limits<To>::max();
         if(f > static_cast<From>(tmax) or f < static_cast<From>(tmin)) throw std::runtime_error("floating point to integral cast out of range");

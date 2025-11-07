@@ -31,7 +31,8 @@ class AlgorithmFinite : public AlgorithmBase {
 
     private:
     size_t                             dmrg_blocksize        = 1; // Number of sites in a DMRG step. This is updated by the information per scale mass center
-    double                             dmrg_eigs_tol         = 1e-12; // Tolerance for the iterative eigenvalue solver
+    double                             dmrg_eigs_abstol      = 1e-10; // Absolute tolerance for the iterative eigenvalue solver
+    double                             dmrg_eigs_reltol      = 1e-1;  // Relative Tolerance for the iterative eigenvalue solver
     double                             eigval_upper_bound    = 1;
     size_t                             iter_last_bond_reduce = 0;
     std::optional<std::vector<size_t>> sites_mps, sites_mpo; // Used when moving sites
@@ -69,10 +70,10 @@ class AlgorithmFinite : public AlgorithmBase {
     public:
     virtual void                resume()                = 0;
     virtual void                run_default_task_list() = 0;
+    void                        try_mps_compression();
     void                        try_projection(std::optional<std::string> target_axis = std::nullopt);
     void                        set_parity_shift_mpo(std::optional<std::string> target_axis = std::nullopt);
     void                        set_parity_shift_mpo_squared(std::optional<std::string> target_axis = std::nullopt);
-    void                        try_moving_sites();
     BondExpansionResult<Scalar> expand_bonds(BondExpansionOrder order);
     void                        move_center_point(std::optional<long> num_moves = std::nullopt);
     virtual void                set_energy_shift_mpo(); // We override this in xdmrg

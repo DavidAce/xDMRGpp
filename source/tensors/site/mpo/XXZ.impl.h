@@ -1,5 +1,4 @@
 #pragma once
-#include "XXZ.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/num.h"
@@ -7,8 +6,8 @@
 #include "math/tenx.h"
 #include "qm/spin.h"
 #include "tools/common/log.h"
+#include "XXZ.h"
 #include <h5pp/h5pp.h>
-
 
 template<typename Scalar>
 XXZ<Scalar>::XXZ(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {

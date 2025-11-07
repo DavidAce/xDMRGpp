@@ -9,5 +9,4 @@ template Eigen::Tensor<Scalar , 2>  tools::finite::measure::correlation_matrix(c
 
 template RealScalar<Scalar>  tools::finite::measure::structure_factor(const StateFinite<Scalar> &state, const Eigen::Tensor<Scalar, 2> &correlation_matrix);
 
-
 /* clang-format on */

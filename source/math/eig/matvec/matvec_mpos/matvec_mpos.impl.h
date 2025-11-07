@@ -24,7 +24,7 @@
 #include <primme/primme.h>
 #include <queue>
 #include <unsupported/Eigen/CXX11/Tensor>
-#include <unsupported/Eigen/src/IterativeSolvers/IncompleteLU.h>
+#include <unsupported/Eigen/IterativeSolvers>
 
 // #if defined(DMRG_ENABLE_TBLIS)
 //     #include <tblis/tblis.h>
@@ -893,11 +893,28 @@ void MatVecMPOS<Scalar>::MultAx(const Scalar *mps_in_, Scalar *mps_out_) const {
     auto token   = t_multAx->tic_token();
     auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(mps_in_, shape_mps);
     auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
+    assert(Eigen::Map<const VectorType>(mps_in_, size_mps).allFinite());
     if(mpos_A.size() == 1) {
+        // if(low_prec) {
+        //     if constexpr(std::is_same_v<Scalar, double>) {
+        //         using Tensor3f = Eigen::Tensor<float, 3>;
+        //         using Tensor4f = Eigen::Tensor<float, 4>;
+        //         Tensor3f mps_in_f = mps_in.template cast<float>();
+        //         Tensor3f mps_out_f = mps_out.template cast<float>();
+        //         Tensor3f envL_A_f = envL_A.template cast<float>();
+        //         Tensor3f envR_A_f = envR_A.template cast<float>();
+        //         Tensor4f mpo_A_f = mpos_A.front().template cast<float>();
+        //         tools::common::contraction::matrix_vector_product(mps_out_f, mps_in_f, mpo_A_f, envL_A_f, envR_A_f);
+        //         mps_out = mps_out_f.template cast <double>();
+        //     }
+        // }else {
+        // }
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A.front(), envL_A, envR_A);
+
     } else {
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A_shf, envL_A, envR_A);
     }
+    assert(Eigen::Map<VectorType>(mps_out_, size_mps).allFinite());
     num_mv++;
 }
 
@@ -1067,7 +1084,9 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
     if(doneCalcPc) {
         // We have already computed jacobi blocks. We need to determine if we should really make new ones
         bool shift_active = !mpos_B.empty();
-        bool shift_is_new = std::isfinite(shift) and (jcbShift.has_value() ? std::abs(shift - jcbShift.value()) != 0 : true);
+        bool shift_is_new =
+            std::isfinite(shift) and (jcbShift.has_value() ? std::abs(shift - jcbShift.value()) / std::abs(shift) > RealScalar{5e-2f} : true); // 5% threshold
+        // bool shift_is_new = false; //std::isfinite(shift) and (jcbShift.has_value() ? std::abs(shift - jcbShift.value()) != 0 : true);
         bool bsize_is_new = jcbBlockSize != jcbMaxBlockSize;
         if(bsize_is_new or (shift_active and shift_is_new)) {
             eig::log->trace("{}: Recomputing the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname, fp(shift),
@@ -1091,10 +1110,6 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
         doneCalcPc = true;
         eig::log->debug("{}: calculating the jacobi preconditioner ... done (shift = {:.16f})", fname, fp(shift));
     } else if(jcbBlockSize > 1) {
-        long nblocks = 1 + ((size_mps - 1) / jcbBlockSize); // ceil: note that the last block may be smaller than blocksize!
-
-        eig::log->debug("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} ...", fname,
-                        eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks, fp(shift));
         std::vector<fp64> sparsity;
         auto              m_rss = debug::mem_hwm_in_mb();
         auto              t_jcb = tid::ur("jcb");
@@ -1107,11 +1122,44 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
         // cgJcbBlocks.clear();
         // bicgstabJcbBlocks.clear();
 
+        // Calculate offsets and extents
+        // long nblocks   = 1 + ((size_mps - 1) / jcbBlockSize); // ceil: note that the last block may be smaller than blocksize!
+        jcbOverlapSize = std::clamp<Eigen::Index>(jcbOverlapSize, 0, jcbMaxBlockSize / 2);
+        assert(jcbOverlapSize >= 0);
+
+        struct BlockSpec {
+            Eigen::Index offset, extent;
+        };
+        std::vector<BlockSpec> blockSpecs;
+        Eigen::Index           blkidx = 0;
+        Eigen::Index           blkoff = 0;
+        Eigen::Index           blkext = 0;
+        Eigen::Index           maxidx = size_mps / (jcbBlockSize - 1) + 1;
+        while(blkoff + blkext < size_mps) {
+            blkoff = std::max<long>(0, blkidx * jcbBlockSize -
+                                           jcbOverlapSize); // std::clamp<long>(blkidx * jcbBlockSize - jcbOverlapSize, 0, size_mps - jcbBlockSize - 1);
+            blkext = std::min(jcbBlockSize, size_mps - blkoff);
+            if(size_mps - blkoff < 2 * jcbBlockSize) {
+                // Just absorb the last block (which would have been smaller)
+                blkext = size_mps - blkoff;
+            }
+            blockSpecs.emplace_back(BlockSpec{.offset = blkoff, .extent = blkext});
+            // eig::log->info("blkidx {} | blkoff {} | blkext {}", blkidx, blkoff, blkext);
+            blkidx++;
+            if(blkidx > maxidx)
+                throw except::runtime_error("Too many blocks! blkidx {} | blkoff {} | blkext {} | size_mps {} | jcb_os {}", blkidx, blkoff, blkext, size_mps,
+                                            jcbOverlapSize);
+        }
+        long nblocks = static_cast<long>(blockSpecs.size());
+        eig::log->info("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} | overlap {}...",
+                       fname, eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks, fp(shift), jcbOverlapSize);
 #pragma omp parallel for ordered schedule(dynamic, 1)
         for(long blkidx = 0; blkidx < nblocks; ++blkidx) {
             eig::Factorization factorization_internal = factorization;
-            long               offset                 = blkidx * jcbBlockSize;
-            long               extent                 = std::min((blkidx + 1) * jcbBlockSize - offset, size_mps - offset);
+            auto [offset, extent]                     = blockSpecs.at(static_cast<size_t>(blkidx));
+            // long               offset                 = blkidx * jcbBlockSize;
+            // long               extent                 = std::min((blkidx + 1) * jcbBlockSize - offset + jcbOverlapSize, size_mps - offset);
+
             // if constexpr(eig::debug_matvec_mpos) eig::log->trace("calculating block {}/{} ... done", blkidx, nblocks);
             auto t_dblk = tid::ur("dblk");
             t_dblk.tic();
@@ -1311,25 +1359,52 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
     }
 
     if(jcbMaxBlockSize == 1) {
-        if(mpos_B.empty()) invJcbDiagonal = jcbDiagA.array().cwiseInverse().matrix();
-        else invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+        if(mpos_B.empty())
+            invJcbDiagonal = jcbDiagA.array().cwiseInverse().matrix();
+        else
+            invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
         // for(Eigen::Index i = 0; i < jcbDiagA.size(); ++i) {
         //     eig::log->info("{:4}: {:20.16f} {:20.16f} {:20.16f}", i, fp(jcbDiagA(i)), fp(jcbDiagB(i)), fp(invJcbDiagonal(i)));
         // }
 
         assert(jcbDiagA.allFinite());
         assert(jcbDiagB.allFinite());
-        assert(jcbDiagA.nonZeros() == jcbDiagA.size());
-        assert(jcbDiagB.nonZeros() == jcbDiagB.size());
         assert(jcbDiagB.allFinite());
         assert(invJcbDiagonal.allFinite());
         iLinSolvCfg.jacobi.invdiag = invJcbDiagonal.data();
     } else if(jcbMaxBlockSize > 1) {
-        iLinSolvCfg.jacobi.lltJcbBlocks  = &lltJcbBlocks;
-        iLinSolvCfg.jacobi.ldltJcbBlocks = &ldltJcbBlocks;
-        iLinSolvCfg.jacobi.luJcbBlocks   = &luJcbBlocks;
-        iLinSolvCfg.jacobi.qrJcbBlocks   = &qrJcbBlocks;
+        // Calculate jcb block multiplicity
+        auto countMultiplicity = [](Eigen::Index idx, auto &jcbBlocks) -> RealScalar {
+            RealScalar count = 0;
+            for(const auto &[offset, sign, jcbBlock] : jcbBlocks) {
+                if(!jcbBlock) continue;
+                bool inrange = idx == std::clamp(idx, offset, offset + jcbBlock->rows() - 1);
+                if(inrange) { count += RealScalar{1}; }
+            }
+            return count;
+        };
+        jcbInvSqrtMultiplicity.setZero(size_mps);
+        for(Eigen::Index idx = 0; idx < size_mps; ++idx) {
+            jcbInvSqrtMultiplicity[idx] += countMultiplicity(idx, lltJcbBlocks);
+            jcbInvSqrtMultiplicity[idx] += countMultiplicity(idx, ldltJcbBlocks);
+            jcbInvSqrtMultiplicity[idx] += countMultiplicity(idx, luJcbBlocks);
+            jcbInvSqrtMultiplicity[idx] += countMultiplicity(idx, qrJcbBlocks);
+        }
+        auto jcbMaxMultiplicity = static_cast<Eigen::Index>(jcbInvSqrtMultiplicity.maxCoeff());
+        if(jcbInvSqrtMultiplicity.isApproxToConstant(RealScalar{1}))
+            jcbInvSqrtMultiplicity = {}; // Clear: No need to scale (probably no overlap/multiplicity)
+        else
+            jcbInvSqrtMultiplicity = jcbInvSqrtMultiplicity.cwiseInverse().cwiseSqrt().eval();
+        assert(jcbInvSqrtMultiplicity.allFinite());
+        iLinSolvCfg.jacobi.lltJcbBlocks           = &lltJcbBlocks;
+        iLinSolvCfg.jacobi.ldltJcbBlocks          = &ldltJcbBlocks;
+        iLinSolvCfg.jacobi.luJcbBlocks            = &luJcbBlocks;
+        iLinSolvCfg.jacobi.qrJcbBlocks            = &qrJcbBlocks;
+        iLinSolvCfg.jacobi.jcbInvSqrtMultiplicity = &jcbInvSqrtMultiplicity;
+        iLinSolvCfg.jacobi.jcbMaxMultiplicity     = jcbMaxMultiplicity;
+        iLinSolvCfg.jacobi.jcbNumPasses           = jcbNumPasses;
     }
+
     readyCalcPc = true;
 }
 
@@ -1358,6 +1433,7 @@ typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultPX(const Eigen::
                                                                    std::optional<const Eigen::Ref<const VectorReal>> shifts) {
     if(preconditioner == eig::Preconditioner::NONE) return X;
     assert(X.rows() == get_size());
+    assert(X.allFinite());
     MatrixType Y(X.rows(), X.cols());
     if(shifts.has_value() and shifts->size() == X.cols())
         for(Eigen::Index i = 0; i < X.cols(); ++i) { MultPc(X.col(i).data(), Y.col(i).data(), shifts->coeff(i)); }
@@ -1569,6 +1645,22 @@ void MatVecMPOS<Scalar>::set_jcbMaxBlockSize(std::optional<long> size) {
 }
 
 template<typename Scalar>
+void MatVecMPOS<Scalar>::set_jcbOverlapSize(std::optional<long> size) {
+    if(size.has_value() and size.value() > 0) {
+        jcbOverlapSize = size.value();
+    } else
+        jcbOverlapSize = 0;
+}
+
+template<typename Scalar>
+void MatVecMPOS<Scalar>::set_jcbNumPasses(std::optional<long> numPasses) {
+    if(numPasses.has_value() and numPasses.value() >= 0) {
+        jcbNumPasses = numPasses.value();
+    } else
+        jcbNumPasses = 1;
+}
+
+template<typename Scalar>
 void MatVecMPOS<Scalar>::set_iterativeLinearSolverConfig(const IterativeLinearSolverConfig<Scalar> &cfg) {
     iLinSolvCfg = cfg;
 }
@@ -1730,6 +1822,15 @@ long MatVecMPOS<Scalar>::get_jcbMaxBlockSize() const {
 }
 
 template<typename Scalar>
+long MatVecMPOS<Scalar>::get_jcbOverlapSize() const {
+    return jcbOverlapSize;
+}
+template<typename Scalar>
+long MatVecMPOS<Scalar>::get_jcbNumPasses() const {
+    return jcbNumPasses;
+}
+
+template<typename Scalar>
 const IterativeLinearSolverConfig<Scalar> &MatVecMPOS<Scalar>::get_iterativeLinearSolverConfig() const {
     return iLinSolvCfg;
 }
@@ -1750,7 +1851,7 @@ bool MatVecMPOS<Scalar>::isReadyShift() const {
 template<typename Scalar>
 typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters, RealScalar reltol) {
     if(!std::isnan(op_norm) and max_op_norm_iters <= op_norm_iters) return op_norm;
-    VectorType v = VectorType::Random(size_mps).normalized();
+    VectorType v = Eigen::VectorXf::Random(size_mps).cast<Scalar>().normalized();
     VectorType w(size_mps);
 
     for(Eigen::Index i = 0; i < max_op_norm_iters; ++i) {

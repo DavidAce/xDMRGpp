@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(here, '../..'))
 sys.path.insert(0, os.path.join(here, ''))
 from dmrg_plot.common.io.h5ops import *
 from dmrg_plot.common.io.parse import parse
-from statistics.write_statistics import *
+from stats.write_statistics import *
 
 def lbit_avg(args):
     projdir = args.basedir

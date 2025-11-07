@@ -1,7 +1,7 @@
 #pragma once
 
-#include "correlation.h"
 #include "config/debug.h"
+#include "correlation.h"
 #include "debug/exceptions.h"
 #include "expectation_value.h"
 #include "math/tenx.h"

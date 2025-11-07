@@ -1652,7 +1652,10 @@ StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar> 
     if constexpr(settings::debug) {
         auto t_dbg = tid::tic_scope("debug");
         // Check normalization
-        for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized();
+        constexpr auto eps                = std::numeric_limits<RealScalar<Scalar>>::epsilon();
+        const auto     slack              = static_cast<RealScalar<Scalar>>(settings::precision::max_norm_slack);
+        const auto     normErrorTolerance = eps * slack;
+        for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized(normErrorTolerance);
         // Double-check the transform operation
         // Check that the transform backwards is equal to the original state
         auto state_lbit_debug = state_real;
@@ -1692,7 +1695,10 @@ StateFinite<Scalar> qm::lbit::transform_to_real_basis(const StateFinite<Scalar> 
     if constexpr(settings::debug) {
         auto t_dbg = tid::tic_scope("debug");
         // Check normalization
-        for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized();
+        constexpr auto eps                = std::numeric_limits<RealScalar<Scalar>>::epsilon();
+        const auto     slack              = static_cast<RealScalar<Scalar>>(settings::precision::max_norm_slack);
+        const auto     normErrorTolerance = eps * slack;
+        for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized(normErrorTolerance);
 
         // Double-check the transform operation
         // Check that the transform backwards is equal to the original state
@@ -1735,7 +1741,10 @@ StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar> 
     if constexpr(settings::debug) {
         auto t_dbg = tid::tic_scope("debug");
         // Check normalization
-        for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized();
+        constexpr auto eps                = std::numeric_limits<RealScalar<Scalar>>::epsilon();
+        const auto     slack              = static_cast<RealScalar<Scalar>>(settings::precision::max_norm_slack);
+        const auto     normErrorTolerance = eps * slack;
+        for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized(normErrorTolerance);
 
         // Double-check that the transform operation backwards is equal to the original state
         auto state_real_debug = state_lbit;
@@ -1775,7 +1784,10 @@ StateFinite<Scalar> qm::lbit::transform_to_lbit_basis(const StateFinite<Scalar> 
     if constexpr(settings::debug) {
         auto t_dbg = tid::tic_scope("debug");
         // Check normalization
-        for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized();
+        constexpr auto eps                = std::numeric_limits<RealScalar<Scalar>>::epsilon();
+        const auto     slack              = static_cast<RealScalar<Scalar>>(settings::precision::max_norm_slack);
+        const auto     normErrorTolerance = eps * slack;
+        for(const auto &mps : state_lbit.mps_sites) mps->assert_normalized(normErrorTolerance);
 
         // Double-check the that transform operation backwards is equal to the original state
         auto state_real_debug = state_lbit;

@@ -126,7 +126,7 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
     res.set_eigs_idx(0);
     res.set_eigs_nev(solver.nev);
     res.set_eigs_ncv(solver.ncv);
-    res.set_eigs_tol(solver.tol);
+    res.set_eigs_tol(solver.abstol);
     res.set_eigs_jcb(solver.get_jcbMaxBlockSize());
     res.set_eigs_ritz(enum2sv(solver.ritz));
     res.set_eigs_type(enum2sv(opt_meta.optType));

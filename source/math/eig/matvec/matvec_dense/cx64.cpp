@@ -2,5 +2,3 @@
 
 using Scalar = cx64;
 template class MatVecDense<Scalar>;
-
-

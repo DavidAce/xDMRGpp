@@ -1,9 +1,9 @@
 #pragma once
 #include "gate.h"
 #include "math/svd/config.h"
-#include "math/tenx/fwd_decl.h"
 #include "qm.h"
 #include <complex>
+#include <Eigen/Core>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -195,7 +195,6 @@ namespace qm::lbit {
                                         const Eigen::Tensor<T, 1> & ledge,
                                         const Eigen::Tensor<T, 1> & redge,
                                         svd::config svd_cfg);
-
 
     /* clang-format on */
 }

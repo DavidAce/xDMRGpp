@@ -85,4 +85,3 @@ StateFinite<Scalar> tools::finite::mps::add_states(const StateFinite<Scalar> &st
 
     return stateR;
 }
-

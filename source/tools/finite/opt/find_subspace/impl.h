@@ -219,7 +219,7 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_part(const Tenso
 
     // Create a reusable config for multiple nev trials
     eig::settings config;
-    config.tol             = settings::precision::eigs_tol_min;
+    config.tol             = settings::precision::eigs_abstol_min;
     config.sigma           = cx64(static_cast<fp64>(energy_target), 0.0);
     config.shift_invert    = eig::Shinv::ON;
     config.compute_eigvecs = eig::Vecs::ON;
@@ -322,7 +322,7 @@ void convTestFun([[maybe_unused]] double *eval, [[maybe_unused]] void *evec, dou
             }
 
             if(valid_cols.size() >= 2) {
-                eigvecs = eigvecs(Eigen::all, valid_cols).colwise().normalized().eval();
+                eigvecs = eigvecs(Eigen::placeholders::all, valid_cols).colwise().normalized().eval();
 
                 // Check the quality of the subspace
                 const auto initial_vec = Eigen::Map<const VectorType>(static_cast<Scalar *>(config.initial_guess.front().ptr), eigvecs.rows());
@@ -384,7 +384,7 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const Ten
     // https://www.cs.wm.edu/~andreas/software/doc/appendix.html#c.primme_params.eps
     eig::settings config;
     config.lib                 = eig::Lib::PRIMME;
-    config.tol                 = meta.eigs_tol; // 1e-12 is good. This Sets "eps" in primme, see link above.
+    config.tol                 = meta.eigs_abstol; // 1e-12 is good. This Sets "eps" in primme, see link above.
     config.maxNev              = meta.eigs_nev;
     config.maxNcv              = meta.eigs_ncv;
     config.shift_invert        = eig::Shinv::OFF;
@@ -470,7 +470,7 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const Ten
             }
             if(valid_cols.empty()) continue;
             eigvals = eigvals(valid_cols).eval();
-            eigvecs = eigvecs(Eigen::all, valid_cols).colwise().normalized().eval();
+            eigvecs = eigvecs(Eigen::placeholders::all, valid_cols).colwise().normalized().eval();
         }
         // else {
         // eigvals = eigvals_map;

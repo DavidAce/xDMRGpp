@@ -1,9 +1,9 @@
 #pragma once
-#include "LBit.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
 #include "io/fmt_f128_t.h"
+#include "LBit.h"
 #include "math/cast.h"
 #include "math/num.h"
 #include "math/rnd.h"
@@ -47,8 +47,6 @@ std::string format_mpo(const Eigen::Tensor<C, 4> &mpo, R J1_rand, const std::vec
     }
     return str;
 }
-
-
 
 template<typename Scalar>
 LBit<Scalar>::LBit(ModelType model_type_, size_t position_) : MpoSite<Scalar>(model_type_, position_) {

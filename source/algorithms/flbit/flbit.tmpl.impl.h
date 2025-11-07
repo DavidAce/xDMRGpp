@@ -46,7 +46,6 @@ std::pair<StateFinite<Scalar>, AlgorithmStatus> flbit_tmpl::update_state(const s
     return {state_tevo, check_convergence(status_tevo)};
 }
 
-
 template<typename Scalar>
 StateFinite<Scalar> flbit_tmpl::time_evolve_lbit_state(const StateFinite<Scalar> &state_lbit_init, const std::vector<std::vector<qm::SwapGate>> &gates_tevo,
                                                        const AlgorithmStatus &status) {

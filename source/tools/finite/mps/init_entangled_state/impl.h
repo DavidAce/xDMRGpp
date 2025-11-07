@@ -114,7 +114,6 @@ void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scala
     move_center_point_to_pos_dir(state, 0, 1);
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
     tools::log->debug("Initial state: {}", bitfield);
 }
 
@@ -160,7 +159,6 @@ void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<Scala
     }
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 template<typename Scalar>
@@ -219,7 +217,6 @@ void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(St
     }
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 template<typename Scalar>
@@ -293,7 +290,6 @@ void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspi
     }
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 template<typename Scalar>
@@ -376,7 +372,6 @@ void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspi
     if(spin_component * sign < 0) throw except::logic_error("Could not initialize_state in the correct sector");
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 template<typename Scalar>

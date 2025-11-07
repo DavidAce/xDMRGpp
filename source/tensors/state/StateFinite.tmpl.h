@@ -16,11 +16,10 @@
 template<typename Scalar>
 template<typename T>
 StateFinite<Scalar>::StateFinite(const StateFinite<T> &other) noexcept {
-    direction            = other.direction;
-    tag_normalized_sites = other.tag_normalized_sites;
-    name                 = other.name;
-    algo                 = other.algo;
-    convrates            = other.convrates;
+    direction = other.direction;
+    name      = other.name;
+    algo      = other.algo;
+    convrates = other.convrates;
     mps_sites.clear();
     mps_sites.reserve(other.mps_sites.size());
     for(const auto &mps_other : other.mps_sites) {
@@ -46,11 +45,10 @@ StateFinite<Scalar> &StateFinite<Scalar>::operator=(const StateFinite<T> &other)
     if constexpr(std::is_same_v<Scalar, T>) {
         if(this == &other) return *this; // check for self-assignment
     }
-    direction            = other.direction;
-    tag_normalized_sites = other.tag_normalized_sites;
-    name                 = other.name;
-    algo                 = other.algo;
-    convrates            = other.convrates;
+    direction = other.direction;
+    name      = other.name;
+    algo      = other.algo;
+    convrates = other.convrates;
     mps_sites.clear();
     mps_sites.reserve(other.mps_sites.size());
     for(const auto &mps_other : other.mps_sites) { mps_sites.emplace_back(std::make_unique<MpsSite<Scalar>>(*mps_other)); }

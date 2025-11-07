@@ -12,5 +12,4 @@ template void tools::common::contraction::contract_mps_mpo_env(      T *       r
                                                                const T * const mps_ptr , std::array<long,3> mps_dims,
                                                                const T * const mpo_ptr , std::array<long,4> mpo_dims);
 
-
 /* clang-format on */

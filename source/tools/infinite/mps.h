@@ -1,7 +1,7 @@
 #pragma once
 #include "config/enums.h"
 #include "math/svd/config.h"
-#include "math/tenx/fwd_decl.h"
+#include <unsupported/Eigen/CXX11/Tensor>
 #include <complex>
 #include <optional>
 #include <set>

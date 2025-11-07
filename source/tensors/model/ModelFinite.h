@@ -68,6 +68,10 @@ class ModelFinite {
     [[nodiscard]] bool                                       has_parity_shifted_mpo() const;
     [[nodiscard]] bool                                       has_parity_shifted_mpo_squared() const;
 
+    // void                                                     set_parity_projector(int sign, std::string_view axis);
+    // [[nodiscard]] std::pair<int, std::string_view>           get_parity_projector() const;
+    // [[nodiscard]] bool                                       has_parity_projector() const;
+
     public:
     std::vector<std::unique_ptr<MpoSite<Scalar>>> MPO; /*!< A list of stored Hamiltonian MPO tensors,indexed by chain position. */
     std::vector<size_t>                           active_sites;

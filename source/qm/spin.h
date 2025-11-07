@@ -1,11 +1,11 @@
 #pragma once
 #include "math/float.h"
-#include "math/tenx/fwd_decl.h"
 #include "qm.h"
 #include <array>
 #include <complex>
+#include <Eigen/Core>
+#include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
-
 namespace Eigen {
     template<typename std::ptrdiff_t... Indices>
     struct Sizes;

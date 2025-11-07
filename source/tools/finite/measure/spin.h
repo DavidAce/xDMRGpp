@@ -1,7 +1,7 @@
 #pragma once
 #include "math/float.h"
-#include "math/tenx/fwd_decl.h"
 #include <array>
+#include <Eigen/Core>
 #include <string_view>
 
 template<typename Scalar>

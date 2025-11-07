@@ -1,6 +1,6 @@
 #include "impl.h"
 
-using Scalar = fp64;
+using Scalar   = fp64;
 using CalcType = fp64;
 /* clang-format off */
 

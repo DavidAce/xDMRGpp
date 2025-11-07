@@ -1,13 +1,12 @@
 #pragma once
-#include "ModelInfinite.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
 #include "math/num.h"
 #include "math/svd.h"
 #include "math/tenx.h"
+#include "ModelInfinite.h"
 #include "tensors/site/mpo/MpoFactory.h"
-
 
 template<typename Scalar>
 ModelInfinite<Scalar>::ModelInfinite() = default;

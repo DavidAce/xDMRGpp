@@ -1,16 +1,14 @@
 #pragma once
-#include "tensors/state/StateInfinite.h"
 #include "config/settings.h"
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"
+#include "tensors/state/StateInfinite.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
 #include "tools/common/split.h"
 #include "tools/common/views.h"
 #include "tools/infinite/measure.h"
 #include "tools/infinite/mps.h"
-
-
 
 template<typename Scalar>
 StateInfinite<Scalar>::StateInfinite() : MPS_A(std::make_unique<MpsSite<Scalar>>()), MPS_B(std::make_unique<MpsSite<Scalar>>()) {

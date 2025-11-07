@@ -58,6 +58,7 @@ def write_stats_to_node(data, tgt_node, axis):
     med_dset = tgt_node.create_dataset(name='med', data=np.nanmedian(data, axis=axis))
     max_dset = tgt_node.create_dataset(name='max', data=np.nanmax(data, axis=axis))
     min_dset = tgt_node.create_dataset(name='min', data=np.nanmin(data, axis=axis))
+    typ_dset = tgt_node.create_dataset(name='typ', data=sc.stats.gmean(data, axis=axis))
     num_dset = tgt_node.create_dataset(name='num', data=num)
     data_dset = tgt_node.create_dataset(name='data', data=data, compression="gzip", compression_opts=9 )
 

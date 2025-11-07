@@ -1,5 +1,5 @@
 #pragma once
-#include "math/tenx/fwd_decl.h"
+#include <Eigen/Core>
 
 namespace Eigen {
     template<typename Idx>
@@ -30,7 +30,7 @@ namespace linalg {
 
     template<typename TA, typename TB>
     using cplx_or_real_t = std::conditional_t<is_std_complex_v<TA> or is_std_complex_v<TB>, //
-                                                     CplxScalar<CommonRealScalar<TA, TB>>,         //
-                                                     RealScalar<CommonRealScalar<TA, TB>>>;
+                                              CplxScalar<CommonRealScalar<TA, TB>>,         //
+                                              RealScalar<CommonRealScalar<TA, TB>>>;
 
 }

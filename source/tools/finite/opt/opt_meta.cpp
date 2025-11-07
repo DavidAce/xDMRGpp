@@ -45,6 +45,10 @@ namespace tools::finite::opt {
         if(eigs_ncv) res += fmt::format(" | ncv {}", eigs_ncv.value());
         // res += fmt::format(" | env.exp. α {:.3e}", alpha_expansion ? alpha_expansion.value() : std::numeric_limits<double>::quiet_NaN());
         if(svd_cfg) res += fmt::format(" | svd_ε {:.2e}", svd_cfg->truncation_limit.value_or(std::numeric_limits<double>::quiet_NaN()));
+        if(eigs_jcbMaxBlockSize) {
+            res += fmt::format(" | jcb {}", eigs_jcbMaxBlockSize.value());
+            if(eigs_jcbOverlapSize) res += fmt::format(" overlap {}", eigs_jcbOverlapSize.value());
+        }
         return res;
     }
 

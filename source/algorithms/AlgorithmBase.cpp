@@ -34,8 +34,9 @@ void AlgorithmBase::init_bond_dimension_limits() {
         double bond_max = std::min(long_max, std::pow(2.0, settings::model::model_size / 2));
         status.bond_max = std::min(status.bond_max, safe_cast<long>(bond_max));
     }
-    status.bond_lim = std::min(status.bond_max, settings::get_bond_min(status.algo_type));
-    status.bond_min = std::max(status.bond_min, settings::get_bond_min(status.algo_type));
+    status.bond_lim                   = std::clamp(settings::get_bond_min(status.algo_type), 1l, status.bond_max);
+    status.bond_min                   = std::clamp(settings::get_bond_min(status.algo_type), 1l, status.bond_max);
+    status.bond_limit_has_reached_max = status.bond_lim >= status.bond_max;
     if(settings::strategy::bond_increase_when == UpdatePolicy::NEVER) {
         status.bond_lim                   = status.bond_max;
         status.bond_limit_has_reached_max = true;

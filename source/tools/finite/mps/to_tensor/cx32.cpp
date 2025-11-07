@@ -1,6 +1,6 @@
 #include "impl.h"
 
-using Scalar = cx32;
+using Scalar   = cx32;
 using RealType = fp32;
 using CplxType = cx32;
 /* clang-format off */

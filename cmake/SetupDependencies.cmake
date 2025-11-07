@@ -30,15 +30,15 @@ find_package(OpenMP                       REQUIRED BYPASS_PROVIDER COMPONENTS CX
 find_package(gfortran                     REQUIRED BYPASS_PROVIDER OPTIONAL_COMPONENTS quadmath)
 find_package(Lapacke                      REQUIRED BYPASS_PROVIDER MODULE)
 find_package(pcg-cpp                      REQUIRED)
-find_package(Eigen3       3.4.0           REQUIRED)                                         # Eigen3 numerical library (needed by ceres and h5pp)
+find_package(Eigen3       5.0.0           REQUIRED)                                         # Eigen3 numerical library (needed by ceres and h5pp)
 find_package(Ceres        2.2.0           REQUIRED)                                         # Eigen3 numerical library (needed by ceres and h5pp)
 find_package(h5pp         1.11.0...1.11.3 REQUIRED)                                         # h5pp for writing to file binary in format
 find_package(spdlog       1.11.0...1.16.0 REQUIRED)
 find_package(fmt          11.0.0...11.9.0 REQUIRED)
-find_package(CLI11        2.1.1...2.4.2   REQUIRED)                                         # Command line argument parser
+find_package(CLI11        2.4.1...2.6.0   REQUIRED)                                         # Command line argument parser
 find_package(Backward     1.6             REQUIRED)
 #find_package(tomlplusplus 3.4.0           REQUIRED)
-find_package(toml11       4.2.0           REQUIRED)
+find_package(toml11       4.4.0           REQUIRED)
 #find_package(arpack++   2.3.0  REQUIRED)                                          # C++ frontend for arpack-ng. Custom find module.
 #find_package(mpfr       4.1.0  REQUIRED)
 
@@ -114,7 +114,6 @@ if(TARGET Eigen3::Eigen)
         message(STATUS "Eigen will use BLAS")
         target_link_libraries(Eigen3::Eigen INTERFACE BLAS::BLAS)
         target_compile_definitions(Eigen3::Eigen INTERFACE EIGEN_USE_BLAS)
-        target_compile_definitions(Eigen3::Eigen INTERFACE EIGEN_USE_LAPACKE)
     endif()
 else()
     message(FATAL_ERROR "Target not defined: Eigen3::Eigen")

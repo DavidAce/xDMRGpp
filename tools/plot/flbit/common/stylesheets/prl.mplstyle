@@ -54,7 +54,7 @@ legend.title_fontsize   : 8
 legend.frameon          : false      # if true, draw the legend on a background patch
 legend.loc              : center left
 legend.borderpad        : 0.35      # border whitespace
-#legend.labelspacing     : 0.030    # the vertical space between the legend entries
+#legend.labelspacing    : 0.030    # the vertical space between the legend entries
 legend.labelspacing     : 0.15      # the vertical space between the legend entries
 legend.handlelength     : 0.5       # the length of the legend lines
 legend.handletextpad    : 0.25      # the space between the legend line and legend text

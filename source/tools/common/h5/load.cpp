@@ -7,7 +7,6 @@
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
 
-
 namespace tools::common::h5 {
     AlgorithmStatus getStatusRecord(const h5pp::File &h5file, std::string_view status_path, hsize_t offset) {
         // Read elements individually if they exist.

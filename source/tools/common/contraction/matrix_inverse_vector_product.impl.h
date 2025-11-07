@@ -1,8 +1,11 @@
 #pragma once
-#include "math/tenx/fwd_decl.h"
+#include "math/float_eigen.h"
 // Eigen goes first
 #include "debug/exceptions.h"
 #include "math/cast.h"
+#include "math/eig/third_party/eigen/BiCGSTAB_ST.h"
+#include "math/eig/third_party/eigen/ConjugateGradient_ST.h"
+#include "math/eig/third_party/eigen/MINRES_ST.h"
 #include "math/tenx.h"
 #include "MatrixLikeOperator.h"
 #include "tid/tid.h"
@@ -11,7 +14,6 @@
 #include "tools/common/contraction/IterativeLinearSolverPreconditioner.h"
 #include "tools/common/log.h"
 #include <complex>
-#include <Eigen/IterativeLinearSolvers>
 #include <unsupported/Eigen/IterativeSolvers>
 #include <variant>
 
@@ -20,15 +22,15 @@ namespace settings {
 }
 
 template<typename Scalar>
-tools::common::contraction::VectorType<Scalar> tools::common::contraction::matrix_inverse_vector_product(MatrixLikeOperator<Scalar>          &MatrixOp, //
-                                                                                                         const Scalar                        *rhs_ptr,  //
+tools::common::contraction::VectorType<Scalar> tools::common::contraction::matrix_inverse_vector_product(MatrixLikeOperator<Scalar>                &MatrixOp, //
+                                                                                                         const Scalar                              *rhs_ptr,  //
                                                                                                          const IterativeLinearSolverConfig<Scalar> &cfg) {
     using PreconditionerType = IterativeLinearSolverPreconditioner<MatrixLikeOperator<Scalar>>;
-    using DefSolverType      = Eigen::ConjugateGradient<MatrixLikeOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>;
-    using IndSolverType      = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                //
-                                                  Eigen::BiCGSTAB<MatrixLikeOperator<Scalar>, PreconditionerType>, //
+    using DefSolverType      = Eigen::ConjugateGradient_ST<MatrixLikeOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>;
+    using IndSolverType      = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                   //
+                                                  Eigen::BiCGSTAB_ST<MatrixLikeOperator<Scalar>, PreconditionerType>, //
                                                   // Eigen::BiCGSTAB<MatrixLikeOperator<Scalar>, PreconditionerType> //
-                                                  Eigen::MINRES<MatrixLikeOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>
+                                                  Eigen::MINRES_ST<MatrixLikeOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>
                                                   // Eigen::GMRES<MatrixLikeOperator<Scalar>, PreconditionerType>
                                                   >;
     std::variant<IndSolverType, DefSolverType> solverVariant;
@@ -48,7 +50,8 @@ tools::common::contraction::VectorType<Scalar> tools::common::contraction::matri
         }
         return "Unknown solver";
     };
-    auto               rhs = Eigen::Map<const VectorType<Scalar>>(rhs_ptr, MatrixOp.rows());
+    auto rhs = Eigen::Map<const VectorType<Scalar>>(rhs_ptr, MatrixOp.rows());
+    assert(rhs.allFinite());
     VectorType<Scalar> res;
     auto               run = [&](auto &solver) {
         auto t_jdop = tid::tic_token("matinv", tid::level::higher);

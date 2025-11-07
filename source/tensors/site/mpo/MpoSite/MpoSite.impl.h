@@ -9,8 +9,6 @@
 #include "math/rnd.h"
 #include "math/tenx.h"
 #include "math/tenx/sfinae.h"
-#include "MpoSite.tmpl.h"
-#include "qm/qm.h"
 #include "qm/spin.h"
 #include "tools/common/log.h"
 #include <config/settings.h>
@@ -23,7 +21,8 @@ MpoSite<Scalar>::MpoSite(ModelType model_type_, size_t position_) : model_type(m
 
 template<typename Scalar>
 void MpoSite<Scalar>::build_mpo() {
-    mpo_internal   = get_mpo(energy_shift_mpo);
+    mpo_internal = get_mpo(energy_shift_mpo);
+    // mpo_internal   = get_parity_projected_mpo(mpo_internal);
     mpo_internal   = get_parity_shifted_mpo(mpo_internal);
     mpo_internal   = apply_edge_left(mpo_internal, get_MPO_edge_left(mpo_internal));
     mpo_internal   = apply_edge_right(mpo_internal, get_MPO_edge_right(mpo_internal));
@@ -35,6 +34,7 @@ void MpoSite<Scalar>::build_mpo() {
 template<typename Scalar>
 void MpoSite<Scalar>::build_mpo_q() {
     mpo_internal_q = get_mpo_q(energy_shift_mpo);
+    // mpo_internal_q = get_parity_projected_mpo(mpo_internal_q);
     mpo_internal_q = get_parity_shifted_mpo(mpo_internal_q);
     mpo_internal_q = apply_edge_left(mpo_internal_q, get_MPO_edge_left(mpo_internal_q));
     mpo_internal_q = apply_edge_right(mpo_internal_q, get_MPO_edge_right(mpo_internal_q));
@@ -44,7 +44,8 @@ void MpoSite<Scalar>::build_mpo_q() {
 
 template<typename Scalar>
 void MpoSite<Scalar>::build_mpo_squared() {
-    mpo_squared    = get_non_compressed_mpo_squared();
+    mpo_squared = get_non_compressed_mpo_squared();
+    // mpo_squared    = get_parity_projected_mpo(mpo_squared.value());
     mpo_squared    = get_parity_shifted_mpo_squared(mpo_squared.value());
     mpo_squared    = apply_edge_left(mpo_squared.value(), get_MPO2_edge_left<Scalar>());
     mpo_squared    = apply_edge_right(mpo_squared.value(), get_MPO2_edge_right<Scalar>());
@@ -322,6 +323,11 @@ bool MpoSite<Scalar>::has_parity_shifted_mpo2() const {
     return !parity_shift_axus_mpo2.empty() and parity_shift_sign_mpo2 != 0;
 }
 
+// template<typename Scalar>
+// bool MpoSite<Scalar>::has_parity_projector() const {
+//     return !parity_projector_axus.empty() and parity_projector_sign != 0;
+// }
+
 template<typename Scalar>
 bool MpoSite<Scalar>::has_compressed_mpo_squared() const {
     // When H² = mpo*mpo is compressed, we typically find that the virtual bonds
@@ -403,6 +409,23 @@ void MpoSite<Scalar>::set_parity_shift_mpo(OptRitz ritz, int sign, std::string_v
     }
 }
 
+// template<typename Scalar>
+// void MpoSite<Scalar>::set_parity_projector(int sign, std::string_view axis) {
+//     if(not qm::spin::half::is_valid_axis(axis)) {
+//         tools::log->warn("MpoSite[{}]::set_parity_projector: invalid axis {} | expected one of {}", get_position(), axis, qm::spin::half::valid_axis_str);
+//         return;
+//     }
+//     if(std::abs(sign) != 1) sign = qm::spin::half::get_sign(axis);
+//     auto axus = qm::spin::half::get_axis_unsigned(axis);
+//     if(sign != parity_projector_sign or axus != parity_projector_axus) {
+//         tools::log->trace("MpoSite[{}]::set_parity_projector: {}{}", get_position(), fmt::format("{:+}", sign).front(), axus);
+//         parity_projector_sign = sign;
+//         parity_projector_axus = axus;
+//         clear_mpo();
+//         clear_mpo_squared();
+//     }
+// }
+
 template<typename Scalar>
 std::tuple<OptRitz, int, std::string_view> MpoSite<Scalar>::get_parity_shift_mpo() const {
     return {parity_shift_ritz_mpo, parity_shift_sign_mpo, parity_shift_axus_mpo};
@@ -431,11 +454,11 @@ Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::get_parity_shifted_mpo_squared(const E
     // Example 2: For xDMRG we can add the projection on H² directly, as
     //                  H² --> (H² + Q(σ))
     //            Then, if q == +1 we get and
-    //                  (H² + Q(σ)) |ψ+⟩ = (E + 0.5(1-1)) |ψ+⟩ = (E² + 0) |ψ+⟩ <--- target state
-    //                  (H² + Q(σ)) |ψ-⟩ = (E + 0.5(1+1)) |ψ-⟩ = (E² + 1) |ψ-⟩
+    //                  (H² + Q(σ)) |ψ+⟩ = (E² + 0.5(1-1)) |ψ+⟩ = (E² + 0) |ψ+⟩ <--- target state
+    //                  (H² + Q(σ)) |ψ-⟩ = (E² + 0.5(1+1)) |ψ-⟩ = (E² + 1) |ψ-⟩
     //            If q == -1 instead we get
-    //                  (H² + Q(σ)) |ψ+⟩ = (E + 0.5(1+1)) |ψ+⟩ = (E² + 1) |ψ+⟩
-    //                  (H² + Q(σ)) |ψ-⟩ = (E + 0.5(1-1)) |ψ-⟩ = (E² + 0) |ψ-⟩ <--- target state
+    //                  (H² + Q(σ)) |ψ+⟩ = (E² + 0.5(1+1)) |ψ+⟩ = (E² + 1) |ψ+⟩
+    //                  (H² + Q(σ)) |ψ-⟩ = (E² + 0.5(1-1)) |ψ-⟩ = (E² + 0) |ψ-⟩ <--- target state
     //  Note:
     //  1) Var(H) is typically a number close to 0, so 1 adds a very large gap.
     //  2) We for xDMRG we could in principle add the projection on the mpo for H instead by defining
@@ -461,6 +484,7 @@ Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::get_parity_shifted_mpo_squared(const E
     mpo2_with_parity_shift_op.slice(tenx::array4{0, 0, 0, 0}, mpo_build.dimensions())             = mpo_build;
     mpo2_with_parity_shift_op.slice(tenx::array4{d0, d1, 0, 0}, extent4).reshape(extent2)         = tenx::asScalarType<Scalar>(id);
     mpo2_with_parity_shift_op.slice(tenx::array4{d0 + 1, d1 + 1, 0, 0}, extent4).reshape(extent2) = tenx::asScalarType<Scalar>(pl);
+
     return mpo2_with_parity_shift_op;
 }
 
@@ -490,6 +514,11 @@ template<typename Scalar>
 std::pair<int, std::string_view> MpoSite<Scalar>::get_parity_shift_mpo_squared() const {
     return {parity_shift_sign_mpo2, parity_shift_axus_mpo2};
 }
+
+// template<typename Scalar>
+// std::pair<int, std::string_view> MpoSite<Scalar>::get_parity_projector() const {
+//     return {parity_projector_sign, parity_projector_axus};
+// }
 
 template<typename Scalar>
 long MpoSite<Scalar>::size() const {

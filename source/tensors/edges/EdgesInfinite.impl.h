@@ -1,6 +1,6 @@
 #pragma once
-#include "EdgesInfinite.h"
 #include "debug/exceptions.h"
+#include "EdgesInfinite.h"
 #include "math/num.h"
 #include "math/tenx.h"
 #include "tensors/site/env/EnvEne.h"
@@ -141,4 +141,3 @@ template<typename Scalar>
 env_pair<Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_var_blk() {
     return {varL->get_block(), varR->get_block()};
 }
-

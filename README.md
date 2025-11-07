@@ -12,17 +12,16 @@ variational technique used to calculate eigenstates of 1D quantum systems. DMRG 
 form of a [Matrix Product State](https://en.wikipedia.org/wiki/Matrix_product_states) (MPS), until obtaining an
 eigenstate with high precision.
 
-xDMRG++ includes several algorithms:
+xDMRG++ includes several algorithms for open boundary systems:
 
-- ***x*DMRG:** *Excited state* DMRG. Finds highly excited eigenstates of finite systems.
-- ***f*DMRG:** *finite* DMRG. Finds the groundstate of finite systems.
-- ***i*DMRG:** *infinite* DMRG. Finds the groundstate of infinite translationally invariant systems.
-- ***i*TEBD:** *Imaginary Time Evolving Block Decimation*. Finds the ground state of infinite translationally
-  invariant systems from a quench in imaginary time.
+- ***x*DMRG:** *Excited state* DMRG. For mid-spectrum eigenstates.
+- ***f*DMRG:** *finite* DMRG. For groundstates.
+- ***i*DMRG:** *infinite* DMRG. For groundstates of infinite translationally invariant systems.
+- ***i*TEBD:** *Imaginary Time Evolving Block Decimation*. For groundstates of infinite translationally invariant systems.
 
 One additional algorithm is included to study the dynamics in the Many-body Localized phase:
 
-- ***f*LBIT:** *Finite* l-BIT. Time evolution on a finite system in the basis of local integrals of motion (l-bits).
+- ***f*LBIT:** *Finite* l-BIT. Time evolution of finite systems in terms of local integrals of motion (l-bits).
 
 
 ## Documentation

@@ -16,7 +16,6 @@ void tools::infinite::print::print_hamiltonians(const ModelInfinite<Scalar> &mod
     model.get_mpo_siteB().print_parameter_values();
 }
 
-
 template<typename Scalar>
 void tools::infinite::print::dimensions(const TensorsInfinite<Scalar> &tensors) {
     const auto &mpsa = tensors.state->get_mps_siteA().dimensions();

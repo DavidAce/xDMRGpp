@@ -246,7 +246,7 @@ void fdmrg<Scalar>::update_state() {
     /* clang-format off */
     opt_meta.optExit = OptExit::SUCCESS;
     if(opt_state.get_grad_max()       > static_cast<RealScalar>(1.000)                            ) opt_meta.optExit |= OptExit::FAIL_GRADIENT;
-    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::precision::eigs_tol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
+    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::precision::eigs_abstol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
     if(opt_state.get_eigs_nev()       == 0 and
        opt_meta.optSolver             == OptSolver::EIGS                                          ) opt_meta.optExit |= OptExit::FAIL_RESIDUAL; // No convergence
     if(opt_state.get_overlap()        < static_cast<RealScalar>(0.010)                            ) opt_meta.optExit |= OptExit::FAIL_OVERLAP;
@@ -268,7 +268,6 @@ void fdmrg<Scalar>::update_state() {
                           opt_state.get_time());
     }
     last_optsolver = opt_state.get_optsolver();
-    tensors.state->tag_active_sites_normalized(false);
 
     // Do the truncation with SVD
     // TODO: We may need to detect here whether the truncation error limit needs lowering due to a variance increase in the svd merge

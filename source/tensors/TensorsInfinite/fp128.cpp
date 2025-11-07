@@ -3,4 +3,3 @@
 using Scalar = fp128;
 
 template class TensorsInfinite<Scalar>;
-

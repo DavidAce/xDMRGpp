@@ -86,7 +86,6 @@ namespace lanczos_h1h2 {
 
 }
 
-
 template<typename CalcType, typename Scalar>
 opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &initial,                         //
                                   [[maybe_unused]] const StateFinite<Scalar> &state,                           //
@@ -94,7 +93,8 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
                                   const EdgesFinite<Scalar>                  &edges,                           //
                                   OptMeta                                    &opt_meta,                        //
                                   reports::eigs_log<Scalar>                  &elog,                            //
-                                  Eigen::Index                                jcb,                             //
+                                  Eigen::Index                                jcb_bs,                          //
+                                  Eigen::Index                                jcb_os,                          //
                                   eig::Preconditioner                         preconditioner_type,             //
                                   ResidualCorrectionType                      rct,                             //
                                   bool                                        use_coarse_inner_preconditioner, //
@@ -134,7 +134,8 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
     solver.max_matvecs    = -1ul; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.set_jcbMaxBlockSize(jcb);
+    solver.set_jcbMaxBlockSize(jcb_bs);
+    solver.set_jcbOverlapSize(jcb_bs);
     solver.set_chebyshevFilterDegree(0);
     solver.set_chebyshevFilterLambdaCutBias(0.1f);
     solver.set_chebyshevFilterRelGapThreshold(1e-3f);
@@ -207,11 +208,12 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
                                   const EdgesFinite<Scalar>                  &edges,    //
                                   OptMeta                                    &opt_meta, //
                                   reports::eigs_log<Scalar>                  &elog) {
-    auto jcb = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::precision::eigs_jcb_blocksize_max);
-    auto prt = eig::StringToPreconditioner(opt_meta.eigs_preconditioner_type.value_or("SOLVE"));
-    auto rct = StringToResidualCorrection(opt_meta.eigs_residual_correction_type.value_or("JACOBI_DAVIDSON"));
-    bool crs = opt_meta.eigs_use_coarse_inner_preconditioner.value_or(false);
-    if(jcb <= 1) return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, prt, rct, crs, "");
+    auto jcb_bs = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::precision::eigs_jcb_blocksize_max);
+    auto jcb_os = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::precision::eigs_jcb_overlap_size);
+    auto prt    = eig::StringToPreconditioner(opt_meta.eigs_preconditioner_type.value_or("SOLVE"));
+    auto rct    = StringToResidualCorrection(opt_meta.eigs_residual_correction_type.value_or("JACOBI_DAVIDSON"));
+    bool crs    = opt_meta.eigs_use_coarse_inner_preconditioner.value_or(false);
+    if(jcb_bs <= 1) return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb_bs, prt, rct, crs, "");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 0, ResidualCorrectionType::NONE, "NO 0");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, ResidualCorrectionType::NONE, "NO 1");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 256, ResidualCorrectionType::NONE, "NO 256");
@@ -230,15 +232,15 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 0, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 0");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, eig::Preconditioner::SOLVE, ResidualCorrectionType::CHEAP_OLSEN, "CO");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, eig::Preconditioner::JACOBI, ResidualCorrectionType::CHEAP_OLSEN, "CO");
-    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, eig::Preconditioner::SOLVE, ResidualCorrectionType::CHEAP_OLSEN, "CO");
-    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, eig::Preconditioner::JACOBI, ResidualCorrectionType::CHEAP_OLSEN, "CO");
-    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 256, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 256");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb_bs, eig::Preconditioner::SOLVE, ResidualCorrectionType::CHEAP_OLSEN, "CO");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb_bs, eig::Preconditioner::JACOBI, ResidualCorrectionType::CHEAP_OLSEN,
+    // "CO"); eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 256, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 256");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 512, ResidualCorrectionType::JACOBI_DAVIDSON, "JD 512");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 1, eig::Preconditioner::SOLVE, ResidualCorrectionType::JACOBI_DAVIDSON, "JD");
-    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, prt, ResidualCorrectionType::CHEAP_OLSEN, false, "CO");
-    eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, prt, ResidualCorrectionType::CHEAP_OLSEN, true, "CO (c)");
-    return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, prt, rct, crs, "JD");
-    // return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb, prt, rct, true, "JD (c)");
+    // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb_bs, prt, ResidualCorrectionType::CHEAP_OLSEN, false, "CO");
+    eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb_bs, prt, ResidualCorrectionType::CHEAP_OLSEN, true, "CO (c)");
+    return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb_bs, jcb_os, prt, rct, crs, "JD");
+    // return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb_bs, prt, rct, true, "JD (c)");
 }
 
 template<typename Scalar>
@@ -284,4 +286,3 @@ template<typename Scalar>
         }
     }
 }
-

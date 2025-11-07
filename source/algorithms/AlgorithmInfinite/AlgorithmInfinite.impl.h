@@ -265,9 +265,7 @@ void AlgorithmInfinite<Scalar>::check_convergence_entanglement(std::optional<Rea
     if(not sensitivity) sensitivity = settings::precision::entanglement_saturation_sensitivity;
     entropy_iter.emplace_back(tools::infinite::measure::entanglement_entropy(tensors.get_state()));
     auto report = check_saturation(entropy_iter, sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mov);
-    if(report.has_computed) {
-        status.entanglement_saturated_for = report.saturated_count;
-    }
+    if(report.has_computed) { status.entanglement_saturated_for = report.saturated_count; }
 }
 
 template<typename Scalar>

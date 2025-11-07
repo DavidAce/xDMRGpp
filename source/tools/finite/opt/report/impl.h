@@ -50,7 +50,7 @@ void tools::finite::opt::reports::eigs_log<Scalar>::print_eigs_report(std::optio
         return;
     }
     /* clang-format off */
-    tools::log->log(level, "{:<36} {:<7} {:<4} {:<5} {:<4} {:<4} {:<4} {:<4} {:<8} {:<22} {:<22} {:<10} {:<22} {:<18} {:<18} {:<8} {:<8} {:<9} {:<5} {:<7} {:<7} {:<10} {:<10} {:<10}",
+    tools::log->log(level, "{:<37} {:<7} {:<4} {:<5} {:<4} {:<4} {:<4} {:<4} {:<8} {:<22} {:<22} {:<10} {:<22} {:<18} {:<18} {:<8} {:<8} {:<9} {:<5} {:<7} {:<7} {:<10} {:<10} {:<10} {:<10} {:<10}",
                       "Optimization report",
                       "size",
                       "ritz",
@@ -73,6 +73,8 @@ void tools::finite::opt::reports::eigs_log<Scalar>::print_eigs_report(std::optio
                       "mv",
                       "pc",
                       "time [s]",
+                      "mv [s]",
+                      "pc [s]",
                       "avg [mv/s]",
                       "avg [pc/s]");
 
@@ -80,7 +82,7 @@ void tools::finite::opt::reports::eigs_log<Scalar>::print_eigs_report(std::optio
         if(max_entries and max_entries.value() <= idx) break;
         double mv_freq = entry.mv == 0 or entry.time_mv == 0 ? 0 : static_cast<double>(entry.mv)/entry.time_mv;
         double pc_freq = entry.pc == 0 or entry.time_pc == 0 ? 0 : static_cast<double>(entry.pc)/entry.time_pc;
-        tools::log->log(level, "- {:<34} {:<7} {:<4} {:<5} {:<4} {:<4} {:<4} {:<4} {:<8.2e} {:<+22.15f} {:<+22.15f} {:<10.4e} {:<+22.15f} {:<18.15f} {:<18.15f} {:<8.2e} {:<8.2e} {:<9.2e} {:<5} {:<7} {:<7} {:<10.2e} {:<10.2e} {:<10.2e}",
+        tools::log->log(level, "- {:<35} {:<7} {:<4} {:<5} {:<4} {:<4} {:<4} {:<4} {:<8.2e} {:<+22.15f} {:<+22.15f} {:<10.4e} {:<+22.15f} {:<18.15f} {:<18.15f} {:<8.2e} {:<8.2e} {:<9.2e} {:<5} {:<7} {:<7} {:<10.2e} {:<10.2e} {:<10.2e} {:<10.2e} {:<10.2e}",
                           entry.description,
                           entry.size, entry.ritz,entry.type, entry.idx, entry.nev, entry.ncv, entry.jcb, fp(entry.tol),
                           fp(entry.energy),
@@ -90,6 +92,8 @@ void tools::finite::opt::reports::eigs_log<Scalar>::print_eigs_report(std::optio
                           fp(entry.overlap),fp(entry.norm), fp(entry.rnorm), fp(entry.rnorm_H1), fp(entry.rnorm_H2),
                           entry.iter, entry.mv, entry.pc,
                           entry.time,
+                          entry.time_mv,
+                          entry.time_pc,
                           mv_freq,
                           pc_freq
                           );

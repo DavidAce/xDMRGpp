@@ -1,6 +1,6 @@
 #pragma once
 #include "math/float.h"
-#include "math/tenx/fwd_decl.h"
+#include <Eigen/Core>
 #include <vector>
 
 template<typename Scalar>
@@ -21,7 +21,7 @@ template<typename T>
 struct env_pair;
 
 namespace tools::finite::measure {
-    template<typename T>  using RealScalar = decltype(std::real(std::declval<T>()));
+    template<typename T> using RealScalar = decltype(std::real(std::declval<T>()));
     // template<typename Scalar>
     // using RealScalar = decltype(std::real(std::declval<Scalar>()));
     /* clang-format off */

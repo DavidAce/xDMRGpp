@@ -11,6 +11,10 @@ class MpsSite {
     public:
     using value_type = Scalar;
     using RealScalar = decltype(std::real(std::declval<Scalar>()));
+    using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+    using MatrixReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using VectorReal = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
     template<class U> friend class MpsSite;
 
     private:
@@ -23,9 +27,9 @@ class MpsSite {
     double                                                 truncation_error_LC = -1.0;
     double                                                 truncation_error_last = -1.0;
     std::string                                            label                 = {};
+    mutable std::optional<RealScalar>                      norm_error_cached     = std::nullopt;
     mutable std::optional<bool>                            is_real_cached        = std::nullopt;
     mutable std::optional<bool>                            has_nan_cached        = std::nullopt;
-    mutable std::optional<bool>                            is_norm_cached        = std::nullopt;
     mutable std::optional<std::size_t>                     unique_id             = std::nullopt;
     mutable std::optional<stash<Eigen::Tensor<Scalar, 3>>> U_stash               = std::nullopt; /*!< \f$U\f$ A "U" matrix from SVD stored temporarily  */
     mutable std::optional<stash<Eigen::Tensor<Scalar, 1>>> S_stash               = std::nullopt; /*!< \f$S\f$ A "S" matrix from SVD stored temporarily  */
@@ -69,9 +73,9 @@ class MpsSite {
         truncation_error_LC   = other.truncation_error_LC;
         truncation_error_last = other.truncation_error_last;
         label                 = other.label;
+        norm_error_cached     = static_cast<RealScalar>(other.norm_error_cached.value());
         is_real_cached        = other.is_real_cached;
         has_nan_cached        = other.has_nan_cached;
-        is_norm_cached        = other.is_norm_cached;
         unique_id             = std::nullopt;
         MC                    = std::nullopt;
         U_stash               = std::nullopt;
@@ -93,9 +97,9 @@ class MpsSite {
         truncation_error_LC   = other.truncation_error_LC;
         truncation_error_last = other.truncation_error_last;
         label                 = other.label;
+        norm_error_cached     = static_cast<RealScalar>(other.norm_error_cached.value());
         is_real_cached        = other.is_real_cached;
         has_nan_cached        = other.has_nan_cached;
-        is_norm_cached        = other.is_norm_cached;
         unique_id             = std::nullopt;
         MC                    = std::nullopt;
         U_stash               = std::nullopt;
@@ -107,10 +111,11 @@ class MpsSite {
 
     [[nodiscard]] bool                            is_real() const;
     [[nodiscard]] bool                            has_nan() const;
-    [[nodiscard]] bool                            is_normalized(RealScalar prec = std::numeric_limits<RealScalar>::epsilon()) const;
+    [[nodiscard]] RealScalar                      get_norm_error() const;
+    [[nodiscard]] bool                            is_normalized(RealScalar tol) const;
     void                                          assert_validity() const;
     void                                          assert_dimensions() const;
-    void                                          assert_normalized(RealScalar prec = std::numeric_limits<RealScalar>::epsilon()) const;
+    void                                          assert_normalized(RealScalar tol) const;
     [[nodiscard]] bool                            isCenter() const;
     [[nodiscard]] bool                            has_L() const;
     [[nodiscard]] bool                            has_M() const;
@@ -173,21 +178,21 @@ class MpsSite {
         // M has to be a "bare" matrix, i.e. not an MC which would include LC.
         M = tenx::asScalarType<Scalar>(M_);
         MC.reset();
-        unique_id      = std::nullopt;
-        is_real_cached = std::nullopt;
-        has_nan_cached = std::nullopt;
-        is_norm_cached = std::nullopt;
+        unique_id         = std::nullopt;
+        norm_error_cached = std::nullopt;
+        is_real_cached    = std::nullopt;
+        has_nan_cached    = std::nullopt;
     }
     template<typename T1>
     requires tenx::sfinae::is_eigen_tensor1<T1>
     void set_L(const T1 &L_, double error = -1.0) {
         if(!position.has_value()) throw std::runtime_error("Can't set L: Position hasn't been set yet");
         set_truncation_error(error);
-        L              = tenx::asScalarType<Scalar>(L_);
-        unique_id      = std::nullopt;
-        is_real_cached = std::nullopt;
-        has_nan_cached = std::nullopt;
-        is_norm_cached = std::nullopt;
+        L                 = tenx::asScalarType<Scalar>(L_);
+        unique_id         = std::nullopt;
+        norm_error_cached = std::nullopt;
+        is_real_cached    = std::nullopt;
+        has_nan_cached    = std::nullopt;
     }
     template<typename T1>
     requires tenx::sfinae::is_eigen_tensor1<T1>
@@ -197,10 +202,10 @@ class MpsSite {
         set_truncation_error_LC(error);
         LC = tenx::asScalarType<Scalar>(LC_);
         MC.reset();
-        unique_id      = std::nullopt;
-        is_real_cached = std::nullopt;
-        has_nan_cached = std::nullopt;
-        is_norm_cached = std::nullopt;
+        unique_id         = std::nullopt;
+        norm_error_cached = std::nullopt;
+        is_real_cached    = std::nullopt;
+        has_nan_cached    = std::nullopt;
     }
 
     template<typename T>

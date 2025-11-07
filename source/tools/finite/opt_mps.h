@@ -45,7 +45,8 @@ namespace tools::finite::opt {
         std::optional<long>                     eigs_idx       = std::nullopt;
         std::optional<long>                     eigs_nev       = std::nullopt;
         std::optional<long>                     eigs_ncv       = std::nullopt;
-        std::optional<double>                   eigs_tol       = std::nullopt;
+        std::optional<double>                   eigs_abstol    = std::nullopt;
+        std::optional<double>                   eigs_reltol    = std::nullopt;
         std::optional<Eigen::Index>             eigs_jcb       = std::nullopt;
         std::optional<RealScalar<Scalar>>       eigs_rnorm     = std::nullopt;
         std::optional<RealScalar<Scalar>>       eigs_eigval    = std::nullopt;
@@ -156,7 +157,8 @@ namespace tools::finite::opt {
         [[nodiscard]] auto        get_eigs_idx() const { return eigs_idx.value_or(-1l); }
         [[nodiscard]] auto        get_eigs_nev() const { return eigs_nev.value_or(-1l); }
         [[nodiscard]] auto        get_eigs_ncv() const { return eigs_ncv.value_or(-1l); }
-        [[nodiscard]] auto        get_eigs_tol() const { return get_or_nan(eigs_tol); }
+        [[nodiscard]] auto        get_eigs_abstol() const { return get_or_nan(eigs_abstol); }
+        [[nodiscard]] auto        get_eigs_reltol() const { return get_or_nan(eigs_reltol); }
         [[nodiscard]] auto        get_eigs_jcb() const { return eigs_jcb.value_or(-1l); }
         [[nodiscard]] auto        get_eigs_rnorm() const { return get_or_nan(eigs_rnorm); }
         [[nodiscard]] auto        get_eigs_eigval() const { return get_or_nan(eigs_eigval); }
@@ -232,7 +234,7 @@ namespace tools::finite::opt {
         template<typename T> void set_eigs_idx(T eigs_idx_) { eigs_idx = eigs_idx_; }
         template<typename T> void set_eigs_nev(T eigs_nev_) { eigs_nev = eigs_nev_; }
         template<typename T> void set_eigs_ncv(T eigs_ncv_) { eigs_ncv = eigs_ncv_; }
-        template<typename T> void set_eigs_tol(T eigs_tol_) { eigs_tol = static_cast<double>(eigs_tol_); }
+        template<typename T> void set_eigs_tol(T eigs_tol_) { eigs_abstol = static_cast<double>(eigs_tol_); }
         template<typename T> void set_eigs_jcb(T eigs_jcb_) { eigs_jcb = eigs_jcb_; }
         template<typename T> void set_eigs_rnorm(T eigs_rnorm_) { eigs_rnorm = static_cast<RealScalar<Scalar>>(eigs_rnorm_); }
         template<typename T> void set_eigs_eigval(T eigs_eigval_) { eigs_eigval = eigs_eigval_; }

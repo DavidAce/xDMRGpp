@@ -168,10 +168,8 @@ def plot_v3_time_fig_sub_line(db, meta, figspec, subspec, linspec, algo_filter=N
                         ydata = np.atleast_2d(scipy.stats.mstats.gmean(np.where(data < 1e-10, 1e-10, data), axis=1)).T
                     if colname := meta.get('colname'):
                         print(f'Loading datanode {datanode=} | {colname=}')
-                        ydata, colnames = get_table_data(datanode[ystat], colname,
-                                                         'f8')  # Supports multiple columns
-                        edata, colnames = get_table_data(datanode['ste'], colname,
-                                                         'f8')  # Supports multiple columns
+                        ydata, colnames = get_table_data(datanode[ystat], colname,'f8')  # Supports multiple columns
+                        edata, colnames = get_table_data(datanode['ste'], colname,'f8')  # Supports multiple columns
                     if isinstance(datanode, h5py.Group) and 'avg' in datanode:
                         tdata = datanode['avg']['physical_time'][()].astype(float)
                         ndata = datanode['avg']['num'][()]
@@ -494,9 +492,9 @@ def plot_v3_time_fig_sub_line(db, meta, figspec, subspec, linspec, algo_filter=N
 
                         label = None
                         if 'entanglement' in colname or 'Neumann' in colname:
-                            label = '$S_\mathrm{vN}$'
+                            label = '$S_\\mathrm{vN}$'
                         elif 'number' in colname:
-                            label = '$S_\mathrm{N}$'
+                            label = '$S_\\mathrm{N}$'
                         gamma = None  # Localization length obtained from fit SE ~ gamma ln(t)
                         kappa = None  # Slope of loglog fit of approach
                         alpha = None  # Exponent to power fit of approach
@@ -738,9 +736,9 @@ def plot_v3_time_fig_sub_line(db, meta, figspec, subspec, linspec, algo_filter=N
                             # ax.plot(t_win, sn_max_mean, linestyle='none', markerfacecolor='none', markeredgecolor=color,marker='v', markersize=3, alpha=0.6)
                             if lidx == 0:
                                 sub = 'N' if 'number' in colname else 'E'
-                                label_max = f'$\overline S_\mathrm{{{sub}}}^\mathrm{{max}}$'
-                                label_avg = f'$\overline S_\mathrm{{{sub}}}$'
-                                label_min = f'$\overline S_\mathrm{{{sub}}}^\mathrm{{min}}$'
+                                label_max = f'$\\overline S_\\mathrm{{{sub}}}^\\mathrm{{max}}$'
+                                label_avg = f'$\\overline S_\\mathrm{{{sub}}}$'
+                                label_min = f'$\\overline S_\\mathrm{{{sub}}}^\\mathrm{{min}}$'
                                 xymax_tail = (0.45, 0.245)
                                 xymax_head = (1.20, 0.260)
                                 xyavg_tail = (0.45, 0.220)
@@ -1184,12 +1182,9 @@ def plot_v2_time_fig3_sub3_line1(db, meta, figspec, subspec, linspec, algo_filte
             if not col in [l.split(':')[0] for l in subspec + linspec]:
                 legend_col_keys.append(col)
 
-    figprod = list(
-        product(*get_keys(db, figspec)))  # All combinations of figspecs (names of parameters that iterate figures)
-    subprod = list(
-        product(*get_keys(db, subspec)))  # All combinations of subspecs (names of parameters that iterate subplots)
-    linprod = list(
-        product(*get_keys(db, linspec)))  # All combinations of linspecs (names of parameters that iterate lines)
+    figprod = list(product(*get_keys(db, figspec)))  # All combinations of figspecs (names of parameters that iterate figures)
+    subprod = list(product(*get_keys(db, subspec)))  # All combinations of subspecs (names of parameters that iterate subplots)
+    linprod = list(product(*get_keys(db, linspec)))  # All combinations of linspecs (names of parameters that iterate lines)
     dirprod = list(product(db['keys']['algo'], db['keys']['state'], db['keys']['crono']))
     numfigs = len(figprod)
     numsubs = len(subprod)
@@ -1257,9 +1252,9 @@ def plot_v2_time_fig3_sub3_line1(db, meta, figspec, subspec, linspec, algo_filte
 
                         label = None
                         if 'entanglement' in colname or 'Neumann' in colname:
-                            label = '$S_\mathrm{vN}$'
+                            label = '$S_\\mathrm{vN}$'
                         elif 'number' in colname:
-                            label = '$S_\mathrm{N}$'
+                            label = '$S_\\mathrm{N}$'
 
                         if meta.get('plotsatapproach'):
                             sdata = datanode['avg']['entanglement_entropy'][()]
@@ -1406,7 +1401,7 @@ def plot_v2_time_fig3_sub3_line1(db, meta, figspec, subspec, linspec, algo_filte
                     ix.set_xscale('log')
 
             elif meta.get('timeselection') == 'lnlnt':
-                ax.set_xlabel("$\ln\ln t$")
+                ax.set_xlabel("$\\ln\\ln t$")
 
             if meta.get('zoomloglogwindow') and ix is not None:
                 x1, x2, y1, y2 = meta['zoomloglogwindow']['coords']  # sub region of the original image

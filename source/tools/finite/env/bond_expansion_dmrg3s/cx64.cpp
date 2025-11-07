@@ -4,4 +4,3 @@ using Scalar = cx64;
 
 template BondExpansionResult<Scalar> tools::finite::env::expand_bond_dmrg3s(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
                                                                             EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg);
-

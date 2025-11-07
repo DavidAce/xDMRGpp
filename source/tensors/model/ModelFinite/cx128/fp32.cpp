@@ -1,7 +1,7 @@
 #include "../../ModelFinite.tmpl.h"
 
 using Scalar = cx128;
-using T = fp32;
+using T      = fp32;
 
 /* clang-format off */
 template Eigen::Tensor<T, 4>  ModelFinite<Scalar>::get_multisite_mpo(const std::vector<size_t> &sites, std::optional<std::vector<size_t>> nbody, bool with_edgeL, bool with_edgeR) const;

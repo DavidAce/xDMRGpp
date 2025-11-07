@@ -65,8 +65,6 @@ class JacobiPreconditioner {
         return *this;
     }
 
-
-
     /** \internal */
     template<typename Rhs, typename Dest>
     void _solve_impl(const Rhs &b, Dest &x) const {

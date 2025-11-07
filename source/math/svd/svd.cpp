@@ -98,4 +98,3 @@ double svd::solver::get_truncation_error() const { return truncation_error; }
 long svd::solver::get_rank() const { return rank; }
 
 long long svd::solver::get_count() { return count; }
-

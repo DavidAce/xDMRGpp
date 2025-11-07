@@ -5,6 +5,7 @@
 #include "tid/tid.h"
 #include <complex>
 #include <csignal>
+#include <Eigen/Core>
 #include <fmt/ranges.h>
 
 #ifndef lapack_complex_float
@@ -15,6 +16,11 @@
 #endif
 
 // complex must be included before lapacke!
+#if defined(_LAPACKE_H_)
+#pragma message "LAPACKE header was already included elsewhere"
+#endif
+
+
 #if defined(MKL_AVAILABLE)
     #include <mkl_lapacke.h>
 #elif defined(OPENBLAS_AVAILABLE)
@@ -771,9 +777,9 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
             }
             log->warn("Pruning non-finite rows/cols from the results! rank {} -> {}", rank, valid_rows.size());
             log->debug("valid rows: {}", valid_rows);
-            U    = U(Eigen::all, valid_rows);
+            U    = U(Eigen::placeholders::all, valid_rows);
             S    = S(valid_rows);
-            VT   = VT(valid_rows, Eigen::all);
+            VT   = VT(valid_rows, Eigen::placeholders::all);
             rank = S.size();
         }
 

@@ -90,7 +90,7 @@ namespace linalg::matrix {
         if constexpr(debug_mgs) {
             if(m.nonZeroCols.size() >= 2) {
                 // Orthogonality check
-                MatrixType Qnnz    = m.Q(Eigen::all, m.nonZeroCols);
+                MatrixType Qnnz    = m.Q(Eigen::placeholders::all, m.nonZeroCols);
                 auto       nnzCols = Qnnz.cols();
                 m.orthError        = (Qnnz.adjoint() * Qnnz - MatrixType::Identity(nnzCols, nnzCols)).cwiseAbs().maxCoeff();
                 m.maxOrthError     = eps * RealScalar{1e4};
@@ -139,7 +139,7 @@ namespace linalg::matrix {
         m.nonZeroCols.shrink_to_fit();
         if constexpr(debug_mgs) {
             // Orthogonality check
-            MatrixType Qnnz    = m.Q(Eigen::all, m.nonZeroCols);
+            MatrixType Qnnz    = m.Q(Eigen::placeholders::all, m.nonZeroCols);
             auto       nnzCols = Qnnz.cols();
             m.orthError        = (Qnnz.adjoint() * Qnnz - MatrixType::Identity(nnzCols, nnzCols)).cwiseAbs().maxCoeff();
             m.maxOrthError     = eps * AsqrtSize * 10000;

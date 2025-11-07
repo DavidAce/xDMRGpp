@@ -26,11 +26,13 @@ namespace tools::common {
         inline static bool                     components_computed  = false;
 
         static void                     compute_mps_components(const StateInfinite<Scalar> &state);
-        static Eigen::Tensor<Scalar, 4> get_theta(const StateFinite<Scalar> &state, Scalar norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$.*/
+        static Eigen::Tensor<Scalar, 4> get_theta(const StateFinite<Scalar> &state, Scalar norm = 1.0);   /*!< Returns rank 4 tensor \f$\Theta\f$.*/
         static Eigen::Tensor<Scalar, 4> get_theta(const StateInfinite<Scalar> &state, Scalar norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$.*/
-        static Eigen::Tensor<Scalar, 4> get_theta_swapped(const StateInfinite<Scalar> &state, Scalar norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$, with A and B swapped.*/
+        static Eigen::Tensor<Scalar, 4> get_theta_swapped(const StateInfinite<Scalar> &state,
+                                                          Scalar norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$, with A and B swapped.*/
         static Eigen::Tensor<Scalar, 4> get_theta_evn(const StateInfinite<Scalar> &state, Scalar norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$.*/
-        static Eigen::Tensor<Scalar, 4> get_theta_odd(const StateInfinite<Scalar> &state, Scalar                       norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$, with A and B swapped.*/
+        static Eigen::Tensor<Scalar, 4> get_theta_odd(const StateInfinite<Scalar> &state,
+                                                      Scalar                       norm = 1.0); /*!< Returns rank 4 tensor \f$\Theta\f$, with A and B swapped.*/
         static Eigen::Tensor<Scalar, 4> get_transfer_matrix_zero(const StateInfinite<Scalar> &state);
         static Eigen::Tensor<Scalar, 4> get_transfer_matrix_LBGA(const StateInfinite<Scalar> &state, Scalar norm = 1.0);
         static Eigen::Tensor<Scalar, 4> get_transfer_matrix_GALC(const StateInfinite<Scalar> &state, Scalar norm = 1.0);

@@ -5,7 +5,6 @@
 #include <Eigen/src/Core/util/Macros.h>
 #include <h5pp/h5pp.h>
 
-
 template<typename Scalar>
 svd::internal::DumpSVD<Scalar>::~DumpSVD() {
     if(svd_save == save::NONE) return;

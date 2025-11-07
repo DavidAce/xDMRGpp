@@ -28,10 +28,8 @@
 #include <Eigen/Eigenvalues>
 
 namespace settings {
-    inline constexpr bool debug_edges     = false;
+    inline constexpr bool debug_edges = false;
 }
-
-
 
 template<typename Scalar>
 void tools::finite::env::assert_edges_ene(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {

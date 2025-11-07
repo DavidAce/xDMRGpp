@@ -1,6 +1,6 @@
 #pragma once
 #include "math/float.h"
-#include "math/tenx/fwd_decl.h"
+#include <unsupported/Eigen/CXX11/Tensor>
 template<typename Scalar>
 class StateFinite;
 

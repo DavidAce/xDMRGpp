@@ -1,18 +1,18 @@
 #pragma once
-#include "math/tenx/fwd_decl.h"
+#include "math/float_eigen.h"
 // Eigen goes first
 #include "../solver_base.h"
 #include "debug/exceptions.h"
 #include "math/cast.h"
+#include "math/eig/third_party/eigen/BiCGSTAB_ST.h"
+#include "math/eig/third_party/eigen/ConjugateGradient_ST.h"
+#include "math/eig/third_party/eigen/MINRES_ST.h"
 #include "math/tenx.h"
 #include "tid/tid.h"
 #include "tools/common/contraction/IterativeLinearSolverConfig.h"
 #include "tools/common/contraction/IterativeLinearSolverPreconditioner.h"
 #include "tools/common/log.h"
 #include <complex>
-#include <Eigen/IterativeLinearSolvers>
-#include <unsupported/Eigen/IterativeSolvers>
-#include "third_party/eigen/MINRES_ST.h"
 #include <variant>
 
 template<typename Scalar_>
@@ -25,7 +25,7 @@ namespace settings {
 }
 
 namespace Eigen::internal {
-    // JacobiDavidsonOperator looks-like a Dense Matrix, so let's inherits its traits:
+    // JacobiDavidsonOperator looks-like a Dense Matrix, so let's inherit its traits:
     template<typename Scalar_>
     struct traits<JacobiDavidsonOperator<Scalar_>> : public Eigen::internal::traits<DenseMatrix<Scalar_>> {};
 
@@ -104,11 +104,11 @@ namespace Eigen::internal {
         static void scaleAndAddTo(Dest &dst, const JacobiDavidsonOperator<ReplScalar> &mat, const Rhs &rhs, const Scalar &alpha) {
             // This method should implement "dst += alpha * lhs * rhs" inplace; however, for iterative solvers, alpha is always equal to 1, so let's not worry
             // about it.
+            auto t_jcb = tid::tic_scope("jdop", tid::level::higher);
             assert(alpha == Scalar(1) && "scaling is not implemented");
             assert(rhs.size() == mat.rows());
             assert(dst.size() == mat.rows());
             EIGEN_ONLY_USED_FOR_DEBUG(alpha);
-            auto t_jcb = tid::tic_scope("jdop", tid::level::higher);
 
             {
                 const auto &ResidualOp = mat.ResidualOp; // (A - θB)
@@ -132,9 +132,9 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
                                                                                    const VectorType                    &rhs,     //
                                                                                    IterativeLinearSolverConfig<Scalar> &cfg) {
     using PreconditionerType = IterativeLinearSolverPreconditioner<JacobiDavidsonOperator<Scalar>>;
-    using DefSolverType      = Eigen::ConjugateGradient<JacobiDavidsonOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>;
-    using IndSolverType      = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                    //
-                                                  Eigen::BiCGSTAB<JacobiDavidsonOperator<Scalar>, PreconditionerType>, //
+    using DefSolverType      = Eigen::ConjugateGradient_ST<JacobiDavidsonOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>;
+    using IndSolverType      = std::conditional_t<sfinae::is_std_complex_v<Scalar>,                                       //
+                                                  Eigen::BiCGSTAB_ST<JacobiDavidsonOperator<Scalar>, PreconditionerType>, //
                                                   // Eigen::BiCGSTAB<JacobiDavidsonOperator<Scalar>, PreconditionerType> //
                                                   Eigen::MINRES_ST<JacobiDavidsonOperator<Scalar>, Eigen::Upper | Eigen::Lower, PreconditionerType>
                                                   // Eigen::GMRES<JacobiDavidsonOperator<Scalar>, PreconditionerType>
@@ -181,8 +181,10 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
         cfg.result.matvecs += matRepl.iterations();
         cfg.result.precond += solver.preconditioner().iterations();
         cfg.result.time += t_jdop->get_last_interval();
-        cfg.result.time_matvecs += matRepl.elapsed_time();
-        cfg.result.time_precond += solver.preconditioner().elapsed_time();
+        cfg.result.time_matvecs += matRepl.elapsed_time();                     // Time doing matrix-vector multiplications
+        cfg.result.time_precond += solver.preconditioner().elapsed_time();     // Time doing in preconditioning step
+        cfg.result.time_jacobi += solver.preconditioner().time_jacobi();       // Time applying jacobi
+        cfg.result.time_chebyshev += solver.preconditioner().time_chebyshev(); // Time applying chebyshev
 
         // cfg.result.total_iters += solver.iterations();
         // cfg.result.total_matvecs += matRepl.iterations();

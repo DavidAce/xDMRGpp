@@ -77,7 +77,7 @@ void tools::finite::ops::apply_mpos(StateFinite<Scalar> &state, const std::vecto
     if constexpr(settings::verbose_projection) {
         state.clear_measurements();
         tools::log->debug("Num mpos             before applying mpos: {}", mpos.size());
-        tools::log->debug("Norm                 before applying mpos: {:.16f}", tools::finite::measure::norm(state));
+        tools::log->debug("Norm                 before applying mpos: {:.16f}", tools::finite::measure::norm_state(state));
         tools::log->debug("Spin components      before applying mpos: {}", fv(tools::finite::measure::spin_components(state)));
         tools::log->debug("Bond dimensions      before applying mpos: {}", tools::finite::measure::bond_dimensions(state));
         tools::log->debug("Entanglement entropy before applying mpos: {}", fv(tools::finite::measure::entanglement_entropies(state)));
@@ -175,11 +175,10 @@ void tools::finite::ops::apply_mpos(StateFinite<Scalar> &state, const std::vecto
 
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 
     if constexpr(settings::verbose_projection) {
         tools::log->debug("Num mpos             after  applying mpos: {}", mpos.size());
-        tools::log->debug("Norm                 after  applying mpos: {:.16f}", tools::finite::measure::norm(state));
+        tools::log->debug("Norm                 after  applying mpos: {:.16f}", tools::finite::measure::norm_state(state));
         tools::log->debug("Spin components      after  applying mpos: {}", fv(tools::finite::measure::spin_components(state)));
         tools::log->debug("Bond dimensions      after  applying mpos: {}", tools::finite::measure::bond_dimensions(state));
         tools::log->debug("Entanglement entropy after  applying mpos: {}", fv(tools::finite::measure::entanglement_entropies(state)));
@@ -316,7 +315,6 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
 
     state.clear_measurements();
     state.clear_cache();
-    state.tag_all_sites_normalized(false); // This operation denormalizes all sites
 }
 
 template<typename Scalar>

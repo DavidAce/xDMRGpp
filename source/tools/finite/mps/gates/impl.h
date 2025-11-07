@@ -118,7 +118,6 @@ std::vector<size_t> tools::finite::mps::generate_gate_sequence(long state_len, l
     return gate_sequence;
 }
 
-
 template<typename Scalar>
 void tools::finite::mps::apply_gate(StateFinite<Scalar> &state, const qm::Gate &gate, GateOp gop, GateMove gm, std::optional<svd::config> svd_cfg) {
     if(gate.pos.back() >= state.get_length()) throw except::logic_error("The last position of gate is out of bounds: {}", gate.pos);
@@ -211,7 +210,6 @@ void tools::finite::mps::apply_gates(StateFinite<Scalar> &state, const std::vect
     apply_gates(state, gates, cop, moveback, gm, svd_cfg);
 }
 
-
 template<typename Scalar>
 void tools::finite::mps::apply_gates(StateFinite<Scalar> &state, const std::vector<qm::Gate> &gates, CircuitOp cop, bool moveback, GateMove gm,
                                      std::optional<svd::config> svd_cfg) {
@@ -254,7 +252,6 @@ void tools::finite::mps::apply_circuit(StateFinite<Scalar> &state, const std::ve
         }
     }
 }
-
 
 template<typename T>
 std::vector<T> get_site_idx(const std::vector<size_t> &sites, const std::vector<size_t> &pos) {
@@ -530,7 +527,6 @@ void tools::finite::mps::apply_swap_gate(StateFinite<Scalar> &state, const qm::S
     }
 }
 
-
 template<typename Scalar>
 void tools::finite::mps::apply_swap_gates(StateFinite<Scalar> &state, std::vector<qm::SwapGate> &gates, CircuitOp cop, GateMove gm,
                                           std::optional<svd::config> svd_cfg) {
@@ -585,7 +581,6 @@ void tools::finite::mps::apply_swap_gates(StateFinite<Scalar> &state, std::vecto
                           rwap_count, swap_count + rwap_count, skip_count, svds_count, t_swapgate->get_last_interval());
     }
 }
-
 
 template<typename Scalar>
 void tools::finite::mps::apply_swap_gates(StateFinite<Scalar> &state, const std::vector<qm::SwapGate> &gates, CircuitOp cop, GateMove gm,

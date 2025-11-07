@@ -17,6 +17,7 @@ class solver_lanczos : solver_base<Scalar> {
 
     using RealScalar = typename solver_base<Scalar>::RealScalar;
     using MatrixType = typename solver_base<Scalar>::MatrixType;
+    using MatrixReal = typename solver_base<Scalar>::MatrixReal;
     using VectorType = typename solver_base<Scalar>::VectorType;
     using VectorReal = typename solver_base<Scalar>::VectorReal;
     using VectorIdxT = typename solver_base<Scalar>::VectorIdxT;
@@ -45,7 +46,7 @@ class solver_lanczos : solver_base<Scalar> {
     using solver_base<Scalar>::T_evecs;
     using solver_base<Scalar>::hhqr;
     using solver_base<Scalar>::eps;
-    using solver_base<Scalar>::tol;
+    using solver_base<Scalar>::abstol;
     using solver_base<Scalar>::normTol;
     using solver_base<Scalar>::orthTol;
     using solver_base<Scalar>::quotTolB;

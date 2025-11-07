@@ -10,8 +10,8 @@
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
 namespace settings {
-    inline constexpr bool debug_moves   = true;
-    inline constexpr bool verbose_moves = true;
+    inline constexpr bool debug_moves   = false;
+    inline constexpr bool verbose_moves = false;
 }
 
 template<typename Scalar>
@@ -55,7 +55,7 @@ size_t tools::finite::mps::move_center_point_single_site(StateFinite<Scalar> &st
             auto &mps    = state.get_mps_site(pos);    // This AC becomes the new B
             auto  trnc   = mps.get_truncation_error(); // Truncation error of old AC/new B, i.e. bond to the left of pos,
             // No need to contract anything this time. Note that we must take a copy! Not a reference (since M, LC are unset in merge)
-            const auto onesite_tensor = mps.get_M();
+            auto onesite_tensor = mps.get_M();
             tools::finite::mps::merge_multisite_mps(state, onesite_tensor, {pos_ul}, posC, MergeEvent::MOVE, svd_cfg, LogPolicy::VERBOSE);
             if(posC >= 0) {
                 auto &mpsC = state.get_mps_site(posC); // This old A is now an AC

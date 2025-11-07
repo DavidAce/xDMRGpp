@@ -193,7 +193,7 @@ void eig::solver_arpack<MatrixType>::eigs_comp() {
     if constexpr(sfinae::is_any_v<Scalar, cx32, cx64>) {
         using Real = typename Scalar::value_type;
         ARCompStdEig<Real, MatrixType> solver(matrix.rows(), nev_internal, &matrix, &MatrixType::MultAx, config.get_ritz_string().data(), ncv_internal,
-                                                static_cast<Real>(config.tol.value()), config.maxIter.value(), residual);
+                                              static_cast<Real>(config.tol.value()), config.maxIter.value(), residual);
         find_solution(solver, config.maxNev.value());
         copy_solution(solver);
     } else {
@@ -206,7 +206,7 @@ void eig::solver_arpack<MatrixType>::eigs_comp_rc() {
     if constexpr(sfinae::is_any_v<Scalar, cx32, cx64>) {
         using Real = typename Scalar::value_type;
         ARrcCompStdEig<Real> solver(matrix.rows(), nev_internal, config.get_ritz_string().data(), ncv_internal, static_cast<Real>(config.tol.value()),
-                                      safe_cast<int>(config.maxIter.value()), residual, true);
+                                    safe_cast<int>(config.maxIter.value()), residual, true);
         find_solution_rc(solver);
         copy_solution(solver);
     } else {

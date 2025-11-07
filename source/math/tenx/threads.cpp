@@ -50,9 +50,9 @@ namespace tenx::threads {
 #else
     internal::DefaultDeviceWrapper::DefaultDeviceWrapper() : dev(std::make_unique<Eigen::DefaultDevice>()) {}
 
-    void                                  setNumThreads([[maybe_unused]] int num) {}
-    std::unique_ptr<Eigen::DefaultDevice> dev;
-    const std::unique_ptr<internal::DefaultDeviceWrapper>                 &get() noexcept {
+    void                                                   setNumThreads([[maybe_unused]] int num) {}
+    std::unique_ptr<Eigen::DefaultDevice>                  dev;
+    const std::unique_ptr<internal::DefaultDeviceWrapper> &get() noexcept {
         if(not internal::defaultDeviceWrapper) internal::defaultDeviceWrapper = std::make_unique<internal::DefaultDeviceWrapper>();
         return internal::defaultDeviceWrapper;
     }

@@ -31,7 +31,7 @@ void tools::finite::env::internal::merge_mixing_terms_MP_N0(const StateFinite<T>
     tools::log->trace("merge_mixing_terms_MP_N0: ({}{},{}{}) {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), svd_cfg.to_string());
     svd::solver svd;
     // using Real = decltype(std::real(std::declval<T>()));
-    auto posR  = mpsR.get_position();
+    auto posR = mpsR.get_position();
     assert(mpsL.get_label() == "AC");
     assert(mpsR.get_label() == "B");
     auto [U, S, V] = svd.schmidt_into_left_normalized(MP, mpsL.spin_dim(), svd_cfg);

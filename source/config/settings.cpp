@@ -226,8 +226,10 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("precision::eigs_iter_max"                         , precision::eigs_iter_max);
     dmrg_config.load_parameter("precision::eigs_iter_gain"                        , precision::eigs_iter_gain);
     dmrg_config.load_parameter("precision::eigs_iter_gain_policy"                 , precision::eigs_iter_gain_policy);
-    dmrg_config.load_parameter("precision::eigs_tol_min"                          , precision::eigs_tol_min);
-    dmrg_config.load_parameter("precision::eigs_tol_max"                          , precision::eigs_tol_max);
+    dmrg_config.load_parameter("precision::eigs_abstol_min"                          , precision::eigs_abstol_min);
+    dmrg_config.load_parameter("precision::eigs_abstol_max"                          , precision::eigs_abstol_max);
+    dmrg_config.load_parameter("precision::eigs_reltol_min"                       , precision::eigs_reltol_min);
+    dmrg_config.load_parameter("precision::eigs_reltol_max"                       , precision::eigs_reltol_max);
     dmrg_config.load_parameter("precision::eigs_nev_min"                          , precision::eigs_nev_min);
     dmrg_config.load_parameter("precision::eigs_nev_max"                          , precision::eigs_nev_max);
     dmrg_config.load_parameter("precision::eigs_ncv_min"                          , precision::eigs_ncv_min);
@@ -237,6 +239,7 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("precision::eigs_max_size_shift_invert"            , precision::eigs_max_size_shift_invert);
     dmrg_config.load_parameter("precision::eigs_jcb_blocksize_min"                , precision::eigs_jcb_blocksize_min);
     dmrg_config.load_parameter("precision::eigs_jcb_blocksize_max"                , precision::eigs_jcb_blocksize_max);
+    dmrg_config.load_parameter("precision::eigs_jcb_overlap_size"                 , precision::eigs_jcb_overlap_size);
     dmrg_config.load_parameter("precision::svd_truncation_min"                    , precision::svd_truncation_min);
     dmrg_config.load_parameter("precision::svd_truncation_max"                    , precision::svd_truncation_max);
     dmrg_config.load_parameter("precision::svd_switchsize_bdc"                    , precision::svd_switchsize_bdc);

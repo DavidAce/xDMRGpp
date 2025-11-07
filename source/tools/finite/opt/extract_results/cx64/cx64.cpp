@@ -1,7 +1,7 @@
 #include "../impl.h"
 
 using Scalar = cx64;
-using T = cx64;
+using T      = cx64;
 
 /* clang-format off */
 

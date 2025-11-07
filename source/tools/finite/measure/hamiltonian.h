@@ -1,8 +1,9 @@
 #pragma once
 #include "math/float.h"
 #include "math/svd/config.h"
-#include "math/tenx/fwd_decl.h"
+#include <Eigen/Core>
 #include <optional>
+#include <unsupported/Eigen/CXX11/Tensor>
 
 template<typename Scalar>
 class StateFinite;

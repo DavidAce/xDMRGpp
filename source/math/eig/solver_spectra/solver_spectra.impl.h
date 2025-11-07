@@ -4,6 +4,7 @@
 #include "../matvec/matvec_mpos.h"
 #include "../matvec/matvec_sparse.h"
 #include "../matvec/matvec_zero.h"
+#include "GenMatVec.h"
 #include "math/cast.h"
 #include "math/eig/log.h"
 #include "solver_spectra.h"
@@ -14,9 +15,6 @@
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/SymGEigsSolver.h>
-
-#include "GenMatVec.h"
-
 
 inline Spectra::SortRule get_spectra_sort_rule(eig::Ritz ritz) {
     switch(ritz) {
@@ -57,9 +55,6 @@ inline std::string_view SpectraInfoToString(Spectra::CompInfo info) {
     }
 }
 
-
-
-
 template<typename MatrixType>
 void eig::solver_spectra<MatrixType>::eigs() {
     auto t_spectra = tid::tic_scope("spectra");
@@ -77,8 +72,7 @@ void eig::solver_spectra<MatrixType>::eigs() {
     auto tol     = std::max<Real>(static_cast<Real>(tol_cfg), tol_min); /*!< 1e-12 is good, see link above. */
     auto maxiter = config.maxIter.value_or(1000);
 
-
-    auto sort    = get_spectra_sort_rule(config.ritz.value());
+    auto sort = get_spectra_sort_rule(config.ritz.value());
     matrix.set_mode(config.form.value());
     matrix.set_side(config.side.value());
 
@@ -131,11 +125,12 @@ void eig::solver_spectra<MatrixType>::eigs() {
     } else {
         if(matrix.get_form() == Form::SYMM) {
             if constexpr(std::is_same_v<MatrixType, MatVecMPOS<Scalar>>) {
-                if (config.primme_massMatrixMatvec.has_value()) {
+                if(config.primme_massMatrixMatvec.has_value()) {
                     auto matrixB = GenMatVec<MatrixType>(matrix);
                     matrixB.set_maxiters(200000);
                     matrixB.set_tolerance(1e-10f);
-                    Spectra::SymGEigsSolver<MatrixType, GenMatVec<MatrixType>, Spectra::GEigsMode::RegularInverse> sol(matrix,matrixB, nev_internal, ncv_internal);
+                    Spectra::SymGEigsSolver<MatrixType, GenMatVec<MatrixType>, Spectra::GEigsMode::RegularInverse> sol(matrix, matrixB, nev_internal,
+                                                                                                                       ncv_internal);
                     return run(sol, result.get_eigvals<Form::SYMM, type>(), result.get_eigvecs<Form::SYMM, type>());
                 }
             }

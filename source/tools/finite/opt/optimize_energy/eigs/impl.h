@@ -16,7 +16,7 @@
 #include "tools/finite/opt_mps.h"
 #include <primme/primme.h>
 
-using namespace  tools::finite::opt;
+using namespace tools::finite::opt;
 template<typename Scalar>
 void preconditioner(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *ierr) {
     if(x == nullptr) return;
@@ -54,7 +54,7 @@ std::vector<opt_mps<Scalar>> optimize_energy_eigs_executor(const TensorsFinite<S
     hamiltonian.factorization = eig::Factorization::LU; // H is not definite, so we can't use LLT or LDLT
 
     // https://www.cs.wm.edu/~andreas/software/doc/appendix.html#c.primme_params.eps
-    solver.config.tol                   = meta.eigs_tol.value_or(settings::precision::eigs_tol_min);
+    solver.config.tol                   = meta.eigs_abstol.value_or(settings::precision::eigs_abstol_min);
     solver.config.compute_eigvecs       = eig::Vecs::ON;
     solver.config.lib                   = eig::Lib::PRIMME;
     solver.config.primme_method         = eig::stringToMethod(meta.primme_method);
@@ -109,10 +109,9 @@ std::vector<opt_mps<Scalar>> optimize_energy_eigs_executor(const TensorsFinite<S
     return results;
 }
 
-
 template<typename Scalar>
-opt_mps<Scalar> internal::optimize_energy(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
-                                          OptMeta &meta, reports::eigs_log<Scalar> &elog) {
+opt_mps<Scalar> internal::optimize_energy(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, OptMeta &meta,
+                                          reports::eigs_log<Scalar> &elog) {
     if(meta.optSolver == OptSolver::EIG) return optimize_energy_eig(tensors, initial_mps, meta, elog);
     if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_energy_eigs(): not implemented for type {}", enum2sv(meta.optType));
@@ -171,5 +170,3 @@ opt_mps<Scalar> internal::optimize_energy(const TensorsFinite<Scalar> &tensors, 
     for(const auto &mps : results) elog.eigs_add_entry(mps, spdlog::level::debug);
     return results.front();
 }
-
-

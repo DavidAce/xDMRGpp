@@ -37,8 +37,10 @@ class MatrixLikeOperator : public Eigen::EigenBase<MatrixLikeOperator<Scalar_>> 
     template<typename Rhs>
     Eigen::Product<MatrixLikeOperator, Rhs, Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs> &x) const {
         auto t_start = std::chrono::high_resolution_clock::now();
-        auto result  = Eigen::Product<MatrixLikeOperator, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
-        auto t_end   = std::chrono::high_resolution_clock::now();
+        assert(x.allFinite());
+        auto result = Eigen::Product<MatrixLikeOperator, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
+        assert(result.allFinite());
+        auto t_end = std::chrono::high_resolution_clock::now();
         m_optimer += std::chrono::duration<double>(t_end - t_start).count();
         m_opcounter++;
         return result;
@@ -70,6 +72,7 @@ namespace Eigen::internal {
             assert(rhs.size() == mat.rows());
             assert(dst.size() == mat.rows());
             EIGEN_ONLY_USED_FOR_DEBUG(alpha);
+            assert(dst.allFinite());
             dst.noalias() += mat.MatrixOp(rhs);
         }
     };

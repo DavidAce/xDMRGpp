@@ -47,7 +47,6 @@ template<typename Scalar> StateFinite<Scalar>::StateFinite(const StateFinite &ot
     cache_cx32(other.cache_cx32),
     cache_cx64(other.cache_cx64),
     cache_cx128(other.cache_cx128),
-    tag_normalized_sites(other.tag_normalized_sites),
     name(other.name),
     algo(other.algo),
     convrates(other.convrates),
@@ -66,20 +65,19 @@ template<typename Scalar>
 StateFinite<Scalar> &StateFinite<Scalar>::operator=(const StateFinite &other) noexcept {
     if(this == &other) return *this; // check for self-assignment
 
-    direction            = other.direction;
-    cache_fp32           = other.cache_fp32;
-    cache_fp64           = other.cache_fp64;
-    cache_fp128          = other.cache_fp128;
-    cache_cx32           = other.cache_cx32;
-    cache_cx64           = other.cache_cx64;
-    cache_cx128          = other.cache_cx128;
-    tag_normalized_sites = other.tag_normalized_sites;
-    name                 = other.name;
-    algo                 = other.algo;
-    convrates            = other.convrates;
-    active_sites         = other.active_sites;
-    measurements         = other.measurements;
-    popcount             = other.popcount;
+    direction    = other.direction;
+    cache_fp32   = other.cache_fp32;
+    cache_fp64   = other.cache_fp64;
+    cache_fp128  = other.cache_fp128;
+    cache_cx32   = other.cache_cx32;
+    cache_cx64   = other.cache_cx64;
+    cache_cx128  = other.cache_cx128;
+    name         = other.name;
+    algo         = other.algo;
+    convrates    = other.convrates;
+    active_sites = other.active_sites;
+    measurements = other.measurements;
+    popcount     = other.popcount;
     mps_sites.clear();
     mps_sites.reserve(other.mps_sites.size());
     for(const auto &mps_other : other.mps_sites) { mps_sites.emplace_back(std::make_unique<MpsSite<Scalar>>(*mps_other)); }
@@ -115,7 +113,6 @@ void StateFinite<Scalar>::initialize(AlgorithmType algo_type, size_t model_size,
     if(mps_sites.size() != model_size) throw except::logic_error("Initialized state with wrong size");
     if(not get_mps_site(position).isCenter()) throw except::logic_error("Initialized state center bond at the wrong position");
     if(get_position<long>() != position) throw except::logic_error("Initialized state at the wrong position");
-    tag_normalized_sites = std::vector<bool>(model_size, false);
 }
 
 template<typename Scalar>
@@ -763,104 +760,23 @@ void StateFinite<Scalar>::shrink_cache() const {
 }
 
 template<typename Scalar>
-void StateFinite<Scalar>::tag_active_sites_normalized(bool tag) const {
-    assert(tag_normalized_sites.size() == get_length());
-    for(auto &site : active_sites) tag_normalized_sites[site] = tag;
+bool StateFinite<Scalar>::is_normalized(RealScalar tol) const {
+    auto is_normalized_state = std::abs(RealScalar{1} - tools::finite::measure::norm_state(*this)) < tol; // Measures |1-<psi|psi>| < tol
+    auto is_normalized_sites = is_normalized_on_all_sites(tol);                                           // Measures the norm error on each site
+    return is_normalized_state < tol and is_normalized_sites;
 }
 
 template<typename Scalar>
-void StateFinite<Scalar>::tag_all_sites_normalized(bool tag) const {
-    assert(tag_normalized_sites.size() == get_length());
-    tag_normalized_sites = std::vector<bool>(get_length(), tag);
+bool StateFinite<Scalar>::is_normalized_on_all_sites(RealScalar tol) const {
+    auto norm_errors = get_norm_errors();
+    return std::all_of(norm_errors.begin(), norm_errors.end(), [&tol](auto err) { return err < tol; });
 }
 
 template<typename Scalar>
-void StateFinite<Scalar>::tag_site_normalized(size_t pos, bool tag) const {
-    assert(tag_normalized_sites.size() == get_length());
-    tag_normalized_sites[pos] = tag;
-}
-
-template<typename Scalar>
-bool StateFinite<Scalar>::is_normalized_on_all_sites(RealScalar prec) const {
-    if(tag_normalized_sites.size() != get_length())
-        // tools::log->warn("tag_normalized_sites.size() != get_length()");
-        throw except::runtime_error("Cannot check normalization status on all sites, size mismatch in site list");
-    // If all tags are false then we should definitely normalize:
-    auto normalized_none = std::none_of(tag_normalized_sites.begin(), tag_normalized_sites.end(), [](bool v) { return v; });
-    if(normalized_none) {
-        tools::log->debug("{} normalized: false (none)", get_name());
-        return false;
-    }
-
-    prec = std::max(prec, std::numeric_limits<RealScalar>::epsilon() * 100);
-    if constexpr(settings::debug) {
-        auto normalized_some = std::any_of(tag_normalized_sites.begin(), tag_normalized_sites.end(), [](bool v) { return v; });
-        if(normalized_some) {
-            // In debug mode we check if the tags are truthful
-            for(const auto &mps : mps_sites) {
-                auto pos = mps->template get_position<size_t>();
-                if(not tag_normalized_sites[pos]) {
-                    if(mps->is_normalized(prec)) tag_normalized_sites[pos] = true;
-                }
-            }
-        }
-    }
-    auto normalized_tags = std::all_of(tag_normalized_sites.begin(), tag_normalized_sites.end(), [](bool v) { return v; });
-    auto normalized_fast = true;
-    auto normalized_full = true;
-    auto normalized_site = true;
-    auto msg             = fmt::format("tags {}", normalized_tags);
-    if(normalized_tags) {
-        // We don't need this check fully if the tags already told us the state is normalized
-        auto norm       = tools::finite::measure::norm(*this, false);
-        auto norm_error = std::abs(norm - RealScalar{1});
-        normalized_fast = num::leq(norm_error, prec);
-        msg += fmt::format(" | fast {} norm error: {:.3e}", normalized_fast, fp(norm_error));
-    }
-    if constexpr(settings::debug) {
-        if(normalized_tags and normalized_fast) {
-            auto norm       = tools::finite::measure::norm(*this, true);
-            normalized_full = num::leq(std::abs(norm - RealScalar{1}), prec);
-            msg += fmt::format(" | full {} {:.3e}", normalized_full, fp(norm));
-        }
-        if(normalized_tags and normalized_fast and normalized_full) {
-            std::vector<long> site_list;
-            for(const auto &mps : mps_sites) {
-                if(not mps->is_normalized(prec)) { site_list.emplace_back(mps->template get_position<long>()); }
-            }
-            if(not site_list.empty()) {
-                normalized_site = false;
-                msg += fmt::format(" | non-normalized sites {}", site_list);
-            }
-        }
-    }
-    tools::log->debug("{} normalized: {}", get_name(), msg);
-    return normalized_tags and normalized_fast and normalized_full and normalized_site;
-}
-
-template<typename Scalar>
-bool StateFinite<Scalar>::is_normalized_on_any_sites() const {
-    if(tag_normalized_sites.size() != get_length()) throw except::runtime_error("Cannot check normalization status on any sites, size mismatch in site list");
-    return std::any_of(tag_normalized_sites.begin(), tag_normalized_sites.end(), [](bool v) { return v; });
-}
-
-template<typename Scalar>
-bool StateFinite<Scalar>::is_normalized_on_active_sites() const {
-    if(tag_normalized_sites.size() != get_length())
-        throw except::runtime_error("Cannot check normalization status on active sites, size mismatch in site list");
-    if(active_sites.empty()) return false;
-    auto first_site_ptr = std::next(tag_normalized_sites.begin(), safe_cast<long>(active_sites.front()));
-    auto last_site_ptr  = std::next(tag_normalized_sites.begin(), safe_cast<long>(active_sites.back()));
-    return std::all_of(first_site_ptr, last_site_ptr, [](bool v) { return v; });
-}
-
-template<typename Scalar>
-bool StateFinite<Scalar>::is_normalized_on_non_active_sites() const {
-    if(tag_normalized_sites.size() != get_length()) throw except::runtime_error("Cannot check update status on all sites, size mismatch in site list");
-    if(active_sites.empty()) return is_normalized_on_all_sites();
-    for(size_t idx = 0; idx < get_length(); idx++)
-        if(std::find(active_sites.begin(), active_sites.end(), idx) == active_sites.end() and not tag_normalized_sites[idx]) return false;
-    return true;
+bool StateFinite<Scalar>::is_normalized_on_active_sites(RealScalar tol) const {
+    if(active_sites.empty()) throw except::runtime_error("is_normalized_on_active_sites: no active sites");
+    auto norm_errors = get_norm_errors(active_sites);
+    return std::all_of(norm_errors.begin(), norm_errors.end(), [&tol](auto err) { return err < tol; });
 }
 
 template<typename Scalar>
@@ -870,7 +786,24 @@ std::vector<size_t> StateFinite<Scalar>::get_active_ids() const {
     for(const auto &pos : active_sites) ids.emplace_back(get_mps_site(pos).get_unique_id());
     return ids;
 }
+
 template<typename Scalar>
-const std::vector<bool> &StateFinite<Scalar>::get_normalization_tags() const {
-    return tag_normalized_sites;
+auto StateFinite<Scalar>::get_norm_error(size_t pos) const -> RealScalar {
+    return get_mps_site(pos).get_norm_error();
+}
+
+template<typename Scalar>
+auto StateFinite<Scalar>::get_norm_errors(const std::vector<size_t> &sites) const -> std::vector<RealScalar> {
+    auto norm_errors = std::vector<RealScalar>();
+    norm_errors.reserve(sites.size());
+    for(const auto &pos : sites) { norm_errors.emplace_back(get_mps_site(pos).get_norm_error()); }
+    return norm_errors;
+}
+
+template<typename Scalar>
+auto StateFinite<Scalar>::get_norm_errors() const -> std::vector<RealScalar> {
+    auto norm_errors = std::vector<RealScalar>();
+    norm_errors.reserve(mps_sites.size());
+    for(const auto &mps : mps_sites) { norm_errors.emplace_back(mps->get_norm_error()); }
+    return norm_errors;
 }

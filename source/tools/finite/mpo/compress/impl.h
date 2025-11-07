@@ -179,7 +179,7 @@ std::pair<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> deparallelize_mpo_
     mat_xfer.conservativeResize(static_cast<long>(col_keep.size()), Eigen::NoChange);
 
     // Create the deparallelized mpo by shuffling the indices back into position
-    auto matrix_dep = MatrixType(mpo_map(Eigen::all, col_keep)); // Deparallelized matrix
+    auto matrix_dep = MatrixType(mpo_map(Eigen::placeholders::all, col_keep)); // Deparallelized matrix
     auto tensor_dep = tenx::TensorMap(matrix_dep, std::array<long, 4>{dim0, dim1, dim2, matrix_dep.cols()});
     auto mpo_dep    = Eigen::Tensor<Scalar, 4>(tensor_dep.shuffle(std::array<long, 4>{2, 3, 0, 1}));
 
@@ -297,7 +297,7 @@ std::pair<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> deparallelize_mpo_
     mat_xfer.conservativeResize(Eigen::NoChange, static_cast<long>(row_keep.size()));
 
     // Create the deparallelized mpo by shuffling the indices back into position
-    auto matrix_dep = MatrixType(mpo_map(row_keep, Eigen::all)); // Deparallelized matrix
+    auto matrix_dep = MatrixType(mpo_map(row_keep, Eigen::placeholders::all)); // Deparallelized matrix
     auto tensor_dep = tenx::TensorMap(matrix_dep, std::array<long, 4>{matrix_dep.rows(), dim1, dim2, dim3});
     auto mpo_dep    = Eigen::Tensor<Scalar, 4>(tensor_dep.shuffle(std::array<long, 4>{0, 3, 1, 2}));
 

@@ -181,32 +181,32 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
             'J': '$J$', 'J1': '$J_1$', 'J2': '$J_2$', 'J3': '$J_3$',
             'w': '$w$', 'w1': '$w_1$', 'w2': '$w_2$', 'w3': '$w_3$',
             'x': '$\\xi_J$', 'r': '$r$',
-            'u': '$d_u$', 'f': '$f$', 'tstd': '$\sigma_\\theta$', 'cstd': '$\sigma_c$',
+            'u': '$d_u$', 'f': '$f$', 'tstd': '$\\sigma_\\theta$', 'cstd': '$\\sigma_c$',
             'tgw8': '$w_\\theta$',
             'cgw8': '$w_c$',
             'g8w8': '$w$',
             'type': '$m$',
-            'l': '$\lambda$',
+            'l': '$\\lambda$',
             'wkind': '$w$',
             'mkind': '$m$',
-            'ubond': '$\chi_u$',
+            'ubond': '$\\chi_u$',
             't': '$t$',
             'algo': 'algo',
             'state': 'state',
             'crono': 'crono',
             'data': 'data',
             'num': '$n$',
-            'bavg': '$\\bar \chi$',
-            'bmax': '$\lceil \chi \\rceil$',
-            'time': '$\\bar t_\mathrm{sim}$',
-            'tsim': '$\\bar t_\mathrm{sim}$',
+            'bavg': '$\\bar \\chi$',
+            'bmax': '$\\lceil \\chi \\rceil$',
+            'time': '$\\bar t_\\mathrm{sim}$',
+            'tsim': '$\\bar t_\\mathrm{sim}$',
         },
         'vals': {
             'L': set(),
             'J': set(), 'J1': set(), 'J2': set(), 'J3': set(),
             'w': set(), 'w1': set(), 'w2': set(), 'w3': set(),
             'x': set(), 'r': set(),
-            'u': set(), 'f': set(), 'tstd': set(), 'cstd': set(), 'tgw8': set(), 'cgw8': set(), 'g8w8' : set(), 'type': set(),'l': set(), 'wkind':set(), 'mkind':set(), 'ubond': set(),
+            'u': set(), 'f': set(), 'tstd': set(),'tsim':set(), 'cstd': set(), 'tgw8': set(), 'cgw8': set(), 'g8w8' : set(), 'type': set(),'l': set(), 'wkind':set(), 'mkind':set(), 'ubond': set(),
         },
         'dsets': {},
         'filename': h5_src.filename,
@@ -253,7 +253,7 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
         if incl := meta.get('common').get('include_v3'):
             val_requested = True
             for tag, val in zip(['L', 'J', 'w', 'x', 'r', 'u', 'f', 'tstd', 'cstd', 'tgw8', 'cgw8', 'g8w8', 'type','l', 'wkind','mkind', 'ubond'],
-                                [L, J, w, x, r, u, f, tstd, cstd, tgw8, cgw8,g8w8,type,l, wkind, mkind, ubond]):
+                                [L, J, w, x, r, u, f, tstd,cstd, tgw8, cgw8,g8w8,type,l, wkind, mkind, ubond]):
                 if tag in incl and not val in incl.get(tag):
                     if debug:
                         print(f" Not requested: {tag}:{val}")
@@ -357,6 +357,7 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
                 db['dsets'][dname]['node']['f'] = h5_src[match_path(modelnode.name, 'u[')]
                 db['dsets'][dname]['node']['u'] = h5_src[match_path(modelnode.name, 'u[')]
                 db['dsets'][dname]['node']['tstd'] = h5_src[match_path(modelnode.name, 'u[')]
+                db['dsets'][dname]['node']['tsim'] = h5_src[match_path(modelnode.name, 'u[')]
                 db['dsets'][dname]['node']['cstd'] = h5_src[match_path(modelnode.name, 'u[')]
                 db['dsets'][dname]['node']['tgw8'] = h5_src[match_path(modelnode.name, 'u[')]
                 db['dsets'][dname]['node']['cgw8'] = h5_src[match_path(modelnode.name, 'u[')]
@@ -451,6 +452,7 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
                         db['dsets'][dname]['vals']['u'] = u
                         db['dsets'][dname]['vals']['f'] = f
                         db['dsets'][dname]['vals']['tstd'] = tstd
+                        db['dsets'][dname]['vals']['tsim'] = tsim
                         db['dsets'][dname]['vals']['cstd'] = cstd
                         db['dsets'][dname]['vals']['tgw8'] = tgw8
                         db['dsets'][dname]['vals']['cgw8'] = cgw8
@@ -460,7 +462,6 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
                         db['dsets'][dname]['vals']['wkind'] = wkind
                         db['dsets'][dname]['vals']['mkind'] = mkind
                         db['dsets'][dname]['vals']['ubond'] = ubond
-                        db['dsets'][dname]['vals']['tsim'] = tsim
                         db['dsets'][dname]['vals']['bavg'] = bavg
                         db['dsets'][dname]['vals']['bmax'] = bmax
                         db['dsets'][dname]['vals']['plotdir'] = meta['common']['plotdir']
@@ -477,6 +478,7 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
                         db['dsets'][dname]['node']['f'] = h5_src[match_path(modelnode.name, 'u[')]
                         db['dsets'][dname]['node']['u'] = h5_src[match_path(modelnode.name, 'u[')]
                         db['dsets'][dname]['node']['tstd'] = h5_src[match_path(modelnode.name, 'u[')]
+                        db['dsets'][dname]['node']['tsim'] = h5_src[match_path(modelnode.name, 'u[')]
                         db['dsets'][dname]['node']['cstd'] = h5_src[match_path(modelnode.name, 'u[')]
                         db['dsets'][dname]['node']['tgw8'] = h5_src[match_path(modelnode.name, 'u[')]
                         db['dsets'][dname]['node']['cgw8'] = h5_src[match_path(modelnode.name, 'u[')]
@@ -510,6 +512,7 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
                                 'u': '{}'.format(u),
                                 'f': '{:.2f}'.format(f),
                                 'tstd': '{:.2f}'.format(tstd) if tstd is not None else 'None',
+                                'tsim': '{:.2f}'.format(tsim) if tsim is not None else 'None',
                                 'cstd': '{:.2f}'.format(cstd) if cstd is not None else 'None',
                                 'tgw8': '{}'.format(tgw8),
                                 'cgw8': '{}'.format(cgw8),
@@ -544,6 +547,7 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
                                 'u': '${}{}{:>.0f}$'.format(db['tex']['u'].strip('$'), '{:}', u),
                                 'f': '${}{}{:>.4f}$'.format(db['tex']['f'].strip('$'), '{:}', f),
                                 'tstd': '${}{}{:>.2f}$'.format(db['tex']['tstd'].strip('$'), '{:}', tstd) if tstd is not None else 'None',
+                                'tsim': '${}{}{:>.2f}$'.format(db['tex']['tsim'].strip('$'), '{:}', tsim) if tsim is not None else 'None',
                                 'cstd': '${}{}{:>.2f}$'.format(db['tex']['cstd'].strip('$'), '{:}', cstd) if cstd is not None else 'None',
                                 'tgw8': '{}{}{}'.format(db['tex']['tgw8'].strip('$'), '{:}', tgw8),
                                 'cgw8': '{}{}{}'.format(db['tex']['cgw8'].strip('$'), '{:}', cgw8),
@@ -699,6 +703,7 @@ def load_time_database3(h5_src, meta, algo_filter=None, model_filter=None, state
     db['vals']['u'] = sorted(db['vals']['u'])
     db['vals']['f'] = sorted(db['vals']['f'])
     db['vals']['tstd'] = sorted(db['vals']['tstd'])
+    db['vals']['tsim'] = sorted(db['vals']['tsim'])
     db['vals']['cstd'] = sorted(db['vals']['cstd'])
     db['vals']['tgw8'] = sorted(db['vals']['tgw8'])
     db['vals']['cgw8'] = sorted(db['vals']['cgw8'])
@@ -726,7 +731,7 @@ def load_time_database2(h5_src, meta, algo_filter=None, model_filter=None, state
             'data': [],
         },
         'tex': {
-            'L': '$L$', 'J': '$J$', 'w': '$\omega$', 'x': '$\\xi_J$', 'f': '$f$', 'u': '$d_u$', 'r': '$r$',
+            'L': '$L$', 'J': '$J$', 'w': '$\\omega$', 'x': '$\\xi_J$', 'f': '$f$', 'u': '$d_u$', 'r': '$r$',
             't': '$t$',
             'algo': 'algo',
             'model': 'model',
@@ -734,10 +739,10 @@ def load_time_database2(h5_src, meta, algo_filter=None, model_filter=None, state
             'crono': 'crono',
             'data': 'data',
             'num': '$n$',
-            'bavg': '$\\bar \chi$',
-            'bmax': '$\lceil \chi \\rceil$',
-            'time': '$\\bar t_\mathrm{sim}$',
-            'tsim': '$\\bar t_\mathrm{sim}$',
+            'bavg': '$\\bar \\chi$',
+            'bmax': '$\\lceil \\chi \\rceil$',
+            'time': '$\\bar t_\\mathrm{sim}$',
+            'tsim': '$\\bar t_\\mathrm{sim}$',
         },
         'vals': {
             'L': [], 'J': [], 'w': [], 'x': [], 'f': [], 'u': [], 'r': []

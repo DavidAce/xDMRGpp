@@ -1,6 +1,5 @@
 #include "../entanglement_entropy.impl.h"
 
-
 using Scalar = cx128;
 using Real   = fp128;
 
@@ -23,6 +22,3 @@ template std::vector<Real>  tools::finite::measure::renyi_entropies(const StateF
 template Real  tools::finite::measure::renyi_entropy_midchain(const StateFinite<Scalar> &, double);
 
 /* clang-format on */
-
-
-

@@ -11,30 +11,34 @@ enum class PreconditionerType { JACOBI, CHEBYSHEV };
 template<typename Scalar>
 struct IterativeLinearSolverConfig {
     using Real       = decltype(std::real(std::declval<Scalar>()));
+    using VectorReal = Eigen::Matrix<Real, Eigen::Dynamic, 1>;
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
 
     private:
     struct JacobiPreconditionerConfig {
-        using LLTType                             = Eigen::LLT<MatrixType, Eigen::Lower>;
-        using LDLTType                            = Eigen::LDLT<MatrixType, Eigen::Lower>;
-        using LUType                              = Eigen::PartialPivLU<MatrixType>;
-        using QRType                              = Eigen::ColPivHouseholderQR<MatrixType>;
-        using LLTJcbBlocksType                    = std::vector<std::tuple<long, int, std::unique_ptr<LLTType>>>;
-        using LDLTJcbBlocksType                   = std::vector<std::tuple<long, int, std::unique_ptr<LDLTType>>>;
-        using LUJcbBlocksType                     = std::vector<std::tuple<long, int, std::unique_ptr<LUType>>>;
-        using QRJcbBlocksType                     = std::vector<std::tuple<long, int, std::unique_ptr<QRType>>>;
-        const Scalar            *invdiag          = nullptr;
-        const LLTJcbBlocksType  *lltJcbBlocks     = nullptr;
-        const LDLTJcbBlocksType *ldltJcbBlocks    = nullptr;
-        const LUJcbBlocksType   *luJcbBlocks      = nullptr;
-        const QRJcbBlocksType   *qrJcbBlocks      = nullptr;
-        Real                     cond             = std::numeric_limits<Real>::quiet_NaN();
-        MatrixType               deflationEigVecs = {};
-        VectorType               deflationEigInvs = {};
-        MatrixType               coarseZ          = {};
-        MatrixType               coarseBZ         = {};
-        bool                     skipjcb          = false;
+        using LLTType                                   = Eigen::LLT<MatrixType, Eigen::Lower>;
+        using LDLTType                                  = Eigen::LDLT<MatrixType, Eigen::Lower>;
+        using LUType                                    = Eigen::PartialPivLU<MatrixType>;
+        using QRType                                    = Eigen::ColPivHouseholderQR<MatrixType>;
+        using LLTJcbBlocksType                          = std::vector<std::tuple<long, int, std::unique_ptr<LLTType>>>;
+        using LDLTJcbBlocksType                         = std::vector<std::tuple<long, int, std::unique_ptr<LDLTType>>>;
+        using LUJcbBlocksType                           = std::vector<std::tuple<long, int, std::unique_ptr<LUType>>>;
+        using QRJcbBlocksType                           = std::vector<std::tuple<long, int, std::unique_ptr<QRType>>>;
+        const Scalar            *invdiag                = nullptr;
+        const LLTJcbBlocksType  *lltJcbBlocks           = nullptr;
+        const LDLTJcbBlocksType *ldltJcbBlocks          = nullptr;
+        const LUJcbBlocksType   *luJcbBlocks            = nullptr;
+        const QRJcbBlocksType   *qrJcbBlocks            = nullptr;
+        const VectorReal        *jcbInvSqrtMultiplicity = nullptr;
+        Eigen::Index             jcbMaxMultiplicity     = 1l;
+        Eigen::Index             jcbNumPasses           = 1l;
+        Real                     cond                   = std::numeric_limits<Real>::quiet_NaN();
+        MatrixType               deflationEigVecs       = {};
+        VectorType               deflationEigInvs       = {};
+        MatrixType               coarseZ                = {};
+        MatrixType               coarseBZ               = {};
+        bool                     skipjcb                = false;
     };
 
     struct ChebyshevPreconditionerConfig {
@@ -43,20 +47,16 @@ struct IterativeLinearSolverConfig {
         Eigen::Index degree     = 0;
     };
     struct Result {
-        Eigen::Index iters        = 0; /*! For the last run */
-        Eigen::Index matvecs      = 0; /*! For the last run */
-        Eigen::Index precond      = 0; /*! For the last run */
-        double       time         = 0; /*! For the last run */
-        double       time_matvecs = 0; /*! For the last run */
-        double       time_precond = 0; /*! For the last run */
-        // Eigen::Index           total_iters        = 0; /*! For all runs */
-        // Eigen::Index           total_matvecs      = 0; /*! For all runs */
-        // Eigen::Index           total_precond      = 0; /*! For all runs */
-        // double                 total_time         = 0; /*! For all runs */
-        // double                 total_time_matvecs = 0; /*! For all runs */
-        // double                 total_time_precond = 0; /*! For all runs */
-        Real                   error = 0;
-        Eigen::ComputationInfo info  = Eigen::ComputationInfo::NoConvergence;
+        Eigen::Index           iters          = 0; /*! For the last run */
+        Eigen::Index           matvecs        = 0; /*! For the last run */
+        Eigen::Index           precond        = 0; /*! For the last run */
+        double                 time           = 0; /*! For the last run */
+        double                 time_matvecs   = 0; /*! For the last run */
+        double                 time_precond   = 0; /*! For the last run */
+        double                 time_jacobi    = 0;
+        double                 time_chebyshev = 0;
+        Real                   error          = 0;
+        Eigen::ComputationInfo info           = Eigen::ComputationInfo::NoConvergence;
 
         Result &operator+=(const Result &other) {
             this->iters += other.iters;
@@ -65,13 +65,6 @@ struct IterativeLinearSolverConfig {
             this->time += other.time;
             this->error = other.error;
             this->info  = other.info;
-            // this->total_iters += other.iters;
-            // this->total_matvecs += other.matvecs;
-            // this->total_precond += other.precond;
-            // this->total_time += other.time;
-            // this->total_time_matvecs += other.time_matvecs;
-            // this->total_time_precond += other.time_precond;
-
             return *this;
         }
         void add_latest(const Result &other) {
@@ -108,8 +101,8 @@ struct IterativeLinearSolverConfig {
 
     public:
     long                          maxiters     = 1000;
-    Real                          tolerance    = Real{0.25f};
-    MatDef                        matdef       = MatDef::DEF; /*! Whether the matrix is indefinite or (semi) definite*/
+    Real                          tolerance    = Real{0.1f};
+    MatDef                        matdef       = MatDef::IND; /*! Whether the matrix is indefinite or (semi) definite*/
     PreconditionerType            precondType  = PreconditionerType::JACOBI;
     MatrixType                    initialGuess = {};
     JacobiPreconditionerConfig    jacobi       = {};

@@ -11,6 +11,7 @@
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
+#include <config/settings.h>
 #include <fmt/ranges.h>
 #include <general/sfinae.h>
 #include <utility>
@@ -86,31 +87,49 @@ bool MpsSite<Scalar>::has_nan() const {
         return has_nan_cached.value();
     }
 }
+
 template<typename Scalar>
-bool MpsSite<Scalar>::is_normalized(RealScalar prec) const {
+MpsSite<Scalar>::RealScalar MpsSite<Scalar>::get_norm_error() const {
     if constexpr(!settings::debug) {
-        if(is_norm_cached.has_value()) return is_norm_cached.value();
+        if(norm_error_cached.has_value()) return norm_error_cached.value();
     }
-    constexpr auto eps  = std::numeric_limits<RealScalar>::epsilon();
-    const auto     size = static_cast<RealScalar>(get_M_bare().size());
-    prec                = std::max(prec, eps * std::sqrt(size) * 100);
-    auto t_dbg          = tid::tic_token("is_normalized", tid::level::highest);
-    if(isCenter() or get_label() == "AC") {
-        auto norm      = tools::common::contraction::contract_mps_norm(get_M());
-        is_norm_cached = std::abs(norm - Scalar{1}) <= prec;
-        return is_norm_cached.value();
-    }
-    if(get_label() == "A") {
-        auto id        = tools::common::contraction::contract_mps_partial<std::array{0l, 1l}>(get_M_bare());
-        is_norm_cached = tenx::isIdentity(id, prec);
-        return is_norm_cached.value();
-    }
+
+    RealScalar norm_error = std::numeric_limits<RealScalar>::quiet_NaN();
+
     if(get_label() == "B") {
-        auto id        = tools::common::contraction::contract_mps_partial<std::array{0l, 2l}>(get_M_bare());
-        is_norm_cached = tenx::isIdentity(id, prec);
-        return is_norm_cached.value();
+        auto BB_rank2 = tools::common::contraction::contract_mps_partial<std::array{0l, 2l}>(get_M_bare());
+        auto BB       = tenx::MatrixMap(BB_rank2);
+        norm_error    = (BB - MatrixReal::Identity(BB.rows(), BB.cols())).norm();
+        norm_error /= std::sqrt(static_cast<RealScalar>(get_chiL()));
+    } else { // Valid for A and AC
+        auto AA_rank2 = tools::common::contraction::contract_mps_partial<std::array{0l, 1l}>(get_M_bare());
+        auto AA       = tenx::MatrixMap(AA_rank2);
+        norm_error    = (AA - MatrixReal::Identity(AA.rows(), AA.cols())).norm();
+        norm_error /= std::sqrt(static_cast<RealScalar>(get_chiR()));
     }
-    throw except::runtime_error("MpsSite<Scalar>::is_identity: unexpected label: {}", get_label());
+
+    if(!std::isfinite(norm_error)) throw except::runtime_error("MpsSite<Scalar>::get_norm_error: non-finite norm error: {}", fp(norm_error));
+
+    if constexpr(settings::debug) {
+        constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
+        if(norm_error_cached.has_value()) {
+            if(std::abs(norm_error_cached.value() - norm_error) > eps)
+                throw except::logic_error("MpsSite<Scalar>::get_norm_error(): cached norm error value mismatch {:.16f} (cached) != {:.16f} (actual)",
+                                          fp(norm_error_cached.value()), fp(norm_error));
+        }
+    }
+    norm_error_cached = norm_error;
+    return norm_error;
+}
+
+template<typename Scalar>
+bool MpsSite<Scalar>::is_normalized(RealScalar tol) const {
+    if(!std::isfinite(tol)) {
+        static constexpr auto eps   = std::numeric_limits<RealScalar>::epsilon();
+        const auto            slack = settings ::precision::max_norm_slack;
+        tol                         = eps * slack;
+    }
+    return get_norm_error() < tol;
 }
 
 template<typename Scalar>
@@ -142,10 +161,11 @@ void MpsSite<Scalar>::assert_dimensions() const {
 }
 
 template<typename Scalar>
-void MpsSite<Scalar>::assert_normalized(RealScalar prec) const {
-    if(not is_normalized(prec))
-        throw except::runtime_error("MpsSite<Scalar>::assert_normalized({0:.2e}): {1}^dagger {1} is not normalized at pos {2}", fp(prec), get_label(),
-                                    get_position());
+void MpsSite<Scalar>::assert_normalized(RealScalar tol) const {
+    if(not is_normalized(tol))
+        throw except::runtime_error(
+            "MpsSite<Scalar>::assert_normalized({0:.2e}): {1}^dagger {1} is not normalized at pos {2} | norm_error {3:.5e} > tolerance {4:.5e}", fp(tol),
+            get_label(), get_position(), fp(get_norm_error()), fp(tol));
 }
 
 template<typename Scalar>
@@ -293,22 +313,22 @@ void MpsSite<Scalar>::set_label(std::string_view label_) {
 }
 template<typename Scalar>
 void MpsSite<Scalar>::unset_LC() {
-    LC             = std::nullopt;
-    MC             = std::nullopt;
-    unique_id      = std::nullopt;
-    is_real_cached = std::nullopt;
-    has_nan_cached = std::nullopt;
-    is_norm_cached = std::nullopt;
+    LC                = std::nullopt;
+    MC                = std::nullopt;
+    unique_id         = std::nullopt;
+    norm_error_cached = std::nullopt;
+    is_real_cached    = std::nullopt;
+    has_nan_cached    = std::nullopt;
     if(label == "AC") label = "A";
 }
 
 template<typename Scalar>
 void MpsSite<Scalar>::unset_L() {
-    L              = std::nullopt;
-    unique_id      = std::nullopt;
-    is_real_cached = std::nullopt;
-    has_nan_cached = std::nullopt;
-    is_norm_cached = std::nullopt;
+    L                 = std::nullopt;
+    unique_id         = std::nullopt;
+    norm_error_cached = std::nullopt;
+    is_real_cached    = std::nullopt;
+    has_nan_cached    = std::nullopt;
 }
 
 template<typename Scalar>

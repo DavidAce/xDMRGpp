@@ -1,9 +1,8 @@
 #include "impl.h"
 
 using Scalar = cx128;
-using T = cx128;
-using R = fp128;
-
+using T      = cx128;
+using R      = fp128;
 
 /* clang-format off */
 

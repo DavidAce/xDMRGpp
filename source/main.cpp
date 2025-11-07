@@ -32,15 +32,12 @@ int main(int argc, char *argv[]) {
 
     tools::log = tools::Logger::setLogger("xDMRG++ main", settings::console::loglevel, settings::console::timestamp);
 
-
     // Set up the number of openmp and std threads for Eigen Tensor
     settings::configure_threads();
-
 
     // Seed with random::device initially (This also takes care of srand used by Eigen)
     // This is to make reproducible simulations
     rnd::seed(settings::input::seed);
-
 
     // print environment and git status
     tools::log->info("Hostname        : {}", debug::hostname());
@@ -55,7 +52,6 @@ int main(int argc, char *argv[]) {
     // Make sure to move the file back from temp location
     std::atexit(clean_up);
     std::at_quick_exit(clean_up);
-
 
     // Initialize the launcher and run the algorithms
     AlgorithmLauncher().run_algorithms();

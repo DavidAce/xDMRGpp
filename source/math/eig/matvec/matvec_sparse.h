@@ -61,9 +61,9 @@ class MatVecSparse {
     void              perform_op(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
 
     // Various utility functions
-    mutable long num_mv = 0;
-    mutable long num_op = 0;
-    mutable long num_pc = 0;
+    mutable long                             num_mv = 0;
+    mutable long                             num_op = 0;
+    mutable long                             num_pc = 0;
     void                                     print() const;
     void                                     set_shift(Cplx sigma_);
     void                                     set_mode(const eig::Form form_);

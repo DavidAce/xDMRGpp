@@ -1,5 +1,4 @@
 #pragma once
-#include "number_entropy.h"
 #include "config/debug.h"
 #include "debug/exceptions.h"
 #include "dimensions.h"
@@ -8,6 +7,7 @@
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/tenx.h"
+#include "number_entropy.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
@@ -734,7 +734,6 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::number_entropies(const S
     /* clang-format on */
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::number_entropy_current(const StateFinite<Scalar> &state) {
     if(state.measurements.number_entropy_current) return state.measurements.number_entropy_current.value();
@@ -750,7 +749,6 @@ RealScalar<Scalar> tools::finite::measure::number_entropy_current(const StateFin
         return 0;
 }
 
-
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::number_entropy_midchain(const StateFinite<Scalar> &state) {
     if(state.measurements.number_entropy_midchain) return state.measurements.number_entropy_midchain.value();
@@ -765,7 +763,6 @@ RealScalar<Scalar> tools::finite::measure::number_entropy_midchain(const StateFi
     } else
         return 0;
 }
-
 
 // template<typename AmplitudesT, typename CacheT>
 // std::vector<double> compute_probability(const StateFinite<Scalar> &state, long tgt_pos, AmplitudesT &amplitudes, CacheT &cache) {

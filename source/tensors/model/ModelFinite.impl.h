@@ -447,6 +447,16 @@ std::pair<int, std::string_view> ModelFinite<Scalar>::get_parity_shift_mpo_squar
     return parity_shift;
 }
 
+
+// template<typename Scalar>
+// void ModelFinite<Scalar>::set_parity_projector(int sign, std::string_view axis) {
+//     if(not qm::spin::half::is_valid_axis(axis)) return;
+//     if(get_parity_projector() == std::make_pair(sign, axis)) return;
+//     tools::log->info("Setting MPO² parity projector for target axis {}{}", sign == 0 ? "" : (sign < 0 ? "-" : "+"), qm::spin::half::get_axis_unsigned(axis));
+//     for(const auto &mpo : MPO) mpo->set_parity_projector(sign, axis);
+//     clear_cache();
+// }
+
 template<typename Scalar>
 ModelLocal<Scalar> ModelFinite<Scalar>::get_local(const std::vector<size_t> &sites) const {
     if(sites.empty()) throw std::runtime_error("No active sites on which to build a multisite hamiltonian tensor");

@@ -1,7 +1,7 @@
 #include "../MpoSite.tmpl.h"
 
-using Scalar = cx32;
-using T = cx128;
+using Scalar = cx128;
+using T      = cx128;
 
 /* clang-format off */
 
@@ -18,4 +18,3 @@ template Eigen::Tensor<T, 1>  MpoSite<Scalar>::get_MPO_edge_right(const Eigen::T
 template Eigen::Tensor<T, 1>  MpoSite<Scalar>::get_MPO2_edge_left() const;
 
 template Eigen::Tensor<T, 1>  MpoSite<Scalar>::get_MPO2_edge_right() const;
-

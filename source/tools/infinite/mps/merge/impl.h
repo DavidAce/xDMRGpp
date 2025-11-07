@@ -37,5 +37,3 @@ void tools::infinite::mps::merge_twosite_tensor(StateInfinite<Scalar> &state, co
     state.get_mps_siteA().fuse_mps(mps_list.front());
     state.get_mps_siteB().fuse_mps(mps_list.back());
 }
-
-

@@ -18,7 +18,8 @@
 #ifndef EIGEN_MINRES_ST_H
 #define EIGEN_MINRES_ST_H
 
-
+#include <unsupported/Eigen/IterativeSolvers>
+#include <deque>
 namespace Eigen {
 
     namespace internal {
@@ -56,7 +57,7 @@ namespace Eigen {
             // initialize
             const Index maxIters(iters);  // initialize maxIters to iters
             const Index N(mat.cols());    // the size of the matrix
-            const RealScalar threshold2(tol_error*tol_error*rhsNorm2); // convergence threshold (compared to residualNorm2)
+
 
             // BEGIN MINRES -> MINRES_ST
             auto get_stats = [&](const std::deque<RealScalar>& a, bool sample = true) -> std::tuple<RealScalar, RealScalar, RealScalar> {
@@ -67,13 +68,13 @@ namespace Eigen {
 
                 // Pass 1: average
                 RealScalar sum = 0;
-                for(const auto& x : a) sum += x;
+                for(const auto& elem : a) sum += elem;
                 const RealScalar avg = sum / n;
 
                 // Pass 2: sum of squared deviations
                 RealScalar ss = 0;
-                for(const auto& x : a) {
-                    const RealScalar d = x - avg;
+                for(const auto& elem : a) {
+                    const RealScalar d = elem - avg;
                     ss += d * d;
                 }
 
@@ -85,20 +86,25 @@ namespace Eigen {
             };
 
 
-
             std::deque<RealScalar> error_history;
             // END MINRES -> MINRES_ST
             // Initialize preconditioned Lanczos
             VectorType v_old(N); // will be initialized inside loop
             VectorType v( VectorType::Zero(N) ); //initialize v
             VectorType v_new(rhs-mat*x); //initialize v_new
-            RealScalar residualNorm2(v_new.squaredNorm());
+            RealScalar residualNorm2 = v_new.squaredNorm();
+            // RealScalar r0Norm2 = residualNorm2;
+
+            const RealScalar threshold2 = (tol_error * tol_error) * rhsNorm2; // convergence threshold (compared to residualNorm2)
+
+
             VectorType w(N); // will be initialized inside loop
             VectorType w_new(precond.solve(v_new)); // initialize w_new
 //            RealScalar beta; // will be initialized inside loop
-            RealScalar beta_new2(v_new.dot(w_new));
-            eigen_assert(beta_new2 >= 0.0 && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
+            RealScalar beta_new2 = numext::real(v_new.dot(w_new));
+            eigen_assert(beta_new2 > RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
             RealScalar beta_new(sqrt(beta_new2));
+            eigen_assert(beta_new > RealScalar{0});
             const RealScalar beta_one(beta_new);
             // Initialize other variables
             RealScalar c(1.0); // the cosine of the Givens rotation
@@ -130,18 +136,19 @@ namespace Eigen {
                 v = v_new; // update
                 w = w_new; // update
                 v_new.noalias() = mat*w - beta*v_old; // compute v_new
-                const RealScalar alpha = v_new.dot(w);
+                const RealScalar alpha = numext::real(v_new.dot(w));
                 v_new -= alpha*v; // overwrite v_new
                 w_new = precond.solve(v_new); // overwrite w_new
                 beta_new2 = v_new.dot(w_new); // compute beta_new
-                eigen_assert(beta_new2 >= 0.0 && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
+                eigen_assert(beta_new2 >= RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
                 beta_new = sqrt(beta_new2); // compute beta_new
+
 
                 // Givens rotation
                 const RealScalar r2 =s*alpha+c*c_old*beta; // s, s_old, c and c_old are still from previous iteration
                 const RealScalar r3 =s_old*beta; // s, s_old, c and c_old are still from previous iteration
                 const RealScalar r1_hat=c*alpha-c_old*s*beta;
-                const RealScalar r1 =sqrt( std::pow(r1_hat,2) + std::pow(beta_new,2) );
+                const RealScalar r1 = std::hypot(r1_hat, beta_new) ;// sqrt( std::pow(r1_hat,2) + std::pow(beta_new,2) );
                 c_old = c; // store for next iteration
                 s_old = s; // store for next iteration
                 c=r1_hat/r1; // new cosine
@@ -152,29 +159,45 @@ namespace Eigen {
                 p_old = p;
                 p.noalias()=(w-r2*p_old-r3*p_oold) /r1; // IS NOALIAS REQUIRED?
                 x += beta_one*c*eta*p;
-                /* Update the squared residual. Note that this is the estimated residual.
+                /* Update the squared residual with s*s. Note that this is the estimated residual.
                 The real residual |Ax-b|^2 may be slightly larger */
-                residualNorm2 *= s*s;
+                if(iters % 100 == 0)
+                    residualNorm2 =  (rhs - mat * x).squaredNorm();// Use the true residual to avoid drift
+                else {
+                    residualNorm2 *= s*s;
+                }
 
                 // BEGIN MINRES -> MINRES_ST
-                // Store the error |Ax-b|/|b|
-                tol_error = std::sqrt(residualNorm2 / rhsNorm2);
-                error_history.push_back(tol_error);
-                if(iters > 20 and iters % 10 == 0){
-                    // Check for stall every 10 iterations
+                // Store the error |Ax-b|/|x|
+                // RealScalar xNorm2 = x.squaredNorm();
+                // RealScalar error = std::sqrt(residualNorm2 / xNorm2); // Stewart's backward error
+                RealScalar rrnorm = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
+                error_history.push_back(-std::log10(rrnorm));
+                bool rrnorm_has_converged  = residualNorm2 < threshold2;
+                bool rrnorm_has_made_progress = rrnorm < std::max(tol_error, RealScalar{0.1f});
+                bool minres_has_converged = rrnorm_has_converged;
+
+                if((iters >=20 and iters % 20 == 0) or minres_has_converged) {
+                    // Check for stall every 20 iterations
                     while(error_history.size() > 20) error_history.pop_front();
                     auto [avg, sdv, rel] = get_stats(error_history);
-                    // auto tol_error_prev = error_history[error_history.size()-2];
-                    // auto relnow = std::abs(tol_error -tol_error_prev)/tol_error;
-                    // std::printf("tol_error: %.5e  avg: %.5e  sdv: %.5e  rel: %.5e relnow: %.5e\n", error_history.back(),  avg, sdv, rel, relnow);
-                    if (rel < RealScalar{1e-2f}) break;
+                    bool rrnorm_has_saturated = rel < RealScalar{1e-2f};
+                    bool minres_has_saturated = rrnorm_has_saturated and rrnorm_has_made_progress;
+                    // if constexpr(std::is_same_v<RealScalar, float> or std::is_same_v<RealScalar, double>) {
+                    //     std::printf("k: %4ld |rk|=%.5e |r0|=%.5e |rk|/|b|=%.5e (log10 avg: %.5e  std: %.5e  rel: %.5e)\n",
+                    //                  iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, avg, sdv, rel);
+                    // }
+
+                    if (minres_has_converged) {
+                        // std::printf("minres converged\n");
+                        break;
+                    }
+                    if (minres_has_saturated) {
+                        // std::printf("minres saturated\n");
+                        break;
+                    }
                 }
                 // END MINRES -> MINRES_ST
-
-                if ( residualNorm2 < threshold2)
-                {
-                    break;
-                }
 
                 eta=-s*eta; // update eta
                 iters++; // increment iteration number (for output purposes)
@@ -293,7 +316,8 @@ namespace Eigen {
                               &&  (!NumTraits<Scalar>::IsComplex)
             };
             typedef typename internal::conditional<TransposeInput,Transpose<const ActualMatrixType>, ActualMatrixType const&>::type RowMajorWrapper;
-            EIGEN_STATIC_ASSERT(EIGEN_IMPLIES(MatrixWrapper::MatrixFree,UpLo==(Lower|Upper)),MATRIX_FREE_CONJUGATE_GRADIENT_IS_COMPATIBLE_WITH_UPPER_UNION_LOWER_MODE_ONLY);
+            EIGEN_STATIC_ASSERT(internal::check_implication(MatrixWrapper::MatrixFree, UpLo == (Lower | Upper)),
+                                MATRIX_FREE_CONJUGATE_GRADIENT_IS_COMPATIBLE_WITH_UPPER_UNION_LOWER_MODE_ONLY);
             typedef typename internal::conditional<UpLo==(Lower|Upper),
                                                   RowMajorWrapper,
                                                   typename MatrixWrapper::template ConstSelfAdjointViewReturnType<UpLo>::Type

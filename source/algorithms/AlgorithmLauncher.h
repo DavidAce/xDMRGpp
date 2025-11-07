@@ -11,12 +11,12 @@ class AlgorithmLauncher {
 
     public:
     AlgorithmLauncher();
-    void start_h5file();
-    void setup_temp_path();
-    void run_algorithms();
-    template <typename Scalar> void run_idmrg();
-    template <typename Scalar> void run_fdmrg();
-    template <typename Scalar> void run_flbit();
-    template <typename Scalar> void run_xdmrg();
-    template <typename Scalar> void run_itebd();
+    void                           start_h5file();
+    void                           setup_temp_path();
+    void                           run_algorithms();
+    template<typename Scalar> void run_idmrg();
+    template<typename Scalar> void run_fdmrg();
+    template<typename Scalar> void run_flbit();
+    template<typename Scalar> void run_xdmrg();
+    template<typename Scalar> void run_itebd();
 };

@@ -1,4 +1,7 @@
 #pragma once
+#include "math/tenx.h"
+//
+
 #include "../solver_lanczos.h"
 #include "../StopReason.h"
 #include "io/fmt_custom.h"
@@ -8,7 +11,6 @@
 #include "math/float.h"
 #include "math/linalg/matrix/gramSchmidt.h"
 #include "math/linalg/matrix/to_string.h"
-#include "math/tenx.h"
 #include <Eigen/Eigenvalues>
 
 namespace settings {
