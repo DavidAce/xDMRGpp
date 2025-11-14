@@ -14,9 +14,9 @@
 
 namespace settings {
 #if defined(DEBUG)
-    static constexpr bool debug_standard_basis_change = true;
+    static constexpr bool debug_standard_basis_change = false;
 #else
-    static constexpr bool debug_standard_basis_change = true;
+    static constexpr bool debug_standard_basis_change = false;
 #endif
 }
 

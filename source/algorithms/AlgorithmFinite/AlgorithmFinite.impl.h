@@ -269,10 +269,10 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
         if(status.algorithm_has_stuck_for > 1) {
             m1.optAlgo = settings::xdmrg::algo_stuck;
             m1.optRitz = settings::xdmrg::ritz_stuck;
-            if(m1.optAlgo == OptAlgo::GDMRG and status.iter % 3 == 0) {
-                m1.optAlgo = settings::xdmrg::algo_warmup;
-                m1.optRitz = settings::xdmrg::ritz_warmup;
-            }
+            // if(m1.optAlgo == OptAlgo::GDMRG and status.iter % 3 == 0) {
+            //     m1.optAlgo = settings::xdmrg::algo_warmup;
+            //     m1.optRitz = settings::xdmrg::ritz_warmup;
+            // }
         }
         if(status.iter < settings::strategy::iter_max_warmup /* or std::abs(h2) > 1e-3 */) {
             m1.optAlgo = settings::xdmrg::algo_warmup;
@@ -645,7 +645,7 @@ void AlgorithmFinite<Scalar>::reduce_bond_dimension_limit(double rate, UpdatePol
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::try_mps_compression() {
     if(not tensors.position_is_inward_edge()) return;
-    if(settings::strategy::trnc_increase_vtol < 0) return;
+    if(settings::strategy::trnc_increase_vtol <= 0) return;
     tools::log->trace("try_mps_compression: vtol {:.5e} | trnc lim {:.5e} max {:.5e} min {:.5e} | bond dims: {}", settings::strategy::trnc_increase_vtol,
                       status.trnc_lim, settings::precision::svd_truncation_max, settings::precision::svd_truncation_min,
                       tools::finite::measure::bond_dimensions(tensors.get_state()));
@@ -688,8 +688,11 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
                          tools::finite::measure::bond_dimensions(tensors.get_state()));
     }
     auto trnc_old   = status.trnc_lim;
+    auto trnc_max   = tensors.get_state().get_truncation_error_largest();
     status.trnc_lim = std::clamp(trnc_try * 0.1, status.trnc_lim, settings::precision::svd_truncation_max);
-    if(status.trnc_lim != trnc_old) tools::log->info("try_mps_compression: updated truncation error: {:.5e} -> {:.5e}", trnc_old, status.trnc_lim);
+    if(status.trnc_lim != trnc_old)
+        tools::log->info("try_mps_compression: updated truncation error limit: {:.5e} -> {:.5e} | largest truncation error {:.5e}",
+            trnc_old, status.trnc_lim, trnc_max);
 }
 
 template<typename Scalar>
@@ -1737,7 +1740,8 @@ void AlgorithmFinite<Scalar>::check_convergence_truncation_error() {
     auto trnc_max_it = std::max_element(trnc_err.begin(), trnc_err.end());
     auto trnc_max    = trnc_max_it != trnc_err.end() ? *trnc_max_it : 1;
     tools::log->debug("truncation error max: {:.5e}", fp(*trnc_max_it));
-    status.trnc_error_has_converged = trnc_max < status.trnc_lim or status.trnc_limit_has_reached_min;
+    bool trying_mps_compression = settings::strategy::trnc_increase_vtol > 0 ;
+    status.trnc_error_has_converged = trying_mps_compression or trnc_max <= status.trnc_lim or status.trnc_limit_has_reached_min;
 }
 
 template<typename Scalar>

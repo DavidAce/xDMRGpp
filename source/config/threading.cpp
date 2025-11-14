@@ -31,21 +31,28 @@ namespace settings {
     void configure_threads() {
         // Set the number of threads to be used
 //        unsigned int omp_threads = 1;
-#if defined(_OPENMP)
-        std::string omp_proc_bind;
-        switch(omp_get_proc_bind()) {
-                /* clang-format off */
-            case 0 : {omp_proc_bind = "false";break;}
-            case 1 : {omp_proc_bind = "true";break;}
-            case 2 : {omp_proc_bind = "primary";break;}
-            case 3 : {omp_proc_bind = "close";break;}
-            case 4 : {omp_proc_bind = "spread";break;}
-            default: omp_proc_bind = "unknown";
-                /* clang-format on */
+#if defined(_OPENMP) and defined(EIGEN_USE_THREADS)
+        auto get_omp_proc_bind = []() -> std::string {
+            switch(omp_get_proc_bind()) {
+                case 0: return "false";
+                case 1: return "true";
+                case 2: return "primary";
+                case 3: return "close";
+                case 4: return "spread";
+                default: return "unknown";
+            }
+        };
+        if(auto omp_proc_bind = get_omp_proc_bind(); omp_proc_bind != "false") {
+            throw except::runtime_error("\n \t Detected OMP_PROC_BIND: {}.\n"
+                                        "\t OpenMP core pinning interacts poorly with std::thread in Eigen::Tensor when EIGEN_USE_THREADS is defined.\n"
+                                        "\t Please unset environment variables OMP_PROC_BIND and OMP_PLACES, or unset preprocessor variable EIGEN_USE_THREADS",
+                                        omp_proc_bind);
         }
 
-        tools::log->info("OpenMP | omp_max_threads {} | omp_max_active_levels {} | omp_dynamic {} | omp_proc_bind [{}] | omp_num_procs {}",
-                         omp_get_max_threads(), omp_get_max_active_levels(), omp_get_dynamic(), omp_proc_bind, omp_get_num_procs());
+
+
+        tools::log->info("OpenMP | omp_max_threads {} | omp_max_active_levels {} | omp_dynamic {} | omp_num_procs {}",
+                         omp_get_max_threads(), omp_get_max_active_levels(), omp_get_dynamic(), omp_get_num_procs());
 
 //        omp_threads = safe_cast<unsigned int>(omp_get_max_threads());
 #endif

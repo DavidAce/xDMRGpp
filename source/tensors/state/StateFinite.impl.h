@@ -655,6 +655,11 @@ fp64 StateFinite<Scalar>::get_truncation_error_active_max() const {
     auto truncation_errors_active = get_truncation_errors_active();
     return *std::max_element(truncation_errors_active.begin(), truncation_errors_active.end());
 }
+template<typename Scalar>
+fp64 StateFinite<Scalar>::get_truncation_error_largest() const {
+    auto truncation_errors = get_truncation_errors();
+    return *std::max_element(truncation_errors.begin(), truncation_errors.end());
+}
 
 template<typename Scalar>
 size_t StateFinite<Scalar>::num_bonds_truncated(double truncation_threshold) const {

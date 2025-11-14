@@ -258,6 +258,7 @@ class StateFinite {
     std::vector<double> get_truncation_errors() const;
     std::vector<double> get_truncation_errors_active() const;
     double              get_truncation_error_active_max() const;
+    double              get_truncation_error_largest() const;
 
     size_t num_bonds_truncated(double truncation_threshold) const;
     size_t num_bonds_at_limit(long bond_lim) const;

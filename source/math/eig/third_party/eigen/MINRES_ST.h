@@ -174,7 +174,7 @@ namespace Eigen {
                 RealScalar rrnorm = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
                 error_history.push_back(-std::log10(rrnorm));
                 bool rrnorm_has_converged  = residualNorm2 < threshold2;
-                bool rrnorm_has_made_progress = rrnorm < std::max(tol_error, RealScalar{0.1f});
+                bool rrnorm_has_made_progress = rrnorm < std::max(tol_error, RealScalar{0.33f});
                 bool minres_has_converged = rrnorm_has_converged;
 
                 if((iters >=20 and iters % 20 == 0) or minres_has_converged) {
@@ -183,10 +183,11 @@ namespace Eigen {
                     auto [avg, sdv, rel] = get_stats(error_history);
                     bool rrnorm_has_saturated = rel < RealScalar{1e-2f};
                     bool minres_has_saturated = rrnorm_has_saturated and rrnorm_has_made_progress;
-                    // if constexpr(std::is_same_v<RealScalar, float> or std::is_same_v<RealScalar, double>) {
-                    //     std::printf("k: %4ld |rk|=%.5e |r0|=%.5e |rk|/|b|=%.5e (log10 avg: %.5e  std: %.5e  rel: %.5e)\n",
-                    //                  iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, avg, sdv, rel);
-                    // }
+                    if constexpr(std::is_same_v<RealScalar, float> or std::is_same_v<RealScalar, double>) {
+                        if(iters % 500 == 0)
+                            std::printf("k: %4ld |rk|=%.5e |r0|=%.5e |rk|/|b|=%.5e (log10 avg: %.5e  std: %.5e  rel: %.5e)\n",
+                                     iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, avg, sdv, rel);
+                    }
 
                     if (minres_has_converged) {
                         // std::printf("minres converged\n");

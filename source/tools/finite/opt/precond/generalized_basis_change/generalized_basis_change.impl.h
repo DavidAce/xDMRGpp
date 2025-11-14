@@ -19,10 +19,10 @@
 #include <unsupported/Eigen/MatrixFunctions>
 
 namespace settings {
-#if defined(DEBUG)
-    static constexpr bool debug_generalized_basis_change = true;
+#if defined(NDEBUG)
+    static constexpr bool debug_generalized_basis_change = false;
 #else
-    static constexpr bool debug_generalized_basis_change = true;
+    static constexpr bool debug_generalized_basis_change = false;
 #endif
 }
 
@@ -88,7 +88,7 @@ auto GeneralizedBasisChange<Scalar>::matrix_norm(const MatrixType &A) -> MatrixT
 
 template<typename Scalar>
 void GeneralizedBasisChange<Scalar>::regularize(Eigen::Tensor<Scalar, 1> &w, const EnvWeightRegularizer ewr, std::string_view tag) {
-    print_stats(w, tag);
+    //print_stats(w, tag);
     Eigen::Map<VectorType> wmap = tenx::VectorMap(w);
     switch(ewr) {
             /* clang-format off */
@@ -100,7 +100,7 @@ void GeneralizedBasisChange<Scalar>::regularize(Eigen::Tensor<Scalar, 1> &w, con
         default: throw except::runtime_error("EnvWeightRegularizer not implemented");
             /* clang-format on */
     }
-    print_stats(w, tag);
+    //print_stats(w, tag);
 };
 
 template<typename Scalar>
@@ -568,8 +568,8 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
 
         // VectorReal absEpsY = Y.cwiseAbs().cwiseMax(eps);
         // absEpsY /= absEpsY.mean();
-        tools::log->info("Y : {::.5e}", fv(Y));
-        tools::log->info("D : {::.5e}", fv(D));
+        //tools::log->info("Y : {::.5e}", fv(Y));
+        // tools::log->info("D : {::.5e}", fv(D));
         VectorReal invPowD = D.array().pow(-RealScalar{bcfg.alpha} / 2);
         VectorReal absPowD = D.array().pow(+RealScalar{bcfg.alpha} / 2);
         MatrixType T_zip   = U * absPowD.asDiagonal() * U.adjoint();
@@ -647,8 +647,8 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms(const Eigen::Ten
     }
     D = D.cwiseAbs();
     D /= D.mean();
-    tools::log->info("Y : {::.5e}", fv(Y));
-    tools::log->info("D : {::.5e}", fv(D));
+    // tools::log->info("Y : {::.5e}", fv(Y));
+    // tools::log->info("D : {::.5e}", fv(D));
     assert(!D.isZero());
     assert(D.allFinite());
 
@@ -723,19 +723,19 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms(const Eigen::Ten
         };
 
         auto check_congruence = [&](const MatrixType &X, const MatrixType &TT, const MatrixType &G, std::string_view lbl) {
-            MatrixType W   = TT.adjoint() * X * TT;
-            RealScalar rel = rel_err(W, G, X.norm());
-            RealScalar hrm = herm_resid(W);
-            tools::log->info("{}: ||T^H X T - G||/max(1,||X||) = {:.3e}", lbl, fp(rel));
-            tools::log->info("{}: Herm residual (rel) = {:.3e}", lbl, fp(hrm));
-            eig_range(W, std::string(lbl) + "_sym");
+                MatrixType W   = TT.adjoint() * X * TT;
+                RealScalar rel = rel_err(W, G, X.norm());
+                RealScalar hrm = herm_resid(W);
+                tools::log->info("{}: ||T^H X T - G||/max(1,||X||) = {:.3e}", lbl, fp(rel));
+                tools::log->info("{}: Herm residual (rel) = {:.3e}", lbl, fp(hrm));
+                eig_range(W, std::string(lbl) + "_sym");
         };
         if(bcfg.eat != EnvAggregateType::H2_zip) {
             // In H2Zip we have unequal sizes for agg1 agg2 and T
 
             // Targets for magnitude-only tempered scheme:
             //   T = U |Y|^{-alpha/2} U^H  ⇒  T^H A T = U [sgn(Y)|Y|^{1-alpha}] U^H,
-            //                               T^H B T = U [|Y|^{-alpha}]        U^H.
+            //                                T^H B T = U [|Y|^{-alpha}]        U^H.
             VectorReal sgnY = Y.array().sign().matrix();
             // const auto n       = env1_agg.dimension(0);
             MatrixType target1 = U * (sgnY.array() * D.array().pow(RealScalar{1} - bcfg.get_alpha<RealScalar>())).matrix().asDiagonal() * U.adjoint();

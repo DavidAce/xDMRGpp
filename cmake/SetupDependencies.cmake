@@ -30,14 +30,12 @@ find_package(OpenMP                       REQUIRED BYPASS_PROVIDER COMPONENTS CX
 find_package(gfortran                     REQUIRED BYPASS_PROVIDER OPTIONAL_COMPONENTS quadmath)
 find_package(Lapacke                      REQUIRED BYPASS_PROVIDER MODULE)
 find_package(pcg-cpp                      REQUIRED)
-find_package(Eigen3       5.0.0           REQUIRED)                                         # Eigen3 numerical library (needed by ceres and h5pp)
-find_package(Ceres        2.2.0           REQUIRED)                                         # Eigen3 numerical library (needed by ceres and h5pp)
+find_package(Eigen3       5.0.0           REQUIRED)                                         # Eigen3 numerical library
 find_package(h5pp         1.11.0...1.11.3 REQUIRED)                                         # h5pp for writing to file binary in format
 find_package(spdlog       1.11.0...1.16.0 REQUIRED)
 find_package(fmt          11.0.0...11.9.0 REQUIRED)
 find_package(CLI11        2.4.1...2.6.0   REQUIRED)                                         # Command line argument parser
 find_package(Backward     1.6             REQUIRED)
-#find_package(tomlplusplus 3.4.0           REQUIRED)
 find_package(toml11       4.4.0           REQUIRED)
 #find_package(arpack++   2.3.0  REQUIRED)                                          # C++ frontend for arpack-ng. Custom find module.
 #find_package(mpfr       4.1.0  REQUIRED)
@@ -75,7 +73,6 @@ target_link_libraries(xdmrg++-deps INTERFACE
             pcg-cpp::pcg-cpp
             h5pp::h5pp
             Eigen3::Eigen
-            Ceres::ceres
             fmt::fmt
             spdlog::spdlog
             lapacke::lapacke
@@ -85,7 +82,6 @@ target_link_libraries(xdmrg++-deps INTERFACE
             lbfgspp
             Spectra::Spectra
             cppoptlib::cppoptlib
-#            tomlplusplus::tomlplusplus
             # We link Backward::Backward on the xdmrg++-stacktrace object directly
             )
 
