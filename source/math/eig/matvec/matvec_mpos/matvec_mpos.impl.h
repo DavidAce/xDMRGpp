@@ -1151,7 +1151,7 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
                                             jcbOverlapSize);
         }
         long nblocks = static_cast<long>(blockSpecs.size());
-        eig::log->info("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} | overlap {}...",
+        eig::log->debug("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} | overlap {}...",
                        fname, eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks, fp(shift), jcbOverlapSize);
 #pragma omp parallel for ordered schedule(dynamic, 1)
         for(long blkidx = 0; blkidx < nblocks; ++blkidx) {

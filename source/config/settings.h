@@ -265,10 +265,10 @@ namespace settings {
         inline size_t             eigs_iter_max                   = 100000;                 /*!< Maximum number of iterations for eigenvalue solver. */
         inline double             eigs_iter_gain                  = 2     ;                 /*!< Increase number of iterations on OptSolver::EIGS by gain^(iters without progress) */
         inline GainPolicy         eigs_iter_gain_policy           = GainPolicy::SAT_ALGO;   /*!< Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC] */
-        inline double             eigs_abstol_min                    = 1e-14 ;                 /*!< Precision tolerance for halting the eigenvalue solver. */
-        inline double             eigs_abstol_max                    = 1e-8  ;                  /*!< Precision tolerance for halting the eigenvalue solver. */
-        inline double             eigs_reltol_min                 = 1e-2  ;                  /*!< If != 0, eigensolver success when the residual norm has decreased by this much. */
-        inline double             eigs_reltol_max                 = 1e-1  ;                  /*!< If != 0, eigensolver success when the residual norm has decreased by this much. */
+        inline double             eigs_abstol_min                 = 1e-14 ;                 /*!< Precision tolerance for halting the eigenvalue solver. */
+        inline double             eigs_abstol_max                 = 1e-8  ;                 /*!< Precision tolerance for halting the eigenvalue solver. */
+        inline double             eigs_reltol_min                 = 1e-2  ;                 /*!< If != 0, eigensolver success when the residual norm has decreased by this much. */
+        inline double             eigs_reltol_max                 = 1e-1  ;                 /*!< If != 0, eigensolver success when the residual norm has decreased by this much. */
         inline int                eigs_ncv_min                    = 0     ;                 /*!< Minimum krylov subspace size in the eigensolver. Set ncv <= 0 for automatic selection */
         inline int                eigs_ncv_max                    = 0     ;                 /*!< Minimum krylov subspace size in the eigensolver. Set ncv <= 0 for automatic selection */
         inline int                eigs_nev_min                    = 1     ;                 /*!< The minimum number of eigenpairs to request on OptSolver::EIGS */

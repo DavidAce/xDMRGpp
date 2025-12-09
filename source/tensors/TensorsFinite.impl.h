@@ -572,8 +572,6 @@ void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &
         throw except::runtime_error("All active sites are not equal: tensors {} | state {} | model {} | edges {}", active_sites, state->active_sites,
                                     model->active_sites, edges->active_sites);
     clear_measurements(log_policy);
-    RealScalar norm = std::real(tools::common::contraction::contract_mps_norm(multisite_tensor));
-    tools::log->info("merging multisite_tensor with norm: direct {:.16f} contract {:.16f}", fp(tenx::norm(multisite_tensor)), fp(norm));
     tools::finite::mps::merge_multisite_mps(get_state(), multisite_tensor, active_sites, get_position<long>(), mevent, svd_cfg, log_policy);
     normalize_state(svd_cfg, NormPolicy::IFNEEDED);
 }

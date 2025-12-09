@@ -314,7 +314,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_std(const opt_mps<Scalar>       &in
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.setLogger(spdlog::level::debug, fmt::format("gd+k{}", tag));
+    solver.setLogger(spdlog::level::info, fmt::format("gd+k {}", tag));
     solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<CalcReal>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
@@ -565,7 +565,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.setLogger(spdlog::level::debug, fmt::format("gd+k{}", tag));
+    solver.setLogger(spdlog::level::info, fmt::format("gd+k {}", tag));
     solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<CalcReal>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
@@ -778,7 +778,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.setLogger(spdlog::level::debug, fmt::format("gd+k{}", tag));
+    solver.setLogger(spdlog::level::info, fmt::format("gd+k {}", tag));
     solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
@@ -1013,4 +1013,5 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
     // auto result7 = eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, false, true, "JD h1h2", elog);
     // return eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, false, false, "JD", elog);
     // return eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb, prt, rct, "JD");
+    throw except::runtime_error("opt_meta.optAlgo not handled: {}", enum2sv(opt_meta.optAlgo));
 }

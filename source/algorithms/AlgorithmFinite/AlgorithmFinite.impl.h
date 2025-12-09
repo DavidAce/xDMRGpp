@@ -656,6 +656,10 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
     // auto evar_new = tools::finite::measure::energy_variance(tensors);
     // auto evar_lim = evar_new * RealScalar{1.0f + static_cast<RealScalar>(settings::strategy::trnc_increase_vtol)};
     // auto bond_min = tensors.state->get_largest_bond() / 4;
+
+    auto trnc_max_old = tensors.get_state().get_truncation_error_largest();
+    auto bond_max_old = tensors.get_state().get_largest_bond();
+
     auto trials   = 0;
     auto trnc_prv = status.trnc_lim;
     auto trnc_try = status.trnc_lim;
@@ -675,24 +679,28 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
         bool reject_bond_too_small  = tensors.get_state().get_largest_bond() < 16;
         bool reject_error_too_large = std::max(var_err, ene_err) > settings::strategy::trnc_increase_vtol;
         if(reject_bond_too_small or reject_error_too_large) {
-            tools::log->info("try_mps_compression: Rejected trial {} trnc try {:.3e} prv {:.3e}  | var {:.5e} -> {:.5e} (err {:.5e}) | ene {:.5e} -> {:.5e} "
-                             "(err {:.5e}) | bond dims: {}",
-                             trials, trnc_try, trnc_prv, fp(var_old), fp(var_new), fp(var_err), fp(ene_old), fp(ene_new), fp(ene_err),
-                             tools::finite::measure::bond_dimensions(tensors.get_state()));
+            tools::log->debug("try_mps_compression: Rejected trial {} trnc try {:.3e} prv {:.3e}  | var {:.5e} -> {:.5e} (err {:.5e}) | ene {:.5e} -> {:.5e} "
+                              "(err {:.5e}) | bond dims: {}",
+                              trials, trnc_try, trnc_prv, fp(var_old), fp(var_new), fp(var_err), fp(ene_old), fp(ene_new), fp(ene_err),
+                              tools::finite::measure::bond_dimensions(tensors.get_state()));
             tensors = tensors_tmp;
             break;
         }
-        tools::log->info("try_mps_compression: Accepted trial {} trnc try {:.3e} prv {:.3e} | var {:.5e} -> {:.5e} (err {:.5e}) | ene {:.5e} -> {:.5e} (err "
-                         "{:.5e}) | bond dims: {}",
-                         trials, trnc_try, trnc_prv, fp(var_old), fp(var_new), fp(var_err), fp(ene_old), fp(ene_new), fp(ene_err),
-                         tools::finite::measure::bond_dimensions(tensors.get_state()));
+        tools::log->debug("try_mps_compression: Accepted trial {} trnc try {:.3e} prv {:.3e} | var {:.5e} -> {:.5e} (err {:.5e}) | ene {:.5e} -> {:.5e} (err "
+                          "{:.5e}) | bond dims: {}",
+                          trials, trnc_try, trnc_prv, fp(var_old), fp(var_new), fp(var_err), fp(ene_old), fp(ene_new), fp(ene_err),
+                          tools::finite::measure::bond_dimensions(tensors.get_state()));
     }
-    auto trnc_old   = status.trnc_lim;
-    auto trnc_max   = tensors.get_state().get_truncation_error_largest();
+    auto trnc_old = status.trnc_lim;
+    auto trnc_max = tensors.get_state().get_truncation_error_largest();
+    auto bond_max = tensors.get_state().get_largest_bond();
+
     status.trnc_lim = std::clamp(trnc_try * 0.1, status.trnc_lim, settings::precision::svd_truncation_max);
     if(status.trnc_lim != trnc_old)
-        tools::log->info("try_mps_compression: updated truncation error limit: {:.5e} -> {:.5e} | largest truncation error {:.5e}",
-            trnc_old, status.trnc_lim, trnc_max);
+        tools::log->info("try_mps_compression: updated truncation error limit: {:.5e} -> {:.5e} "
+                         "| largest truncation error {:.5e} -> {:.5e} "
+                         "| largest bond dimension {} -> {}",
+                         trnc_old, status.trnc_lim, trnc_max_old, trnc_max, bond_max_old, bond_max);
 }
 
 template<typename Scalar>
@@ -1740,7 +1748,7 @@ void AlgorithmFinite<Scalar>::check_convergence_truncation_error() {
     auto trnc_max_it = std::max_element(trnc_err.begin(), trnc_err.end());
     auto trnc_max    = trnc_max_it != trnc_err.end() ? *trnc_max_it : 1;
     tools::log->debug("truncation error max: {:.5e}", fp(*trnc_max_it));
-    bool trying_mps_compression = settings::strategy::trnc_increase_vtol > 0 ;
+    bool trying_mps_compression     = settings::strategy::trnc_increase_vtol > 0;
     status.trnc_error_has_converged = trying_mps_compression or trnc_max <= status.trnc_lim or status.trnc_limit_has_reached_min;
 }
 

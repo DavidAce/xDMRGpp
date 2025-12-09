@@ -214,7 +214,7 @@ class IterativeLinearSolverPreconditioner {
         assert(x.allFinite());
 
         if(config->matdef == MatDef::DEF) {
-            auto beta_new2 = std::real(b.dot(x));
+            [[maybe_unused]] auto beta_new2 = std::real(b.dot(x));
             eigen_assert(beta_new2 >= RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
         }
     }

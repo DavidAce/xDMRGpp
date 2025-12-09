@@ -197,15 +197,15 @@ typename solver_base<Scalar>::RealScalar solver_base<Scalar>::get_op_norm_estima
             if(not eigval.has_value()) { eigval = RealScalar{1}; }
             auto abs_lambda = std::abs(eigval.value());
 
-            //RealScalar H1_vnorm = H1V.norm() / V.norm();
-            //RealScalar H2_vnorm = H2V.norm() / V.norm();
-            // tools::log->debug("Op norm H1: max eval = {:.3e},  |H1Q|/|Q| = {:.3e}, |H1V|/|V| = {:.3e} pow iter estimate = {:.3e}", fp(H1_maxeval),
-            //                   fp(H1_maxnorm), fp(H1_vnorm), fp(H1_pownorm));
-            // tools::log->debug("Op norm H2: max eval = {:.3e},  |H2Q|/|Q| = {:.3e}, |H2V|/|V| = {:.3e} pow iter estimate = {:.3e}", fp(H2_maxeval),
-            //                   fp(H2_maxnorfm), fp(H2_vnorm), fp(H2_pownorm));
-            // tools::log->debug("Op norm  |H1Q|/|H2Q|  = {:.3e},  |H1V|/|H2V|  = {:.3e}", fp(H1_maxnorm / H2_maxnorm), fp(H1_vnorm / H2_vnorm));
-            // tools::log->debug("Op norm  |H1Q|+|H2Q|λ = {:.3e},  |H1V|+|H2V|λ = {:.3e}", fp(H1_maxnorm + abs_lambda * H2_maxnorm),
-            //                   fp(H1_vnorm + abs_lambda * H2_vnorm));
+            // RealScalar H1_vnorm = H1V.norm() / V.norm();
+            // RealScalar H2_vnorm = H2V.norm() / V.norm();
+            //  tools::log->debug("Op norm H1: max eval = {:.3e},  |H1Q|/|Q| = {:.3e}, |H1V|/|V| = {:.3e} pow iter estimate = {:.3e}", fp(H1_maxeval),
+            //                    fp(H1_maxnorm), fp(H1_vnorm), fp(H1_pownorm));
+            //  tools::log->debug("Op norm H2: max eval = {:.3e},  |H2Q|/|Q| = {:.3e}, |H2V|/|V| = {:.3e} pow iter estimate = {:.3e}", fp(H2_maxeval),
+            //                    fp(H2_maxnorfm), fp(H2_vnorm), fp(H2_pownorm));
+            //  tools::log->debug("Op norm  |H1Q|/|H2Q|  = {:.3e},  |H1V|/|H2V|  = {:.3e}", fp(H1_maxnorm / H2_maxnorm), fp(H1_vnorm / H2_vnorm));
+            //  tools::log->debug("Op norm  |H1Q|+|H2Q|λ = {:.3e},  |H1V|+|H2V|λ = {:.3e}", fp(H1_maxnorm + abs_lambda * H2_maxnorm),
+            //                    fp(H1_vnorm + abs_lambda * H2_vnorm));
 
             return H1_normest + abs_lambda * H2_normest;
         }
@@ -421,8 +421,8 @@ typename solver_base<Scalar>::VectorReal solver_base<Scalar>::get_slopes(const s
     };
     if(v.empty()) return {};
 
-    auto       m = v.size();
-    auto       n = v.front().size();
+    auto       m = static_cast<Eigen::Index>(v.size());
+    auto       n = static_cast<Eigen::Index>(v.front().size());
     VectorReal x = VectorReal::LinSpaced(m, RealScalar(0), RealScalar(m - 1));
     VectorReal slopes(n);
     for(Eigen::Index j = 0; j < n; ++j) {
@@ -476,7 +476,7 @@ bool solver_base<Scalar>::eigVals_have_saturated() {
 }
 
 template<typename Scalar>
-void solver_base<Scalar>::adjust_preconditioner_tolerance(const Eigen::Ref<const MatrixType> &S) {
+void solver_base<Scalar>::adjust_preconditioner_tolerance([[maybe_unused]] const Eigen::Ref<const MatrixType> &S) {
     // if(status.iter_last_preconditioner_tolerance_adjustment == status.iter) return;
     H1.get_iterativeLinearSolverConfig().jacobi.cond =
         std::max(std::abs(status.T1_max_eval), std::abs(status.T1_min_eval)) / std::min(std::abs(status.T1_max_eval), std::abs(status.T1_min_eval));
@@ -485,7 +485,7 @@ void solver_base<Scalar>::adjust_preconditioner_tolerance(const Eigen::Ref<const
     H1H2.get_iterativeLinearSolverConfig().jacobi.cond = status.condition;
 
     if(!use_adaptive_inner_tolerance) return;
-    auto Snorm = S.leftCols(nev).colwise().norm().minCoeff();
+    // auto Snorm = S.leftCols(nev).colwise().norm().minCoeff();
 
     auto set_cfg = [&](IterativeLinearSolverConfig<Scalar> &cfg) {
         auto oldtol = std::max(eps, cfg.tolerance);
@@ -2831,6 +2831,8 @@ void solver_base<Scalar>::init() {
     status.rNorms_init = status.rNorms;
     assert(V.cols() == b);
     assert_allFinite(V);
+    last_log_time.tic();
+    last_log_time.start_lap();
 }
 
 template<typename Scalar>
@@ -3490,19 +3492,16 @@ void solver_base<Scalar>::printStatus() {
         case ResidualCorrectionType::JACOBI_DAVIDSON: rCorrMsg = "JD"; break;
         case ResidualCorrectionType::AUTO: rCorrMsg = "AU"; break;
     }
-    auto        H1ir            = H1.get_iterativeLinearSolverConfig();
-    auto        H2ir            = H2.get_iterativeLinearSolverConfig();
-    auto        H1H2ir          = H1H2.get_iterativeLinearSolverConfig();
-    std::string innerMsg        = status.num_matvecs_inner == 0 ? std::string()
-                                                                : fmt::format("[inner: ({}) mv {:5} err {:.2e} tol {:.2e} t {:.1e}s] ",                  //
-                                                                              rCorrMsg,                                                                  //
-                                                                              status.num_matvecs_inner,                                                  //
-                                                                              fp(std::max({H1ir.result.error, H2ir.result.error, H1H2ir.result.error})), //
-                                                                              fp(std::max({H1ir.tolerance, H2ir.tolerance, H1H2ir.tolerance})),          //
-                                                                              fp(H1ir.result.time + H2ir.result.time + H1H2ir.result.time));
-    bool        log_low_maxiter = max_iters < 10;
-    bool        log_jacobi_prec = preconditioner_type == eig::Preconditioner::JACOBI and status.iter % 100 == 0;
-    bool        log_solve_prec  = preconditioner_type == eig::Preconditioner::SOLVE;
+    auto        H1ir     = H1.get_iterativeLinearSolverConfig();
+    auto        H2ir     = H2.get_iterativeLinearSolverConfig();
+    auto        H1H2ir   = H1H2.get_iterativeLinearSolverConfig();
+    std::string innerMsg = status.num_matvecs_inner == 0 ? std::string()
+                                                         : fmt::format("[inner: ({}) mv {:5} err {:.2e} tol {:.2e} t {:.1e}s] ",                  //
+                                                                       rCorrMsg,                                                                  //
+                                                                       status.num_matvecs_inner,                                                  //
+                                                                       fp(std::max({H1ir.result.error, H2ir.result.error, H1H2ir.result.error})), //
+                                                                       fp(std::max({H1ir.tolerance, H2ir.tolerance, H1H2ir.tolerance})),          //
+                                                                       fp(H1ir.result.time + H2ir.result.time + H1H2ir.result.time));
 
     MatrixType  Gram      = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
     RealScalar  orthError = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
@@ -3513,38 +3512,46 @@ void solver_base<Scalar>::printStatus() {
         evMsg           = fmt::format(" {::.16f} / {::.16f}", fv(VH1V), fv(VH2V));
     }
 
-    if(log_low_maxiter or log_jacobi_prec or log_solve_prec)
-        eiglog->debug("it {:3} mv {:3} pc {:3} t {:.1e}s {}"
-                      "eigVal {::.16f}{} "
-                      "oErr {:.3e} rNorms {::.8e} rNormTol {::.3e} tol {:.2e} (rel {:.2e}) "
-                      "({:9.2e}/mv) sat {}:{}/{} col {:2} b {} ritz {} "
-                      "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
-                      status.iter + 1,                   //
-                      status.num_matvecs,                //
-                      status.num_precond,                //
-                      status.time_elapsed.restart_lap(), //
-                      innerMsg,                          //
-                      fv(status.eigVal),                 //
-                      evMsg,                             //
-                      fp(orthError),                     //
-                      // fv(VectorReal(status.rNorms.topRows(nev))), //
-                      fv(VectorReal(status.rNorms)),            //
-                      fv(rNormTols()),                          //
-                      fp(abstol),                               //
-                      fp(reltol),                               //
-                      fp(get_rNorms_log10_change_per_matvec()), //
-                      status.saturation_count_eigVal,           //
-                      status.saturation_count_rNorm,            //
-                      status.saturation_count_max,              //
-                      Q.cols(),                                 //
-                      b,                                        //
-                      enum2sv(ritz),                            //
-                      fp(status.op_norm_estimate),              //
-                      fp(status.condition),                     //
-                      fp(status.sensitivity),                   //
-                      msg_rnorm_gap);
-
-    // status.time_elapsed.restart_lap();
+    bool log_low_maxiter = max_iters < 10;
+    // bool log_jacobi_prec   = preconditioner_type == eig::Preconditioner::JACOBI and status.iter % 100 == 0;
+    // bool log_solve_prec    = preconditioner_type == eig::Preconditioner::SOLVE;
+    bool log_long_time    = last_log_time.get_lap() > 10.0;
+    bool log_every_ten_it = (status.iter + 1) % 10 == 0;
+    spdlog::level::level_enum loglevel = std::min(spdlog::level::debug, eiglog->level());
+    if(log_low_maxiter or log_every_ten_it or log_long_time) loglevel = spdlog::level::info;
+    if(eiglog->level() >= loglevel) {
+        [[maybe_unused]] auto lap = last_log_time.restart_lap();
+        eiglog->log(loglevel,
+                    "it {:3} mv {:3} pc {:3} t {:.1e}s {}"
+                    "eigVal {::.16f}{} "
+                    "oErr {:.3e} rNorms {::.8e} rNormTol {::.3e} tol {:.2e} (rel {:.2e}) "
+                    "({:9.2e}/mv) sat {}:{}/{} col {:2} b {} ritz {} "
+                    "op norm {:.2e} cond {:.2e} sens {:.2e}{}",
+                    status.iter + 1,                   //
+                    status.num_matvecs,                //
+                    status.num_precond,                //
+                    status.time_elapsed.restart_lap(), //
+                    innerMsg,                          //
+                    fv(status.eigVal),                 //
+                    evMsg,                             //
+                    fp(orthError),                     //
+                    // fv(VectorReal(status.rNorms.topRows(nev))), //
+                    fv(VectorReal(status.rNorms)),            //
+                    fv(rNormTols()),                          //
+                    fp(abstol),                               //
+                    fp(reltol),                               //
+                    fp(get_rNorms_log10_change_per_matvec()), //
+                    status.saturation_count_eigVal,           //
+                    status.saturation_count_rNorm,            //
+                    status.saturation_count_max,              //
+                    Q.cols(),                                 //
+                    b,                                        //
+                    enum2sv(ritz),                            //
+                    fp(status.op_norm_estimate),              //
+                    fp(status.condition),                     //
+                    fp(status.sensitivity),                   //
+                    msg_rnorm_gap);
+    }
 }
 
 template<typename Scalar>

@@ -167,6 +167,7 @@ class solver_base {
     protected:
     spdlog::level::level_enum       logLevel = spdlog::level::warn;
     std::shared_ptr<spdlog::logger> eiglog;
+    tid::ur                         last_log_time = tid::ur();
 
     Eigen::Index      qBlocks = 0;
     MatrixType        get_wBlock(fMultP_t MultP);
