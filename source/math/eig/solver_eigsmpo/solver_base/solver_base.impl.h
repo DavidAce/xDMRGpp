@@ -3512,13 +3512,13 @@ void solver_base<Scalar>::printStatus() {
         evMsg           = fmt::format(" {::.16f} / {::.16f}", fv(VH1V), fv(VH2V));
     }
 
-    bool log_low_maxiter = max_iters < 10;
+    // bool log_low_maxiter = max_iters < 10;
     // bool log_jacobi_prec   = preconditioner_type == eig::Preconditioner::JACOBI and status.iter % 100 == 0;
     // bool log_solve_prec    = preconditioner_type == eig::Preconditioner::SOLVE;
     bool log_long_time    = last_log_time.get_lap() > 10.0;
     bool log_every_ten_it = (status.iter + 1) % 10 == 0;
     spdlog::level::level_enum loglevel = std::min(spdlog::level::debug, eiglog->level());
-    if(log_low_maxiter or log_every_ten_it or log_long_time) loglevel = spdlog::level::info;
+    if(log_every_ten_it or log_long_time) loglevel = spdlog::level::info;
     if(eiglog->level() >= loglevel) {
         [[maybe_unused]] auto lap = last_log_time.restart_lap();
         eiglog->log(loglevel,
