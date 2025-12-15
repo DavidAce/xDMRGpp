@@ -29,7 +29,7 @@ config_ranges = {
                                      '+0.00',
                                      '+0.50', '+1.00', '+1.50', '+2.00', '+2.50', '+3.00', '+3.50', '+4.00', '+4.50', '+5.00', '+5.50', '+6.00', '+6.50', '+7.00', '+7.50', '+8.00'],
     "xdmrg::energy_spectrum_shift": ['0.0'],
-    "xdmrg::iter_max": ['100'],
+    "xdmrg::iter_max": ['200'],
 }
 
 configs = get_config_product(config_ranges, config_paths)
