@@ -324,8 +324,8 @@ std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_deparallelized_mpo
     std::vector<std::string> report;
     // if(tools::log->level() == spdlog::level::trace)
     for(const auto &mpo : mpos) report.emplace_back(fmt::format("{}", mpo.dimensions()));
-
-    for(size_t iter = 0; iter < 2; iter++) {
+    const Eigen::Index maxiter = 2;
+    for(size_t iter = 0; iter < maxiter; iter++) {
         // Start by deparallelizing left to right compress from left to right
         Eigen::Tensor<Scalar, 2> T_l2r; // Transfer matrix
         Eigen::Tensor<Scalar, 4> T_mpo;

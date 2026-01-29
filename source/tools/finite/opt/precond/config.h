@@ -2,6 +2,7 @@
 enum class BasisChangeScale { NONE, MIN, AVG, MAX, SQRTMIN, SQRTAVG, SCALE };
 enum class EnvWeightRegularizer { NONE, NORM, MAX, SUM, MEAN };
 enum class EnvWeightType {
+    OFF,
     ONES,
     NO_PSI_TRACE,
     WITH_PSI_TRACE,

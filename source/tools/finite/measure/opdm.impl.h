@@ -119,7 +119,7 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::opdm_general(const StateFinite<
     // tools::log->info("r-+: trace {:.16f}\n{}", fp(rmp.trace()), linalg::matrix::to_string(rmp, 5));
     // tools::log->info("r--: trace {:.16f}\n{}", fp(rmm.trace()), linalg::matrix::to_string(rmm, 5));
     // tools::log->info("R : trace {:.16f}\n{}", fp(R.trace()), linalg::matrix::to_string(R, 5));
-    auto r1pp = MatrixType::Identity(rpp.rows(), rpp.cols()) - rpp.adjoint();
+    [[maybe_unused]] auto r1pp = MatrixType::Identity(rpp.rows(), rpp.cols()) - rpp.adjoint();
     assert(rpp.isApprox(rpp.adjoint(), std::numeric_limits<RealT>::epsilon() * 1000));
     assert(rmm.isApprox(rmm.adjoint(), std::numeric_limits<RealT>::epsilon() * 1000));
     assert(rpm.isApprox(rmp.adjoint(), std::numeric_limits<RealT>::epsilon() * 1000));

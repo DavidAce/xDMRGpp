@@ -895,22 +895,7 @@ void MatVecMPOS<Scalar>::MultAx(const Scalar *mps_in_, Scalar *mps_out_) const {
     auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
     assert(Eigen::Map<const VectorType>(mps_in_, size_mps).allFinite());
     if(mpos_A.size() == 1) {
-        // if(low_prec) {
-        //     if constexpr(std::is_same_v<Scalar, double>) {
-        //         using Tensor3f = Eigen::Tensor<float, 3>;
-        //         using Tensor4f = Eigen::Tensor<float, 4>;
-        //         Tensor3f mps_in_f = mps_in.template cast<float>();
-        //         Tensor3f mps_out_f = mps_out.template cast<float>();
-        //         Tensor3f envL_A_f = envL_A.template cast<float>();
-        //         Tensor3f envR_A_f = envR_A.template cast<float>();
-        //         Tensor4f mpo_A_f = mpos_A.front().template cast<float>();
-        //         tools::common::contraction::matrix_vector_product(mps_out_f, mps_in_f, mpo_A_f, envL_A_f, envR_A_f);
-        //         mps_out = mps_out_f.template cast <double>();
-        //     }
-        // }else {
-        // }
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A.front(), envL_A, envR_A);
-
     } else {
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A_shf, envL_A, envR_A);
     }
@@ -922,6 +907,61 @@ template<typename Scalar>
 void MatVecMPOS<Scalar>::MultAx(Scalar *mps_in_, Scalar *mps_out_) {
     MultAx(static_cast<const Scalar *>(mps_in_), mps_out_);
 }
+
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultAx_hp(const Scalar *mps_in_, Scalar *mps_out_) const {
+    auto token   = t_multAx->tic_token();
+    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(mps_in_, shape_mps);
+    auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
+    assert(Eigen::Map<const VectorType>(mps_in_, size_mps).allFinite());
+
+    Eigen::Tensor<ScalarL, 3> mps_in_hp = mps_in.template cast<ScalarL>();
+    Eigen::Tensor<ScalarL, 3> mps_out_hp(shape_mps);
+    if(mpos_A_hp.empty()) {
+        for(const auto & mpo_A : mpos_A ) {
+            mpos_A_hp.emplace_back(mpo_A.template cast<ScalarL>());
+        }
+    }
+    if(envL_A_hp.size() != envL_A.size()) envL_A_hp = envL_A.template cast<ScalarL>();
+    if(envR_A_hp.size() != envR_A.size()) envR_A_hp = envR_A.template cast<ScalarL>();
+
+    if(mpos_A_hp.size() == 1) {
+         if(mps_in.size()) tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_hp.front(), envL_A_hp, envR_A_hp);
+    } else {
+        tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_shf_hp, envL_A_hp, envR_A_hp);
+    }
+    mps_out = mps_out_hp.template cast<Scalar>();
+    assert(Eigen::Map<VectorType>(mps_out_, size_mps).allFinite());
+    num_mv++;
+}
+
+
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultAx_hp(Scalar *mps_in_, Scalar *mps_out_) {
+    MultAx_hp(static_cast<const Scalar *>(mps_in_), mps_out_);
+}
+
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultAx_x2(const Scalar *mps_in_, Scalar *mps_out_) const {
+    auto token   = t_multAx->tic_token();
+    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(mps_in_, shape_mps);
+    auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
+    assert(Eigen::Map<const VectorType>(mps_in_, size_mps).allFinite());
+     if(mpos_A.size() == 1) {
+        if(mps_in.size()) tools::common::contraction::matrix_vector_product_gemm_x2(mps_out, mps_in, mpos_A.front(), envL_A, envR_A);
+    } else {
+        tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A_shf, envL_A, envR_A);
+    }
+    assert(Eigen::Map<VectorType>(mps_out_, size_mps).allFinite());
+    num_mv++;
+}
+
+
+template<typename Scalar>
+void MatVecMPOS<Scalar>::MultAx_x2(Scalar *mps_in_, Scalar *mps_out_) {
+    MultAx_x2(static_cast<const Scalar *>(mps_in_), mps_out_);
+}
+
 
 template<typename Scalar>
 void MatVecMPOS<Scalar>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
@@ -1025,6 +1065,36 @@ typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx(const Eigen::
     MultAx(x.data(), y.data());
     return y;
 }
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultAX_hp(const Eigen::Ref<const MatrixType> &X) const {
+    assert(X.rows() == get_size());
+    MatrixType Y(X.rows(), X.cols());
+    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultAx_hp(X.col(i).data(), Y.col(i).data()); }
+    return Y;
+}
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx_hp(const Eigen::Ref<const VectorType> &x) const {
+    assert(x.rows() == get_size());
+    VectorType y(x.rows());
+    MultAx_hp(x.data(), y.data());
+    return y;
+}
+
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultAX_x2(const Eigen::Ref<const MatrixType> &X) const {
+    assert(X.rows() == get_size());
+    MatrixType Y(X.rows(), X.cols());
+    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultAx_x2(X.col(i).data(), Y.col(i).data()); }
+    return Y;
+}
+template<typename Scalar>
+typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx_x2(const Eigen::Ref<const VectorType> &x) const {
+    assert(x.rows() == get_size());
+    VectorType y(x.rows());
+    MultAx_x2(x.data(), y.data());
+    return y;
+}
+
 
 template<typename Scalar>
 typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultBX(const Eigen::Ref<const MatrixType> &X) const {
@@ -1152,7 +1222,7 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
         }
         long nblocks = static_cast<long>(blockSpecs.size());
         eig::log->debug("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} | overlap {}...",
-                       fname, eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks, fp(shift), jcbOverlapSize);
+                        fname, eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks, fp(shift), jcbOverlapSize);
 #pragma omp parallel for ordered schedule(dynamic, 1)
         for(long blkidx = 0; blkidx < nblocks; ++blkidx) {
             eig::Factorization factorization_internal = factorization;

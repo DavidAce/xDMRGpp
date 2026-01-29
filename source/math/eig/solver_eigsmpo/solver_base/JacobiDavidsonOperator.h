@@ -104,7 +104,7 @@ namespace Eigen::internal {
         static void scaleAndAddTo(Dest &dst, const JacobiDavidsonOperator<ReplScalar> &mat, const Rhs &rhs, const Scalar &alpha) {
             // This method should implement "dst += alpha * lhs * rhs" inplace; however, for iterative solvers, alpha is always equal to 1, so let's not worry
             // about it.
-            auto t_jcb = tid::tic_scope("jdop", tid::level::higher);
+            auto t_jdop = tid::tic_scope("jdop", tid::level::higher);
             assert(alpha == Scalar(1) && "scaling is not implemented");
             assert(rhs.size() == mat.rows());
             assert(dst.size() == mat.rows());
@@ -159,7 +159,7 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
 
     VectorType res;
     auto       run = [&](auto &solver) {
-        auto t_jdop = tid::tic_scope("jdsolver", tid::level::higher);
+        auto t_jdsol = tid::tic_scope("jdsolver", tid::level::higher);
 
         solver.setMaxIterations(cfg.maxiters);
         solver.setTolerance(cfg.tolerance);
@@ -172,15 +172,15 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
             // eiglog->info("solving without guess");
             res = solver.solve(rhs);
         }
-        t_jdop.toc();
+        t_jdsol.toc();
         if constexpr(settings::debug_jdop)
             tools::log->trace("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | mat iter {} | time {:.2e}", get_solver_name(), matRepl.rows(),
                                     static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.iterations(),
-                                    t_jdop->get_last_interval());
+                                    t_jdsol->get_last_interval());
         cfg.result.iters += solver.iterations();
         cfg.result.matvecs += matRepl.iterations();
         cfg.result.precond += solver.preconditioner().iterations();
-        cfg.result.time += t_jdop->get_last_interval();
+        cfg.result.time += t_jdsol->get_last_interval();
         cfg.result.time_matvecs += matRepl.elapsed_time();                     // Time doing matrix-vector multiplications
         cfg.result.time_precond += solver.preconditioner().elapsed_time();     // Time doing in preconditioning step
         cfg.result.time_jacobi += solver.preconditioner().time_jacobi();       // Time applying jacobi
@@ -189,7 +189,7 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
         // cfg.result.total_iters += solver.iterations();
         // cfg.result.total_matvecs += matRepl.iterations();
         // cfg.result.total_precond += solver.preconditioner().iterations();
-        // cfg.result.total_time += t_jdop->get_last_interval();
+        // cfg.result.total_time += t_jdsol->get_last_interval();
         // cfg.result.total_time_matvecs += matRepl.elapsed_time();
         // cfg.result.total_time_precond += solver.preconditioner().elapsed_time();
 

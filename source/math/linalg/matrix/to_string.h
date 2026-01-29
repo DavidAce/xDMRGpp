@@ -20,7 +20,45 @@ namespace linalg::matrix {
                 ss << m.derived().format(f);
                 return ss.str();
             }
-#if defined(DMRG_USE_QUADMATH)
+    #if defined(DMRG_USE_FLOAT128)
+            else if constexpr(std::is_same_v<Inner, fp128>) {
+                auto to_chars_internal = [&](const auto &v) -> std::string {
+                    using V = std::remove_cvref_t<decltype(v)>;
+                    static_assert(std::is_floating_point_v<V>);
+                    std::chars_format fmtType = std::chars_format::fixed;
+                    constexpr auto   bsize = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
+                    char             buffer[bsize]; // Temporary buffer for conversion
+
+                    std::to_chars_result result;
+                    // C++23 std::to_chars for floating-point has an overload to accept precision.
+                    result = std::to_chars(buffer , buffer + sizeof(buffer), v, fmtType, f.precision);
+                    if(result.ec != std::errc{}) { throw std::system_error{static_cast<int>(result.ec), std::system_category()}; }
+
+                    // Create a string_view for the converted result.
+                    return std::string(buffer, result.ptr - buffer);
+                };
+
+                std::string s;
+                std::string fmt          = "%." + std::to_string(f.precision) + "Qf";
+                auto        probablesize = m.derived().size() * std::max<size_t>(64, static_cast<size_t>(f.precision) + 34);
+                s.reserve(probablesize);
+                s += f.matPrefix;
+                for(long i = 0; i < m.derived().rows(); ++i) {
+                    s += f.rowPrefix;
+                    for(long j = 0; j < m.derived().cols(); ++j) {
+                        auto rv = std::real(m.derived()(i,j));
+                        auto iv = std::imag(m.derived()(i,j));
+                        s += "(" +  to_chars_internal(rv) + ", " + to_chars_internal(iv) + ")";
+                        if(j + 1 != m.derived().cols()) s += f.coeffSeparator;
+                    }
+                    s += f.rowSuffix;
+                    if(i + 1 != m.derived().rows()) s += f.rowSeparator;
+                }
+                s += f.matSuffix;
+                s.shrink_to_fit();
+                return s;
+            }
+#elif defined(DMRG_USE_QUADMATH)
             else if constexpr(std::is_same_v<Inner, fp128>) {
                 std::string s;
                 auto        probablesize = 4 + 2 * (m.derived().size() + 1) * std::max<size_t>(64, static_cast<size_t>(f.precision) + 34);
@@ -57,7 +95,43 @@ namespace linalg::matrix {
             }
 
         }
-#if defined(DMRG_USE_QUADMATH)
+#if defined(DMRG_USE_FLOAT128)
+        else if constexpr(std::is_same_v<Scalar, fp128>) {
+            auto to_chars_internal = [&](const auto &v) -> std::string {
+                using V = std::remove_cvref_t<decltype(v)>;
+                static_assert(std::is_floating_point_v<V>);
+                std::chars_format fmtType = std::chars_format::fixed;
+                constexpr auto   bsize = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
+                char             buffer[bsize]; // Temporary buffer for conversion
+
+                std::to_chars_result result;
+                // C++23 std::to_chars for floating-point has an overload to accept precision.
+                result = std::to_chars(buffer , buffer + sizeof(buffer), v, fmtType, f.precision);
+                if(result.ec != std::errc{}) { throw std::system_error{static_cast<int>(result.ec), std::system_category()}; }
+
+                // Create a string_view for the converted result.
+                return std::string(buffer, result.ptr - buffer);
+            };
+
+            std::string s;
+            std::string fmt          = "%." + std::to_string(f.precision) + "Qf";
+            auto        probablesize = m.derived().size() * std::max<size_t>(64, static_cast<size_t>(f.precision) + 34);
+            s.reserve(probablesize);
+            s += f.matPrefix;
+            for(long i = 0; i < m.derived().rows(); ++i) {
+                s += f.rowPrefix;
+                for(long j = 0; j < m.derived().cols(); ++j) {
+                    s += to_chars_internal(m.derived()(i,j));
+                    if(j + 1 != m.derived().cols()) s += f.coeffSeparator;
+                }
+                s += f.rowSuffix;
+                if(i + 1 != m.derived().rows()) s += f.rowSeparator;
+            }
+            s += f.matSuffix;
+            s.shrink_to_fit();
+            return s;
+        }
+#elif defined(DMRG_USE_QUADMATH)
         else if constexpr(std::is_same_v<Scalar, fp128>) {
             std::string s;
             std::string fmt          = "%." + std::to_string(f.precision) + "Qf";

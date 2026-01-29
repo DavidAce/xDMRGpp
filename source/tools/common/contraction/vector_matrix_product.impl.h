@@ -34,7 +34,7 @@ namespace settings {
 
 #include "tools/common/log.h"
 
-namespace tools::common::contraction::internal {
+namespace tools::common::contraction::internal_vmp {
     template<typename Scalar>
     struct Info {
         using RealScalar              = decltype(std::real(std::declval<Scalar>()));
@@ -88,20 +88,18 @@ namespace tools::common::contraction::internal {
         thread_local Eigen::Tensor<Scalar, 4> T2;
 
         if(info.contract_left) {
-            T1.resize(mps.dimension(0), mps.dimension(2), envL.dimension(1), envL.dimension(2));
-            T2.resize(mps.dimension(2), envL.dimension(1), mpo.dimension(1), mpo.dimension(3));
-
-            T1.device(*threads->dev)  = mps.contract(envL, tenx::idx({1}, {0}));
-            T2.device(*threads->dev)  = T1.contract(mpo, tenx::idx({3, 0}, {0, 2}));
-            res.device(*threads->dev) = T2.contract(envR, tenx::idx({0, 2}, {0, 2})).shuffle(tenx::array3{1, 0, 2});
+            T1.resize(mps.dimension(0), mps.dimension(2), envL.dimension(0), envL.dimension(2));
+            T2.resize(mps.dimension(2), envL.dimension(0), mpo.dimension(1), mpo.dimension(2));
+            T1.device(*threads->dev)  = mps.contract(envL, tenx::idx({1}, {1}));
+            T2.device(*threads->dev)  = T1.contract(mpo, tenx::idx({3, 0}, {0, 3}));
+            res.device(*threads->dev) = T2.contract(envR, tenx::idx({0, 2}, {1, 2})).shuffle(tenx::array3{1, 0, 2});
 
         } else {
-            T1.resize(mps.dimension(0), mps.dimension(1), envR.dimension(1), envR.dimension(2));
-            T2.resize(mps.dimension(1), envR.dimension(1), mpo.dimension(0), mpo.dimension(3));
-
-            T1.device(*threads->dev)  = mps.contract(envR, tenx::idx({2}, {0}));
-            T2.device(*threads->dev)  = T1.contract(mpo, tenx::idx({3, 0}, {1, 2}));
-            res.device(*threads->dev) = T2.contract(envL, tenx::idx({0, 2}, {0, 2})).shuffle(tenx::array3{1, 2, 0});
+            T1.resize(mps.dimension(0), mps.dimension(1), envR.dimension(0), envR.dimension(2));
+            T2.resize(mps.dimension(1), envR.dimension(0), mpo.dimension(0), mpo.dimension(2));
+            T1.device(*threads->dev)  = mps.contract(envR, tenx::idx({2}, {1}));
+            T2.device(*threads->dev)  = T1.contract(mpo, tenx::idx({3, 0}, {1, 3}));
+            res.device(*threads->dev) = T2.contract(envL, tenx::idx({0, 2}, {1, 2})).shuffle(tenx::array3{1, 2, 0});
         }
         info.mps_norm           = get_norm(mps.data(), mps.dimensions());
         info.mpo_norm           = get_norm(mpo.data(), mpo.dimensions());
@@ -120,9 +118,9 @@ namespace tools::common::contraction::internal {
     Info<Scalar> contract_with_tblis(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
         static_assert(settings::tblis_enabled);
         if constexpr(settings::tblis_enabled) {
-            assert(mps.dimension(1) == envL.dimension(0));
-            assert(mps.dimension(2) == envR.dimension(0));
-            assert(mps.dimension(0) == mpo.dimension(2));
+            assert(mps.dimension(1) == envL.dimension(1));
+            assert(mps.dimension(2) == envR.dimension(1));
+            assert(mps.dimension(0) == mpo.dimension(3));
             assert(envL.dimension(2) == mpo.dimension(0));
             assert(envR.dimension(2) == mpo.dimension(1));
             static const tblis::tblis_config *tblis_cfg = nullptr; // tblis::config(get_tblis_arch().data());
@@ -138,17 +136,17 @@ namespace tools::common::contraction::internal {
             thread_local Eigen::Tensor<Scalar, 4> T1;
             thread_local Eigen::Tensor<Scalar, 4> T2;
             if(mps.dimension(1) >= mps.dimension(2)) {
-                T1.resize(mps.dimension(0), mps.dimension(2), envL.dimension(1), envL.dimension(2));
-                T2.resize(mpo.dimension(1), mpo.dimension(3), mps.dimension(2), envL.dimension(1));
-                contract_tblis_wrapper(mps, envL, T1, "afb", "fcd", "abcd", tblis_cfg);
-                contract_tblis_wrapper(mpo, T1, T2, "qhri", "rgjq", "higj", tblis_cfg);
-                contract_tblis_wrapper(T2, envR, res, "higj", "gkh", "ijk", tblis_cfg);
+                T1.resize(mps.dimension(0), mps.dimension(2), envL.dimension(0), envL.dimension(2));
+                T2.resize(mpo.dimension(1), mpo.dimension(2), mps.dimension(2), envL.dimension(0));
+                contract_tblis_wrapper(mps, envL, T1, "afb", "cfd", "abcd", tblis_cfg);
+                contract_tblis_wrapper(mpo, T1, T2, "qhir", "rgjq", "higj", tblis_cfg);
+                contract_tblis_wrapper(T2, envR, res, "higj", "kgh", "ijk", tblis_cfg);
             } else {
-                T1.resize(mps.dimension(0), mps.dimension(1), envR.dimension(1), envR.dimension(2));
-                T2.resize(mps.dimension(1), envR.dimension(1), mpo.dimension(0), mpo.dimension(3));
-                contract_tblis_wrapper(mps, envR, T1, "abf", "fcd", "abcd", tblis_cfg);
-                contract_tblis_wrapper(T1, mpo, T2, "qijk", "rkql", "ijrl", tblis_cfg);
-                contract_tblis_wrapper(T2, envL, res, "qkri", "qjr", "ijk", tblis_cfg);
+                T1.resize(mps.dimension(0), mps.dimension(1), envR.dimension(0), envR.dimension(2));
+                T2.resize(mps.dimension(1), envR.dimension(0), mpo.dimension(0), mpo.dimension(2));
+                contract_tblis_wrapper(mps, envR, T1, "abf", "cfd", "abcd", tblis_cfg);
+                contract_tblis_wrapper(T1, mpo, T2, "qijk", "rklq", "ijrl", tblis_cfg);
+                contract_tblis_wrapper(T2, envL, res, "qkri", "jqr", "ijk", tblis_cfg);
             }
 
             info.mps_norm           = get_norm(mps.data(), mps.dimensions());
@@ -486,7 +484,7 @@ namespace tools::common::contraction::internal {
 }
 
 template<typename Scalar>
-void tools::common::contraction::matrix_vector_product(Scalar             *res_ptr,                                 //
+void tools::common::contraction::vector_matrix_product(Scalar             *res_ptr,                                 //
                                                        const Scalar *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                        const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                        const Scalar *const envL_ptr, std::array<long, 3> envL_dims, //
@@ -508,10 +506,10 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
     auto envL = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(envL_ptr, envL_dims);
     auto envR = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(envR_ptr, envR_dims);
 
-    auto mps_norm  = internal::get_norm(mps_ptr, mps_dims);
-    auto mpo_norm  = internal::get_norm(mpo_ptr, mpo_dims);
-    auto envL_norm = internal::get_norm(envL_ptr, envL_dims);
-    auto envR_norm = internal::get_norm(envR_ptr, envR_dims);
+    auto mps_norm  = internal_vmp::get_norm(mps_ptr, mps_dims);
+    auto mpo_norm  = internal_vmp::get_norm(mpo_ptr, mpo_dims);
+    auto envL_norm = internal_vmp::get_norm(envL_ptr, envL_dims);
+    auto envR_norm = internal_vmp::get_norm(envR_ptr, envR_dims);
 
     bool contract_left = mps_dims[1] >= mps_dims[2];
 
@@ -519,28 +517,28 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
     [[maybe_unused]] auto ST2 = ST1 * mpo_norm;
     [[maybe_unused]] auto ST3 = contract_left ? ST2 * envR_norm : ST2 * envL_norm;
 
-    internal::Info<Scalar>       info;
+    internal_vmp::Info<Scalar>       info;
     [[maybe_unused]] std::string msg;
     if(ST1 > info.highprec_threshold) {
         // if(true) {
         if constexpr(settings::debug_contraction) msg = fmt::format("| running highprecision: ST1 {:.4e} > {:.4e}", fp(ST1), fp(info.highprec_threshold));
-        info = internal::contract_with_longprod<Scalar>(res, mps, mpo, envL, envR);
-        // info = internal::contract_with_quadprod<Scalar>(res, mps, mpo, envL, envR);
-        // info = internal::contract_with_longsum<Scalar>(res, mps, mpo, envL, envR);
+        info = internal_vmp::contract_with_longprod<Scalar>(res, mps, mpo, envL, envR);
+        // info = internal_vmp::contract_with_quadprod<Scalar>(res, mps, mpo, envL, envR);
+        // info = internal_vmp::contract_with_longsum<Scalar>(res, mps, mpo, envL, envR);
         if constexpr(use_tblis) {
             Eigen::Tensor<Scalar, 3> resd(mps_dims);
-            auto                     infod = internal::contract_with_tblis<Scalar>(resd, mps, mpo, envL, envR);
+            auto                     infod = internal_vmp::contract_with_tblis<Scalar>(resd, mps, mpo, envL, envR);
             RealScalar               diff  = (tenx::VectorMap(res) - tenx::VectorMap(resd)).norm();
             if constexpr(settings::debug_contraction) msg += fmt::format(" diff={:.4e}", fp(diff));
         }
     } else {
         if constexpr(use_tblis) {
-            info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
+            info = internal_vmp::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
         } else {
-            info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
+            info = internal_vmp::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
         }
     }
-    using namespace internal;
+    using namespace internal_vmp;
     if constexpr(settings::debug_contraction)
         if(!msg.empty())
             tools::log->info("res {:.4e} mps {:.4e} envL {:.4e} envR {:.4e} mpo {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e} {}",
@@ -549,7 +547,7 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
 }
 
 template<typename Scalar, typename mpo_type>
-void tools::common::contraction::matrix_vector_product(Scalar *res_ptr, const Scalar *const mps_ptr, std::array<long, 3> mps_dims,
+void tools::common::contraction::vector_matrix_product(Scalar *res_ptr, const Scalar *const mps_ptr, std::array<long, 3> mps_dims,
                                                        const std::vector<mpo_type> &mpos_shf, const Scalar *const envL_ptr, std::array<long, 3> envL_dims,
                                                        const Scalar *const envR_ptr, std::array<long, 3> envR_dims) {
     // Make sure the mpos are pre-shuffled. If not, shuffle and call this function again
@@ -558,7 +556,7 @@ void tools::common::contraction::matrix_vector_product(Scalar *res_ptr, const Sc
         // mpos_shf are not actually shuffled. Let's shuffle.
         std::vector<Eigen::Tensor<Scalar, 4>> mpos_really_shuffled;
         for(const auto &mpo : mpos_shf) { mpos_really_shuffled.emplace_back(mpo.shuffle(tenx::array4{2, 3, 0, 1})); }
-        return matrix_vector_product(res_ptr, mps_ptr, mps_dims, mpos_really_shuffled, envL_ptr, envL_dims, envR_ptr, envR_dims);
+        return vector_matrix_product(res_ptr, mps_ptr, mps_dims, mpos_really_shuffled, envL_ptr, envL_dims, envR_ptr, envR_dims);
     }
 
     auto &threads = tenx::threads::get();

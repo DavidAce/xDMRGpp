@@ -52,8 +52,14 @@ class MatVecMPOS {
 
     std::vector<Eigen::Tensor<Scalar, 4>> mpos_A, mpos_B, mpos_A_shf, mpos_B_shf;
     Eigen::Tensor<Scalar, 3>              envL_A, envR_A, envL_B, envR_B;
-    void                                  init_mpos_A();
-    void                                  init_mpos_B();
+
+    using RealScalarL = std::conditional_t<std::is_same_v<RealScalar, float>, double, std::conditional_t<std::is_same_v<RealScalar, double>, long double, fp128>>;
+    using ScalarL     = std::conditional_t<std::is_floating_point_v<Scalar>, RealScalarL, std::complex<RealScalarL>>;
+    mutable std::vector<Eigen::Tensor<ScalarL, 4>> mpos_A_hp, mpos_B_hp, mpos_A_shf_hp, mpos_B_shf_hp; // For high precision contractions
+    mutable Eigen::Tensor<ScalarL, 3>              envL_A_hp, envR_A_hp, envL_B_hp, envR_B_hp;         // For high precision contractions
+
+    void init_mpos_A();
+    void init_mpos_B();
 
     std::array<long, 3>       shape_mps;
     long                      size_mps;
@@ -173,8 +179,12 @@ class MatVecMPOS {
     void FactorOP();                                //  Factorizes (A-sigma*I) (or finds its diagonal elements)
     void MultOPv(Scalar *mps_in_, Scalar *mps_out); //  Applies the preconditioner as the matrix-vector product x_out <- inv(A-sigma*I)*x_in.
     void MultOPv(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err); //  Applies the preconditioner
-    void MultAx(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
-    void MultAx(Scalar *mps_in_, Scalar *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultAx(const Scalar *mps_in_, Scalar *mps_out_) const;    //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultAx(Scalar *mps_in_, Scalar *mps_out_);                //  Computes the matrix-vector multiplication x_out <- A*x_in.
+    void MultAx_hp(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in in high precision
+    void MultAx_hp(Scalar *mps_in_, Scalar *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in in high precision
+    void MultAx_x2(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in with 2-float expansion
+    void MultAx_x2(Scalar *mps_in_, Scalar *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in with 2-float expansion
     void MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
     void MultBx(Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
@@ -190,6 +200,12 @@ class MatVecMPOS {
     VectorType               MultAx(const Eigen::Ref<const VectorType> &x) const;
     MatrixType               MultBX(const Eigen::Ref<const MatrixType> &X) const;
     VectorType               MultBx(const Eigen::Ref<const VectorType> &x) const;
+
+    MatrixType MultAX_hp(const Eigen::Ref<const MatrixType> &X) const;
+    VectorType MultAx_hp(const Eigen::Ref<const VectorType> &x) const;
+
+    MatrixType MultAX_x2(const Eigen::Ref<const MatrixType> &X) const;
+    VectorType MultAx_x2(const Eigen::Ref<const VectorType> &x) const;
 
     void       CalcPc(RealScalar shift = RealScalar{0});                                         // Calculates the diagonal or tridiagonal part of A
     void       MultPc(const Scalar *mps_in_, Scalar *mps_out, RealScalar shift = RealScalar{0}); // Applies the preconditioner

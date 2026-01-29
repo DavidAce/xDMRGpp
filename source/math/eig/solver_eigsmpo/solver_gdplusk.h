@@ -107,7 +107,7 @@ class solver_gdplusk : public solver_base<Scalar> {
     using solver_base<Scalar>::orthonormalize_Z;
     using solver_base<Scalar>::block_l2_orthogonalize;
     using solver_base<Scalar>::block_l2_orthonormalize;
-    using solver_base<Scalar>::block_h2_orthonormalize_dgks;
+    using solver_base<Scalar>::block_h2_orthonormalize_dgks_x2;
     using solver_base<Scalar>::block_h2_orthonormalize_llt;
     using solver_base<Scalar>::block_h2_orthonormalize_eig;
     using solver_base<Scalar>::block_h2_orthogonalize;

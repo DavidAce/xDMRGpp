@@ -762,6 +762,15 @@ tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::Genera
     : sites(initial.get_sites()), initial_guess(initial), mpo1(mpo1_), mpo2(mpo2_), bcfg(bcfg_) {
     if(bcfg.scale <= 0) throw except::runtime_error("Scale must be positive");
 
+    if(bcfg.ewt == EnvWeightType::OFF) {
+        bc_enveL = env1.L;
+        bc_enveR = env1.R;
+        bc_envvL = env2.L;
+        bc_envvR = env2.R;
+        initial_guess.set_tensor(initial.get_tensor());
+        return;
+    }
+
     const Eigen::Tensor<Scalar, 3> &env1L = env1.L.get_block();
     const Eigen::Tensor<Scalar, 3> &env1R = env1.R.get_block();
     const Eigen::Tensor<Scalar, 3> &env2L = env2.L.get_block();
@@ -829,20 +838,20 @@ tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::Genera
     initial_guess.set_tensor(transform_tensor(initial.get_tensor(), SL, SR));
 
     // Rescale the environments so that <H2> = 1 in the new basis
-    auto get_expval_H2 = [this]() -> RealScalar {
-        const auto &psi   = initial_guess.get_tensor();
-        const auto &env2L = bc_envvL.get_block();
-        const auto &env2R = bc_envvR.get_block();
-        auto        vv    = tools::common::contraction::contract_mps_overlap(psi, psi);
-        auto        vh2v  = tools::common::contraction::expectation_value(psi, mpo2, env2L, env2R);
-        return std::abs(vh2v / vv);
-    };
-    RealScalar eh2   = get_expval_H2();
-    RealScalar gamma = RealScalar{1} / std::max(std::sqrt(eh2), RealScalar{1e-30f});
-    bc_enveL.get_block() *= bc_enveL.get_block().constant(gamma);
-    bc_enveR.get_block() *= bc_enveR.get_block().constant(gamma);
-    bc_envvL.get_block() *= bc_envvL.get_block().constant(gamma);
-    bc_envvR.get_block() *= bc_envvR.get_block().constant(gamma);
+    // auto get_expval_H2 = [this]() -> RealScalar {
+    //     const auto &psi   = initial_guess.get_tensor();
+    //     const auto &env2L = bc_envvL.get_block();
+    //     const auto &env2R = bc_envvR.get_block();
+    //     auto        vv    = tools::common::contraction::contract_mps_overlap(psi, psi);
+    //     auto        vh2v  = tools::common::contraction::expectation_value(psi, mpo2, env2L, env2R);
+    //     return std::abs(vh2v / vv);
+    // };
+    // RealScalar eh2   = get_expval_H2();
+    // RealScalar gamma = RealScalar{1} / std::max(std::sqrt(eh2), RealScalar{1e-30f});
+    // bc_enveL.get_block() *= bc_enveL.get_block().constant(gamma);
+    // bc_enveR.get_block() *= bc_enveR.get_block().constant(gamma);
+    // bc_envvL.get_block() *= bc_envvL.get_block().constant(gamma);
+    // bc_envvR.get_block() *= bc_envvR.get_block().constant(gamma);
 }
 
 template<typename Scalar>
@@ -856,6 +865,7 @@ tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::Genera
 template<typename Scalar>
 GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(const GeneralizedBasisChange<Scalar> &bc)
     : GeneralizedBasisChange(bc.initial_guess, bc.mpo1, bc.mpo2, bc.get_enve_pair(), bc.get_envv_pair(), bc.bcfg) {
+    if(bcfg.ewt == EnvWeightType::OFF) return;
     // bc now has the old basis, and "this" object now has the new transformed basis.
 
     pass = bc.pass + 1;
@@ -869,8 +879,8 @@ GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(const GeneralizedBasisCha
 template<typename Scalar>
 GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(const GeneralizedBasisChange<Scalar> &bc, BasisChangeConfig bcfg_)
     : GeneralizedBasisChange(bc.initial_guess, bc.mpo1, bc.mpo2, bc.get_enve_pair(), bc.get_envv_pair(), bc.bcfg) {
+    if(bcfg.ewt == EnvWeightType::OFF) return;
     // bc now has the old basis, and "this" object now has the new transformed basis.
-
     pass = bc.pass + 1;
     // We need to update the transforms so that we can undo the transformation.
     TL = (bc.TL * TL).eval();

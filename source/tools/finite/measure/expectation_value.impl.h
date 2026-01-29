@@ -269,7 +269,7 @@ CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3
             static_assert(h5pp::type::sfinae::invalid_type_v<EnvType>);
     }
 
-    Eigen::Tensor<CalcType, 3> mpoMpsKet = tools::common::contraction::matrix_vector_product(tenx::asScalarType<CalcType>(mpsKet), mpos_shf, envL, envR);
+    Eigen::Tensor<CalcType, 3> mpoMpsKet = tools::common::contraction::matrix_vector_product_gemm_x2(tenx::asScalarType<CalcType>(mpsKet), mpos_shf, envL, envR);
     return tools::common::contraction::contract_mps_overlap(tenx::asScalarType<CalcType>(mpsBra), mpoMpsKet);
 }
 
@@ -429,10 +429,6 @@ CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3
         auto mps_refs = std::vector<std::reference_wrapper<const MpsSite<Scalar>>>{mps};
         return expectation_value<CalcType>(mps_refs, mps_refs, mpos, envs);
     } else {
-        // We can avoid splitting the mps by applying the mpos directly onto the mps in sequence
-        // auto mpo_mps = tools::common::contraction::matrix_vector_product(multisite_mps, mpos, envs);
-        // return tools::common::contraction::contract_mps_overlap(multisite_mps, mpo_mps);
-
         // Set the new center position in the interior of the set of positions, so we don't get stashes that need to be thrown away.
         auto mps_split = tools::common::split::split_mps<Scalar>(multisite_mps, spin_dims_bra, positions, safe_cast<long>(positions.front()), svd_cfg);
         // Put them into a vector of reference wrappers for compatibility with the other expectation_value function

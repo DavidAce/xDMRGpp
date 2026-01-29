@@ -15,7 +15,8 @@ Scalar tools::common::contraction::contract_mps_mps_overlap(const Scalar * const
     auto mps1 = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic,1>>(mps1_ptr, size1);
     auto mps2 = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic,1>>(mps2_ptr, size2);
     if(size1 != size2) throw except::runtime_error("Size mismatch mps1 {} and mps2 {}",size1, size2);
-    return mps1.dot(mps2); // Calls gemv // TODO: Check that this works with the tests (used to be conjugate on mps2!)
+    return mps1.dot(mps2); // Calls gemv
+    // TODO: Check that this works with the tests (used to be conjugate on mps2!)
 }
 
 /* clang-format on */

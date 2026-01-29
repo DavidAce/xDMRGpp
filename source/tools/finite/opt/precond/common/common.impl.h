@@ -1,7 +1,6 @@
 #pragma once
 #include "../common.h"
 
-
 namespace settings {
 #if defined(DEBUG)
     static constexpr bool debug_common = true;
@@ -22,7 +21,7 @@ Ten<Scalar, 3> tools::finite::opt::precond::common::transform_env(const Ten<Scal
     auto bc_env   = Ten<Scalar, 3>(bc_dim);
     auto dim_beta = bc_dim[2];
     for(Eigen::Index b = 0; b < dim_beta; ++b) {
-        auto env_slice    = blk.chip(b, 2);
+        auto env_slice = blk.chip(b, 2);
         // bc_env.chip(b, 2) = Mh.contract(env_slice, tenx::idx({1}, {0})).contract(M, tenx::idx({1}, {0}));
         bc_env.chip(b, 2) = M.contract(env_slice, tenx::idx({1}, {0})).contract(Mh, tenx::idx({1}, {0}));
     }
@@ -43,7 +42,7 @@ Ten<Scalar, 3> tools::finite::opt::precond::common::transform_tensor(const Ten<S
 
 template<typename Scalar>
 Vec<Scalar> tools::finite::opt::precond::common::transform_vector(const Vec<Scalar> &psi, std::array<Eigen::Index, 3> psi_dims, const Mat<Scalar> &ML,
-                                                                       const Mat<Scalar> &MR) {
+                                                                  const Mat<Scalar> &MR) {
     Ten<Scalar, 3> psi_tensor             = tenx::TensorCast(psi, psi_dims);
     Ten<Scalar, 3> transformed_psi_tensor = transform_tensor(psi_tensor, ML, MR);
     return tenx::VectorCast(transformed_psi_tensor);
@@ -51,9 +50,9 @@ Vec<Scalar> tools::finite::opt::precond::common::transform_vector(const Vec<Scal
 
 template<typename Scalar>
 Mat<Scalar> tools::finite::opt::precond::common::transform_matrix(const Mat<Scalar> &V, const std::array<Eigen::Index, 3> psi_shape, const Mat<Scalar> &ML,
-                                                                       const Mat<Scalar> &MR) {
+                                                                  const Mat<Scalar> &MR) {
     // V has many psi (one per column) with dimensions of psi_shape
-
+    if(ML.size() == 0 or MR.size() == 0) return V;
     auto  MLm     = tenx::TensorMap(ML);
     auto  MRm     = tenx::TensorMap(MR);
     auto &threads = tenx::threads::get();
@@ -73,4 +72,3 @@ Mat<Scalar> tools::finite::opt::precond::common::transform_matrix(const Mat<Scal
     }
     return ML_V_MR;
 }
-

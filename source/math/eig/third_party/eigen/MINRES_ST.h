@@ -174,28 +174,31 @@ namespace Eigen {
                 RealScalar rrnorm = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
                 error_history.push_back(-std::log10(rrnorm));
                 bool rrnorm_has_converged  = residualNorm2 < threshold2;
-                bool rrnorm_has_made_progress = rrnorm < std::max(tol_error, RealScalar{0.33f});
+                bool rrnorm_has_made_progress = rrnorm < std::max(tol_error, RealScalar{0.63f});
                 bool minres_has_converged = rrnorm_has_converged;
 
-                if((iters >=20 and iters % 20 == 0) or minres_has_converged) {
-                    // Check for stall every 20 iterations
-                    while(error_history.size() > 20) error_history.pop_front();
+                if((iters >=10 and iters % 10 == 0) or minres_has_converged) {
+                    // Check for stall every 10 iterations
+                    while(error_history.size() > 50) error_history.pop_front();
                     auto [avg, sdv, rel] = get_stats(error_history);
-                    bool rrnorm_has_saturated = rel < RealScalar{1e-2f};
+                    bool rrnorm_has_saturated = rel < RealScalar{1e-5f};
                     bool minres_has_saturated = rrnorm_has_saturated and rrnorm_has_made_progress;
-                    // if constexpr(std::is_same_v<RealScalar, float> or std::is_same_v<RealScalar, double>) {
-                    //     if(iters % 1000 == 0)
-                    //         std::printf("k: %4ld |rk|=%.5e |r0|=%.5e |rk|/|b|=%.5e (log10 avg: %.5e  std: %.5e  rel: %.5e)\n",
-                    //                  iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, avg, sdv, rel);
-                    // }
+                    if constexpr(std::is_same_v<RealScalar, float> or std::is_same_v<RealScalar, double>) {
+                        if((iters % 100 == 0) or minres_has_converged or minres_has_saturated) {
+                            std::printf("k: %4ld |rk|=%.5e |r0|=%.5e |rk|/|r0|=%.5e (log10 avg: %.5e  std: %.5e  rel: %.5e)",
+                                     iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, avg, sdv, rel);
 
-                    if (minres_has_converged) {
-                        // std::printf("minres converged\n");
-                        break;
-                    }
-                    if (minres_has_saturated) {
-                        // std::printf("minres saturated\n");
-                        break;
+                            if (minres_has_converged) {
+                                std::printf(" -- minres converged\n");
+                                break;
+                            }
+                            if (minres_has_saturated) {
+                                std::printf(" -- minres saturated\n");
+                                break;
+                            }
+                            std::printf("\n");
+                        }
+
                     }
                 }
                 // END MINRES -> MINRES_ST

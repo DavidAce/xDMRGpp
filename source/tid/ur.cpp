@@ -39,7 +39,10 @@ namespace tid {
     }
 
     void ur::add_time(double new_time) noexcept {
-        if constexpr(tid::enable) { measured_time += std::chrono::duration_cast<hresclock::duration>(std::chrono::duration<double>(new_time)); }
+        if constexpr(tid::enable) {
+            measured_time += std::chrono::duration_cast<hresclock::duration>(std::chrono::duration<double>(new_time));
+            count++;
+        }
     }
 
     void ur::set_count(size_t count_) noexcept {

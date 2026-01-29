@@ -12,7 +12,7 @@
 
 namespace settings {
 #if defined(NDEBUG)
-    constexpr bool debug_gdplusk = false;
+    constexpr bool debug_gdplusk = true;
 #else
     constexpr bool debug_gdplusk = true;
 #endif
@@ -21,6 +21,7 @@ namespace settings {
 
 template<typename Scalar>
 void solver_gdplusk<Scalar>::make_new_Q_block(fMultP_t fMultP) {
+    auto t_make = tid::tic_scope("make_new_Q_block");
     assert(V.rows() == N);
     assert(V.cols() == b);
 
@@ -45,24 +46,30 @@ void solver_gdplusk<Scalar>::make_new_Q_block(fMultP_t fMultP) {
 
     Eigen::Index sOffset = mBlocks;
     if(sBlocks > 0) Q_new.middleCols(sOffset * b, b).noalias() = get_sBlock(S, fMultP);
-    OrthMeta m;
-    m.maskPolicy = MaskPolicy::COMPRESS;
 
     auto orthognalize_Q_new = [&]() {
-        HQ_new  = MatrixType();
-        H1Q_new = MatrixType();
-        H2Q_new = MatrixType();
+        OrthMeta m;
+        m.maskPolicy  = MaskPolicy::COMPRESS;
+        m.refresh_h2y = true;
+        HQ_new        = MatrixType();
+        H1Q_new       = MatrixType();
+        H2Q_new       = MatrixType();
         if(algo == OptAlgo::GDMRG) {
             if(use_h2_inner_product) {
+                assert_h2_orthonormal(V, H2V, m);
+                assert_h2_orthonormal(Q, H2Q, m);
                 block_h2_orthogonalize(V, H1V, H2V, Q_new, H1Q_new, H2Q_new, m);
                 block_h2_orthogonalize(Q, H1Q, H2Q, Q_new, H1Q_new, H2Q_new, m);
+                block_h2_orthonormalize_dgks_x2(Q_new, H1Q_new, H2Q_new, m);
             } else {
                 block_l2_orthogonalize(V, H1V, H2V, Q_new, H1Q_new, H2Q_new, m);
                 block_l2_orthogonalize(Q, H1Q, H2Q, Q_new, H1Q_new, H2Q_new, m);
+                block_l2_orthonormalize(Q_new, H1Q_new, H2Q_new, m);
             }
         } else {
             block_l2_orthogonalize(V, HV, Q_new, HQ_new, m);
             block_l2_orthogonalize(Q, HQ, Q_new, HQ_new, m);
+            block_l2_orthonormalize(Q_new, HQ_new, m);
         }
     };
 
@@ -78,6 +85,7 @@ void solver_gdplusk<Scalar>::make_new_Q_block(fMultP_t fMultP) {
 
 template<typename Scalar>
 void solver_gdplusk<Scalar>::build() {
+    auto t_build = tid::tic_scope("build");
     switch(algo) {
         case OptAlgo::DMRG: [[fallthrough]];
         case OptAlgo::DMRGX: [[fallthrough]];
@@ -218,6 +226,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
             m.maskPolicy = MaskPolicy::COMPRESS;
             // Orthogonalize K_prev against Q_ks with DGKS, and orthonormalize K_prev internally
             block_l2_orthogonalize(Q_ks, HQ_ks, K_prev, HK_prev, m);
+            block_l2_orthonormalize(K_prev, HK_prev, m);
         }
 
         MatrixType Gram_K      = K_prev.adjoint() * K_prev;
@@ -236,13 +245,13 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
         // Orthonormalize the resulting Q
         OrthMeta m;
         m.Gram       = Q.adjoint() * Q;
-        m.Gram       = (m.Gram + m.Gram.adjoint()) * half;
+        m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * half;
         m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
         m.maskPolicy = MaskPolicy::COMPRESS;
         if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after composition: orthError: {:.5e}", fp(m.orthError));
         block_l2_orthonormalize(Q, HQ, m);
 
-        if constexpr(settings::debug_gdplusk) eiglog->info("Gram of Q after orthonorm : orthError: {:.5e}", fp(m.orthError));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after orthonorm : orthError: {:.5e}", fp(m.orthError));
 
         status.iter_last_restart = status.iter;
     };
@@ -267,13 +276,13 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
     OrthMeta m;
     m.maskPolicy = MaskPolicy::COMPRESS;
     m.Gram       = Q.adjoint() * Q;
-    m.Gram       = (m.Gram + m.Gram.adjoint()) * half;
+    m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * half;
     m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 
     if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after appen: orthError: {:.5e}", fp(m.orthError));
 
     m.Gram      = Q.adjoint() * Q;
-    m.Gram      = (m.Gram + m.Gram.adjoint()) * half;
+    m.Gram      = (m.Gram + m.Gram.adjoint()).eval() * half;
     m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 
     bool basis_was_restarted = status.iter_last_restart == status.iter;
@@ -347,9 +356,17 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
             m.maskPolicy = MaskPolicy::COMPRESS;
             // Orthogonalize K_prev against Q_ks with DGKS, and orthonormalize K_prev internally
             if(use_h2_inner_product) {
+                m.refresh_h2y = false; // Do not refresh H2Q_ks on entry to block_h2_orthonormalize_eig
+                block_h2_orthonormalize_eig(Q_ks, H1Q_ks, H2Q_ks, m);
+                m.refresh_h2y = true; // Do refresh H2K_prev on entry to block_h2_orthogonalize
                 block_h2_orthogonalize(Q_ks, H1Q_ks, H2Q_ks, K_prev, H1K_prev, H2K_prev, m);
+                block_h2_orthonormalize_eig(K_prev, H1K_prev, H2K_prev, m);
             } else {
+                m.refresh_h2y = false; // Do not refresh H2Q_ks on entry to block_l2_orthonormalize_eig
+                block_l2_orthonormalize(Q_ks, H1Q_ks, H2Q_ks, m);
+                m.refresh_h2y = true; // Do refresh H2K_prev on entry to block_l2_orthogonalize
                 block_l2_orthogonalize(Q_ks, H1Q_ks, H2Q_ks, K_prev, H1K_prev, H2K_prev, m);
+                block_l2_orthonormalize(K_prev, H1K_prev, H2K_prev, m);
             }
         }
 
@@ -373,18 +390,19 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
 
         // Orthonormalize the resulting Q
         OrthMeta m;
-        m.Gram       = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-        m.Gram       = (m.Gram + m.Gram.adjoint()) * half;
-        m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
-        m.maskPolicy = MaskPolicy::COMPRESS;
+        m.Gram        = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
+        m.Gram        = (m.Gram + m.Gram.adjoint()).eval() * half;
+        m.orthError   = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
+        m.maskPolicy  = MaskPolicy::COMPRESS;
+        m.refresh_h2y = false;
         if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after composition: orthError: {:.5e}", fp(m.orthError));
 
         if(use_h2_inner_product) {
-            block_h2_orthonormalize_eig(Q, H1Q, H2Q, m);
+            block_h2_orthonormalize_dgks_x2(Q, H1Q, H2Q, m);
         } else {
             block_l2_orthonormalize(Q, H1Q, H2Q, m);
         }
-        if constexpr(settings::debug_gdplusk) eiglog->info("Gram of Q after orthonorm : orthError: {:.5e}", fp(m.orthError));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after orthonorm : orthError: {:.5e}", fp(m.orthError));
 
         status.iter_last_restart = status.iter;
     };
@@ -408,35 +426,87 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
     H2Q.rightCols(copyCols) = H2Q_new.leftCols(copyCols);
     //
 
-    OrthMeta m;
-    m.maskPolicy = MaskPolicy::COMPRESS;
-    m.Gram       = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-    m.Gram       = (m.Gram + m.Gram.adjoint()) * half;
-    m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
-
-    if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after appen: orthError: {:.5e}", fp(m.orthError));
-
-    m.Gram      = use_h2_inner_product ? Q.adjoint() * H2Q : Q.adjoint() * Q;
-    m.Gram      = (m.Gram + m.Gram.adjoint()) * half;
-    m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
-
-    bool basis_was_restarted = status.iter_last_restart == status.iter;
-    if(basis_was_restarted or m.orthError > normTol * std::sqrt(status.op_norm_estimate)) {
+    auto orthonormalize_dgks_x2 = [&](MatrixType Q, MatrixType H1Q, MatrixType H2Q) -> std::tuple<MatrixType, MatrixType, MatrixType, OrthMeta> {
+        OrthMeta m;
+        m.maskPolicy = MaskPolicy::COMPRESS;
         if(use_h2_inner_product) {
-            block_h2_orthonormalize_eig(Q, H1Q, H2Q, m);
+            m.analyze_h2_orthonormality(Q, H2Q);
         } else {
-            block_l2_orthonormalize(Q, H1Q, H2Q, m);
+            m.analyze_l2_orthonormality(Q);
         }
-    }
+        m.refresh_h2y = false;
+        if constexpr(settings::debug_gdplusk)
+            eiglog->trace("After appending [Q, Q_new]: orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError), fp(m.skewError));
 
-    if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after ortho: orthError: {:.5e}", fp(m.orthError));
+        bool basis_was_restarted = status.iter_last_restart == status.iter;
+        if(basis_was_restarted or m.symmError > normTol * std::sqrt(status.op_norm_estimate)) {
+            if(use_h2_inner_product) {
+                block_h2_orthonormalize_dgks_x2(Q, H1Q, H2Q, m);
+            } else {
+                block_l2_orthonormalize(Q, H1Q, H2Q, m);
+            }
+            if constexpr(settings::debug_gdplusk)
+                eiglog->trace("After orthonormalizing Q: orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError),
+                              fp(m.skewError));
+        }
+        if(m.symmError > eps * 1000000) {
+            MatrixType GramError     = m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols());
+            MatrixType GramSymmError = m.Gram_symm - MatrixType::Identity(m.Gram.rows(), m.Gram.cols());
+            eiglog->warn("After orthonormalizing Q: symmError: {:.5e} (too large!). Gram - I: \n{}\n", fp(m.symmError),
+                         linalg::matrix::to_string(GramError, 8));
+            eiglog->warn("|Gram_symm - I| = {:.4e} Gram_symm - I \n{}\n", fp(m.symmError), linalg::matrix::to_string(GramSymmError, 8));
+        }
 
-    if(use_h2_inner_product) {
-        assert_h2_orthonormal(Q, H2Q);
-    } else {
-        assert_l2_orthonormal(Q);
-    }
-    assert(Q.colwise().norm().minCoeff() > eps);
+        if(use_h2_inner_product) {
+            assert_h2_orthonormal(Q, H2Q);
+        } else {
+            assert_l2_orthonormal(Q);
+        }
+        assert(Q.colwise().norm().minCoeff() > eps);
+        return std::make_tuple(Q, H1Q, H2Q, m);
+    };
+
+    OrthMeta m;
+    std::tie(Q, H1Q, H2Q, m) = orthonormalize_dgks_x2(Q, H1Q, H2Q);
+
+     eiglog->trace("After orthonormalization x2     : orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError), fp(m.skewError));
+
+    //
+    // OrthMeta m;
+    // m.maskPolicy = MaskPolicy::COMPRESS;
+    // if(use_h2_inner_product) {
+    //     m.analyze_h2_orthonormality(Q, H2Q);
+    // } else {
+    //     m.analyze_l2_orthonormality(Q);
+    // }
+    // m.refresh_h2y = false;
+    // if constexpr(settings::debug_gdplusk)
+    //     eiglog->trace("After appending [Q, Q_new]: orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError), fp(m.skewError));
+    //
+    // bool basis_was_restarted = status.iter_last_restart == status.iter;
+    // if(basis_was_restarted or m.symmError > normTol * std::sqrt(status.op_norm_estimate)) {
+    //     if(use_h2_inner_product) {
+    //         block_h2_orthonormalize_dgks(Q, H1Q, H2Q, m);
+    //     } else {
+    //         block_l2_orthonormalize(Q, H1Q, H2Q, m);
+    //     }
+    //     if constexpr(settings::debug_gdplusk)
+    //         eiglog->trace("After orthonormalizing Q: orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError), fp(m.skewError));
+    // }
+    // if(m.symmError > eps * 1000000) {
+    //     MatrixType GramError     = m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols());
+    //     MatrixType GramSymmError = m.Gram_symm - MatrixType::Identity(m.Gram.rows(), m.Gram.cols());
+    //     eiglog->warn("After orthonormalizing Q: symmError: {:.5e} (too large!). Gram - I: \n{}\n", fp(m.symmError), linalg::matrix::to_string(GramError, 8));
+    //     eiglog->warn("|Gram_symm - I| = {:.4e} Gram_symm - I \n{}\n", fp(m.symmError), linalg::matrix::to_string(GramSymmError, 8));
+    // }
+    //
+    // if(use_h2_inner_product) {
+    //     assert_h2_orthonormal(Q, H2Q);
+    // } else {
+    //     assert_l2_orthonormal(Q);
+    // }
+    // assert(Q.colwise().norm().minCoeff() > eps);
+
     // assert(H1Q.colwise().norm().minCoeff() > eps);
     // assert(H2Q.colwise().norm().minCoeff() > eps);
 }
