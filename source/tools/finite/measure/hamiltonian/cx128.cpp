@@ -24,6 +24,32 @@ template Scalar  tools::finite::measure::expval_hamiltonian_squared(const Eigen:
 
 template Scalar  tools::finite::measure::expval_hamiltonian_squared(const TensorsFinite<Scalar> &tensors);
 
+template RealScalar<Scalar> tools::finite::measure::local_operator_norm_estimate      (const Eigen::Tensor<Scalar, 4> &mpo, const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR,Eigen::Index maxiter, fp32 reltolf);
+
+template RealScalar<Scalar> tools::finite::measure::local_hamiltonian_norm             (const TensorsFinite<Scalar> & tensors,Eigen::Index maxiter, fp32 reltolf);
+
+template RealScalar<Scalar> tools::finite::measure::local_hamiltonian_norm             (const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges,Eigen::Index maxiter, fp32 reltolf);
+
+template RealScalar<Scalar> tools::finite::measure::local_hamiltonian_norm             (const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpo_refs, const env_pair<const EnvEne<Scalar> &> &envs,Eigen::Index maxiter, fp32 reltolf);
+
+template RealScalar<Scalar> tools::finite::measure::local_hamiltonian_squared_norm     (const TensorsFinite<Scalar> & tensors,Eigen::Index maxiter, fp32 reltolf);
+
+template RealScalar<Scalar> tools::finite::measure::local_hamiltonian_squared_norm     (const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges,Eigen::Index maxiter, fp32 reltolf);
+
+template RealScalar<Scalar> tools::finite::measure::local_hamiltonian_squared_norm     (const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpo_refs, const env_pair<const EnvVar<Scalar> &> &envs,Eigen::Index maxiter, fp32 reltolf);
+
+template RealScalar<Scalar> tools::finite::measure::global_hamiltonian_trace          (const TensorsFinite<Scalar> & tensors);
+
+template RealScalar<Scalar> tools::finite::measure::global_hamiltonian_trace          (const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges);
+
+template RealScalar<Scalar> tools::finite::measure::global_hamiltonian_trace          (const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpo_refs, const env_pair<const EnvEne<Scalar> &> &envs);
+
+template RealScalar<Scalar> tools::finite::measure::global_hamiltonian_squared_trace  (const TensorsFinite<Scalar> & tensors);
+
+template RealScalar<Scalar> tools::finite::measure::global_hamiltonian_squared_trace  (const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges);
+
+template RealScalar<Scalar> tools::finite::measure::global_hamiltonian_squared_trace  (const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpo_refs, const env_pair<const EnvVar<Scalar> &> &envs);
+
 template Real tools::finite::measure::energy_minus_energy_shift(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, MeasurementsTensorsFinite<Scalar> *measurements);
 
 template Real tools::finite::measure::energy_minus_energy_shift(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> *measurements);
