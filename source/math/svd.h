@@ -165,6 +165,53 @@ namespace svd {
             return std::make_tuple(tenx::TensorMap(U), tenx::TensorMap(S.template cast<Scalar>()), tenx::TensorMap(VT));
         }
 
+        template<typename Scalar>
+        std::tuple<Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 1>, Eigen::Tensor<Scalar, 3>>
+            decompose(const Eigen::Tensor<Scalar, 4> &tensor, const svd::config &svd_cfg = svd::config()) {
+            long dL   = tensor.dimension(0);
+            long chiL = tensor.dimension(1);
+            long dR   = tensor.dimension(2);
+            long chiR = tensor.dimension(3);
+            if(dL * chiL * dR * chiR != tensor.size()) throw std::range_error("schmidt error: tensor size does not match given dimensions.");
+            auto [U, S, VT] = do_svd_ptr(tensor.data(), dL * chiL, dR * chiR, svd_cfg);
+            return std::make_tuple(tenx::TensorMap(U, dL, chiL, S.size()), tenx::TensorMap(S.template cast<Scalar>(), S.size()),
+                                   tenx::TensorMap(VT, S.size(), dR, chiR).shuffle(tenx::array3{1, 0, 2}));
+        }
+
+        template<typename Scalar>
+        std::tuple<Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 1>, Eigen::Tensor<Scalar, 3>>
+            decompose_multisite(const Eigen::Tensor<Scalar, 3> &tensor, long dL, long dR, long chiL, long chiR, const svd::config &svd_cfg = svd::config()) {
+            /* This function assumes that the tensor is given with indices in multisite standard form, i.e., with order
+             *
+             * 1) physical indices (any number of them, contracted from left to right)
+             * 2) left bond index
+             * 4) right bond index
+             *
+             * (1)chiL ---[tensor]--- (2)chiR
+             *               |
+             *          (0)d*d*d...
+             *
+             * we start by transposing the tensor into "left-right" order suitable for a decomposition
+             *
+             * (1)chiL---[  tensor  ]---(3)chiR
+             *            |        |
+             *        (0)dL      (2)dR
+             *
+             * The function call argument order dL, dR, chiL,chiR is meant as a hint for how to use this function.
+             *
+             * NOTE: This function does not normalize the singular values!
+             *
+             */
+            if(dR == 1) { // probably a single-site right-moving split. No need for a shuffle on VT!
+                auto [U, S, VT] = do_svd_ptr(tensor.data(), dL * chiL, dR * chiR, svd_cfg);
+                return std::make_tuple(tenx::TensorMap(U, dL, chiL, S.size()), tenx::TensorMap(S, S.size()), tenx::TensorMap(VT, 1, S.size(), chiR));
+
+            } else {
+                Eigen::Tensor<Scalar, 4> tensor4 = tensor.reshape(tenx::array4{dL, dR, chiL, chiR}).shuffle(tenx::array4{0, 2, 1, 3});
+                return decompose(tensor4, svd_cfg);
+            }
+        }
+
         template<typename Derived>
         std::tuple<MatrixType<typename Derived::Scalar>, VectorType<typename Derived::Scalar>, MatrixType<typename Derived::Scalar>>
             decompose(const Eigen::DenseBase<Derived> &matrix, const svd::config &svd_cfg = svd::config()) {
