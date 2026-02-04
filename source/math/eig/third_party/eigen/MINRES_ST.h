@@ -161,11 +161,15 @@ namespace Eigen {
                 x += beta_one*c*eta*p;
                 /* Update the squared residual with s*s. Note that this is the estimated residual.
                 The real residual |Ax-b|^2 may be slightly larger */
-                if(iters % 100 == 0)
-                    residualNorm2 =  (rhs - mat * x).squaredNorm();// Use the true residual to avoid drift
-                else {
-                    residualNorm2 *= s*s;
-                }
+                // if(iters % 100 == 0) {
+                //     residualNorm2 *= s*s;
+                //     RealScalar residualNorm2_true =  (rhs - mat * x).squaredNorm();// Use the true residual to avoid drift
+                //     std::printf("corrected residualnorm2 %.5e -> %.5e\n",residualNorm2, residualNorm2_true );
+                //     residualNorm2 = residualNorm2_true;
+                // }else {
+                //     residualNorm2 *= s*s;
+                // }
+                residualNorm2 *= s*s;
 
                 // BEGIN MINRES -> MINRES_ST
                 // Store the error |Ax-b|/|x|
