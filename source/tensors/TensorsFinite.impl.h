@@ -605,8 +605,8 @@ BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(BondExpansionCon
     }
 
     if(res.ok) {
-        tools::log->debug("Expanded environment {} block [{}-{}] | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f}", flag2str(bcfg.policy), res.posL, res.posR,
-                          fp(res.var_old), fp(res.var_new), fp(res.ene_old), fp(res.ene_new));
+        tools::log->debug("Expanded environment {} block [{}-{}] | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f} | hsq {:.16f} -> {:.16f}", flag2str(bcfg.policy), res.posL, res.posR,
+                          fp(res.var_old), fp(res.var_new), fp(res.ene_old), fp(res.ene_new), fp(res.hsq_old), fp(res.hsq_new));
         clear_measurements();
     } else {
         tools::log->debug("Expansion canceled: {}", res.msg);
