@@ -72,7 +72,7 @@ RealScalar<Scalar> tools::infinite::measure::energy_variance_mpo(const state_or_
         auto t_var = tid::tic_scope("var");
         auto H2    = tools::common::contraction::expectation_value(state, mpo, env.L, env.R);
         assert(std::abs(std::imag(H2)) < RealScalar<Scalar>{1e-10f});
-        return std::abs(H2 - E2);
+        return std::real(H2 - E2);
     }
 }
 

@@ -81,12 +81,15 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
                 res.set_eigs_eigval(eigvals[idx]);
 
                 Real energy   = std::real(vh1v + tensors.get_model().get_energy_shift_mpo());
-                Real variance = std::real(vh2v) - std::abs(vh1v * vh1v);
+                Real variance = std::real(vh2v - vh1v * vh1v);
 
                 res.set_energy(energy);
                 res.set_energy_shifted(std::real(vh1v));
                 res.set_hsquared(std::real(vh2v));
                 res.set_variance(variance);
+
+                auto rnormH1_squared = rnormH1 * rnormH1;
+                tools::log->info("extract_results: variance <H²>-<H>²={:.16e}  |Hv-Ev|²= {:.16e}", fp(variance), fp(rnormH1_squared));
 
                 res.validate_basis_vector();
 
@@ -145,19 +148,24 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
     res.set_iter(solver.status.iter);
     res.set_eigs_rnorm(solver.status.rNorms(0));
     res.set_eigs_eigval(static_cast<fp64>(solver.status.eigVal[0]));
-    auto mpos    = tensors.get_model().get_mpo_active();
-    auto enve    = tensors.get_edges().get_ene_active();
-    auto envv    = tensors.get_edges().get_var_active();
-    auto vh1v    = tools::finite::measure::expval_hamiltonian(res.get_tensor(), mpos, enve);
-    auto vh2v    = tools::finite::measure::expval_hamiltonian_squared(res.get_tensor(), mpos, envv);
-    auto rnormH1 = tools::finite::measure::residual_norm(res.get_tensor(), mpos, enve);
-    auto rnormH2 = tools::finite::measure::residual_norm(res.get_tensor(), mpos, envv);
+    auto mpos     = tensors.get_model().get_mpo_active();
+    auto enve     = tensors.get_edges().get_ene_active();
+    auto envv     = tensors.get_edges().get_var_active();
+    auto vh1v     = tools::finite::measure::expval_hamiltonian(res.get_tensor(), mpos, enve);
+    auto vh2v     = tools::finite::measure::expval_hamiltonian_squared(res.get_tensor(), mpos, envv);
+    auto rnormH1  = tools::finite::measure::residual_norm(res.get_tensor(), mpos, enve);
+    auto rnormH2  = tools::finite::measure::residual_norm(res.get_tensor(), mpos, envv);
+    // auto energy   = std::real(vh1v + res.get_eshift());
+    auto energy   = std::real(vh1v + tensors.get_model().get_energy_shift_mpo());
+    auto variance = std::real(vh2v - vh1v * vh1v);
     res.set_rnorm_H1(rnormH1);
     res.set_rnorm_H2(rnormH2);
-    res.set_energy(std::real(vh1v + res.get_eshift()));
-    res.set_variance(std::real(vh2v) - std::abs(vh1v * vh1v));
+    res.set_energy(energy);
+    res.set_variance(variance);
     res.set_energy_shifted(std::real(vh1v));
     res.set_hsquared(std::real(vh2v));
+    auto rnormH1_squared = rnormH1 * rnormH1;
+    tools::log->info("extract_results: variance <H²>-<H>²={:.16e}  |Hv-Ev|²= {:.16e}", fp(variance), fp(rnormH1_squared));
 }
 
 template<typename CalcType, typename Scalar>
@@ -223,7 +231,7 @@ void tools::finite::opt::internal::extract_results_subspace(const TensorsFinite<
                 res.set_eigs_eigval(eigvals[idx]);
 
                 Real energy   = std::real(vh1v + tensors.get_model().get_energy_shift_mpo());
-                Real variance = std::real(vh2v) - std::abs(vh1v * vh1v);
+                Real variance = std::real(vh2v - vh1v * vh1v);
 
                 res.set_energy(energy);
                 res.set_energy_shifted(std::real(vh1v));
