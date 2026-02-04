@@ -63,7 +63,7 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
 
     if(pos_expanded.empty()) {
         auto res = BondExpansionResult<Scalar>();
-        res.msg  = fmt::format("No positions to expand: mode {}", flag2str(bcfg.policy));
+        res.msg  = fmt::format("density_matrix_perturbation_preopt_1site: No positions to expand: mode {}", flag2str(bcfg.policy));
         return res; // No update
     }
 
@@ -73,8 +73,8 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
     auto  &mpsR = state.get_mps_site(posR);
     if(state.num_bonds_at_maximum(pos_expanded) == 1) {
         auto res = BondExpansionResult<Scalar>();
-        res.msg =
-            fmt::format("The bond [{}-{}] has reached its upper limit {} | mode {}", mpsL.get_tag(), mpsR.get_tag(), mpsL.get_chiR(), flag2str(bcfg.policy));
+        res.msg  = fmt::format("density_matrix_perturbation_preopt_1site: The bond [{}-{}] has reached its upper limit {} | mode {}", mpsL.get_tag(),
+                               mpsR.get_tag(), mpsL.get_chiR(), flag2str(bcfg.policy));
         return res; // No update
     }
 
@@ -109,9 +109,9 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
     res.dimR_old  = mpsR.dimensions();
     res.ene_old   = tools::finite::measure::energy(state, model, edges);
     res.var_old   = tools::finite::measure::energy_variance(state, model, edges);
-
-    tools::log->debug("Expanding {}{} - {}{} | ene {:.8f} var {:.5e} | χmax {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(),
-                      fp(res.ene_old), fp(res.var_old), bcfg.bond_lim);
+    res.hsq_old   = std::real(tools::finite::measure::expval_hamiltonian_squared(state, model, edges));
+    tools::log->debug("density_matrix_perturbation_preopt_1site: Expanding {}{} - {}{} | ene {:.8f} var {:.5e} hsq {:.5e} | χmax {}", mpsL.get_tag(),
+                      mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), fp(res.ene_old), fp(res.var_old), fp(res.hsq_old), bcfg.bond_lim);
 
     bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
     bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
@@ -137,8 +137,8 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
         res.dimN0       = N_0.dimensions();
         internal::merge_rexpansion_terms_N0_MP(mps0, N_0, mpsP, M_P, bond_lim, pad_value_LC);
 
-        tools::log->debug("Density matrix perturbation l2r {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bcfg.bond_lim, dimP_old,
-                          M.dimensions(), M_P.dimensions());
+        tools::log->debug("density_matrix_perturbation_preopt_1site: l2r {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy),
+                          bcfg.bond_lim, dimP_old, M.dimensions(), M_P.dimensions());
         assert(state.template get_position<long>() == static_cast<long>(pos0));
 
     } else {
@@ -150,8 +150,8 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
         internal::merge_rexpansion_terms_MP_N0(mpsP, M_P, mps0, N_0, bond_lim, pad_value_LC);
-        tools::log->debug("Density matrix perturbation r2l {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bcfg.bond_lim, dimP_old,
-                          M.dimensions(), M_P.dimensions());
+        tools::log->debug("density_matrix_perturbation_preopt_1site: Density matrix perturbation r2l {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded,
+                          flag2str(bcfg.policy), bcfg.bond_lim, dimP_old, M.dimensions(), M_P.dimensions());
         assert(state.template get_position<long>() == static_cast<long>(posP));
     }
 
@@ -162,7 +162,7 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
     env::rebuild_edges(state, model, edges);
 
     if(mpsP.dimensions()[0] * std::min(mpsP.dimensions()[1], mpsP.dimensions()[2]) < std::max(mpsP.dimensions()[1], mpsP.dimensions()[2])) {
-        tools::log->warn("Bond expansion failed: {} -> {}", dimP_old, mpsP.dimensions());
+        tools::log->warn("density_matrix_perturbation_preopt_1site: Bond expansion failed: {} -> {}", dimP_old, mpsP.dimensions());
     }
 
     if(dimL_old[1] != mpsL.get_chiL()) throw except::runtime_error("mpsL changed chiL during bond expansion: {} -> {}", dimL_old, mpsL.dimensions());
@@ -172,12 +172,12 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
 
     assert(mpsL.get_chiR() == mpsR.get_chiL());
     if(mpsL.get_chiR() > bcfg.bond_lim) {
-        throw except::logic_error("rexpand_bond_preopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                                  mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
+        throw except::logic_error("density_matrix_perturbation_preopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(),
+                                  mpsR.get_tag(), mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
     }
     if(mpsR.get_chiL() > bcfg.bond_lim) {
-        throw except::logic_error("rexpand_bond_preopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                                  mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
+        throw except::logic_error("density_matrix_perturbation_preopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(),
+                                  mpsR.get_tag(), mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
     }
     res.dimL_new = mpsL.dimensions();
     res.dimR_new = mpsR.dimensions();
@@ -185,6 +185,7 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
     res.dimN0    = mps0.dimensions();
     res.ene_new  = tools::finite::measure::energy(state, model, edges);
     res.var_new  = tools::finite::measure::energy_variance(state, model, edges);
+    res.hsq_new  = std::real(tools::finite::measure::expval_hamiltonian_squared(state, model, edges));
     res.ok       = true;
     return res;
 }

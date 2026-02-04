@@ -19,9 +19,11 @@ struct BondExpansionResult {
     std::vector<std::array<long, 3>> dims_old, dims_new;
     std::vector<long>                bond_old, bond_new;
     R                                ene_old = std::numeric_limits<R>::quiet_NaN(); /*!< The old expectation value  of energy */
-    R                                ene_new = std::numeric_limits<R>::quiet_NaN(); /*!< The old expectation value  of energy */
-    R                                var_old = std::numeric_limits<R>::quiet_NaN(); /*!< The new expectation value  of energy variance*/
+    R                                ene_new = std::numeric_limits<R>::quiet_NaN(); /*!< The new expectation value  of energy */
+    R                                var_old = std::numeric_limits<R>::quiet_NaN(); /*!< The old expectation value  of energy variance*/
     R                                var_new = std::numeric_limits<R>::quiet_NaN(); /*!< The new expectation value  of energy variance*/
+    R                                hsq_old = std::numeric_limits<R>::quiet_NaN(); /*!< The old expectation value  of energy squared <H²> */
+    R                                hsq_new = std::numeric_limits<R>::quiet_NaN(); /*!< The new expectation value  of energy squared <H²> */
     std::array<long, 3>              dimM    = {};                                  /*!< Dimensions of the mps site to be expanded (before expansion) */
     std::array<long, 3>              dimN    = {};                                  /*!< Dimensions of the mps site to be zero-padded (before expansion) */
     std::array<long, 3>              dimMP   = {};                                  /*!< Dimensions of the expanded term */
