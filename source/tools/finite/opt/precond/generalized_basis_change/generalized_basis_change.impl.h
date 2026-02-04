@@ -88,7 +88,7 @@ auto GeneralizedBasisChange<Scalar>::matrix_norm(const MatrixType &A) -> MatrixT
 
 template<typename Scalar>
 void GeneralizedBasisChange<Scalar>::regularize(Eigen::Tensor<Scalar, 1> &w, const EnvWeightRegularizer ewr, std::string_view tag) {
-    //print_stats(w, tag);
+    // print_stats(w, tag);
     Eigen::Map<VectorType> wmap = tenx::VectorMap(w);
     switch(ewr) {
             /* clang-format off */
@@ -100,7 +100,7 @@ void GeneralizedBasisChange<Scalar>::regularize(Eigen::Tensor<Scalar, 1> &w, con
         default: throw except::runtime_error("EnvWeightRegularizer not implemented");
             /* clang-format on */
     }
-    //print_stats(w, tag);
+    // print_stats(w, tag);
 };
 
 template<typename Scalar>
@@ -723,12 +723,12 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms(const Eigen::Ten
         };
 
         auto check_congruence = [&](const MatrixType &X, const MatrixType &TT, const MatrixType &G, std::string_view lbl) {
-                MatrixType W   = TT.adjoint() * X * TT;
-                RealScalar rel = rel_err(W, G, X.norm());
-                RealScalar hrm = herm_resid(W);
-                tools::log->info("{}: ||T^H X T - G||/max(1,||X||) = {:.3e}", lbl, fp(rel));
-                tools::log->info("{}: Herm residual (rel) = {:.3e}", lbl, fp(hrm));
-                eig_range(W, std::string(lbl) + "_sym");
+            MatrixType W   = TT.adjoint() * X * TT;
+            RealScalar rel = rel_err(W, G, X.norm());
+            RealScalar hrm = herm_resid(W);
+            tools::log->info("{}: ||T^H X T - G||/max(1,||X||) = {:.3e}", lbl, fp(rel));
+            tools::log->info("{}: Herm residual (rel) = {:.3e}", lbl, fp(hrm));
+            eig_range(W, std::string(lbl) + "_sym");
         };
         if(bcfg.eat != EnvAggregateType::H2_zip) {
             // In H2Zip we have unequal sizes for agg1 agg2 and T

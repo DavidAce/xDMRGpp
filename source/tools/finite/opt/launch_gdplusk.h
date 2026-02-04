@@ -938,7 +938,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         // static auto bcfg_b3 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_b, .ewr = ewr_a, .eat = eat_a,.sym = sym_a,  .tst=tst_b};
 
 
-        // auto resultA0 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, true, false, false, false, false, true, false, 1, ncv * 1, bcfg_a0, "A0 JD H2 h2", elog);
+        // auto resultA0 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, true, false, 1, ncv * 1, bcfg_a0, "A0 JD H2 h2", elog);
         auto resultA1 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, true, false, false, false, false, true, false, 1, ncv * 1, bcfg_a1, "A1 JD H2 h2", elog);
         // auto resultA2 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, true, false, 1, ncv * 1, bcfg_a2, "A2 JD H2 h2", elog);
 
