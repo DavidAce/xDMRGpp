@@ -180,12 +180,12 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
         // Tagging it as non-normalized lets us determine whether a full normalization is required later.
         if(pos < state.get_length() - 1) {
             auto &mps_nbr  = state.get_mps_site(pos + 1);
-            auto  old_chiL = mps_nbr.get_chiL();
+            // auto  old_chiL = mps_nbr.get_chiL();
             mps_nbr.take_stash(mps_src);                                                                                 // Take stashed S,V (and possibly LC)
         }
         if(pos > 0) {
             auto &mps_nbr  = state.get_mps_site(pos - 1);
-            auto  old_chiR = mps_nbr.get_chiR();
+            // auto  old_chiR = mps_nbr.get_chiR();
             mps_nbr.take_stash(mps_src);                                                                                 // Take stashed U,S (and possibly LC)
         }
         mps_src.drop_stash(); // Discard whatever is left stashed at the edge (this normalizes the state)

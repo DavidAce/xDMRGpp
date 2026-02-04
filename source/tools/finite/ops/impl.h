@@ -198,13 +198,64 @@ template<typename Scalar>
 void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const std::vector<Eigen::Tensor<Scalar, 4>> &mpos, const svd::config &svd_cfg) {
     tools::log->trace("Applying MPOs");
     if(mpos.size() != state.get_length()) throw except::runtime_error("Number of mpo's doesn't match the number of sites on the system");
-    svd::solver                             svd(svd_cfg);
-    std::optional<Eigen::Tensor<Scalar, 1>> S_prev;
-    std::optional<Eigen::Tensor<Scalar, 2>> U_prev, V_prev, SV, US;
-    Eigen::Tensor<Scalar, 3>                ASV, USB; // The two remaining matrices in the center
-    auto                                    pos_center = state.get_position();
+    svd::solver              svd(svd_cfg);
+    Eigen::Tensor<Scalar, 3> SV, US;
+    Eigen::Tensor<Scalar, 3> mpo_mps;
+    Eigen::Tensor<Scalar, 3> ASV, USB; // The two remaining matrices in the center
+    long                     pos_center = state.template get_position<long>();
+    long                     length     = state.template get_length<long>();
+    auto                    &threads    = tenx::threads::get();
 
-    for(size_t pos = 0; pos < pos_center + 1; ++pos) {
+    for(long pos = 0; pos <= pos_center; ++pos) {
+        auto &mps_site = state.get_mps_site(pos);
+
+        auto &mps = mps_site.get_M();
+        auto &mpo = mpos[pos];
+        /* Connect to mps
+         *
+         *        1---[M]---2        3---[M]---4                     2---[M]---4             1---[M]---2
+         *             |                  |                               |                       |
+         *             0                  |                               |                       0
+         *             2        =         |            shuffle            |        reshape
+         *             |                  |           (2,0,3,1,4)         |
+         *       0---[mpo]---1      0---[mpo]---1                   1---[mpo]---3
+         *             |                  |                               |
+         *             3                  2                               0
+         */
+        long d0 = mpo.dimension(3);
+        long d1 = mps.dimension(1) * mpo.dimension(0);
+        long d2 = mps.dimension(2) * mpo.dimension(1);
+        mpo_mps.resize(std::array{d0, d1, d2});
+        mpo_mps.device(*threads->dev) = mpo.contract(mps, tenx::idx({2}, {0})).shuffle(tenx::array5{2, 0, 3, 1, 4}).reshape(tenx::array3{d0, d1, d2});
+
+        if(pos > 0) {
+            const auto &mps_left    = state.get_mps_site(pos - 1);
+            const auto &S_stash     = mps_left.get_S_stash();
+            const auto &V_stash     = mps_left.get_V_stash();
+            bool        S_from_left = S_stash.has_value() and static_cast<long>(S_stash->pos_dst) == pos;
+            bool        V_from_left = V_stash.has_value() and static_cast<long>(V_stash->pos_dst) == pos;
+            if(S_from_left and V_from_left) {
+                const auto &S = S_stash->data;
+                const auto &V = V_stash->data;
+                tools::common::contraction::contract_bnd_mps(SV, S, V);
+                mpo_mps = tools::common::contraction::contract_mps_mps(SV, mpo_mps);
+            }
+            d0 = mpo_mps.dimension(0);
+            d1 = mpo_mps.dimension(1);
+            d2 = mpo_mps.dimension(2);
+        }
+
+        if(pos < pos_center) {
+            auto [U, S, V] = svd.decompose_multisite(mpo_mps, d0, 1l, d1, d2);
+            mps_site.set_M(U);
+            mps_site.stash_S(S, svd.get_truncation_error(), pos + 1);
+            mps_site.stash_V(V, pos + 1);
+        } else {
+            ASV = mpo_mps;
+        }
+    }
+
+    for(long pos = length - 1; pos > pos_center; --pos) {
         auto &mps_site = state.get_mps_site(pos);
         auto &mps      = mps_site.get_M();
         auto &mpo      = mpos[pos];
@@ -219,99 +270,62 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
          *             |                  |                               |
          *             3                  2                               0
          */
-        long                     d0      = mpo.dimension(3);
-        long                     d1      = mps.dimension(1) * mpo.dimension(0);
-        long                     d2      = mps.dimension(2) * mpo.dimension(1);
-        Eigen::Tensor<Scalar, 3> mpo_mps = mpo.contract(mps, tenx::idx({2}, {0})).shuffle(tenx::array5{2, 0, 3, 1, 4}).reshape(tenx::array3{d0, d1, d2});
+        long d0 = mpo.dimension(3);
+        long d1 = mps.dimension(1) * mpo.dimension(0);
+        long d2 = mps.dimension(2) * mpo.dimension(1);
+        mpo_mps.resize(std::array{d0, d1, d2});
+        mpo_mps = mpo.contract(mps, tenx::idx({2}, {0})).shuffle(tenx::array5{2, 0, 3, 1, 4}).reshape(tenx::array3{d0, d1, d2});
 
-        if(S_prev) mps_site.set_L(S_prev.value(), svd.get_truncation_error());
-        if(S_prev and V_prev) {
-            // mpo_mps = Eigen::Tensor<cx64, 3>(tenx::asDiagonal(S_prev.value())
-            // .contract(V_prev.value(), tenx::idx({1}, {0}))
-            // .contract(mpo_mps, tenx::idx({1}, {1}))
-            // .shuffle(tenx::array3{1, 0, 2}));
-            mpo_mps = Eigen::Tensor<Scalar, 3>(
-                tenx::asDiagonalContract(S_prev.value(), V_prev.value(), 0).contract(mpo_mps, tenx::idx({1}, {1})).shuffle(tenx::array3{1, 0, 2}));
-            d0     = mpo_mps.dimension(0);
-            d1     = mpo_mps.dimension(1);
-            d2     = mpo_mps.dimension(2);
-            S_prev = std::nullopt;
-            V_prev = std::nullopt;
+        if(pos + 1 < length) {
+            const auto &mps_right    = state.get_mps_site(pos + 1);
+            const auto &S_stash      = mps_right.get_S_stash();
+            const auto &U_stash      = mps_right.get_U_stash();
+            bool        S_from_right = S_stash.has_value() and static_cast<long>(S_stash->pos_dst) == pos;
+            bool        U_from_right = U_stash.has_value() and static_cast<long>(U_stash->pos_dst) == pos;
+            if(S_from_right and U_from_right) {
+                const auto &S = S_stash->data;
+                const auto &U = U_stash->data;
+                tools::common::contraction::contract_mps_bnd(US, U, S);
+                mpo_mps = tools::common::contraction::contract_mps_mps(mpo_mps, US);
+            }
+            d0 = mpo_mps.dimension(0);
+            d1 = mpo_mps.dimension(1);
+            d2 = mpo_mps.dimension(2);
         }
 
-        if(pos == pos_center) {
-            ASV    = mpo_mps;
-            S_prev = std::nullopt;
-            V_prev = std::nullopt;
+        if(pos > pos_center + 1) {
+            auto [U, S, V] = svd.decompose_multisite(mpo_mps, 1l, d0, d1, d2);
+            mps_site.set_M(V);
+            mps_site.stash_U(U, pos - 1);
+            mps_site.stash_S(S, svd.get_truncation_error(), pos - 1);
         } else {
-            auto [U, S, V] = svd.decompose(mpo_mps, d0 * d1, d2);
-            mps_site.set_M(Eigen::Tensor<Scalar, 3>(U.reshape(tenx::array3{d0, d1, S.size()})));
-            S_prev = S;
-            V_prev = V;
+            USB = mpo_mps;
         }
     }
 
-    for(size_t pos = state.get_length() - 1; pos > pos_center; --pos) {
-        auto &mps_site = state.get_mps_site(pos);
-        auto &mps      = mps_site.get_M();
-        auto &mpo      = mpos[pos];
-        /* Connect to mps
-         *
-         *        1---[M]---2        3---[M]---4                     2---[M]---4             1---[M]---2
-         *             |                  |                               |                       |
-         *             0                  |                               |                       0
-         *             2        =         |            shuffle            |        reshape
-         *             |                  |           (2,0,3,1,4)         |
-         *       0---[mpo]---1      0---[mpo]---1                   1---[mpo]---3
-         *             |                  |                               |
-         *             3                  2                               0
-         */
-        long                     d0      = mpo.dimension(3);
-        long                     d1      = mps.dimension(1) * mpo.dimension(0);
-        long                     d2      = mps.dimension(2) * mpo.dimension(1);
-        Eigen::Tensor<Scalar, 3> mpo_mps = mpo.contract(mps, tenx::idx({2}, {0})).shuffle(tenx::array5{2, 0, 3, 1, 4}).reshape(tenx::array3{d0, d1, d2});
-        if(S_prev) mps_site.set_L(S_prev.value(), svd.get_truncation_error());
-        if(U_prev and S_prev) {
-            auto US_prev = tenx::asDiagonalContract(S_prev.value(), U_prev.value(), 1);
-            mpo_mps      = Eigen::Tensor<Scalar, 3>(mpo_mps.contract(US_prev, tenx::idx({2}, {0})));
-            S_prev       = std::nullopt;
-            U_prev       = std::nullopt;
-            d0           = mpo_mps.dimension(0);
-            d1           = mpo_mps.dimension(1);
-            d2           = mpo_mps.dimension(2);
-        }
+    if(pos_center + 1 == length) {
+        // We should only have ASV but no USB -> Discard V, keep US
+        auto [U, S, V] = svd.decompose_multisite(ASV, ASV.dimension(0), 1l, ASV.dimension(1), ASV.dimension(2));
+        auto &mps_site = state.get_mps_site(length - 1);
+        mps_site.set_M(U);
+        mps_site.set_LC(S);
+    } else if(pos_center < 0) {
+        // We should only have USB but no ASV -> Discard U, keep SV
+        auto [U, S, V] = svd.decompose_multisite(USB, 1l, USB.dimension(0), USB.dimension(1), USB.dimension(2));
+        auto &mps_site = state.get_mps_site(0);
+        tools::common::contraction::contract_bnd_mps(SV, S, V);
+        mps_site.set_M(V);
+    } else {
+        auto ASVUSB                  = Eigen::Tensor<Scalar, 4>(ASV.dimension(0), ASV.dimension(1), USB.dimension(0), USB.dimension(2));
+        ASVUSB.device(*threads->dev) = ASV.contract(USB, tenx::idx({2}, {1}));
+        auto [U, S, VT]              = svd.decompose(ASVUSB);
 
-        if(pos == pos_center + 1) {
-            USB    = mpo_mps;
-            U_prev = std::nullopt;
-            S_prev = std::nullopt;
-        } else {
-            auto [U, S, V] = svd.decompose(mpo_mps, d1, d0 * d2);
-            U_prev         = U;
-            S_prev         = S;
-            mps_site.set_M(Eigen::Tensor<Scalar, 3>(V.reshape(tenx::array3{d0, S.size(), d2})));
-        }
+        auto &mpsL = state.get_mps_site(pos_center);
+        auto &mpsR = state.get_mps_site(pos_center + 1);
+        mpsL.set_M(U);
+        mpsL.set_LC(S, svd.get_truncation_error());
+        mpsR.set_M(VT);
     }
-
-    /*!
-     *  1---[ASV]---2     1---[USB]---2            1---[ASV]----[USB]---3
-     *        |                 |           --->         |        |
-     *        0                 0                        0        2
-     *
-     */
-
-    long  d0                     = ASV.dimension(0) * ASV.dimension(1);
-    long  d1                     = USB.dimension(0) * USB.dimension(2);
-    auto  ASVUSB                 = Eigen::Tensor<Scalar, 2>(d0, d1);
-    auto &threads                = tenx::threads::get();
-    ASVUSB.device(*threads->dev) = ASV.contract(USB, tenx::idx({2}, {1})).reshape(tenx::array2{d0, d1});
-    auto [U, S, VT]              = svd.decompose(ASVUSB, svd_cfg);
-
-    auto &mpsL = state.get_mps_site(pos_center);
-    auto &mpsR = state.get_mps_site(pos_center + 1);
-    mpsL.set_M(Eigen::Tensor<Scalar, 3>(U.reshape(tenx::array3{ASV.dimension(0), ASV.dimension(1), S.size()})));
-    mpsL.set_LC(S);
-    mpsR.set_M(Eigen::Tensor<Scalar, 3>(VT.reshape(tenx::array3{USB.dimension(0), S.size(), USB.dimension(2)})));
 
     state.clear_measurements();
     state.clear_cache();
@@ -452,8 +466,9 @@ Scalar tools::finite::ops::overlap(const StateFinite<Scalar> &state1, const Stat
         using Real = decltype(std::real(std::declval<Scalar>()));
         if(state1.is_real() and state2.is_real()) return overlap<Real>(state1, state2);
     }
-    if(state1.get_length() != state2.get_length()) throw except::logic_error("ERROR: States have different lengths! Can't do overlap.");
-    if(state1.get_position() != state2.get_position()) throw except::logic_error("ERROR: States need to be at the same position! Can't do overlap.");
+    if(state1.get_length() != state2.get_length()) throw except::logic_error("overlap: States have different lengths!");
+    // if(state1.template get_position<long>() != state2.template get_position<long>())
+    // throw except::logic_error("ERROR: States need to be at the same position! Can't do overlap.");
     size_t              pos     = 0;
     auto                overlap = tools::common::contraction::contract_mps_mps_partial<std::array{0l, 1l}>(state1.get_mps_site(pos).template get_M_as<T>(),
                                                                                                            state2.get_mps_site(pos).template get_M_as<T>());
