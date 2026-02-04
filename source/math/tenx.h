@@ -307,7 +307,7 @@ namespace tenx {
         static_assert(rank >= 2, "Rank must be >= 2 for trace of an index pair");
         long idx0 = idx_pair[0].first;
         long idx1 = idx_pair[0].second;
-        printf("Tracing pair %ld %ld of rank %ld tensor", idx0, idx1, rank);
+        // printf("Tracing pair %ld %ld of rank %ld tensor\n", idx0, idx1, rank);
         if(tensor.dimension(idx0) != tensor.dimension(idx1)) throw std::logic_error("Can't trace index pair of different dimensions");
         long                     dim0 = tensor.dimension(idx0);
         Eigen::Tensor<Scalar, 1> id(dim0);
