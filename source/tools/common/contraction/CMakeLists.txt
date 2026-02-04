@@ -1,5 +1,7 @@
 add_source_target(xdmrg++-tools-common-contraction
         TARGET_SOURCES
+        matvec_policy.cpp
+
         contract_bnd_mps.cx32.cpp
         contract_bnd_mps.cx64.cpp
         contract_bnd_mps.cx128.cpp
@@ -72,25 +74,6 @@ add_source_target(xdmrg++-tools-common-contraction
         matrix_vector_product.fp64.cpp
         matrix_vector_product.fp80.cpp
         matrix_vector_product.fp128.cpp
-
-        matrix_vector_product_gemm_x2.cx32.cpp
-        matrix_vector_product_gemm_x2.cx64.cpp
-        matrix_vector_product_gemm_x2.cx80.cpp
-        matrix_vector_product_gemm_x2.cx128.cpp
-        matrix_vector_product_gemm_x2.fp32.cpp
-        matrix_vector_product_gemm_x2.fp64.cpp
-        matrix_vector_product_gemm_x2.fp80.cpp
-        matrix_vector_product_gemm_x2.fp128.cpp
-
-        vector_matrix_product.cx32.cpp
-        vector_matrix_product.cx64.cpp
-        vector_matrix_product.cx80.cpp
-        vector_matrix_product.cx128.cpp
-        vector_matrix_product.fp32.cpp
-        vector_matrix_product.fp64.cpp
-        vector_matrix_product.fp80.cpp
-        vector_matrix_product.fp128.cpp
-
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

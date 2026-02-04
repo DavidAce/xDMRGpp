@@ -1,7 +1,8 @@
 #pragma once
 #include "../contraction.h"
+#include "internal/gemm_x2.h"
 #include "math/tenx.h"
-#include "ScaledTensor.h"
+#include "matvec_policy.h"
 #include "tid/tid.h"
 #if defined(DMRG_ENABLE_TBLIS)
     // #include <tblis/util/configs.h>
@@ -165,324 +166,75 @@ namespace tools::common::contraction::internal {
     }
 
     template<typename Scalar>
-    Info<Scalar> contract_with_longsum(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
-        using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-
-        auto gemm_highprecision_fp80 = [](const Eigen::Ref<const MatrixType> &A_in, const Eigen::Ref<const MatrixType> &B_in, Eigen::Index BK) -> MatrixType {
-            // Multiply in FP64, accumulate in long double, return FP64.
-            // - If BK == 1: do scalar FMAs (double multiply) into long double accumulator.
-            // - If BK  > 1: do GEMM in double for each k-block, then add that block result into long double accumulator.
-            //
-            // Requirements: A.cols() == B.rows().
-
-            const Eigen::Index m = A_in.rows();
-            const Eigen::Index k = A_in.cols();
-            const Eigen::Index n = B_in.cols();
-
-            assert(B_in.rows() == A_in.cols());
-            assert(BK >= 1);
-            using ScalarL = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<long double>, long double>;
-
-            // long double accumulator (no upcast of A/B storage; only the running sum is long double)
-            Eigen::Matrix<ScalarL, Eigen::Dynamic, Eigen::Dynamic> acc(m, n);
-            acc.setZero();
-
-            // Special case: BK == 1 uses scalar updates (double multiply, long double add)
-            if(BK == 1) {
-                // Access as plain matrices (still views, no copy)
-                const auto &A   = A_in.derived();
-                const auto &B   = B_in.derived();
-                auto        Bkk = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>(n);
-                for(Eigen::Index kk = 0; kk < k; ++kk) {
-                    const auto a_col = A.col(kk); // length m
-                    Bkk              = B.row(kk);
-                    for(Eigen::Index j = 0; j < n; ++j) { acc.col(j).noalias() += (a_col * Bkk(j)).template cast<ScalarL>(); }
-                }
-                return acc.template cast<Scalar>();
-            }
-
-            // General case: BK > 1
-            // Reusable FP64 buffer for each block contribution.
-            Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> P(m, n);
-            P.setZero();
-
-            for(Eigen::Index kk = 0; kk < k; kk += BK) {
-                const Eigen::Index kb = std::min<Eigen::Index>(BK, k - kk);
-
-                P.noalias() = A_in.middleCols(kk, kb) * B_in.middleRows(kk, kb); // FP64 block GEMM
-
-                acc.noalias() += P.template cast<ScalarL>(); // Accumulate block result in long double
-            }
-
-            // Downcast final result back to FP64
-            return acc.template cast<Scalar>();
-        };
+    Info<Scalar> contract_with_gemm_x2(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
         Info<Scalar> info;
         info.contract_left = mps.dimension(1) >= mps.dimension(2);
 
         Eigen::Tensor<Scalar, 4> mpo_shf  = mpo.shuffle(std::array{0, 3, 2, 1});
         Eigen::Tensor<Scalar, 3> envL_shf = envL.shuffle(std::array{0, 2, 1});
 
-        Eigen::Index md       = mps.dimension(0);
-        Eigen::Index mL       = mps.dimension(1);
-        Eigen::Index mR       = mps.dimension(2);
-        Eigen::Index wL       = mpo.dimension(0);
-        Eigen::Index wR       = mpo.dimension(1);
-        Eigen::Index wd       = mpo.dimension(3);
-        auto         envR_mat = Eigen::Map<const MatrixType>(envR.data(), mR, mR * wR);
-        auto         envL_mat = Eigen::Map<const MatrixType>(envL_shf.data(), mL * wL, mL);
-        auto         res_shf  = Eigen::Tensor<Scalar, 3>(wd, mR, mL);
-        auto         res_mat  = Eigen::Map<MatrixType>(res_shf.data(), wd * mR, mL);
+        Eigen::Index md = mps.dimension(0);
+        Eigen::Index mL = mps.dimension(1);
+        Eigen::Index mR = mps.dimension(2);
+        Eigen::Index wL = mpo.dimension(0);
+        Eigen::Index wR = mpo.dimension(1);
+        Eigen::Index wd = mpo.dimension(3);
 
-        thread_local Eigen::Tensor<Scalar, 4> T1;
-        thread_local Eigen::Tensor<Scalar, 4> T2;
-        T1.resize(md, mL, mR, wR);
-        T2.resize(wL, wd, mL, mR);
+        auto mps_x2      = TensorX2<Scalar, 3>(mps);
+        auto mpo_shf_x2  = TensorX2<Scalar, 4>(mpo_shf);
+        auto envL_shf_x2 = TensorX2<Scalar, 3>(envL_shf);
+        auto envR_x2     = TensorX2<Scalar, 3>(envR);
+        auto res_shf_x2  = TensorX2<Scalar, 3>(wd, mR, mL);
 
-        auto mps_mat = Eigen::Map<const MatrixType>(mps.data(), md * mL, mR);
+        thread_local TensorX2<Scalar, 4> T1;
+        thread_local TensorX2<Scalar, 4> T2;
+
+        T1.resize(std::array{md, mL, mR, wR});
+        T2.resize(std::array{wL, wd, mL, mR});
+
+        // Map the DD tensors to DD matrices
+        auto mps_mat_x2  = ConstMatrixX2Map<Scalar>(mps_x2.hi.data(), mps_x2.lo.data(), md * mL, mR);
+        auto envR_mat_x2 = ConstMatrixX2Map<Scalar>(envR_x2.hi.data(), envR_x2.lo.data(), mR, mR * wR);
 
         {
-            auto T1_mat = Eigen::Map<MatrixType>(T1.data(), md * mL, mR * wR);
-            T1_mat      = gemm_highprecision_fp80(mps_mat, envR_mat, 1);
+            auto T1_mat_x2 = MatrixX2Map<Scalar>(T1.hi.data(), T1.lo.data(), md * mL, mR * wR);
+            gemm_x2(T1_mat_x2, mps_mat_x2, envR_mat_x2);
         }
 
         {
-            T1           = Eigen::Tensor<Scalar, 4>(T1.shuffle(std::array{0, 3, 1, 2}));
-            auto T1_mat  = Eigen::Map<const MatrixType>(T1.data(), md * wR, mL * mR);
-            auto T2_mat  = Eigen::Map<MatrixType>(T2.data(), wL * wd, mL * mR);
-            auto mpo_mat = Eigen::Map<const MatrixType>(mpo_shf.data(), wL * wd, md * wR);
-            T2_mat       = gemm_highprecision_fp80(mpo_mat, T1_mat, 1);
+            auto T2_mat_x2      = MatrixX2Map<Scalar>(T2.hi.data(), T2.lo.data(), wL * wd, mL * mR);
+            auto mpo_shf_mat_x2 = ConstMatrixX2Map<Scalar>(mpo_shf_x2.hi.data(), mpo_shf_x2.lo.data(), wL * wd, md * wR);
+            T1.shuffle(std::array{0, 3, 1, 2});
+            auto T1_mat_x2 = ConstMatrixX2Map<Scalar>(T1.hi.data(), T1.lo.data(), md * wR, mL * mR);
+
+            gemm_x2(T2_mat_x2, mpo_shf_mat_x2, T1_mat_x2);
         }
 
         {
-            T2          = Eigen::Tensor<Scalar, 4>(T2.shuffle(std::array{1, 3, 2, 0}));
-            auto T2_mat = Eigen::Map<const MatrixType>(T2.data(), wd * mR, mL * wL);
-            res_mat     = gemm_highprecision_fp80(T2_mat, envL_mat, 1);
-            res         = res_shf.shuffle(std::array{0, 2, 1});
+            auto res_shf_mat_x2 = MatrixX2Map<Scalar>(res_shf_x2.hi.data(), res_shf_x2.lo.data(), wd * mR, mL);
+            T2.shuffle(std::array{1, 3, 2, 0});
+            auto T2_mat_x2   = ConstMatrixX2Map<Scalar>(T2.hi.data(), T2.lo.data(), wd * mR, mL * wL);
+            auto envL_mat_x2 = ConstMatrixX2Map<Scalar>(envL_shf_x2.hi.data(), envL_shf_x2.lo.data(), mL * wL, mL);
+            gemm_x2(res_shf_mat_x2, T2_mat_x2, envL_mat_x2);
         }
+        // final permutation back to tensor layout
+        res_shf_x2.shuffle(std::array{0, 2, 1});
+        res = res_shf_x2.to_TensorType();
 
-        info.mps_norm           = get_norm(mps.data(), mps.dimensions());
-        info.mpo_norm           = get_norm(mpo.data(), mpo.dimensions());
-        info.envL_norm          = get_norm(envL.data(), envL.dimensions());
-        info.envR_norm          = get_norm(envR.data(), envR.dimensions());
-        info.ST1                = get_norm(T1.data(), T1.dimensions());
-        info.ST2                = get_norm(T2.data(), T2.dimensions());
-        info.ST3                = get_norm(res.data(), res.dimensions());
+        info.mps_norm           = mps_x2.norm();
+        info.mpo_norm           = mpo_shf_x2.norm();
+        info.envL_norm          = envL_shf_x2.norm();
+        info.envR_norm          = envR_x2.norm();
+        info.ST1                = T1.norm();
+        info.ST2                = T2.norm();
+        info.ST3                = res_shf_x2.norm();
         auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
         info.cancelation_factor = Smax / info.ST3;
+        // if constexpr(settings::debug_contraction)
+        tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} envR {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e}", fp(info.mps_norm),
+                         fp(info.mpo_norm), fp(info.envL_norm), fp(info.envR_norm), fp(info.ST1), fp(info.ST2), fp(info.ST3), fp(info.cancelation_factor));
         return info;
     }
-
-    template<typename Scalar>
-    Info<Scalar> contract_with_longprod(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
-        using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-
-        auto gemm_highprecision_fp80 = [](const Eigen::Ref<const MatrixType> &A_in, const Eigen::Ref<const MatrixType> &B_in,
-                                          [[maybe_unused]] Eigen::Index BK) -> MatrixType {
-            // Multiply in FP64, accumulate in long double, return FP64.
-            // - If BK == 1: do scalar FMAs (double multiply) into long double accumulator.
-            // - If BK  > 1: do GEMM in double for each k-block, then add that block result into long double accumulator.
-            //
-            // Requirements: A.cols() == B.rows().
-
-            const Eigen::Index m = A_in.rows();
-            const Eigen::Index k = A_in.cols();
-            const Eigen::Index n = B_in.cols();
-
-            assert(B_in.rows() == A_in.cols());
-            assert(BK >= 1);
-            using ScalarL = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<long double>, long double>;
-
-            const auto &A = A_in.derived();
-            const auto &B = B_in.derived();
-
-            // high precision accumulator and compensation
-            Eigen::Matrix<ScalarL, Eigen::Dynamic, Eigen::Dynamic> acc;
-            Eigen::Matrix<ScalarL, Eigen::Dynamic, Eigen::Dynamic> comp;
-            // Resize and initialize to zero
-            acc.setZero(m, n);
-            comp.setZero(m, n);
-
-#pragma omp parallel
-            {
-                Eigen::Matrix<ScalarL, Eigen::Dynamic, 1> aL(m), y(m), tmp(m), prod(m);
-                for(Eigen::Index kk = 0; kk < k; ++kk) {
-                    aL.noalias()     = A.col(kk).template cast<ScalarL>(); // length m
-                    const auto b_row = B.row(kk);
-#pragma omp for schedule(static)
-                    for(Eigen::Index j = 0; j < n; ++j) {
-                        const ScalarL bL      = static_cast<ScalarL>(b_row(j));
-                        prod.noalias()        = aL * bL;
-                        y.noalias()           = prod - comp.col(j);
-                        tmp.noalias()         = acc.col(j) + y;
-                        comp.col(j).noalias() = (tmp - acc.col(j)) - y;
-                        acc.col(j).noalias()  = tmp;
-                    }
-                }
-            }
-            return acc.template cast<Scalar>();
-        };
-        Info<Scalar> info;
-        info.contract_left = mps.dimension(1) >= mps.dimension(2);
-
-        Eigen::Tensor<Scalar, 4> mpo_shf  = mpo.shuffle(std::array{0, 3, 2, 1});
-        Eigen::Tensor<Scalar, 3> envL_shf = envL.shuffle(std::array{0, 2, 1});
-
-        Eigen::Index md       = mps.dimension(0);
-        Eigen::Index mL       = mps.dimension(1);
-        Eigen::Index mR       = mps.dimension(2);
-        Eigen::Index wL       = mpo.dimension(0);
-        Eigen::Index wR       = mpo.dimension(1);
-        Eigen::Index wd       = mpo.dimension(3);
-        auto         envR_mat = Eigen::Map<const MatrixType>(envR.data(), mR, mR * wR);
-        auto         envL_mat = Eigen::Map<const MatrixType>(envL_shf.data(), mL * wL, mL);
-        auto         res_shf  = Eigen::Tensor<Scalar, 3>(wd, mR, mL);
-        auto         res_mat  = Eigen::Map<MatrixType>(res_shf.data(), wd * mR, mL);
-
-        thread_local Eigen::Tensor<Scalar, 4> T1;
-        thread_local Eigen::Tensor<Scalar, 4> T2;
-        T1.resize(md, mL, mR, wR);
-        T2.resize(wL, wd, mL, mR);
-
-        auto mps_mat = Eigen::Map<const MatrixType>(mps.data(), md * mL, mR);
-
-        {
-            auto T1_mat = Eigen::Map<MatrixType>(T1.data(), md * mL, mR * wR);
-            T1_mat      = gemm_highprecision_fp80(mps_mat, envR_mat, 1);
-        }
-
-        {
-            T1           = Eigen::Tensor<Scalar, 4>(T1.shuffle(std::array{0, 3, 1, 2}));
-            auto T1_mat  = Eigen::Map<const MatrixType>(T1.data(), md * wR, mL * mR);
-            auto T2_mat  = Eigen::Map<MatrixType>(T2.data(), wL * wd, mL * mR);
-            auto mpo_mat = Eigen::Map<const MatrixType>(mpo_shf.data(), wL * wd, md * wR);
-            T2_mat       = gemm_highprecision_fp80(mpo_mat, T1_mat, 1);
-        }
-
-        {
-            T2          = Eigen::Tensor<Scalar, 4>(T2.shuffle(std::array{1, 3, 2, 0}));
-            auto T2_mat = Eigen::Map<const MatrixType>(T2.data(), wd * mR, mL * wL);
-            res_mat     = gemm_highprecision_fp80(T2_mat, envL_mat, 1);
-            res         = res_shf.shuffle(std::array{0, 2, 1});
-        }
-
-        info.mps_norm           = get_norm(mps.data(), mps.dimensions());
-        info.mpo_norm           = get_norm(mpo.data(), mpo.dimensions());
-        info.envL_norm          = get_norm(envL.data(), envL.dimensions());
-        info.envR_norm          = get_norm(envR.data(), envR.dimensions());
-        info.ST1                = get_norm(T1.data(), T1.dimensions());
-        info.ST2                = get_norm(T2.data(), T2.dimensions());
-        info.ST3                = get_norm(res.data(), res.dimensions());
-        auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
-        info.cancelation_factor = Smax / info.ST3;
-        return info;
-    }
-
-    template<typename Scalar>
-    Info<Scalar> contract_with_quadprod(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
-        using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-
-        auto gemm_highprecision_fp128 = [](const Eigen::Ref<const MatrixType> &A_in, const Eigen::Ref<const MatrixType> &B_in,
-                                           [[maybe_unused]] Eigen::Index BK) -> MatrixType {
-            // Multiply in FP64, accumulate in long double, return FP64.
-            // - If BK == 1: do scalar FMAs (double multiply) into long double accumulator.
-            // - If BK  > 1: do GEMM in double for each k-block, then add that block result into long double accumulator.
-            //
-            // Requirements: A.cols() == B.rows().
-
-            const Eigen::Index m = A_in.rows();
-            const Eigen::Index k = A_in.cols();
-            const Eigen::Index n = B_in.cols();
-
-            assert(B_in.rows() == A_in.cols());
-            assert(BK >= 1);
-            using ScalarL = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, cx128, fp128>;
-
-            const auto &A = A_in.derived();
-            const auto &B = B_in.derived();
-
-            // high precision accumulator and compensation
-            Eigen::Matrix<ScalarL, Eigen::Dynamic, Eigen::Dynamic> acc;
-            Eigen::Matrix<ScalarL, Eigen::Dynamic, Eigen::Dynamic> comp;
-            // Resize and initialize to zero
-            acc.setZero(m, n);
-            comp.setZero(m, n);
-
-#pragma omp parallel
-            {
-                Eigen::Matrix<ScalarL, Eigen::Dynamic, 1> aL(m), y(m), tmp(m), prod(m);
-                for(Eigen::Index kk = 0; kk < k; ++kk) {
-                    aL.noalias()     = A.col(kk).template cast<ScalarL>(); // length m
-                    const auto b_row = B.row(kk);
-#pragma omp for schedule(static)
-                    for(Eigen::Index j = 0; j < n; ++j) {
-                        const ScalarL bL      = static_cast<ScalarL>(b_row(j));
-                        prod.noalias()        = aL * bL;
-                        y.noalias()           = prod - comp.col(j);
-                        tmp.noalias()         = acc.col(j) + y;
-                        comp.col(j).noalias() = (tmp - acc.col(j)) - y;
-                        acc.col(j).noalias()  = tmp;
-                    }
-                }
-            }
-            return acc.template cast<Scalar>();
-        };
-        Info<Scalar> info;
-        info.contract_left = mps.dimension(1) >= mps.dimension(2);
-
-        Eigen::Tensor<Scalar, 4> mpo_shf  = mpo.shuffle(std::array{0, 3, 2, 1});
-        Eigen::Tensor<Scalar, 3> envL_shf = envL.shuffle(std::array{0, 2, 1});
-
-        Eigen::Index md       = mps.dimension(0);
-        Eigen::Index mL       = mps.dimension(1);
-        Eigen::Index mR       = mps.dimension(2);
-        Eigen::Index wL       = mpo.dimension(0);
-        Eigen::Index wR       = mpo.dimension(1);
-        Eigen::Index wd       = mpo.dimension(3);
-        auto         envR_mat = Eigen::Map<const MatrixType>(envR.data(), mR, mR * wR);
-        auto         envL_mat = Eigen::Map<const MatrixType>(envL_shf.data(), mL * wL, mL);
-        auto         res_shf  = Eigen::Tensor<Scalar, 3>(wd, mR, mL);
-        auto         res_mat  = Eigen::Map<MatrixType>(res_shf.data(), wd * mR, mL);
-
-        thread_local Eigen::Tensor<Scalar, 4> T1;
-        thread_local Eigen::Tensor<Scalar, 4> T2;
-        T1.resize(md, mL, mR, wR);
-        T2.resize(wL, wd, mL, mR);
-
-        auto mps_mat = Eigen::Map<const MatrixType>(mps.data(), md * mL, mR);
-
-        {
-            auto T1_mat = Eigen::Map<MatrixType>(T1.data(), md * mL, mR * wR);
-            T1_mat      = gemm_highprecision_fp128(mps_mat, envR_mat, 1);
-        }
-
-        {
-            T1           = Eigen::Tensor<Scalar, 4>(T1.shuffle(std::array{0, 3, 1, 2}));
-            auto T1_mat  = Eigen::Map<const MatrixType>(T1.data(), md * wR, mL * mR);
-            auto T2_mat  = Eigen::Map<MatrixType>(T2.data(), wL * wd, mL * mR);
-            auto mpo_mat = Eigen::Map<const MatrixType>(mpo_shf.data(), wL * wd, md * wR);
-            T2_mat       = gemm_highprecision_fp128(mpo_mat, T1_mat, 1);
-        }
-
-        {
-            T2          = Eigen::Tensor<Scalar, 4>(T2.shuffle(std::array{1, 3, 2, 0}));
-            auto T2_mat = Eigen::Map<const MatrixType>(T2.data(), wd * mR, mL * wL);
-            res_mat     = gemm_highprecision_fp128(T2_mat, envL_mat, 1);
-            res         = res_shf.shuffle(std::array{0, 2, 1});
-        }
-
-        info.mps_norm           = get_norm(mps.data(), mps.dimensions());
-        info.mpo_norm           = get_norm(mpo.data(), mpo.dimensions());
-        info.envL_norm          = get_norm(envL.data(), envL.dimensions());
-        info.envR_norm          = get_norm(envR.data(), envR.dimensions());
-        info.ST1                = get_norm(T1.data(), T1.dimensions());
-        info.ST2                = get_norm(T2.data(), T2.dimensions());
-        info.ST3                = get_norm(res.data(), res.dimensions());
-        auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
-        info.cancelation_factor = Smax / info.ST3;
-        return info;
-    }
-
 }
 
 template<typename Scalar>
@@ -494,58 +246,113 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
 ) {
     // This applies the mpo's with corresponding environments to local multisite mps
     // This is usually the operation H|psi>  or H²|psi>
-    using RealScalar         = decltype(std::real(std::declval<Scalar>()));
-    constexpr bool use_tblis = settings::tblis_enabled and (std::is_same_v<RealScalar, fp32> or std::is_same_v<RealScalar, fp64>);
 
     assert(mps_dims[1] == envL_dims[0]);
     assert(mps_dims[2] == envR_dims[0]);
     assert(mps_dims[0] == mpo_dims[2]);
     assert(envL_dims[2] == mpo_dims[0]);
     assert(envR_dims[2] == mpo_dims[1]);
+
+    using RealScalar         = decltype(std::real(std::declval<Scalar>()));
+    using VectorType         = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+    constexpr bool use_tblis = settings::tblis_enabled and (std::is_same_v<RealScalar, fp32> or std::is_same_v<RealScalar, fp64>);
+
     auto res  = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(res_ptr, mps_dims);
     auto mps  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(mps_ptr, mps_dims);
     auto mpo  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 4>>(mpo_ptr, mpo_dims);
     auto envL = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(envL_ptr, envL_dims);
     auto envR = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(envR_ptr, envR_dims);
 
-    auto mps_norm  = internal::get_norm(mps_ptr, mps_dims);
-    auto mpo_norm  = internal::get_norm(mpo_ptr, mpo_dims);
-    auto envL_norm = internal::get_norm(envL_ptr, envL_dims);
-    auto envR_norm = internal::get_norm(envR_ptr, envR_dims);
-
-    bool contract_left = mps_dims[1] >= mps_dims[2];
-
-    [[maybe_unused]] auto ST1 = contract_left ? mps_norm * envL_norm : mps_norm * envR_norm;
-    [[maybe_unused]] auto ST2 = ST1 * mpo_norm;
-    [[maybe_unused]] auto ST3 = contract_left ? ST2 * envR_norm : ST2 * envL_norm;
+    auto mpsv = Eigen::Map<const VectorType>(mps.data(), mps.size());
+    auto resv = Eigen::Map<VectorType>(res.data(), res.size());
 
     internal::Info<Scalar>       info;
     [[maybe_unused]] std::string msg;
-    if(ST1 > info.highprec_threshold) {
-        // if(true) {
-        if constexpr(settings::debug_contraction) msg = fmt::format("| running highprecision: ST1 {:.4e} > {:.4e}", fp(ST1), fp(info.highprec_threshold));
-        info = internal::contract_with_longprod<Scalar>(res, mps, mpo, envL, envR);
-        // info = internal::contract_with_quadprod<Scalar>(res, mps, mpo, envL, envR);
-        // info = internal::contract_with_longsum<Scalar>(res, mps, mpo, envL, envR);
-        if constexpr(use_tblis) {
-            Eigen::Tensor<Scalar, 3> resd(mps_dims);
-            auto                     infod = internal::contract_with_tblis<Scalar>(resd, mps, mpo, envL, envR);
-            RealScalar               diff  = (tenx::VectorMap(res) - tenx::VectorMap(resd)).norm();
-            if constexpr(settings::debug_contraction) msg += fmt::format(" diff={:.4e}", fp(diff));
+
+    const internal::MatVecOptions opts           = internal::matvec_options_active();
+    const MatVecBackend           backend_active = opts.backend;
+
+    switch(backend_active) {
+        case MatVecBackend::X2: info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR); break;
+        case MatVecBackend::EIGEN: info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR); break;
+        case MatVecBackend::TBLIS: {
+            if constexpr(use_tblis) {
+                info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
+                break;
+            } else {
+                tools::log->debug("matrix_vector_product: Detected MatVecBackend::TBLIS, but use_tblis==false. Switching to Eigen.");
+                info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
+                break;
+            }
         }
-    } else {
-        if constexpr(use_tblis) {
-            info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
-        } else {
-            info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
+        case MatVecBackend::AUTO: {
+            auto get_op_norm = [&]() -> RealScalar {
+                using namespace internal;
+                if(mpo_dims == opts.H1_dims) return static_cast<RealScalar>(opts.H1_norm);
+                if(mpo_dims == opts.H2_dims) return static_cast<RealScalar>(opts.H2_norm);
+                return std::max({get_norm(envL.data(), envL.dimensions()), get_norm(envR.data(), envR.dimensions())});
+            };
+
+            Eigen::Index md = mps_dims[0];
+            Eigen::Index mL = mps_dims[1];
+            Eigen::Index mR = mps_dims[2];
+            Eigen::Index wL = mpo_dims[0];
+            Eigen::Index wR = mpo_dims[1];
+
+            const Eigen::Index cplx_factor = Eigen::NumTraits<Scalar>::IsComplex == 0 ? 1 : 4;
+            const RealScalar   k_eff =
+                static_cast<RealScalar>(cplx_factor * std::max({md * wL, md * wR, mL * wL, mR * wR})); // inner dimension of the dot products
+            const RealScalar eps          = std::numeric_limits<RealScalar>::epsilon();
+            const RealScalar gamma        = (k_eff * eps) / (RealScalar(1) - k_eff * eps);
+            const RealScalar x2_redoTol   = RealScalar{10} / gamma;
+            const RealScalar x2_switchTol = RealScalar{1} / gamma;
+            const RealScalar xnorm2       = mpsv.squaredNorm();
+            const RealScalar opnorm       = get_op_norm();
+            const RealScalar crit_switch  = opnorm * xnorm2;
+            const bool       use_x2       = !std::isfinite(crit_switch) or crit_switch > x2_switchTol;
+            if(xnorm2 == RealScalar{0}) {
+                resv.setZero();
+                return;
+            }
+            if(use_x2) {
+                tools::log->debug("Switching matvec to x2:  opnorm={:.4e} xnorm2={:.4e} criterion: {:.4e}  switchTol {:.4e}", fp(opnorm), fp(xnorm2),
+                                  fp(opnorm * xnorm2), fp(x2_switchTol));
+                info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+            } else {
+                if constexpr(use_tblis) {
+                    info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
+                } else {
+                    info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
+                }
+
+                // Decide redo: If |A|/(xAx/xx) is too large, there is catastrophic cancellation in the matvec.
+                // Then we better switch to MatVecBackend::X2 (more precise) if the backend is AUTO.
+                const Scalar     xAx       = mpsv.dot(resv);
+                const RealScalar denom     = std::abs(xAx);
+                const RealScalar crit_redo = opnorm * xnorm2 / std::max(denom, eps);
+                const bool       do_redo   = !std::isfinite(crit_redo) or crit_redo > x2_redoTol;
+
+                if(do_redo) {
+                    VectorType resv_old = resv;
+                    info                = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+
+                    const Scalar     xAx_x2   = mpsv.dot(resv);
+                    const RealScalar xAx_diff = std::abs(xAx_x2 - xAx);
+                    const RealScalar Ax_diff  = (resv - resv_old).norm();
+                    tools::log->debug("matrix_vector_product: Redo matvec in x2:  opnorm={:.4e} xAx={:.4e} xnorm2={:.4e} criterion={:.4e}  redoTol={:.4e} "
+                                      "|xAx-xAx|={:.16e} | |Ax-Ax|={:.16e}",
+                                      fp(opnorm), fp(std::real(xAx)), fp(xnorm2), fp(crit_redo), fp(x2_redoTol), fp(xAx_diff), fp(Ax_diff));
+                }
+            }
+            break;
         }
+        default: throw std::runtime_error("matrix_vector_product: Unknown MatVecBackend");
     }
-    using namespace internal;
+
     if constexpr(settings::debug_contraction)
         if(!msg.empty())
-            tools::log->info("res {:.4e} mps {:.4e} envL {:.4e} envR {:.4e} mpo {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e} {}",
-                             fp(get_norm(res_ptr, mps_dims)), fp(mps_norm), fp(envL_norm), fp(envR_norm), fp(mpo_norm), fp(info.ST1), fp(info.ST2),
-                             fp(info.ST3), fp(info.cancelation_factor), msg);
+            tools::log->info("matrix_vector_product: ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e} {}", fp(info.ST1), fp(info.ST2), fp(info.ST3),
+                             fp(info.cancelation_factor), msg);
 }
 
 template<typename Scalar, typename mpo_type>

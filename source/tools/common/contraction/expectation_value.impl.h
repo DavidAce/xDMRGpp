@@ -22,7 +22,7 @@ Scalar tools::common::contraction::expectation_value(const Scalar * const ket_pt
     assert(envR_dims[2] == mpo_dims[1]);
 
     Eigen::Tensor<Scalar, 3> Hket(ket_dims);
-    matrix_vector_product_gemm_x2(Hket.data(), ket_ptr, ket_dims, mpo_ptr, mpo_dims, envL_ptr, envL_dims, envR_ptr, envR_dims);
+    matrix_vector_product(Hket.data(), ket_ptr, ket_dims, mpo_ptr, mpo_dims, envL_ptr, envL_dims, envR_ptr, envR_dims);
     return contract_mps_mps_overlap(ket_ptr, ket_dims, Hket.data(), Hket.dimensions()); // ket gets adjointed
 }
 
@@ -50,7 +50,7 @@ Scalar tools::common::contraction::expectation_value(const Scalar * const bra_pt
     assert(envR_dims[2] == mpo_dims[1]);
 
     Eigen::Tensor<Scalar, 3> Hket(ket_dims);
-    matrix_vector_product_gemm_x2(Hket.data(), ket_ptr, ket_dims, mpo_ptr, mpo_dims, envL_ptr, envL_dims, envR_ptr, envR_dims);
+    matrix_vector_product(Hket.data(), ket_ptr, ket_dims, mpo_ptr, mpo_dims, envL_ptr, envL_dims, envR_ptr, envR_dims);
     return contract_mps_mps_overlap(bra_ptr, bra_dims, Hket.data(), Hket.dimensions()); // bra gets adjointed
 
 }

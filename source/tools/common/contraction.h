@@ -69,29 +69,6 @@ namespace tools::common::contraction {
                                const Scalar * const envR_ptr, std::array<long,3> envR_dims);
 
     template<typename Scalar>
-    void matrix_vector_product_gemm_x2(Scalar * res_ptr,
-                               const Scalar * const mps_ptr, std::array<long,3> mps_dims,
-                               const Scalar * const mpo_ptr, std::array<long,4> mpo_dims,
-                               const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                               const Scalar * const envR_ptr, std::array<long,3> envR_dims);
-
-
-    template<typename Scalar>
-    void vector_matrix_product(Scalar * res_ptr,
-                           const Scalar * const mps_ptr, std::array<long,3> mps_dims,
-                           const Scalar * const mpo_ptr, std::array<long,4> mpo_dims,
-                           const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                           const Scalar * const envR_ptr, std::array<long,3> envR_dims);
-
-
-    template<typename Scalar, typename mpo_type>
-    void vector_matrix_product(Scalar * res_ptr,
-                               const Scalar * const mps_ptr, std::array<long,3> mps_dims,
-                               const std::vector<mpo_type> & mpos_shf,
-                               const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                               const Scalar * const envR_ptr, std::array<long,3> envR_dims);
-
-    template<typename Scalar>
     VectorType<Scalar> matrix_inverse_vector_product(MatrixLikeOperator<Scalar> &MatrixOp,     //
                                                      const Scalar *rhs_ptr,                    //
                                                      const IterativeLinearSolverConfig<Scalar> &cfg);
@@ -197,92 +174,6 @@ namespace tools::common::contraction {
         return result;
     }
 
-
-    template<typename res_type, typename mps_type, typename mpo_type, typename env_type>
-    void matrix_vector_product_gemm_x2(TensorWrite<res_type> &res,
-                                       const TensorRead<mps_type> & mps,
-                                       const TensorRead<mpo_type> & mpo,
-                                       const TensorRead<env_type> & envL,
-                                       const TensorRead<env_type> & envR){
-        static_assert(res_type::NumIndices == 3 and "Wrong res tensor rank != 3 passed to calculation of matrix_vector_product");
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of matrix_vector_product");
-        static_assert(mpo_type::NumIndices == 4 and "Wrong mpo tensor rank != 4 passed to calculation of matrix_vector_product");
-        static_assert(env_type::NumIndices == 3 and "Wrong env tensor rank != 3 passed to calculation of matrix_vector_product");
-        auto & res_ref = static_cast<res_type&>(res);
-        auto  mps_eval = tenx::asEval(mps);
-        auto  mpo_eval = tenx::asEval(mpo);
-        auto  envL_eval = tenx::asEval(envL);
-        auto  envR_eval = tenx::asEval(envR);
-        matrix_vector_product_gemm_x2(
-            res_ref.data(),
-            mps_eval.data(), mps_eval.dimensions(),
-            mpo_eval.data(), mpo_eval.dimensions(),
-            envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions());
-    }
-
-    template<typename mps_type, typename mpo_type, typename env_type>
-    mps_type matrix_vector_product_gemm_x2(const mps_type &mps, const mpo_type &mpo, const env_type &envL, const env_type &envR) {
-        using Scalar = typename mps_type::Scalar;
-        Eigen::Tensor<Scalar,3> result(mps.dimensions());
-        matrix_vector_product_gemm_x2(result, mps, mpo, envL, envR);
-        return result;
-    }
-
-    template<typename res_type, typename mps_type, typename mpo_type, typename env_type>
-    void vector_matrix_product(TensorWrite<res_type> &res,
-                               const TensorRead<mps_type> & mps,
-                               const TensorRead<mpo_type> & mpo,
-                               const TensorRead<env_type> & envL,
-                               const TensorRead<env_type> & envR){
-        static_assert(res_type::NumIndices == 3 and "Wrong res tensor rank != 3 passed to calculation of vector_matrix_product");
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of vector_matrix_product");
-        static_assert(mpo_type::NumIndices == 4 and "Wrong mpo tensor rank != 4 passed to calculation of vector_matrix_product");
-        static_assert(env_type::NumIndices == 3 and "Wrong env tensor rank != 3 passed to calculation of vector_matrix_product");
-        auto & res_ref = static_cast<res_type&>(res);
-        auto  mps_eval = tenx::asEval(mps);
-        auto  mpo_eval = tenx::asEval(mpo);
-        auto  envL_eval = tenx::asEval(envL);
-        auto  envR_eval = tenx::asEval(envR);
-        vector_matrix_product(
-            res_ref.data(),
-            mps_eval.data(), mps_eval.dimensions(),
-            mpo_eval.data(), mpo_eval.dimensions(),
-            envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions());
-    }
-
-    template<typename res_type, typename mps_type, typename mpo_type, typename env_type>
-    void vector_matrix_product(TensorWrite<res_type> &res,
-                               const TensorRead<mps_type> & mps,
-                               const std::vector<mpo_type> & mpos_shf,
-                               const TensorRead<env_type> & envL,
-                               const TensorRead<env_type> & envR){
-        static_assert(res_type::NumIndices == 3 and "Wrong res tensor rank != 3 passed to calculation of vector_matrix_product");
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of vector_matrix_product");
-        static_assert(env_type::NumIndices == 3 and "Wrong env tensor rank != 3 passed to calculation of vector_matrix_product");
-        auto & res_ref = static_cast<res_type&>(res);
-        auto  mps_eval = tenx::asEval(mps);
-        // auto  mpo_eval = tenx::asEval(mpo);
-        auto  envL_eval = tenx::asEval(envL);
-        auto  envR_eval = tenx::asEval(envR);
-        vector_matrix_product(
-            res_ref.data(),
-            mps_eval.data(), mps_eval.dimensions(),
-            mpos_shf,
-            envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions());
-    }
-
-    
-
-    template<typename mps_type, typename mpo_type, typename env_type>
-    mps_type vector_matrix_product(const mps_type &mps, const mpo_type &mpo, const env_type &envL, const env_type &envR) {
-        using Scalar = typename mps_type::Scalar;
-        Eigen::Tensor<Scalar,3> result(mps.dimensions());
-        vector_matrix_product(result, mps, mpo, envL, envR);
-        return result;
-    }
 
     /* clang-format on */
 
