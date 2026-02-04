@@ -20,7 +20,7 @@ template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm(const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo,
                                                          const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR) {
     // Calculate the residual_norm r = |Hv - Ev|
-    auto Hv = tools::common::contraction::matrix_vector_product_gemm_x2(mps, mpo, envL, envR);
+    auto Hv = tools::common::contraction::matrix_vector_product(mps, mpo, envL, envR);
     auto E  = tools::common::contraction::contract_mps_overlap(mps, Hv);
     return (tenx::VectorMap(Hv) - E * tenx::VectorMap(mps)).norm();
 }
@@ -29,7 +29,9 @@ template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm(const Eigen::Tensor<Scalar, 3> &mps, const std::vector<Eigen::Tensor<Scalar, 4>> &mpos,
                                                          const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR) {
     // Calculate the residual_norm r = |Hv - Ev|
-    auto Hv = tools::common::contraction::matrix_vector_product_gemm_x2(mps, mpos, envL, envR);
+    if(mpos.size() == 1) return residual_norm(mps, mpos.front(), envL, envR);
+
+    auto Hv = tools::common::contraction::matrix_vector_product(mps, mpos, envL, envR);
     auto E  = tools::common::contraction::contract_mps_overlap(mps, Hv);
     return (tenx::VectorMap(Hv) - E * tenx::VectorMap(mps)).norm();
 }
