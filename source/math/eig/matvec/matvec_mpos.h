@@ -183,8 +183,6 @@ class MatVecMPOS {
     void MultAx(Scalar *mps_in_, Scalar *mps_out_);                //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultAx_hp(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in in high precision
     void MultAx_hp(Scalar *mps_in_, Scalar *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in in high precision
-    void MultAx_x2(const Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in with 2-float expansion
-    void MultAx_x2(Scalar *mps_in_, Scalar *mps_out_);             //  Computes the matrix-vector multiplication x_out <- A*x_in with 2-float expansion
     void MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
     void MultBx(Scalar *mps_in_, Scalar *mps_out_) const; //  Computes the matrix-vector multiplication x_out <- A*x_in.
     void MultBx(void *x, int *ldx, void *y, int *ldy, int *blockSize, primme_params *primme, int *err) const;
@@ -203,9 +201,6 @@ class MatVecMPOS {
 
     MatrixType MultAX_hp(const Eigen::Ref<const MatrixType> &X) const;
     VectorType MultAx_hp(const Eigen::Ref<const VectorType> &x) const;
-
-    MatrixType MultAX_x2(const Eigen::Ref<const MatrixType> &X) const;
-    VectorType MultAx_x2(const Eigen::Ref<const VectorType> &x) const;
 
     void       CalcPc(RealScalar shift = RealScalar{0});                                         // Calculates the diagonal or tridiagonal part of A
     void       MultPc(const Scalar *mps_in_, Scalar *mps_out, RealScalar shift = RealScalar{0}); // Applies the preconditioner
@@ -265,9 +260,9 @@ class MatVecMPOS {
     std::unique_ptr<tid::ur> t_multPc; // Preconditioner time
     std::unique_ptr<tid::ur> t_multAx; // Matvec time
 
-    RealScalar get_op_norm(Eigen::Index max_op_norm_iters = 10, RealScalar reltol = RealScalar{1e-3f});
+    RealScalar get_op_norm(Eigen::Index max_op_norm_iters = 5, RealScalar reltol = RealScalar{1e-3f}) const;
 
     private:
-    mutable Eigen::Index op_norm_iters;
+    mutable Eigen::Index op_norm_iters = 0;
     mutable RealScalar   op_norm = std::numeric_limits<double>::quiet_NaN();
 };

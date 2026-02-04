@@ -17,6 +17,7 @@
 #include "tools/common/contraction.h"
 #include "tools/common/contraction/IterativeLinearSolverConfig.h"
 #include "tools/common/contraction/MatrixLikeOperator.h"
+#include "tools/common/contraction/matvec_policy.h"
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
 #include <h5pp/h5pp.h>
@@ -918,15 +919,13 @@ void MatVecMPOS<Scalar>::MultAx_hp(const Scalar *mps_in_, Scalar *mps_out_) cons
     Eigen::Tensor<ScalarL, 3> mps_in_hp = mps_in.template cast<ScalarL>();
     Eigen::Tensor<ScalarL, 3> mps_out_hp(shape_mps);
     if(mpos_A_hp.empty()) {
-        for(const auto & mpo_A : mpos_A ) {
-            mpos_A_hp.emplace_back(mpo_A.template cast<ScalarL>());
-        }
+        for(const auto &mpo_A : mpos_A) { mpos_A_hp.emplace_back(mpo_A.template cast<ScalarL>()); }
     }
     if(envL_A_hp.size() != envL_A.size()) envL_A_hp = envL_A.template cast<ScalarL>();
     if(envR_A_hp.size() != envR_A.size()) envR_A_hp = envR_A.template cast<ScalarL>();
 
     if(mpos_A_hp.size() == 1) {
-         if(mps_in.size()) tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_hp.front(), envL_A_hp, envR_A_hp);
+        if(mps_in.size()) tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_hp.front(), envL_A_hp, envR_A_hp);
     } else {
         tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_shf_hp, envL_A_hp, envR_A_hp);
     }
@@ -935,33 +934,10 @@ void MatVecMPOS<Scalar>::MultAx_hp(const Scalar *mps_in_, Scalar *mps_out_) cons
     num_mv++;
 }
 
-
 template<typename Scalar>
 void MatVecMPOS<Scalar>::MultAx_hp(Scalar *mps_in_, Scalar *mps_out_) {
     MultAx_hp(static_cast<const Scalar *>(mps_in_), mps_out_);
 }
-
-template<typename Scalar>
-void MatVecMPOS<Scalar>::MultAx_x2(const Scalar *mps_in_, Scalar *mps_out_) const {
-    auto token   = t_multAx->tic_token();
-    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(mps_in_, shape_mps);
-    auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
-    assert(Eigen::Map<const VectorType>(mps_in_, size_mps).allFinite());
-     if(mpos_A.size() == 1) {
-        if(mps_in.size()) tools::common::contraction::matrix_vector_product_gemm_x2(mps_out, mps_in, mpos_A.front(), envL_A, envR_A);
-    } else {
-        tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_A_shf, envL_A, envR_A);
-    }
-    assert(Eigen::Map<VectorType>(mps_out_, size_mps).allFinite());
-    num_mv++;
-}
-
-
-template<typename Scalar>
-void MatVecMPOS<Scalar>::MultAx_x2(Scalar *mps_in_, Scalar *mps_out_) {
-    MultAx_x2(static_cast<const Scalar *>(mps_in_), mps_out_);
-}
-
 
 template<typename Scalar>
 void MatVecMPOS<Scalar>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
@@ -1079,22 +1055,6 @@ typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx_hp(const Eige
     MultAx_hp(x.data(), y.data());
     return y;
 }
-
-template<typename Scalar>
-typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultAX_x2(const Eigen::Ref<const MatrixType> &X) const {
-    assert(X.rows() == get_size());
-    MatrixType Y(X.rows(), X.cols());
-    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultAx_x2(X.col(i).data(), Y.col(i).data()); }
-    return Y;
-}
-template<typename Scalar>
-typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx_x2(const Eigen::Ref<const VectorType> &x) const {
-    assert(x.rows() == get_size());
-    VectorType y(x.rows());
-    MultAx_x2(x.data(), y.data());
-    return y;
-}
-
 
 template<typename Scalar>
 typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultBX(const Eigen::Ref<const MatrixType> &X) const {
@@ -1919,22 +1879,113 @@ bool MatVecMPOS<Scalar>::isReadyShift() const {
 }
 
 template<typename Scalar>
-typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters, RealScalar reltol) {
+typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters, RealScalar reltol) const {
     if(!std::isnan(op_norm) and max_op_norm_iters <= op_norm_iters) return op_norm;
-    VectorType v = Eigen::VectorXf::Random(size_mps).cast<Scalar>().normalized();
-    VectorType w(size_mps);
 
-    for(Eigen::Index i = 0; i < max_op_norm_iters; ++i) {
-        auto op_norm_old = op_norm;
-        w                = MultAx(v); // w = H * v
-        op_norm          = w.norm();
-        if(op_norm < RealScalar{1e-12f}) break;
-        v = w / op_norm;
-        if(std::abs(op_norm - op_norm_old) < reltol * op_norm_old) break;
+    auto opts      = tools::common::contraction::internal::matvec_options_active();
+    auto shape_mpo = std::array<Eigen::Index, 4>{envL_A.dimension(2), envR_A.dimension(2), shape_mps[0], shape_mps[0]};
+    if(opts.H1_dims == shape_mpo) {
+        op_norm = opts.H1_norm;
+        return opts.H1_norm;
     }
-    // Rayleigh quotient for improved accuracy:
-    w             = MultAx(v);
-    op_norm       = std::abs(v.dot(w)) / v.squaredNorm();
-    op_norm_iters = max_op_norm_iters;
-    return op_norm;
+    if(opts.H2_dims == shape_mpo) {
+        op_norm = opts.H2_norm;
+        return opts.H2_norm;
+    }
+
+    using Real    = RealScalar;
+    using VecType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+    using MatType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    using VecReal = Eigen::Matrix<Real, Eigen::Dynamic, 1>;
+
+    Eigen::Tensor<Scalar, 3> vt(shape_mps);
+    Eigen::Tensor<Scalar, 3> wt(shape_mps);
+    auto                     v_map = Eigen::Map<VecType>(vt.data(), size_mps);
+    auto                     w_map = Eigen::Map<VecType>(wt.data(), size_mps);
+
+    VecType v = VecType::Random(size_mps).normalized();
+
+    auto mvopts = MatVecRaiiOptions(MatVecBackend::TBLIS);
+
+    Real         lambda    = Real{0};
+    Eigen::Index krylovdim = 3;
+    for(Eigen::Index iter = 0; iter < max_op_norm_iters; ++iter) {
+        const Eigen::Index p = std::max<Eigen::Index>(2, krylovdim);
+
+        // Build Krylov matrix K = [v, Av, A^2 v, ...]
+        MatType K(size_mps, p);
+        K.col(0) = v;
+
+        for(Eigen::Index j = 1; j < p; ++j) {
+            v_map = K.col(j - 1);
+            MultAx(vt.data(), wt.data());
+            K.col(j) = w_map;
+        }
+
+        // Orthonormalize K
+        Eigen::HouseholderQR<MatType> qr(K);
+
+        // Estimate effective subspace size from |R(j,j)|
+        // (R is p x p upper triangular inside matrixQR)
+        const MatType QR = qr.matrixQR().topLeftCorner(p, p);
+        VecReal       diag_abs(p);
+        for(Eigen::Index j = 0; j < p; ++j) diag_abs(j) = std::abs(QR(j, j));
+
+        const Real diag0    = (p > 0) ? diag_abs(0) : Real{0};
+        const Real drop_tol = std::max(Real{1e-20}, Real{1e-12} * diag0);
+
+        Eigen::Index k_eff = 0;
+        for(Eigen::Index j = 0; j < p; ++j) {
+            if(diag_abs(j) > drop_tol)
+                ++k_eff;
+            else
+                break;
+        }
+        k_eff = std::max<Eigen::Index>(k_eff, 1);
+
+        // Form thin Q explicitly: Q = qr.householderQ() * I(:, 0:k_eff-1)
+        // This is n x k_eff, k_eff is small so the explicit form is usually fine.
+        MatType Q = qr.householderQ() * MatType::Identity(size_mps, k_eff).eval();
+
+        // W = A Q (compute each column with your matvec)
+        MatType W(size_mps, k_eff);
+        for(Eigen::Index j = 0; j < k_eff; ++j) {
+            v_map = Q.col(j);
+            MultAx(vt.data(), wt.data());
+            W.col(j) = w_map;
+        }
+
+        // Projected operator T = Q^* (A Q) = Q^* W
+        MatType T = (Q.adjoint() * W).eval();
+        T         = ((T + T.adjoint()) / Real{2}).eval(); // suppress tiny non-Hermitian noise
+
+        Eigen::SelfAdjointEigenSolver<MatType> es(T);
+        if(es.info() != Eigen::Success) break;
+
+        const auto &evals = es.eigenvalues();
+        const auto &evecs = es.eigenvectors();
+
+        Eigen::Index idx = 0;
+        evals.cwiseAbs().maxCoeff(&idx);
+
+        const Scalar theta      = Scalar(evals(idx));
+        const Real   lambda_new = std::abs(evals(idx));
+
+        // Ritz vector y = Q x
+        VecType    y      = (Q * evecs.col(idx)).eval();
+        const Real y_norm = y.norm();
+        if(y_norm > Real{0}) y /= y_norm;
+
+        // Ritz residual r = W x - theta (Q x)
+        VecType    r      = (W * evecs.col(idx) - (Q * evecs.col(idx)) * theta).eval();
+        const Real r_norm = r.norm();
+
+        v      = std::move(y);
+        lambda = lambda_new;
+        tools::log->debug("MatVecMPOS: iter {:<2}: lambda = {:.8e}", iter, fp(lambda));
+
+        if(lambda > Real{0} && r_norm < static_cast<Real>(reltol) * lambda) break;
+    }
+
+    return lambda;
 }
