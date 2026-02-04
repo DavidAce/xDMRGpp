@@ -253,6 +253,20 @@ CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3
         bool mpoIsReal   = std::all_of(mpos.begin(), mpos.end(), [](const auto &mpo) -> bool { return mpo.get().is_real(); });
         if(mpsIsReal and envIsReal and mpoIsReal) { return expectation_value<RealScalar>(mpsBra, mpsKet, mpos, envs); }
     }
+    if(mpos.size() == 1) {
+        if constexpr(std::is_same_v<std::remove_cvref_t<EnvType>, EnvEne<Scalar>>)
+            return tools::common::contraction::expectation_value(tenx::asScalarType<CalcType>(mpsBra),           //
+                                                                 tenx::asScalarType<CalcType>(mpsKet),           //
+                                                                 mpos.front().get().template MPO_as<CalcType>(), //
+                                                                 envs.L.template get_block_as<CalcType>(),       //
+                                                                 envs.R.template get_block_as<CalcType>());
+        if constexpr(std::is_same_v<std::remove_cvref_t<EnvType>, EnvVar<Scalar>>)
+            return tools::common::contraction::expectation_value(tenx::asScalarType<CalcType>(mpsBra),            //
+                                                                 tenx::asScalarType<CalcType>(mpsKet),            //
+                                                                 mpos.front().get().template MPO2_as<CalcType>(), //
+                                                                 envs.L.template get_block_as<CalcType>(),        //
+                                                                 envs.R.template get_block_as<CalcType>());
+    }
 
     auto t_expval = tid::tic_scope("expval", tid::level::highest);
 
@@ -269,7 +283,7 @@ CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3
             static_assert(h5pp::type::sfinae::invalid_type_v<EnvType>);
     }
 
-    Eigen::Tensor<CalcType, 3> mpoMpsKet = tools::common::contraction::matrix_vector_product_gemm_x2(tenx::asScalarType<CalcType>(mpsKet), mpos_shf, envL, envR);
+    Eigen::Tensor<CalcType, 3> mpoMpsKet = tools::common::contraction::matrix_vector_product(tenx::asScalarType<CalcType>(mpsKet), mpos_shf, envL, envR);
     return tools::common::contraction::contract_mps_overlap(tenx::asScalarType<CalcType>(mpsBra), mpoMpsKet);
 }
 
@@ -363,7 +377,7 @@ CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3
      * To apply the mpo's one by one efficiently, we need to split the mps using SVD first
      * Here we make the assumption that bra and ket are not necessarily equal
      */
-    if(not svd_cfg) return expectation_value<CalcType>(mpsBra, mpsKet, mpos, envs);
+    if(mpos.size() == 1 or not svd_cfg) return expectation_value<CalcType>(mpsBra, mpsKet, mpos, envs);
 
     std::vector<long>   spin_dims_bra, spin_dims_ket;
     std::vector<size_t> positions;
@@ -405,7 +419,7 @@ CalcType tools::finite::measure::expectation_value(const Eigen::Tensor<Scalar, 3
      * To apply the mpo's one by one efficiently, we need to split the mps using SVD first
      * Here we make the assumption that bra and ket are not necessarily equal
      */
-    if(not svd_cfg) return expectation_value<CalcType>(multisite_mps, multisite_mps, mpos, envs);
+    if(mpos.size() == 1 or not svd_cfg) return expectation_value<CalcType>(multisite_mps, multisite_mps, mpos, envs);
 
     std::vector<long>   spin_dims_bra, spin_dims_ket;
     std::vector<size_t> positions;
