@@ -66,24 +66,27 @@ void AlgorithmBase::init_truncation_error_limits() {
 }
 
 template<typename T>
-size_t AlgorithmBase::count_convergence(const std::vector<T> &Y_vec, T threshold, size_t start_idx) {
+size_t AlgorithmBase::count_convergence(const std::vector<T> &Y_vec, T threshold, size_t start_idx, bool count_negative_as_converged) {
     size_t scount = 0; // Counts how many converged points there have been since saturation (start_idx)
     for(const auto &[i, y] : iter::enumerate(Y_vec)) {
         if(i < start_idx) continue;
         if(y <= threshold) scount++;
+        if(count_negative_as_converged and y < T{0}) scount++;
     }
     size_t rcount = 0; // Counts in reverse how many converged points there have been in a row. Useful with noisy signals that can't saturate.
     for(const auto &y : iter::reverse(Y_vec)) {
         if(y <= threshold)
+            rcount++;
+        else if(count_negative_as_converged and y < T{0})
             rcount++;
         else
             break;
     }
     return std::max(scount, rcount);
 }
-template size_t AlgorithmBase::count_convergence(const std::vector<fp32> &Y_vec, fp32 threshold, size_t start_idx);
-template size_t AlgorithmBase::count_convergence(const std::vector<fp64> &Y_vec, fp64 threshold, size_t start_idx);
-template size_t AlgorithmBase::count_convergence(const std::vector<fp128> &Y_vec, fp128 threshold, size_t start_idx);
+template size_t AlgorithmBase::count_convergence(const std::vector<fp32> &Y_vec, fp32 threshold, size_t start_idx, bool count_negative_as_converged);
+template size_t AlgorithmBase::count_convergence(const std::vector<fp64> &Y_vec, fp64 threshold, size_t start_idx, bool count_negative_as_converged);
+template size_t AlgorithmBase::count_convergence(const std::vector<fp128> &Y_vec, fp128 threshold, size_t start_idx, bool count_negative_as_converged);
 
 template<typename T>
 AlgorithmBase::SaturationReport<T> AlgorithmBase::check_saturation(const std::vector<T> &Y_vec, T sensitivity, SaturationPolicy policy) {

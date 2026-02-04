@@ -33,7 +33,7 @@ class AlgorithmFinite : public AlgorithmBase {
     size_t                             dmrg_blocksize        = 1; // Number of sites in a DMRG step. This is updated by the information per scale mass center
     double                             dmrg_eigs_abstol      = 1e-10; // Absolute tolerance for the iterative eigenvalue solver
     double                             dmrg_eigs_reltol      = 1e-1;  // Relative Tolerance for the iterative eigenvalue solver
-    double                             eigval_upper_bound    = 1;
+    RealScalar                         H_norm_estimate       = 1;
     size_t                             iter_last_bond_reduce = 0;
     std::optional<std::vector<size_t>> sites_mps, sites_mpo; // Used when moving sites
     protected:
@@ -146,7 +146,8 @@ class AlgorithmFinite : public AlgorithmBase {
     struct log_entry {
         AlgorithmStatus         status;
         RealScalar              energy;
-        RealScalar              variance;
+        RealScalar              energy_variance_local;  /*!  Computed as <H_local²> - E² (standard precision, can be negative in ill-conditioned cases) */
+        RealScalar              energy_variance_global; /*!  Computed as <(H_global - E)²> (more precise and strictly positive) */
         RealScalar              locinfoscale;
         double                  time;
         std::vector<RealScalar> entanglement_entropies;

@@ -73,7 +73,7 @@ class AlgorithmBase {
         std::vector<int> Y_sat;     // Flags that tell if Y_vec has saturated at that index
     };
     template<typename T>
-    size_t count_convergence(const std::vector<T> &Y_vec, T threshold, size_t start_idx = 0);
+    size_t count_convergence(const std::vector<T> &Y_vec, T threshold, size_t start_idx = 0, bool count_negative_as_converged = false);
     template<typename T>
     SaturationReport<T> check_saturation(const std::vector<T> &Y_vec, T threshold, SaturationPolicy policy);
 };

@@ -24,10 +24,13 @@
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
+#include "tools/finite/ops.h"
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
 #include <h5pp/details/h5ppFile.h>
+#include <tools/common/contraction/matvec_policy.h>
+#include <tools/finite/measure/residual.impl.h>
 
 template<typename Scalar>
 xdmrg<Scalar>::xdmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmFinite<Scalar>(std::move(h5ppFile_), settings::xdmrg::ritz, AlgorithmType::xDMRG) {
@@ -353,9 +356,13 @@ template<typename Scalar>
 void xdmrg<Scalar>::update_state() {
     using namespace tools::finite;
     using namespace tools::finite::opt;
-    auto t_step      = tid::tic_scope("step");
-    auto bexp_result = expand_bonds(BondExpansionOrder::PREOPT);
-    auto opt_meta    = get_opt_meta();
+    auto t_step = tid::tic_scope("step");
+    {
+        auto mvopts      = MatVecRaiiOptions(MatVecBackend::TBLIS);
+        auto bexp_result = expand_bonds(BondExpansionOrder::PREOPT);
+    }
+
+    auto opt_meta = get_opt_meta();
 
     tools::log->debug("Starting {} iter {} | step {} | pos {} | dir {} | ritz {} | type {}", status.algo_type_sv(), status.iter, status.step, status.position,
                       status.direction, enum2sv(settings::get_ritz(status.algo_type)), enum2sv(opt_meta.optType));
@@ -365,6 +372,7 @@ void xdmrg<Scalar>::update_state() {
         tools::log->debug("No more sites to activate");
         return;
     }
+
     tensors.rebuild_edges();
 
     tools::log->debug("Updating state: {}", opt_meta.string()); // Announce the current configuration for optimization
@@ -423,19 +431,19 @@ void xdmrg<Scalar>::update_state() {
     ene_delta                     = ene_mrg - ene_latest;
     var_latest                    = var_mrg;
     ene_latest                    = ene_mrg;
-    auto bondexp_result = expand_bonds(BondExpansionOrder::POSTOPT);
+    auto bondexp_result           = expand_bonds(BondExpansionOrder::POSTOPT);
 
     auto ene_ini = initial_state.get_energy();
     auto ene_opt = opt_state.get_energy();
     auto ene_exp = bondexp_result.ene_new;
-    auto var_ini = std::abs(initial_state.get_variance());
-    auto var_opt = std::abs(opt_state.get_variance());
+    auto var_ini = initial_state.get_variance();
+    auto var_opt = opt_state.get_variance();
     auto var_exp = bondexp_result.var_new;
 
     ene_delta_opt = ene_opt - ene_ini;
     ene_delta_svd = ene_exp - ene_opt;
-    var_delta_opt = var_opt - var_ini;
-    var_delta_svd = var_exp - var_opt;
+    var_delta_opt = std::abs(var_opt - var_ini);
+    var_delta_svd = std::abs(var_exp - var_opt);
     tools::log->trace("Energy   change Δsvd/Δopt: {:.16f} | ini {:.16f} opt {:.16f} exp {:.16f}", fp(ene_delta_svd / ene_delta_opt), fp(ene_ini), fp(ene_opt),
                       fp(ene_exp));
     tools::log->trace("Variance change Δsvd/Δopt: {:.16f} | ini {:.16f} opt {:.16f} exp {:.16f}", fp(var_delta_svd / var_delta_opt), fp(var_ini), fp(var_opt),

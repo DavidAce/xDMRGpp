@@ -8,7 +8,8 @@ template<typename Scalar> class EdgesInfinite;
 template<typename Scalar>
 class AlgorithmInfinite : public AlgorithmBase {
     protected:
-    using RealScalar = decltype(std::real(std::declval<Scalar>()));
+    using RealScalar           = decltype(std::real(std::declval<Scalar>()));
+    RealScalar H_norm_estimate = RealScalar{1};
 
     public:
     // Inherit the constructor of class_algorithm_base

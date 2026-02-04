@@ -53,20 +53,41 @@ void AlgorithmInfinite<Scalar>::initialize_model() {
     clear_convergence_status();
 }
 
+// template<typename Scalar>
+// void AlgorithmInfinite<Scalar>::update_precision_limit(std::optional<double> energy_upper_bound) {
+//     if(not energy_upper_bound)
+//         energy_upper_bound = static_cast<double>(tools::infinite::measure::energy_per_site_mpo(tensors)) * static_cast<double>(status.iter);
+//     // The variance precision limit depends on the Hamiltonian operator norm ~ the largest eigenvalue.
+//     // We can get a rough order of magnitude estimate the largest eigenvalue by adding the absolute value of all the
+//     // Hamiltonian couplings and fields.
+//     double energy_abs                 = std::abs(energy_upper_bound.value());
+//     double digits10                   = std::numeric_limits<double>::digits10;
+//     double energy_exp                 = std::ceil(std::max(0.0, std::log10(energy_abs)));
+//     double max_digits                 = std::floor(std::max(0.0, digits10 - energy_exp));
+//     status.energy_variance_max_digits = safe_cast<size_t>(max_digits);
+//     status.energy_variance_prec_limit = std::pow(10.0, -max_digits);
+//     tools::log->info("Estimated limit on energy variance precision: {:.3e}", status.energy_variance_prec_limit);
+// }
+
 template<typename Scalar>
 void AlgorithmInfinite<Scalar>::update_precision_limit(std::optional<double> energy_upper_bound) {
+    // The variance precision limit depends on the Hamiltonian operator norm ~ largest eigenvalue.
+    // We can get a rough order of magnitude estimate of the largest eigenvalue by adding the absolute value of all the
+    // Hamiltonian couplings and fields.
     if(not energy_upper_bound)
         energy_upper_bound = static_cast<double>(tools::infinite::measure::energy_per_site_mpo(tensors)) * static_cast<double>(status.iter);
-    // The variance precision limit depends on the Hamiltonian operator norm ~ the largest eigenvalue.
-    // We can get a rough order of magnitude estimate the largest eigenvalue by adding the absolute value of all the
-    // Hamiltonian couplings and fields.
-    double energy_abs                 = std::abs(energy_upper_bound.value());
-    double digits10                   = std::numeric_limits<double>::digits10;
-    double energy_exp                 = std::ceil(std::max(0.0, std::log10(energy_abs)));
-    double max_digits                 = std::floor(std::max(0.0, digits10 - energy_exp));
+    // if(not energy_upper_bound) energy_upper_bound = tensors.model->get_energy_upper_bound();
+    RealScalar max_energy             = static_cast<RealScalar>(std::abs(energy_upper_bound.value()));
+    RealScalar max_energy_squared     = max_energy * max_energy;
+    status.energy_variance_prec_limit = static_cast<double>(std::numeric_limits<RealScalar>::epsilon() * max_energy_squared) / 2.0;
+
+    RealScalar prec_limit_exp         = std::max(RealScalar{0}, -static_cast<RealScalar>(std::log10(status.energy_variance_prec_limit)));
+    RealScalar max_digits             = std::ceil(std::max(RealScalar{0}, prec_limit_exp));
     status.energy_variance_max_digits = safe_cast<size_t>(max_digits);
-    status.energy_variance_prec_limit = std::pow(10.0, -max_digits);
-    tools::log->info("Estimated limit on energy variance precision: {:.3e}", status.energy_variance_prec_limit);
+    H_norm_estimate                   = max_energy;
+
+    tools::log->info("Estimated limit on energy variance precision: {:.3e}, max_digits {:.4e}, |H|~{:.4e}, |H²|~{:.4e}", status.energy_variance_prec_limit,
+                     fp(max_digits), fp(max_energy), fp(max_energy_squared));
 }
 
 template<typename Scalar>
