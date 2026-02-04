@@ -56,17 +56,6 @@ class ModelFinite {
     }
 
     //    std::vector<Eigen::Tensor<cx64, 4>> get_compressed_mpos(std::vector<Eigen::Tensor<cx64, 4>> mpos);
-    void                                                     randomize();
-    [[nodiscard]] bool                                       has_mpo() const;
-    [[nodiscard]] bool                                       has_mpo_squared() const;
-    void                                                     clear_mpo_squared();
-    void                                                     set_energy_shift_mpo(Scalar energy_shift);
-    void                                                     set_parity_shift_mpo(OptRitz, int sign, std::string_view axis);
-    void                                                     set_parity_shift_mpo_squared(int sign, std::string_view axis);
-    [[nodiscard]] std::tuple<OptRitz, int, std::string_view> get_parity_shift_mpo() const;
-    [[nodiscard]] std::pair<int, std::string_view>           get_parity_shift_mpo_squared() const;
-    [[nodiscard]] bool                                       has_parity_shifted_mpo() const;
-    [[nodiscard]] bool                                       has_parity_shifted_mpo_squared() const;
 
     // void                                                     set_parity_projector(int sign, std::string_view axis);
     // [[nodiscard]] std::pair<int, std::string_view>           get_parity_projector() const;
@@ -87,6 +76,7 @@ class ModelFinite {
     ModelFinite &operator=(const ModelFinite &other); // copy assign
 
     void                                                                     initialize(ModelType model_type_, size_t model_size);
+    void                                                                     randomize();
     void                                                                     assert_validity() const;
     [[nodiscard]] size_t                                                     get_length() const;
     [[nodiscard]] bool                                                       is_real() const;
@@ -107,9 +97,22 @@ class ModelFinite {
     [[nodiscard]] std::vector<Eigen::Tensor<Scalar, 4>>                      get_compressed_mpos_squared(MposWithEdges withEdges = MposWithEdges::OFF);
     [[nodiscard]] std::vector<Eigen::Tensor<Scalar, 4>>                      get_mpos_energy_shifted_view(Scalar energy_per_site) const;
 
-    [[nodiscard]] bool                  has_energy_shifted_mpo() const; // For shifted energy MPO's
-    [[nodiscard]] Scalar                get_energy_shift_mpo() const;
-    [[nodiscard]] Scalar                get_energy_shift_mpo_per_site() const;
+    [[nodiscard]] bool has_mpo() const;
+    [[nodiscard]] bool has_mpo_squared() const;
+
+    [[nodiscard]] bool   has_energy_shifted_mpo() const; // For shifted energy MPO's
+    [[nodiscard]] Scalar get_energy_shift_mpo() const;
+    [[nodiscard]] Scalar get_energy_shift_mpo_per_site() const;
+
+    void                                                     clear_mpo_squared();
+    void                                                     set_energy_shift_mpo(Scalar energy_shift);
+    void                                                     set_parity_shift_mpo(OptRitz, int sign, std::string_view axis);
+    void                                                     set_parity_shift_mpo_squared(int sign, std::string_view axis);
+    [[nodiscard]] std::tuple<OptRitz, int, std::string_view> get_parity_shift_mpo() const;
+    [[nodiscard]] std::pair<int, std::string_view>           get_parity_shift_mpo_squared() const;
+    [[nodiscard]] bool                                       has_parity_shifted_mpo() const;
+    [[nodiscard]] bool                                       has_parity_shifted_mpo_squared() const;
+
     [[nodiscard]] bool                  has_compressed_mpo_squared() const;
     [[nodiscard]] std::vector<std::any> get_parameter(std::string_view fieldname);
     [[nodiscard]] double                get_energy_upper_bound() const;
