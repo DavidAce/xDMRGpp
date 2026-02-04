@@ -11,6 +11,10 @@
 #include "tid/tid.h"
 #include <complex>
 
+namespace settings {
+    static constexpr bool debug_compression = false;
+}
+
 template<typename Scalar>
 std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_svdcompressed_mpos(std::vector<Eigen::Tensor<Scalar, 4>> mpos) {
     tools::log->trace("Compressing MPOs: {} sites", mpos.size());
@@ -49,7 +53,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_svdcompressed_mpos
             } else {
                 std::tie(mpo, T_l2r) = svd.split_mpo_l2r(T_mpo);
             }
-            if constexpr(settings::debug) tools::log->trace("iter {} | idx {} | dim {} -> {}", iter, idx, mpo_dim_old, mpo.dimensions());
+            if constexpr(settings::debug_compression) tools::log->trace("iter {} | idx {} | dim {} -> {}", iter, idx, mpo_dim_old, mpo.dimensions());
         }
 
         // Now we have done left to right. Next we do right to left
@@ -66,14 +70,14 @@ std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_svdcompressed_mpos
             } else {
                 std::tie(T_r2l, mpo) = svd.split_mpo_r2l(mpo_T);
             }
-            if constexpr(settings::debug) tools::log->trace("iter {} | idx {} | dim {} -> {}", iter, idx, mpo_dim_old, mpo.dimensions());
+            if constexpr(settings::debug_compression) tools::log->trace("iter {} | idx {} | dim {} -> {}", iter, idx, mpo_dim_old, mpo.dimensions());
         }
     }
 
     // Print the results
-    if(tools::log->level() == spdlog::level::debug)
+    if constexpr(settings::debug_compression) {
         for(const auto &[idx, msg] : iter::enumerate(report)) tools::log->debug("mpo {}: {} -> {}", idx, msg, mpos[idx].dimensions());
-
+    }
     return mpos;
 }
 
@@ -183,7 +187,7 @@ std::pair<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> deparallelize_mpo_
     auto tensor_dep = tenx::TensorMap(matrix_dep, std::array<long, 4>{dim0, dim1, dim2, matrix_dep.cols()});
     auto mpo_dep    = Eigen::Tensor<Scalar, 4>(tensor_dep.shuffle(std::array<long, 4>{2, 3, 0, 1}));
 
-    if constexpr(settings::debug) {
+    if constexpr(settings::debug_compression) {
         // Sanity check
         auto mpo_old = mpo_map;
         auto mpo_new = MatrixType(matrix_dep * mat_xfer);
@@ -301,7 +305,7 @@ std::pair<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> deparallelize_mpo_
     auto tensor_dep = tenx::TensorMap(matrix_dep, std::array<long, 4>{matrix_dep.rows(), dim1, dim2, dim3});
     auto mpo_dep    = Eigen::Tensor<Scalar, 4>(tensor_dep.shuffle(std::array<long, 4>{0, 3, 1, 2}));
 
-    if constexpr(settings::debug) {
+    if constexpr(settings::debug_compression) {
         // Sanity check
         auto mpo_old = mpo_map;
         auto mpo_new = MatrixType(mat_xfer * matrix_dep);
@@ -341,7 +345,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_deparallelized_mpo
             } else {
                 std::tie(mpo, T_l2r) = deparallelize_mpo_l2r(T_mpo);
             }
-            if constexpr(settings::debug) tools::log->trace("iter {} | idx {} | dim {} -> {}", iter, idx, mpo_dim_old, mpo.dimensions());
+            if constexpr(settings::debug_compression) tools::log->trace("iter {} | idx {} | dim {} -> {}", iter, idx, mpo_dim_old, mpo.dimensions());
         }
 
         // Now we have done left to right. Next we do right to left
@@ -358,13 +362,13 @@ std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_deparallelized_mpo
             } else {
                 std::tie(T_r2l, mpo) = deparallelize_mpo_r2l(mpo_T);
             }
-            if constexpr(settings::debug) tools::log->trace("iter {} | idx {} | dim {} -> {}", iter, idx, mpo_dim_old, mpo.dimensions());
+            if constexpr(settings::debug_compression) tools::log->trace("iter {} | idx {} | dim {} -> {}", iter, idx, mpo_dim_old, mpo.dimensions());
         }
     }
 
     // Print the results
-    if(tools::log->level() == spdlog::level::debug)
+    if constexpr(settings::debug_compression) {
         for(const auto &[idx, msg] : iter::enumerate(report)) tools::log->debug("mpo {}: {} -> {}", idx, msg, mpos[idx].dimensions());
-
+    }
     return mpos;
 }
