@@ -1,10 +1,9 @@
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
+#include "math/linalg.h"
+#include "math/tenx.h"
+#include "qm/spin.h"
 #include <io/spdlog.h>
-#include <math/tenx.h>
-//#include <iostream>
-#include <math/linalg.h>
-#include <qm/spin.h>
 
 template<typename A, typename B>
 bool equal(const A &a, const B &b, double prec = 1e-8) {
