@@ -193,7 +193,7 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     res.set_rnorm_H1(rnormH1);
     res.set_rnorm_H2(rnormH2);
     res.set_energy(std::real(vh1v + res.get_eshift()));
-    res.set_variance(std::real(vh2v) - std::abs(vh1v * vh1v));
+    res.set_variance(std::real(vh2v - vh1v * vh1v));
     res.set_energy_shifted(std::real(vh1v));
     res.set_hsquared(std::real(vh2v));
 

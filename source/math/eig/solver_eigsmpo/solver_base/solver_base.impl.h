@@ -12,6 +12,7 @@
 #include "math/linalg/tensor/to_string.h"
 #include "math/tenx.h"
 #include "tools/common/contraction.h"
+#include "tools/common/contraction/matvec_policy.h"
 #include "tools/finite/opt_mps.h"
 #include <Eigen/Eigenvalues>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -715,13 +716,6 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH2_hp(const Ei
     auto token_matvecs = status.time_matvecs.tic_token();
     status.num_matvecs += X.cols();
     return H2.MultAX_hp(X);
-}
-template<typename Scalar>
-typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH2_x2(const Eigen::Ref<const MatrixType> &X) {
-    if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultH2_x2: should only be called by GDMRG");
-    auto token_matvecs = status.time_matvecs.tic_token();
-    status.num_matvecs += X.cols();
-    return H2.MultAX_x2(X);
 }
 
 template<typename Scalar>
@@ -1811,9 +1805,9 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &H1Y
 
     // Compress or randomize
     handle_masked_columns();
-
-    H1Y = MultH1(Y);
-    H2Y = MultH2(Y);
+    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2); // Use high-precision matvec
+    H1Y         = MultH1(Y);
+    H2Y         = MultH2(Y);
     assert_l2_orthonormal(Y, m);
 }
 
@@ -1924,8 +1918,8 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 
     // Compress or randomize
     handle_masked_columns();
-
-    HY = MultH(Y);
+    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2); // Use high-precision matvec
+    HY          = MultH(Y);
     assert_l2_orthonormal(Y, m);
 }
 
@@ -2024,11 +2018,12 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
 }
 
 template<typename Scalar>
-void solver_base<Scalar>::block_h2_orthonormalize_dgks_x2(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m) {
+void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m) {
     if(Y.cols() == 0) return;
     if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
+    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2); // Use more accurate matvec
 
     auto handle_masked_columns = [&]() {
         if(m.mask.sum() != Y.cols()) {
@@ -2049,7 +2044,7 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks_x2(MatrixType &Y, MatrixT
                     for(Eigen::Index j = 0; j < Y.cols(); ++j) {
                         if(m.mask(j) == 0) {
                             Y.col(j)   = Eigen::VectorXf::Random(Y.col(j).size()).template cast<Scalar>();
-                            H2Y.col(j) = MultH2_hp(Y.col(j));
+                            H2Y.col(j) = MultH2(Y.col(j));
                         }
                     }
                     m.analyze_h2_orthonormality(Y, H2Y);
@@ -2059,22 +2054,13 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks_x2(MatrixType &Y, MatrixT
             }
         }
     };
-    auto dot_fp128 = [](Eigen::Ref<VectorType> a, Eigen::Ref<VectorType> b) -> Scalar {
-        // high-precision inner product
-        using LScalar = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<fp128>, fp128>;
-        return static_cast<Scalar>(a.template cast<LScalar>().dot(b.template cast<LScalar>()));
-    };
+
     auto dot_fp80 = [](Eigen::Ref<VectorType> a, Eigen::Ref<VectorType> b) -> Scalar {
         assert(a.size() == b.size());
         using LScalar = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<long double>, long double>;
         return static_cast<Scalar>(a.template cast<LScalar>().dot(b.template cast<LScalar>()));
     };
-    auto is_positive_definite = [](const MatrixType &G) -> bool {
-        if(G.size() == 0 or G.rows() != G.cols()) return false;
-        auto llt = Eigen::LLT<MatrixType>(G);
-        return llt.info() == Eigen::Success;
-    };
-    auto get_orthError = [](const MatrixType &gram) -> RealScalar { return (gram - MatrixType::Identity(gram.rows(), gram.cols())).norm(); };
+
 
     // Column-wise orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
     m.mask        = VectorIdxT::Ones(Y.cols());
@@ -2091,7 +2077,7 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks_x2(MatrixType &Y, MatrixT
                               Y.rows() != H2Y.rows();    // bad size
 
     // Orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
-    H2Y = MultH2_x2(Y);
+    H2Y = MultH2(Y);
     eiglog->debug("block_h2_orthonormalize_dgks_x2: Refreshed H2Y");
     if(should_refresh_h2y) {}
     m.analyze_h2_orthonormality(Y, H2Y);
@@ -2207,7 +2193,7 @@ struct EigOrthoStepMeta {
     MatrixLType G;
     RealLScalar symmError;
     template<typename Scalar>
-    EigOrthoStepMeta(Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &Y_Scalar,   //
+    EigOrthoStepMeta(Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &Y_Scalar, //
                      Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic> &H2Y_Scalar)
         : Y(Y_Scalar.template cast<LScalar>()), H2Y(H2Y_Scalar.template cast<LScalar>()) {}
 };
@@ -2328,16 +2314,12 @@ void solver_base<Scalar>::block_h2_orthonormalize_eig(MatrixType &Y, MatrixType 
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
     assert(m.maskPolicy == MaskPolicy::COMPRESS); // This operation does not preserve column order
 
-    auto is_positive_definite = [](const MatrixType &G) -> bool {
-        if(G.size() == 0) return false;
-        auto llt = Eigen::LLT<MatrixType>(G);
-        return llt.info() == Eigen::Success;
-    };
+    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2);
 
     // Orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
     m.analyze_h2_orthonormality(Y, H2Y);
     if(m.refresh_h2y or Y.cols() != H2Y.cols() or Y.rows() != H2Y.rows() or m.skewError > m.skewTol) {
-        H2Y = MultH2_x2(Y);
+        H2Y = MultH2(Y);
         m.analyze_h2_orthonormality(Y, H2Y);
         if constexpr(settings::debug_solver) {
             eiglog->debug("block_h2_orthonormalize_eig: Refreshed H2Y");
@@ -2356,7 +2338,7 @@ void solver_base<Scalar>::block_h2_orthonormalize_eig(MatrixType &Y, MatrixType 
             MatrixType H2Y_dbg = MultH2(Y);
             RealScalar H2Y_err = (H2Y - H2Y_dbg).norm();
             // if(H2Y_err > 1e8 * eps) throw except::runtime_error("block_h2_orthonormalize_eig: H2Y mismatch: err {:.4e}", fp(H2Y_err));
-            if(H2Y_err > 1e8 * eps) eiglog->warn("block_h2_orthonormalize_eig: H2Y mismatch: err {:.4e}", fp(H2Y_err));
+            if(H2Y_err > std::sqrt(eps)) eiglog->warn("block_h2_orthonormalize_eig: H2Y mismatch: err {:.4e}", fp(H2Y_err));
         }
     }
 
@@ -2431,7 +2413,7 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
     if(X.cols() == 0 || Y.cols() == 0) return;
     if(m.mask.size() > 0 && m.mask.sum() == 0) return;
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product && "block_h2_orthogonalize is for H2 inner product");
-
+    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2); // Use high-precision matvec
     assert_allFinite(X);
     assert_allFinite(H1X);
     assert_allFinite(H2X);
@@ -2454,7 +2436,7 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
             MatrixType H2Y_dbg = MultH2(Y);
             RealScalar H2Y_err = (H2Y - H2Y_dbg).norm();
             // if(H2Y_err > 1e8 * eps) throw except::runtime_error("block_h2_orthogonalize: H2Y mismatch: err {:.4e}", fp(H2Y_err));
-            if(H2Y_err > 1e8 * eps) eiglog->warn("block_h2_orthogonalize: H2Y mismatch: err {:.4e}", fp(H2Y_err));
+            if(H2Y_err > std::sqrt(eps)) eiglog->warn("block_h2_orthogonalize: H2Y mismatch: err {:.4e}", fp(H2Y_err));
         }
     }
 
@@ -2648,7 +2630,7 @@ void solver_base<Scalar>::init() {
         m.maskPolicy  = MaskPolicy::COMPRESS;
         if(algo == OptAlgo::GDMRG) {
             if(use_h2_inner_product) {
-                block_h2_orthonormalize_dgks_x2(V, H1V, H2V, m);
+                block_h2_orthonormalize_dgks(V, H1V, H2V, m);
             } else {
                 block_l2_orthonormalize(V, H1V, H2V, m);
             }

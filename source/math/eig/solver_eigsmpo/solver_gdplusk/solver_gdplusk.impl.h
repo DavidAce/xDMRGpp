@@ -60,7 +60,7 @@ void solver_gdplusk<Scalar>::make_new_Q_block(fMultP_t fMultP) {
                 assert_h2_orthonormal(Q, H2Q, m);
                 block_h2_orthogonalize(V, H1V, H2V, Q_new, H1Q_new, H2Q_new, m);
                 block_h2_orthogonalize(Q, H1Q, H2Q, Q_new, H1Q_new, H2Q_new, m);
-                block_h2_orthonormalize_dgks_x2(Q_new, H1Q_new, H2Q_new, m);
+                block_h2_orthonormalize_dgks(Q_new, H1Q_new, H2Q_new, m);
             } else {
                 block_l2_orthogonalize(V, H1V, H2V, Q_new, H1Q_new, H2Q_new, m);
                 block_l2_orthogonalize(Q, H1Q, H2Q, Q_new, H1Q_new, H2Q_new, m);
@@ -398,7 +398,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
         if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after composition: orthError: {:.5e}", fp(m.orthError));
 
         if(use_h2_inner_product) {
-            block_h2_orthonormalize_dgks_x2(Q, H1Q, H2Q, m);
+            block_h2_orthonormalize_dgks(Q, H1Q, H2Q, m);
         } else {
             block_l2_orthonormalize(Q, H1Q, H2Q, m);
         }
@@ -441,7 +441,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
         bool basis_was_restarted = status.iter_last_restart == status.iter;
         if(basis_was_restarted or m.symmError > normTol * std::sqrt(status.op_norm_estimate)) {
             if(use_h2_inner_product) {
-                block_h2_orthonormalize_dgks_x2(Q, H1Q, H2Q, m);
+                block_h2_orthonormalize_dgks(Q, H1Q, H2Q, m);
             } else {
                 block_l2_orthonormalize(Q, H1Q, H2Q, m);
             }

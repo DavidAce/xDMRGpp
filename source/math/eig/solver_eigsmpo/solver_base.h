@@ -270,7 +270,7 @@ class solver_base {
     void block_l2_orthogonalize(const MatrixType &X, const MatrixType &H1X, const MatrixType &H2X, MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y,
                                 OrthMeta &m);
 
-    void block_h2_orthonormalize_dgks_x2(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
+    void block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     void block_h2_orthonormalize_llt(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     void block_h2_orthonormalize_eig(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
     // void block_h2_orthonormalize_old(MatrixType &Y, MatrixType &H1Y, MatrixType &H2Y, OrthMeta &m);
@@ -423,7 +423,6 @@ class solver_base {
     MatrixType MultH1(const Eigen::Ref<const MatrixType> &X);
     MatrixType MultH2(const Eigen::Ref<const MatrixType> &X);
     MatrixType MultH2_hp(const Eigen::Ref<const MatrixType> &X);
-    MatrixType MultH2_x2(const Eigen::Ref<const MatrixType> &X);
 
     MatrixType MultP(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals,
                      std::optional<const Eigen::Ref<const MatrixType>> initialGuess = std::nullopt);
