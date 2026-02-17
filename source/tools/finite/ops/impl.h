@@ -196,7 +196,7 @@ void tools::finite::ops::apply_mpos(StateFinite<Scalar> &state, const std::vecto
 
 template<typename Scalar>
 void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const std::vector<Eigen::Tensor<Scalar, 4>> &mpos, const svd::config &svd_cfg) {
-    tools::log->trace("Applying MPOs");
+    tools::log->trace("Applying MPOs (zip-up) ... svd: {}", svd_cfg.to_string());
     if(mpos.size() != state.get_length()) throw except::runtime_error("Number of mpo's doesn't match the number of sites on the system");
     svd::solver              svd(svd_cfg);
     Eigen::Tensor<Scalar, 3> SV, US;
@@ -329,6 +329,7 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
 
     state.clear_measurements();
     state.clear_cache();
+    tools::log->trace("Applying MPOs (zip-up) ... done");
 }
 
 template<typename Scalar>

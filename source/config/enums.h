@@ -17,7 +17,8 @@ enum class ModelType { ising_tf_rf, ising_sdual, ising_majorana, lbit, xxz };
 enum class MpoCompress {
     NONE, /*!< Do not compress */
     SVD,  /*!< Use SVD on each mpo */
-    DPL   /*!< Deparallelization: removes parallel columns/rows from each mpo */
+    DPL,  /*!< Deparallelization: removes parallel columns/rows from each mpo */
+    AUTO, /*!< Select based on global setting */
 };
 enum class MposWithEdges { OFF, ON };
 enum class MeanType { ARITHMETIC, GEOMETRIC };
@@ -728,6 +729,7 @@ constexpr std::string_view enum2sv(const T item) noexcept {
         case MpoCompress::NONE:                                  return "NONE";
         case MpoCompress::SVD:                                   return "SVD";
         case MpoCompress::DPL:                                   return "DPL";
+        case MpoCompress::AUTO:                                  return "AUTO";
         default: return "MpoCompress::UNDEFINED";
     }
     if constexpr(std::is_same_v<T, MposWithEdges>) switch(item) {
@@ -1178,6 +1180,7 @@ constexpr auto sv2enum(std::string_view item) {
         if(item == "NONE")                                  return  MpoCompress::NONE;
         if(item == "SVD")                                   return  MpoCompress::SVD;
         if(item == "DPL")                                   return  MpoCompress::DPL;
+        if(item == "AUTO")                                  return  MpoCompress::AUTO;
     }
     if constexpr(std::is_same_v<T, MposWithEdges>){
         check_item_is_valid("MposWithEdges", item, {"OFF", "ON"});

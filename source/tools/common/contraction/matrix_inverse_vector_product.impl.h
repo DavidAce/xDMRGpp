@@ -18,7 +18,7 @@
 #include <variant>
 
 namespace settings {
-    static constexpr bool debug_jdop = false;
+    inline constexpr bool debug_jdop = false;
 }
 
 template<typename Scalar>

@@ -20,10 +20,10 @@ template<typename Scalar>
 TN<Scalar, 0> contract_Ledge3_Redge3_012_012(const TN<Scalar, 3> &Ledge3, const TN<Scalar, 3> &Redge3, const ThreadPtr &threads);
 
 template<typename Scalar>
-void contract_mps1_mpo_mps2_0_2_4_0(TN<Scalar, 4> &result, const TN<Scalar, 3> &mps1, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &mps2, const ThreadPtr &threads);
+void contract_mps1_mpo_mps2_0_2_4_0(TN<Scalar, 4> &result, const TN<Scalar, 3> &bra, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &ket, const ThreadPtr &threads);
 
 template<typename Scalar>
-void contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(TN<Scalar, 4> &tmp, const TN<Scalar, 4> &result, const TN<Scalar, 3> &mps1, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &mps2, const ThreadPtr &threads);
+void contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(TN<Scalar, 4> &tmp, const TN<Scalar, 4> &result, const TN<Scalar, 3> &bra, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &ket, const ThreadPtr &threads);
 
 template<typename Scalar>
 void contract_resL_ket_mpo_braconj_0_1_02_02_03_10(TN<Scalar, 3> &tmp, const TN<Scalar, 3> &resL, const TN<Scalar, 3> &ket, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &bra, const ThreadPtr &threads);

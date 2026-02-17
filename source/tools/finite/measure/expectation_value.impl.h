@@ -191,17 +191,9 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         decltype(auto) mpo  = tenx::asScalarType<CalcType>(mpos[pos]);
         if(pos == 0) {
             contract_mps1_mpo_mps2_0_2_4_0(result, mps1, mpo, mps2, threads);
-            // auto dim4 = tenx::array4{mpo.dimension(0) * mps1.dimension(1) * mps2.dimension(1), mps1.dimension(2), mpo.dimension(1), mps2.dimension(2)};
-            // auto shf6 = tenx::array6{0, 2, 4, 1, 3, 5};
-            // result.resize(dim4);
-            // result.device(*threads->dev) = mps1.contract(mpo, tenx::idx({0}, {2})).contract(mps2, tenx::idx({4}, {0})).shuffle(shf6).reshape(dim4);
             continue;
         }
         contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(tmp, result, mps1, mpo, mps2, threads);
-        // auto dim4 = tenx::array4{result.dimension(0), mps1.dimension(2), mpo.dimension(1), mps2.dimension(2)};
-        // tmp.resize(dim4);
-        // tmp.device(*threads->dev) =
-        // result.contract(mps1.conjugate(), tenx::idx({1}, {1})).contract(mpo, tenx::idx({1, 3}, {0, 2})).contract(mps2, tenx::idx({1, 4}, {1, 0}));
         result = std::move(tmp);
     }
     // In the end we should have a tensor of size 1 (if the state and mpo edges have dim 1).

@@ -6,9 +6,9 @@
 
 namespace settings {
 #if defined(NDEBUG)
-    static constexpr bool debug_jcb = false;
+    inline constexpr bool debug_jcb = false;
 #else
-    static constexpr bool debug_jcb = true;
+    inline constexpr bool debug_jcb = true;
 #endif
 }
 

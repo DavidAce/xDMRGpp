@@ -133,6 +133,25 @@ class StateFinite {
     template<typename T>
     StateFinite &operator=(const StateFinite<T> &other) noexcept;
 
+    template<typename T>
+    StateFinite<T> cast() const {
+        if constexpr(std::is_same_v<Scalar, T>)
+            return *this;
+        else {
+            StateFinite<T> s;
+            s.direction = this->direction;
+            s.name      = this->name;
+            s.algo      = this->algo;
+            s.convrates = this->convrates;
+            s.mps_sites.clear();
+            s.mps_sites.reserve(this->mps_sites.size());
+            for(const auto &mps : this->mps_sites) { s.mps_sites.emplace_back(std::make_unique<MpsSite<T>>(mps->template cast<T>())); }
+            s.active_sites = this->active_sites;
+            s.popcount     = this->popcount;
+            return s;
+        }
+    }
+
     StateFinite(AlgorithmType algo_type, size_t model_size, long position, long spin_dim = 2);
     void initialize(AlgorithmType algo_type, size_t model_size, long position, long spin_dim = 2);
 

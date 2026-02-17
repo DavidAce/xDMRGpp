@@ -39,6 +39,6 @@ class EdgesInfinite {
 
     env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_ene_blk() const;
     env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_var_blk() const;
-    env_pair<Eigen::Tensor<Scalar, 3> &>       get_env_ene_blk();
-    env_pair<Eigen::Tensor<Scalar, 3> &>       get_env_var_blk();
+    env_pair<Eigen::Tensor<Scalar, 3>>       get_env_ene_blk();
+    env_pair<Eigen::Tensor<Scalar, 3>>       get_env_var_blk();
 };

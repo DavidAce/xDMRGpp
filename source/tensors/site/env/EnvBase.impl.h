@@ -10,7 +10,10 @@
 #include "math/tenx/threads.h"
 #include "tensors/site/mpo/MpoSite.h"
 #include "tensors/site/mps/MpsSite.h"
+#include "tools/common/contraction.h"
+#include "tools/common/contraction/contract_env_x2.h"
 #include "tools/common/log.h"
+#include <tools/common/contraction/contract_env_mps_mpo.impl.h>
 #include <utility>
 
 // We need to define the destructor and other special functions
@@ -23,7 +26,7 @@
 // Read more: https://stackoverflow.com/questions/33212686/how-to-use-unique-ptr-with-forward-declared-type
 // And here:  https://stackoverflow.com/questions/6012157/is-stdunique-ptrt-required-to-know-the-full-definition-of-t
 template<typename Scalar>
-EnvBase<Scalar>::EnvBase() : block(std::make_unique<Eigen::Tensor<Scalar, 3>>()) {
+EnvBase<Scalar>::EnvBase() : blkx2(std::make_unique<x2::Tensor<Scalar, 3>>()) {
     // assert_block();
 } // default ctor
 template<typename Scalar>
@@ -35,7 +38,7 @@ EnvBase<Scalar> &EnvBase<Scalar>::operator=(EnvBase<Scalar> &&other) noexcept = 
 
 template<typename Scalar>
 EnvBase<Scalar>::EnvBase(const EnvBase &other)
-    : block(std::make_unique<Eigen::Tensor<Scalar, 3>>(*other.block)), sites(other.sites), position(other.position), side(other.side), tag(other.tag),
+    : blkx2(std::make_unique<x2::Tensor<Scalar, 3>>(*other.blkx2)), sites(other.sites), position(other.position), side(other.side), tag(other.tag),
       unique_id(other.unique_id), unique_id_mps(other.unique_id_mps), unique_id_mpo(other.unique_id_mpo), unique_id_env(other.unique_id_env),
       is_real_cached(other.is_real_cached), has_nan_cached(other.has_nan_cached) {
     assert_block();
@@ -43,12 +46,12 @@ EnvBase<Scalar>::EnvBase(const EnvBase &other)
 
 template<typename Scalar>
 EnvBase<Scalar>::EnvBase(size_t position_, std::string side_, std::string tag_)
-    : block(std::make_unique<Eigen::Tensor<Scalar, 3>>()), position(position_), side(std::move(side_)), tag(std::move(tag_)) {
+    : blkx2(std::make_unique<x2::Tensor<Scalar, 3>>()), position(position_), side(std::move(side_)), tag(std::move(tag_)) {
     assert_block();
 }
 template<typename Scalar>
 EnvBase<Scalar>::EnvBase(std::string side_, std::string tag_, const MpsSite<Scalar> &MPS, const MpoSite<Scalar> &MPO)
-    : block(std::make_unique<Eigen::Tensor<Scalar, 3>>()), side(std::move(side_)), tag(std::move(tag_)) {
+    : blkx2(std::make_unique<x2::Tensor<Scalar, 3>>()), side(std::move(side_)), tag(std::move(tag_)) {
     if(MPS.get_position() != MPO.get_position())
         throw except::logic_error("MPS and MPO have different positions: {} != {}", MPS.get_position(), MPO.get_position());
     position = MPS.get_position();
@@ -58,7 +61,11 @@ EnvBase<Scalar>::EnvBase(std::string side_, std::string tag_, const MpsSite<Scal
 template<typename Scalar>
 EnvBase<Scalar> &EnvBase<Scalar>::operator=(const EnvBase<Scalar> &other) {
     if(this != &other) {
-        block          = std::make_unique<Eigen::Tensor<Scalar, 3>>(*other.block);
+        if(other.blkx2)
+            blkx2 = std::make_unique<x2::Tensor<Scalar, 3>>(*other.blkx2);
+        else
+            blkx2 = std::make_unique<x2::Tensor<Scalar, 3>>();
+
         sites          = other.sites;
         position       = other.position;
         side           = other.side;
@@ -78,23 +85,23 @@ template<typename Scalar>
 void EnvBase<Scalar>::assert_block() const {
     if(side != "L" and side != "R") throw except::runtime_error("Expected side [L|R]. Got: [{}]", side);
     if(tag != "ene" and tag != "var") throw except::runtime_error("Expected tag [var|ene]. Got: [{}]", tag);
-    if(not block) throw except::runtime_error("env block {} {} at pos {} is nullptr", tag, side, get_position());
+    if(not blkx2) throw except::runtime_error("env block {} {} at pos {} is nullptr", tag, side, get_position());
 }
 
 template<typename Scalar>
-void EnvBase<Scalar>::build_block(Eigen::Tensor<Scalar, 3> &otherblock, const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo) {
-    /*!< Contracts a site into the block-> */
+void EnvBase<Scalar>::build_blkx2(const x2::Tensor<Scalar, 3> &otherblock, const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo) {
+    /*!< Contracts a site into the block */
     // Note that otherblock, mps and mpo should correspond to the same site! I.e. their "get_position()" are all equal.
     // This can't be checked here though, so do that before calling this function.
-    if constexpr(settings::debug) tools::log->trace("EnvBase<Scalar>::build_block(): side({}), pos({})", side, get_position());
+    if constexpr(settings::debug) tools::log->trace("EnvBase<Scalar>::build_blkx2(): side({}), pos({})", side, get_position());
     unique_id      = std::nullopt;
     unique_id_env  = std::nullopt;
     unique_id_mps  = std::nullopt;
     unique_id_mpo  = std::nullopt;
     is_real_cached = std::nullopt;
     has_nan_cached = std::nullopt;
-    auto &threads  = tenx::threads::get();
-    if(not block) block = std::make_unique<Eigen::Tensor<Scalar, 3>>();
+    if(not blkx2) blkx2 = std::make_unique<x2::Tensor<Scalar, 3>>();
+    auto envinfo = tools::common::contraction::internal::get_info_env();
     if(side == "L") {
         /*! # Left environment block contraction
          *   [       ]--0         [       ]--0 0--[LB]--1 1--[  GA    ]--2
@@ -121,16 +128,7 @@ void EnvBase<Scalar>::build_block(Eigen::Tensor<Scalar, 3> &otherblock, const Ei
         if(mpo.dimension(0) != otherblock.dimension(2))
             throw except::runtime_error("env{} {} pos {} dimension mismatch: mpo dim[{}]:{} != left-block dim[{}]:{}", side, tag, position.value(), 0,
                                         mpo.dimension(0), 2, otherblock.dimension(2));
-        // block->resize(mps.dimension(2), mps.dimension(2), mpo.dimension(1));
-        // block->device(*threads->dev) = otherblock.contract(mps, tenx::idx({0}, {1}))
-        //                                    .contract(mpo, tenx::idx({1, 2}, {0, 2}))
-        //                                    .contract(mps.conjugate(), tenx::idx({0, 3}, {1, 0}))
-        //                                    .shuffle(tenx::array3{0, 2, 1});
-        Eigen::Tensor<Scalar, 4> block_mps_mpo(otherblock.dimension(0), mps.dimension(2), mpo.dimension(1), mpo.dimension(2));
-        block_mps_mpo.device(*threads->dev) = otherblock.contract(mps.conjugate(), tenx::idx({1}, {1})).contract(mpo, tenx::idx({1, 2}, {0, 3}));
-        block->resize(mps.dimension(2), mps.dimension(2), mpo.dimension(1));
-        block->device(*threads->dev) = mps.contract(block_mps_mpo, tenx::idx({0, 1}, {3, 0}));
-
+        tools::common::contraction::contract_envL_mps_mpo(*blkx2, otherblock, mps, mpo); // Renormalizes on the fly
     } else if(side == "R") {
         /*! # Right environment contraction
          *   0--[       ]          1--[   GB   ]--2  0--[LB]--1  0--[       ]
@@ -157,16 +155,7 @@ void EnvBase<Scalar>::build_block(Eigen::Tensor<Scalar, 3> &otherblock, const Ei
         if(mpo.dimension(1) != otherblock.dimension(2))
             throw except::runtime_error("env{} {} pos {} dimension mismatch: mpo dim[{}]:{} != right-block dim[{}]:{}", side, tag, position.value(), 1,
                                         mpo.dimension(1), 2, otherblock.dimension(2));
-        // block->resize(mps.dimension(1), mps.dimension(1), mpo.dimension(0));
-        // block->device(*threads->dev) = otherblock.contract(mps, tenx::idx({0}, {2}))
-        // .contract(mpo, tenx::idx({1, 2}, {1, 2}))
-        // .contract(mps.conjugate(), tenx::idx({0, 3}, {2, 0}))
-        // .shuffle(tenx::array3{0, 2, 1});
-
-        Eigen::Tensor<Scalar, 4> block_mps_mpo(otherblock.dimension(0), mps.dimension(1), mpo.dimension(0), mpo.dimension(2));
-        block_mps_mpo.device(*threads->dev) = otherblock.contract(mps.conjugate(), tenx::idx({1}, {2})).contract(mpo, tenx::idx({1, 2}, {1, 3}));
-        block->resize(mps.dimension(1), mps.dimension(1), mpo.dimension(0));
-        block->device(*threads->dev) = mps.contract(block_mps_mpo, tenx::idx({0, 2}, {3, 0}));
+        tools::common::contraction::contract_envR_mps_mpo(*blkx2, otherblock, mps, mpo); // Renormalizes on the fly
     }
 }
 
@@ -180,8 +169,10 @@ void EnvBase<Scalar>::enlarge(const Eigen::Tensor<Scalar, 3> &mps, const Eigen::
     // There is no way to check the positions here, so checks should be done before calling this function
 
     assert_block();
-    Eigen::Tensor<Scalar, 3> thisblock = *block;
-    build_block(thisblock, mps, mpo);
+    assert(get_blkx2().dimensions() == get_block().dimensions());
+    x2::Tensor<Scalar, 3> thisblock = get_blkx2();
+    build_blkx2(thisblock, mps, mpo);
+
     sites++;
     if(position) {
         if(side == "L")
@@ -194,7 +185,7 @@ void EnvBase<Scalar>::enlarge(const Eigen::Tensor<Scalar, 3> &mps, const Eigen::
 template<typename Scalar>
 void EnvBase<Scalar>::clear() {
     assert_block();
-    block->resize(0, 0, 0); // = Eigen::Tensor<Scalar,3>();
+    if(blkx2) blkx2->resize(Eigen::array<Eigen::Index, 3>{0, 0, 0}); // = Eigen::Tensor<Scalar,3>();
     tools::log->trace("Ejected env{} pos {}", side, get_position());
     unique_id = std::nullopt;
 
@@ -213,38 +204,49 @@ void EnvBase<Scalar>::clear() {
 }
 
 template<typename Scalar>
-const Eigen::Tensor<Scalar, 3> &EnvBase<Scalar>::get_block() const {
-    assert_block();
-    return *block;
+const x2::Tensor<Scalar, 3> &EnvBase<Scalar>::get_blkx2() const {
+    if(not blkx2) { throw std::runtime_error("get_blkx2: blkx2 == nullptr"); }
+    return *blkx2;
 }
 
 template<typename Scalar>
-Eigen::Tensor<Scalar, 3> &EnvBase<Scalar>::get_block() {
+x2::Tensor<Scalar, 3> &EnvBase<Scalar>::get_blkx2() {
+    if(not blkx2) { throw std::runtime_error("get_blkx2: blkx2 == nullptr"); }
+    return *blkx2;
+}
+template<typename Scalar>
+const Eigen::Tensor<Scalar, 3> &EnvBase<Scalar>::get_block() const {
     assert_block();
-    return *block;
+    return blkx2->to_TensorType();
+}
+
+template<typename Scalar>
+Eigen::Tensor<Scalar, 3> EnvBase<Scalar>::get_block_copy() {
+    assert_block();
+    return blkx2->to_TensorType();
 }
 
 template<typename Scalar>
 bool EnvBase<Scalar>::has_block() const {
-    return block != nullptr and block->size() != 0;
+    return blkx2 != nullptr and blkx2->size() != 0;
 }
 
 template<typename Scalar>
 std::array<long, 3> EnvBase<Scalar>::dimensions() const {
     assert_block();
-    return block->dimensions();
+    return blkx2->dimensions();
 }
 
 template<typename Scalar>
 std::array<long, 3> EnvBase<Scalar>::get_dims() const {
     assert_block();
-    return block->dimensions();
+    return blkx2->dimensions();
 }
 
 template<typename Scalar>
 void EnvBase<Scalar>::assert_validity() const {
     assert_block();
-    if(tenx::hasNaN(*block)) { throw except::runtime_error("Environment {} side {} at position {} has NAN's", tag, side, get_position()); }
+    if(!blkx2->allFinite()) { throw except::runtime_error("Env block {} side {} at position {} has NAN's", tag, side, get_position()); }
 }
 
 template<typename Scalar>
@@ -278,9 +280,9 @@ template<typename Scalar>
 bool EnvBase<Scalar>::is_real() const {
     assert_block();
     if constexpr(settings::debug) {
-        return tenx::isReal(*block);
+        return tenx::isReal(std::as_const(blkx2)->hi()) and tenx::isReal(std::as_const(blkx2)->lo());
     } else {
-        is_real_cached = is_real_cached.value_or(tenx::isReal(*block));
+        is_real_cached = is_real_cached.value_or(tenx::isReal(std::as_const(blkx2)->hi()) and tenx::isReal(std::as_const(blkx2)->lo()));
         return is_real_cached.value();
     }
 }
@@ -289,9 +291,9 @@ template<typename Scalar>
 bool EnvBase<Scalar>::has_nan() const {
     assert_block();
     if constexpr(settings::debug) {
-        return tenx::hasNaN(*block);
+        return !blkx2->allFinite();
     } else {
-        has_nan_cached = has_nan_cached.value_or(tenx::hasNaN(*block));
+        has_nan_cached = has_nan_cached.value_or(!blkx2->allFinite());
         return has_nan_cached.value();
     }
 }
@@ -312,28 +314,29 @@ size_t EnvBase<Scalar>::get_sites() const {
 template<typename Scalar>
 void EnvBase<Scalar>::set_edge_dims(const Eigen::Tensor<Scalar, 3> &MPS, const Eigen::Tensor<Scalar, 4> &MPO, const Eigen::Tensor<Scalar, 1> &edge) {
     assert_block();
+    Eigen::Tensor<Scalar, 3> newblock;
     if(side == "L") {
         long mpsDim = MPS.dimension(1);
         long mpoDim = MPO.dimension(0);
-        block->resize(tenx::array3{mpsDim, mpsDim, mpoDim});
-        block->setZero();
+        newblock.resize(tenx::array3{mpsDim, mpsDim, mpoDim});
+        newblock.setZero();
         for(long i = 0; i < mpsDim; i++) {
-            std::array<long, 1> extent1                     = {mpoDim};
-            std::array<long, 3> offset3                     = {i, i, 0};
-            std::array<long, 3> extent3                     = {1, 1, mpoDim};
-            block->slice(offset3, extent3).reshape(extent1) = edge;
+            std::array<long, 1> extent1                       = {mpoDim};
+            std::array<long, 3> offset3                       = {i, i, 0};
+            std::array<long, 3> extent3                       = {1, 1, mpoDim};
+            newblock.slice(offset3, extent3).reshape(extent1) = edge;
         }
     }
     if(side == "R") {
         long mpsDim = MPS.dimension(2);
         long mpoDim = MPO.dimension(1);
-        block->resize(tenx::array3{mpsDim, mpsDim, mpoDim});
-        block->setZero();
+        newblock.resize(tenx::array3{mpsDim, mpsDim, mpoDim});
+        newblock.setZero();
         for(long i = 0; i < mpsDim; i++) {
-            std::array<long, 1> extent1                     = {mpoDim};
-            std::array<long, 3> offset3                     = {i, i, 0};
-            std::array<long, 3> extent3                     = {1, 1, mpoDim};
-            block->slice(offset3, extent3).reshape(extent1) = edge;
+            std::array<long, 1> extent1                       = {mpoDim};
+            std::array<long, 3> offset3                       = {i, i, 0};
+            std::array<long, 3> extent3                       = {1, 1, mpoDim};
+            newblock.slice(offset3, extent3).reshape(extent1) = edge;
         }
     }
     sites          = 0;
@@ -343,20 +346,29 @@ void EnvBase<Scalar>::set_edge_dims(const Eigen::Tensor<Scalar, 3> &MPS, const E
     unique_id_mpo  = std::nullopt;
     is_real_cached = std::nullopt;
     has_nan_cached = std::nullopt;
+    *blkx2         = newblock;
+    auto envinfo   = tools::common::contraction::internal::get_info_env();
+    if(envinfo.backend == ContractionBackend::X2) { blkx2->renorm(); }
 }
-
-// void EnvBase<Scalar>::set_mixing_factor(double alpha) {
-//     if(std::isnan(alpha)) throw except::logic_error("EnvBase<Scalar>::set_mixing_factor: alpha cannot be nan");
-//     mixing_factor_alpha = alpha;
-// }
-// double EnvBase<Scalar>::get_mixing_factor() const { return mixing_factor_alpha; }
 
 template<typename Scalar>
 std::size_t EnvBase<Scalar>::get_unique_id() const {
     if(unique_id) return unique_id.value();
     assert_block();
-    unique_id = hash::hash_buffer(block->data(), safe_cast<size_t>(block->size()));
-    return unique_id.value();
+
+    // Prefer going through your accessor so you keep invariants in one place
+    const auto &B = get_blkx2();
+
+    const auto n    = safe_cast<size_t>(B.size());
+    const auto h_hi = hash::hash_buffer(B.hi_data(), n);
+    const auto h_lo = hash::hash_buffer(B.lo_data(), n);
+
+    // Standard hash combine
+    std::size_t h = h_hi;
+    h ^= h_lo + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+
+    unique_id = h;
+    return h;
 }
 
 template<typename Scalar>

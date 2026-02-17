@@ -1,10 +1,10 @@
 #pragma once
 
 #include "config/enums.h"
+#include "debug/exceptions.h"
 #include <complex>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
-
 template<typename Scalar>
 class StateFinite;
 template<typename Scalar>
@@ -38,6 +38,7 @@ namespace tools::finite::mpo {
             case MpoCompress::NONE: return mpos;
             case MpoCompress::SVD: return get_svdcompressed_mpos(mpos);
             case MpoCompress::DPL: return get_deparallelized_mpos(mpos);
+            case MpoCompress::AUTO: throw except::runtime_error("get_compressed_mpos: mpoComp == MpoCompress::AUTO: should be decided earlier");
             default: return mpos;
         }
     }
@@ -58,6 +59,7 @@ namespace tools::finite::mpo {
             case MpoCompress::NONE: return mpos;
             case MpoCompress::SVD: return get_svdcompressed_mpos(mpos, Ledge, Redge);
             case MpoCompress::DPL: return get_deparallelized_mpos(mpos, Ledge, Redge);
+            case MpoCompress::AUTO: throw except::runtime_error("get_compressed_mpos: mpoComp == MpoCompress::AUTO: should be decided earlier");
             default: return mpos;
         }
     }

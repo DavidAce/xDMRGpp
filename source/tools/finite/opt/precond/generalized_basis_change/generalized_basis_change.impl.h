@@ -20,9 +20,9 @@
 
 namespace settings {
 #if defined(NDEBUG)
-    static constexpr bool debug_generalized_basis_change = false;
+    inline constexpr bool debug_generalized_basis_change = false;
 #else
-    static constexpr bool debug_generalized_basis_change = false;
+    inline constexpr bool debug_generalized_basis_change = false;
 #endif
 }
 
@@ -568,7 +568,7 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
 
         // VectorReal absEpsY = Y.cwiseAbs().cwiseMax(eps);
         // absEpsY /= absEpsY.mean();
-        //tools::log->info("Y : {::.5e}", fv(Y));
+        // tools::log->info("Y : {::.5e}", fv(Y));
         // tools::log->info("D : {::.5e}", fv(D));
         VectorReal invPowD = D.array().pow(-RealScalar{bcfg.alpha} / 2);
         VectorReal absPowD = D.array().pow(+RealScalar{bcfg.alpha} / 2);
@@ -584,20 +584,14 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
         return {T, S, U};
     };
 
-    // // Trace physical indices off the mpo
-    // Eigen::Tensor<Scalar, 2> mpo_traced = mpo.trace(std::array<Eigen::Index, 2>{2, 3});
-    // // Trace bond indices off the environments
-    // Eigen::Tensor<Scalar, 1> envL_zip_traced = envL_zip.trace(std::array<Eigen::Index, 2>{0, 1});
-    // Eigen::Tensor<Scalar, 1> envR_zip_traced = envR_zip.trace(std::array<Eigen::Index, 2>{0, 1});
-    // // Contract the traced mpo with the traced environments to get the weights
-    // wL = envR_zip_traced.contract(mpo_traced, tenx::idx({0}, {1}));
-    // wR = envL_zip_traced.contract(mpo_traced, tenx::idx({0}, {0}));
-    std::tie(wL, wR) = get_env_weights(initial_guess.get_tensor(), envL, envR, mpo, bcfg.ewt, bcfg.ewr);
-
     auto envL_agg_inv_map = MapConstMatType(envL_agg_zip_inv.data(), envL_agg_zip_inv.dimension(0), envL_agg_zip_inv.dimension(1));
     auto envR_agg_inv_map = MapConstMatType(envR_agg_zip_inv.data(), envR_agg_zip_inv.dimension(0), envR_agg_zip_inv.dimension(1));
-    std::tie(TL, SL, UL)  = get_transform_H2_zip(wL, PL, envL_agg_inv_map, envL_zip);
-    std::tie(TR, SR, UR)  = get_transform_H2_zip(wR, PR, envR_agg_inv_map, envR_zip);
+
+    // Get the weights
+    std::tie(wL, wR) = get_env_weights(initial_guess.get_tensor(), envL, envR, mpo, bcfg.ewt, bcfg.ewr);
+
+    std::tie(TL, SL, UL) = get_transform_H2_zip(wL, PL, envL_agg_inv_map, envL_zip);
+    std::tie(TR, SR, UR) = get_transform_H2_zip(wR, PR, envR_agg_inv_map, envR_zip);
 
     return tf;
 }
@@ -814,10 +808,10 @@ tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::Genera
     bc_envvL = env2.L;
     bc_envvR = env2.R;
 
-    bc_enveL.get_block() = transform_env(env1.L.get_block(), TL, kappaL);
-    bc_enveR.get_block() = transform_env(env1.R.get_block(), TR, kappaR);
-    bc_envvL.get_block() = transform_env(env2.L.get_block(), TL, kappaL * kappaL);
-    bc_envvR.get_block() = transform_env(env2.R.get_block(), TR, kappaR * kappaR);
+    bc_enveL.set_block_raw(transform_env(env1.L.get_block(), TL, kappaL));
+    bc_enveR.set_block_raw(transform_env(env1.R.get_block(), TR, kappaR));
+    bc_envvL.set_block_raw(transform_env(env2.L.get_block(), TL, kappaL * kappaL));
+    bc_envvR.set_block_raw(transform_env(env2.R.get_block(), TR, kappaR * kappaR));
     // auto enveL_norm      = tenx::VectorMap(bc_enveL.get_block()).norm();
     // auto enveR_norm      = tenx::VectorMap(bc_enveR.get_block()).norm();
     // auto envvL_norm      = tenx::VectorMap(bc_envvL.get_block()).norm();

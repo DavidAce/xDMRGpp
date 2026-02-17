@@ -174,7 +174,6 @@ namespace tools::common::contraction {
         return result;
     }
 
-
     /* clang-format on */
 
     template<typename Scalar>
@@ -190,18 +189,17 @@ namespace tools::common::contraction {
                           const Scalar *const mpsR_ptr, std::array<long, 3> mpsR_dims);
 
     template<typename Scalar>
-    void contract_env_mps_mpo(Scalar *res_ptr, std::array<long, 2> res_dims, const Scalar *const env_ptr, std::array<long, 2> env_dims,
+    void contract_envL_mps_mpo(Scalar *res_ptr, std::array<long, 2> res_dims, const Scalar *const env_ptr, std::array<long, 2> env_dims,
                               const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 2> mpo_dims);
     template<typename Scalar>
-    void contract_env_mps_mpo(Scalar *res_ptr, std::array<long, 3> res_dims, const Scalar *const env_ptr, std::array<long, 3> env_dims,
+    void contract_envL_mps_mpo(Scalar *res_ptr, std::array<long, 3> res_dims, const Scalar *const env_ptr, std::array<long, 3> env_dims,
                               const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims);
-
     template<typename Scalar>
-    void contract_mps_mpo_env(Scalar *res_ptr, std::array<long, 2> res_dims, const Scalar *const env_ptr, std::array<long, 2> env_dims,
-                              const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 2> mpo_dims);
+    void contract_envR_mps_mpo(Scalar *res_ptr, std::array<long, 2> res_dims, const Scalar *const env_ptr, std::array<long, 2> env_dims,
+                               const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 2> mpo_dims);
     template<typename Scalar>
-    void contract_mps_mpo_env(Scalar *res_ptr, std::array<long, 3> res_dims, const Scalar *const env_ptr, std::array<long, 3> env_dims,
-                              const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims);
+    void contract_envR_mps_mpo(Scalar *res_ptr, std::array<long, 3> res_dims, const Scalar *const env_ptr, std::array<long, 3> env_dims,
+                               const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims);
 
     template<typename res_type, typename mps_type, typename bnd_type>
     void contract_mps_bnd(TensorWrite<res_type> &res, const TensorRead<mps_type> &mps, const TensorRead<bnd_type> &bnd) {
@@ -325,7 +323,7 @@ namespace tools::common::contraction {
     }
 
     template<typename res_type, typename env_type, typename mps_type, typename mpo_type>
-    void contract_env_mps_mpo(TensorWrite<res_type> &res, const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
+    void contract_envL_mps_mpo(TensorWrite<res_type> &res, const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
         static_assert((res_type::NumIndices == 2 or res_type::NumIndices == 3) and "Wrong res tensor rank != 2 or 3");
         static_assert((env_type::NumIndices == 2 or env_type::NumIndices == 3) and "Wrong env tensor rank != 2 or 3");
         static_assert((mpo_type::NumIndices == 2 or mpo_type::NumIndices == 4) and "Wrong mpo tensor rank != 2 or 4");
@@ -337,14 +335,14 @@ namespace tools::common::contraction {
         auto mpo_eval = tenx::asEval(mpo);
         if constexpr(env_type::NumIndices == 2){
             res_ref.resize(mps_eval.dimension(2), mps_eval.dimension(2));
-            contract_env_mps_mpo(res_ref.data(), res_ref.dimensions(),
+            contract_envL_mps_mpo(res_ref.data(), res_ref.dimensions(),
                                  env_eval.data(), env_eval.dimensions(),
                                  mps_eval.data(), mps_eval.dimensions(),
                                  mpo_eval.data(), mpo_eval.dimensions());
         }
         else {
             res_ref.resize(mps_eval.dimension(2), mps_eval.dimension(2), mpo_eval.dimension(1));
-            contract_env_mps_mpo(res_ref.data(), res_ref.dimensions(),
+            contract_envL_mps_mpo(res_ref.data(), res_ref.dimensions(),
                                  env_eval.data(), env_eval.dimensions(),
                                  mps_eval.data(), mps_eval.dimensions(),
                                  mpo_eval.data(), mpo_eval.dimensions());
@@ -352,7 +350,7 @@ namespace tools::common::contraction {
         /* clang-format on */
     }
     template<typename res_type, typename env_type, typename mps_type, typename mpo_type>
-    void contract_mps_mpo_env(TensorWrite<res_type> &res, const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
+    void contract_envR_mps_mpo(TensorWrite<res_type> &res, const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
         static_assert((res_type::NumIndices == 2 or res_type::NumIndices == 3) and "Wrong res tensor rank != 2 or 3");
         static_assert((env_type::NumIndices == 2 or env_type::NumIndices == 3) and "Wrong env tensor rank != 2 or 3");
         static_assert((mpo_type::NumIndices == 2 or mpo_type::NumIndices == 4) and "Wrong mpo tensor rank != 2 or 4");
@@ -366,14 +364,14 @@ namespace tools::common::contraction {
 
         if constexpr(env_type::NumIndices == 2){
             res_ref.resize(mps_eval.dimension(1), mps_eval.dimension(1));
-            contract_mps_mpo_env(res_ref.data(), res_ref.dimensions(),
+            contract_envR_mps_mpo(res_ref.data(), res_ref.dimensions(),
                                  env_eval.data(), env_eval.dimensions(),
                                  mps_eval.data(), mps_eval.dimensions(),
                                  mpo_eval.data(), mpo_eval.dimensions());
         }
         else {
             res_ref.resize(mps_eval.dimension(1), mps_eval.dimension(1), mpo_eval.dimension(0));
-            contract_mps_mpo_env(res_ref.data(), res_ref.dimensions(),
+            contract_envR_mps_mpo(res_ref.data(), res_ref.dimensions(),
                                  env_eval.data(), env_eval.dimensions(),
                                  mps_eval.data(), mps_eval.dimensions(),
                                  mpo_eval.data(), mpo_eval.dimensions());
@@ -382,15 +380,15 @@ namespace tools::common::contraction {
     }
 
     template<typename env_type, typename mps_type, typename mpo_type>
-    [[nodiscard]] auto contract_env_mps_mpo(const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
+    [[nodiscard]] auto contract_envL_mps_mpo(const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
         Eigen::Tensor<typename env_type::Scalar, env_type::NumIndices> res;
-        contract_env_mps_mpo(res, env, mps, mpo);
+        contract_envL_mps_mpo(res, env, mps, mpo);
         return res;
     }
     template<typename env_type, typename mps_type, typename mpo_type>
-    [[nodiscard]] auto contract_mps_mpo_env(const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
+    [[nodiscard]] auto contract_envR_mps_mpo(const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
         Eigen::Tensor<typename env_type::Scalar, env_type::NumIndices> res;
-        contract_mps_mpo_env(res, env, mps, mpo);
+        contract_envR_mps_mpo(res, env, mps, mpo);
         return res;
     }
     template<typename mps_type, typename mpo_type, typename env_type>

@@ -219,14 +219,14 @@ void ModelFinite<Scalar>::clear_mpo_squared() {
 template<typename Scalar>
 void ModelFinite<Scalar>::compress_mpo() {
     clear_cache();
-    auto mpo_compressed = get_compressed_mpos();
+    auto mpo_compressed = get_mpo_tensors(0, MposWithEdges::ON, MpoCompress::AUTO);
     for(const auto &[pos, mpo] : iter::enumerate(MPO)) mpo->set_mpo(mpo_compressed[pos]);
 }
 
 template<typename Scalar>
 void ModelFinite<Scalar>::compress_mpo_squared() {
     clear_cache_squared();
-    auto mpo_squared_compressed = get_compressed_mpos_squared();
+    auto mpo_squared_compressed = get_mpo2_tensors(0, MposWithEdges::ON, MpoCompress::AUTO);
     for(const auto &[pos, mpo] : iter::enumerate(MPO)) mpo->set_mpo_squared(mpo_squared_compressed[pos]);
 }
 
@@ -272,94 +272,55 @@ std::vector<std::reference_wrapper<MpoSite<Scalar>>> ModelFinite<Scalar>::get_mp
     return mpos;
 }
 
+
 template<typename Scalar>
-std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_all_mpo_tensors(MposWithEdges withEdges) {
+std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpo_tensors(Scalar energy_shift_per_site, MposWithEdges withEdges, MpoCompress compress) const {
     tools::log->trace("Collecting all MPO: {} sites | with edges {}", MPO.size(), static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
-    // Collect all the mpo (doesn't matter if they are already compressed)
     std::vector<Eigen::Tensor<Scalar, 4>> mpos;
     mpos.reserve(MPO.size());
-    for(const auto &mpo : MPO) mpos.emplace_back(mpo->MPO());
-    switch(withEdges) {
-        case MposWithEdges::OFF: return mpos;
-        case MposWithEdges::ON: {
-            auto ledge = MPO.front()->template get_MPO_edge_left<Scalar>();
-            auto redge = MPO.back()->template get_MPO_edge_right<Scalar>();
-            return tools::finite::mpo::get_mpos_with_edges(mpos, ledge, redge);
-        }
-        default: throw except::runtime_error("Unrecognized enum value <CompressWithEdges>: {}", static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
+    for(const auto &mpo : MPO) mpos.emplace_back(mpo->MPO_energy_shifted_view(energy_shift_per_site));
+    if(withEdges == MposWithEdges::ON) {
+        auto ledge = MPO.front()->template get_MPO_edge_left<Scalar>();
+        auto redge = MPO.back()->template get_MPO_edge_right<Scalar>();
+        mpos       = tools::finite::mpo::get_mpos_with_edges(mpos, ledge, redge);
     }
+    if(compress == MpoCompress::AUTO){ compress = settings::precision::use_compressed_mpo;}
+    return tools::finite::mpo::get_compressed_mpos(mpos, compress);
 }
 
 template<typename Scalar>
-std::vector<Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4>> ModelFinite<Scalar>::get_all_mpo_tensors_t(MposWithEdges withEdges) {
+std::vector<Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4>> ModelFinite<Scalar>::get_mpo_tensors_q(Scalar energy_shift_per_site, MposWithEdges withEdges, MpoCompress compress) const {
     tools::log->trace("Collecting all MPO_q: {} sites | with edges {}", MPO.size(), static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
     // Collect all the mpo (doesn't matter if they are already compressed)
-    std::vector<Eigen::Tensor<QuadScalar, 4>> mpos_t;
-    mpos_t.reserve(MPO.size());
+    std::vector<Eigen::Tensor<QuadScalar, 4>> mpos_q;
+    mpos_q.reserve(MPO.size());
 
-    for(const auto &mpo : MPO) mpos_t.emplace_back(mpo->MPO_q());
-    switch(withEdges) {
-        case MposWithEdges::OFF: return mpos_t;
-        case MposWithEdges::ON: {
-            Eigen::Tensor<QuadScalar, 1> ledge = MPO.front()->template get_MPO_edge_left<QuadScalar>();
-            Eigen::Tensor<QuadScalar, 1> redge = MPO.back()->template get_MPO_edge_right<QuadScalar>();
-            return tools::finite::mpo::get_mpos_with_edges<QuadScalar>(mpos_t, ledge, redge);
-        }
-        default: throw except::runtime_error("Unrecognized enum value <CompressWithEdges>: {}", static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
+    for(const auto &mpo : MPO) mpos_q.emplace_back(mpo->MPO_energy_shifted_view_q(energy_shift_per_site));
+    if(withEdges == MposWithEdges::ON) {
+        Eigen::Tensor<QuadScalar, 1> ledge = MPO.front()->template get_MPO_edge_left<QuadScalar>();
+        Eigen::Tensor<QuadScalar, 1> redge = MPO.back()->template get_MPO_edge_right<QuadScalar>();
+        mpos_q  = tools::finite::mpo::get_mpos_with_edges<QuadScalar>(mpos_q, ledge, redge);
     }
+     if(compress == MpoCompress::AUTO) compress = settings::precision::use_compressed_mpo;
+    return tools::finite::mpo::get_compressed_mpos(mpos_q, compress);
+
 }
 
 template<typename Scalar>
-std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_compressed_mpos(MposWithEdges withEdges) {
-    auto mpoComp = settings::precision::use_compressed_mpo;
-    tools::log->trace("Compressing MPO: {} sites | with edges {} | compression {}", MPO.size(), enum2sv(withEdges), enum2sv(mpoComp));
-    // Collect all the mpo (doesn't matter if they are already compressed)
-    std::vector<Eigen::Tensor<Scalar, 4>> mpos;
-    mpos.reserve(MPO.size());
-    for(const auto &mpo : MPO) mpos.emplace_back(mpo->MPO());
-    switch(withEdges) {
-        case MposWithEdges::OFF: return tools::finite::mpo::get_compressed_mpos<Scalar>(mpos, mpoComp);
-        case MposWithEdges::ON: {
-            auto ledge = MPO.front()->template get_MPO_edge_left<Scalar>();
-            auto redge = MPO.back()->template get_MPO_edge_right<Scalar>();
-            return tools::finite::mpo::get_compressed_mpos(mpos, ledge, redge, mpoComp);
-        }
-        default: throw except::runtime_error("Unrecognized enum value <CompressWithEdges>: {}", static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
+std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpo2_tensors(Scalar energy_shift_per_site, MposWithEdges withEdges, MpoCompress compress) const {
+    tools::log->trace("Collecting all MPO2: {} sites | with edges {}", MPO.size(), static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
+    std::vector<Eigen::Tensor<Scalar, 4>> mpos2;
+    mpos2.reserve(MPO.size());
+    for(const auto &mpo : MPO) mpos2.emplace_back(mpo->MPO2_energy_shifted_view(energy_shift_per_site));
+    if(withEdges == MposWithEdges::ON) {
+        auto ledge = MPO.front()->template get_MPO2_edge_left<Scalar>();
+        auto redge = MPO.back()->template get_MPO2_edge_right<Scalar>();
+        mpos2      = tools::finite::mpo::get_mpos_with_edges(mpos2, ledge, redge);
     }
+    if(compress == MpoCompress::AUTO) compress = settings::precision::use_compressed_mpo_squared;
+    return tools::finite::mpo::get_compressed_mpos(mpos2, compress);
 }
 
-template<typename Scalar>
-std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_compressed_mpos_squared(MposWithEdges withEdges) {
-    auto mpoComp = settings::precision::use_compressed_mpo_squared;
-    tools::log->trace("Compressing MPO²: {} sites | with edges {} | compression type {}", MPO.size(), enum2sv(withEdges), enum2sv(mpoComp));
-    if(not has_mpo_squared()) build_mpo_squared(); // Make sure they exist.
-    // Collect all the mpo² (doesn't matter if they are already compressed)
-    std::vector<Eigen::Tensor<Scalar, 4>> mpos_sq;
-    mpos_sq.reserve(MPO.size());
-    for(const auto &mpo : MPO) mpos_sq.emplace_back(mpo->MPO2());
-    switch(withEdges) {
-        case MposWithEdges::OFF: return tools::finite::mpo::get_compressed_mpos(mpos_sq, mpoComp); break;
-        case MposWithEdges::ON: {
-            auto ledge = MPO.front()->template get_MPO2_edge_left<Scalar>();
-            auto redge = MPO.back()->template get_MPO2_edge_right<Scalar>();
-            return tools::finite::mpo::get_compressed_mpos(mpos_sq, ledge, redge, mpoComp);
-            break;
-        }
-        default: throw except::runtime_error("Unrecognized enum value <CompressWithEdges>: {}", static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
-    }
-}
-
-template<typename Scalar>
-std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpos_energy_shifted_view(Scalar energy_per_site) const {
-    std::vector<Eigen::Tensor<Scalar, 4>> mpos;
-    mpos.reserve(MPO.size());
-    for(const auto &mpo : MPO) mpos.emplace_back(mpo->MPO_energy_shifted_view(energy_per_site));
-    return tools::finite::mpo::get_compressed_mpos<Scalar>(mpos, settings::precision::use_compressed_mpo);
-}
-// std::vector<Eigen::Tensor<cx64, 4>>                ModelFinite<Scalar>::get_mpos_squared_shifted_view(double energy_per_site, MposWithEdges withEdges =
-// MposWithEdges::OFF) const{
-//
-// }
 
 template<typename Scalar>
 void ModelFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
@@ -446,7 +407,6 @@ std::pair<int, std::string_view> ModelFinite<Scalar>::get_parity_shift_mpo_squar
     }
     return parity_shift;
 }
-
 
 // template<typename Scalar>
 // void ModelFinite<Scalar>::set_parity_projector(int sign, std::string_view axis) {

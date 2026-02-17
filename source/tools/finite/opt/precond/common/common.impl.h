@@ -3,9 +3,9 @@
 
 namespace settings {
 #if defined(DEBUG)
-    static constexpr bool debug_common = true;
+    inline constexpr bool debug_common = true;
 #else
-    static constexpr bool debug_common = true;
+    inline constexpr bool debug_common = true;
 #endif
 }
 

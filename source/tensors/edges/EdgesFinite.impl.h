@@ -301,12 +301,12 @@ env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_var_blk(
 }
 
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_ene_blk(size_t posL, size_t posR) {
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_env_ene_blk(size_t posL, size_t posR) {
     return {get_env_ene(posL).L.get_block(), get_env_ene(posR).R.get_block()};
 }
 
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_var_blk(size_t posL, size_t posR) {
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_env_var_blk(size_t posL, size_t posR) {
     return {get_env_var(posL).L.get_block(), get_env_var(posR).R.get_block()};
 }
 
@@ -351,13 +351,13 @@ env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_en
 }
 
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_env_ene_blk(std::optional<std::vector<size_t>> sites) {
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_multisite_env_ene_blk(std::optional<std::vector<size_t>> sites) {
     auto envs = get_multisite_env_ene(std::move(sites));
     return {envs.L.get_block(), envs.R.get_block()};
 }
 
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_env_var_blk(std::optional<std::vector<size_t>> sites) {
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_multisite_env_var_blk(std::optional<std::vector<size_t>> sites) {
     auto envs = get_multisite_env_var(std::move(sites));
     return {envs.L.get_block(), envs.R.get_block()};
 }

@@ -8,6 +8,20 @@
 // #include <tblis/util/configs.h>
 // #endif
 
+namespace settings {
+#if defined(DMRG_ENABLE_TBLIS)
+    inline constexpr bool tblis_enabled = true;
+#else
+    inline constexpr bool tblis_enabled = false;
+#endif
+
+#if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
+    inline constexpr bool tblis_use_openmp = true;
+#else
+    inline constexpr bool tblis_use_openmp = false;
+#endif
+}
+
 /* clang-format off */
 using namespace tools::common::contraction;
 
@@ -25,21 +39,19 @@ void tools::common::contraction::contract_mps_mps(      Scalar * res_ptr       ,
     [[maybe_unused]] auto check_dims = std::array<long,3>{mpsL.dimension(0) * mpsR.dimension(0), mpsL.dimension(1), mpsR.dimension(2)};
     assert(res_dims == check_dims);
     assert(mpsL.dimension(2) == mpsR.dimension(1));
+
+    using RealScalar = Eigen::NumTraits<Scalar>::Real;
+    constexpr bool use_tblis = settings::tblis_enabled and (std::is_same_v<RealScalar, fp32> or std::is_same_v<RealScalar, fp64>);
+
     auto &threads = tenx::threads::get();
-    if constexpr(std::is_same_v<Scalar, fp32> or std::is_same_v<Scalar, fp64>){
+    
+    if constexpr(use_tblis){
         auto tmp = Eigen::Tensor<Scalar,4>(mpsL_dims[0], mpsL_dims[1], mpsR_dims[0], mpsR_dims[2]);
-        #if defined(DMRG_ENABLE_TBLIS)
-        // auto arch =  get_tblis_arch();
-        // const tblis::tblis_config *tblis_cfg = nullptr;// tblis::tblis_get_config(arch.data());
-        // contract_tblis(mpsL, mpsR, tmp, "abe", "ced", "abcd", tblis_config);
         contract_tblis(mpsL.data(), mpsL.dimensions(),  //
                        mpsR.data(), mpsR.dimensions(),  //
                        tmp.data(), tmp.dimensions(),    //
                        "abe", "ced", "abcd", nullptr);
         res.device(*threads->dev)  = tmp.shuffle(shuffle_idx).reshape(res_dims);
-        #else
-        res.device(*threads->dev) = mpsL.contract(mpsR, contract_idx).shuffle(shuffle_idx).reshape(res_dims);
-        #endif
     }else{
         res.device(*threads->dev) = mpsL.contract(mpsR, contract_idx).shuffle(shuffle_idx).reshape(res_dims);
     }

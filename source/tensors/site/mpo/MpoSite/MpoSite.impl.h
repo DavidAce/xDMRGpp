@@ -44,7 +44,8 @@ void MpoSite<Scalar>::build_mpo_q() {
 
 template<typename Scalar>
 void MpoSite<Scalar>::build_mpo_squared() {
-    mpo_squared = get_non_compressed_mpo_squared();
+    if constexpr(settings::debug) tools::log->trace("mpo({}): building mpo²", get_position());
+    mpo_squared = get_mpo_squared(get_mpo(energy_shift_mpo));
     // mpo_squared    = get_parity_projected_mpo(mpo_squared.value());
     mpo_squared    = get_parity_shifted_mpo_squared(mpo_squared.value());
     mpo_squared    = apply_edge_left(mpo_squared.value(), get_MPO2_edge_left<Scalar>());
@@ -55,17 +56,15 @@ void MpoSite<Scalar>::build_mpo_squared() {
 }
 
 template<typename Scalar>
-Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::get_non_compressed_mpo_squared() const {
-    if constexpr(settings::debug) tools::log->trace("mpo({}): building mpo²", get_position());
-    Eigen::Tensor<Scalar, 4> mpo = get_mpo(energy_shift_mpo);
-    Eigen::Tensor<Scalar, 4> mpo2;
-    {
-        auto d0 = mpo.dimension(0) * mpo.dimension(0);
-        auto d1 = mpo.dimension(1) * mpo.dimension(1);
-        auto d2 = mpo.dimension(2);
-        auto d3 = mpo.dimension(3);
-        mpo2    = mpo.contract(mpo.conjugate(), tenx::idx({3}, {2})).shuffle(tenx::array6{0, 3, 1, 4, 2, 5}).reshape(tenx::array4{d0, d1, d2, d3});
-    }
+Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::get_mpo_squared(const Eigen::Tensor<Scalar, 4> &mpo) const {
+    auto                     d0      = mpo.dimension(0) * mpo.dimension(0);
+    auto                     d1      = mpo.dimension(1) * mpo.dimension(1);
+    auto                     d2      = mpo.dimension(2);
+    auto                     d3      = mpo.dimension(2);
+    auto                    &threads = tenx::threads::get();
+    Eigen::Tensor<Scalar, 4> mpo2(std::array{d0, d1, d2, d3});
+    mpo2.device(*threads->dev) =
+        mpo.contract(mpo.conjugate(), tenx::idx({3}, {3})).shuffle(tenx::array6{0, 3, 1, 4, 2, 5}).reshape(tenx::array4{d0, d1, d2, d3});
     return mpo2;
 }
 
@@ -165,13 +164,18 @@ Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 4> MpoSite<Scalar>::MPO_ener
 }
 
 template<typename Scalar>
+Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::MPO2_energy_shifted_view(Scalar energy_shift_per_site) const {
+    if(has_mpo_squared() and all_mpo_parameters_have_been_set and energy_shift_per_site == energy_shift_mpo) return mpo_squared.value();
+    return get_mpo_squared(MPO_energy_shifted_view(energy_shift_per_site));
+}
+
+template<typename Scalar>
 Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::MPO_nbody_view(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const {
     auto mpo_build = get_mpo(energy_shift_mpo, nbody, skip);
     mpo_build      = get_parity_shifted_mpo(mpo_build);
     mpo_build      = apply_edge_left(mpo_build, get_MPO_edge_left(mpo_build));
     mpo_build      = apply_edge_right(mpo_build, get_MPO_edge_right(mpo_build));
     return mpo_build;
-    // return get_mpo(energy_shift_mpo, nbody, skip);
 }
 
 template<typename Scalar>
@@ -196,12 +200,7 @@ const Eigen::Tensor<Scalar, 4> &MpoSite<Scalar>::MPO2() const {
 template<typename Scalar>
 Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::MPO2_nbody_view(std::optional<std::vector<size_t>> nbody, std::optional<std::vector<size_t>> skip) const {
     if(not nbody) return MPO2();
-    auto mpo1 = MPO_nbody_view(nbody, std::move(skip));
-    auto dim0 = mpo1.dimension(0) * mpo1.dimension(0);
-    auto dim1 = mpo1.dimension(1) * mpo1.dimension(1);
-    auto dim2 = mpo1.dimension(2);
-    auto dim3 = mpo1.dimension(3);
-    return mpo1.contract(mpo1, tenx::idx({3}, {2})).shuffle(tenx::array6{0, 3, 1, 4, 2, 5}).reshape(tenx::array4{dim0, dim1, dim2, dim3});
+    return get_mpo_squared(MPO_nbody_view(nbody, std::move(skip)));
 }
 
 template<typename Scalar>
@@ -370,8 +369,16 @@ template<typename Scalar>
     return global_energy_upper_bound;
 }
 template<typename Scalar>
+void MpoSite<Scalar>::set_global_energy_upper_bound(RealScalar energy) {
+    global_energy_upper_bound = energy;
+}
+template<typename Scalar>
 [[nodiscard]] double MpoSite<Scalar>::get_local_energy_upper_bound() const {
     return local_energy_upper_bound;
+}
+template<typename Scalar>
+void MpoSite<Scalar>::set_local_energy_upper_bound(RealScalar energy) {
+    local_energy_upper_bound = energy;
 }
 
 template<typename Scalar>

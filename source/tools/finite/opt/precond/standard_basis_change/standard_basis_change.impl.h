@@ -14,9 +14,9 @@
 
 namespace settings {
 #if defined(DEBUG)
-    static constexpr bool debug_standard_basis_change = false;
+    inline constexpr bool debug_standard_basis_change = false;
 #else
-    static constexpr bool debug_standard_basis_change = false;
+    inline constexpr bool debug_standard_basis_change = false;
 #endif
 }
 
@@ -210,10 +210,10 @@ tools::finite::opt::precond::standard::BasisChange<Scalar>::BasisChange(const op
     bc_envvL = env2.L;
     bc_envvR = env2.R;
 
-    bc_enveL.get_block() = transform_env(env1.L.get_block(), TL, kappaL);
-    bc_enveR.get_block() = transform_env(env1.R.get_block(), TR, kappaR);
-    bc_envvL.get_block() = transform_env(env2.L.get_block(), TL, kappaL * kappaL);
-    bc_envvR.get_block() = transform_env(env2.R.get_block(), TR, kappaR * kappaR);
+    bc_enveL.set_block_raw(transform_env(env1.L.get_block(), TL, kappaL));
+    bc_enveR.set_block_raw(transform_env(env1.R.get_block(), TR, kappaR));
+    bc_envvL.set_block_raw(transform_env(env2.L.get_block(), TL, kappaL * kappaL));
+    bc_envvR.set_block_raw(transform_env(env2.R.get_block(), TR, kappaR * kappaR));
     // auto enveL_norm      = tenx::VectorMap(bc_enveL.get_block()).norm();
     // auto enveR_norm      = tenx::VectorMap(bc_enveR.get_block()).norm();
     // auto envvL_norm      = tenx::VectorMap(bc_envvL.get_block()).norm();

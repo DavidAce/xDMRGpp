@@ -40,7 +40,7 @@ namespace tenx {
     using array = std::array<Eigen::Index, rank>;
 
     template<typename Scalar>
-    using RealScalar = decltype(std::real(std::declval<Scalar>()));
+    using RealScalar = Eigen::NumTraits<Scalar>::Real;
     template<typename Derived>
     using epsilon_t = RealScalar<typename Derived::Scalar>;
     template<typename Derived>
@@ -566,7 +566,7 @@ namespace tenx {
     template<typename Derived, typename... Args>
     bool isReal(const Eigen::EigenBase<Derived> &obj, Args &&...args) {
         using Scalar     = typename Derived::Scalar;
-        using RealScalar = decltype(std::real(std::declval<Scalar>()));
+        using RealScalar = Eigen::NumTraits<Scalar>::Real;
         if constexpr(sfinae::is_std_complex_v<Scalar> and std::is_arithmetic_v<RealScalar>) {
             return obj.derived().imag().isZero(std::forward<Args>(args)...);
         } else {
@@ -578,7 +578,7 @@ namespace tenx {
     bool isReal(const Eigen::TensorBase<T, Eigen::ReadOnlyAccessors> &expr, Args &&...args) {
         auto tensor      = tenx::asEval(expr);
         using Scalar     = typename decltype(tensor)::Scalar;
-        using RealScalar = decltype(std::real(std::declval<Scalar>()));
+        using RealScalar = Eigen::NumTraits<Scalar>::Real;
         if constexpr(sfinae::is_std_complex_v<Scalar> and std::is_arithmetic_v<RealScalar>) {
             auto vector = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(tensor.data(), tensor.size());
             return vector.imag().isZero(std::forward<Args>(args)...);
@@ -687,7 +687,8 @@ namespace tenx {
     template<typename Scalar, typename T>
     requires tenx::sfinae::is_eigen_tensor_v<std::remove_cvref_t<T>>
     decltype(auto) asScalarType(T &&tensor) {
-        static_assert(sfinae::is_any_v<Scalar, fp32, fp64, fp128, cx32, cx64, cx128>);
+        using RealScalar = Eigen::NumTraits<Scalar>::Real;
+        static_assert(std::is_floating_point_v<RealScalar> or std::is_same_v<RealScalar, fp128>);
         using EigenType = std::remove_cvref_t<decltype(tensor)>;
         using OldScalar = typename EigenType::Scalar;
         if constexpr(std::is_same_v<OldScalar, Scalar>) {

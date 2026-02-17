@@ -21,7 +21,7 @@ template<typename T>
 using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
 namespace settings {
-    static constexpr bool debug_jdop = false;
+    inline constexpr bool debug_jdop = false;
 }
 
 namespace Eigen::internal {

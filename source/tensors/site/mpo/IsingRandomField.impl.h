@@ -47,15 +47,15 @@ void IsingRandomField<Scalar>::print_parameter_values() const {
 }
 
 template<typename Scalar>
-void IsingRandomField<Scalar>::set_parameters(TableMap &parameters) {
-    h5tb.param.J1           = std::any_cast<double>(parameters["J1"]);
-    h5tb.param.J2           = std::any_cast<double>(parameters["J2"]);
-    h5tb.param.h_tran       = std::any_cast<double>(parameters["h_tran"]);
-    h5tb.param.h_mean       = std::any_cast<double>(parameters["h_mean"]);
-    h5tb.param.h_wdth       = std::any_cast<double>(parameters["h_wdth"]);
-    h5tb.param.h_rand       = std::any_cast<double>(parameters["h_rand"]);
-    h5tb.param.spin_dim     = std::any_cast<long>(parameters["spin_dim"]);
-    h5tb.param.distribution = std::any_cast<h5pp::vstr_t>(parameters["distribution"]);
+void IsingRandomField<Scalar>::set_parameters(const TableMap &parameters) {
+    h5tb.param.J1           = std::any_cast<double>(parameters.at("J1"));
+    h5tb.param.J2           = std::any_cast<double>(parameters.at("J2"));
+    h5tb.param.h_tran       = std::any_cast<double>(parameters.at("h_tran"));
+    h5tb.param.h_mean       = std::any_cast<double>(parameters.at("h_mean"));
+    h5tb.param.h_wdth       = std::any_cast<double>(parameters.at("h_wdth"));
+    h5tb.param.h_rand       = std::any_cast<double>(parameters.at("h_rand"));
+    h5tb.param.spin_dim     = std::any_cast<long>(parameters.at("spin_dim"));
+    h5tb.param.distribution = std::any_cast<h5pp::vstr_t>(parameters.at("distribution"));
 
     if(h5tb.param.J2 != 0.0) throw except::runtime_error("mpo({}): use of [J2] - Next-nearest neighbor coupling - is not implemented yet", get_position());
     all_mpo_parameters_have_been_set = true;

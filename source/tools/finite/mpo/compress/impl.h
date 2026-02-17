@@ -12,7 +12,7 @@
 #include <complex>
 
 namespace settings {
-    static constexpr bool debug_compression = false;
+    inline constexpr bool debug_compression = false;
 }
 
 template<typename Scalar>
@@ -81,6 +81,24 @@ std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_svdcompressed_mpos
     return mpos;
 }
 
+template<typename Vec, typename Real>
+requires(std::floating_point<Real>)
+std::pair<bool, typename Vec::Scalar> is_parallel_least_squares(const Vec &a, const Vec &b, Real tol_rel, Real tol_abs) {
+    using Scalar     = typename Vec::Scalar;
+    const Real anorm = a.norm();
+    const Real bnorm = b.norm();
+    if(anorm == Real{0} or bnorm == Real{0}) return {false, Scalar{0}};
+
+    const Scalar denom = a.dot(a); // a†a (real if a is complex, but keep Scalar)
+    if(std::abs(denom) == Real{0}) return {false, Scalar{0}};
+
+    const Scalar factor = a.dot(b) / denom; // (a†b)/(a†a)
+    const Real   rnorm  = (b - factor * a).norm();
+
+    const bool ok = rnorm <= (tol_abs + tol_rel * bnorm);
+    return {ok, factor};
+}
+
 template<typename Scalar>
 std::pair<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> deparallelize_mpo_l2r(const Eigen::Tensor<Scalar, 4> &mpo) {
     // Collect index 0,2,3 (left, top, bottom) for rows and leave index 1 for columns.
@@ -111,61 +129,36 @@ std::pair<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> deparallelize_mpo_
 
      */
 
-    auto dim0                 = mpo.dimension(2);
-    auto dim1                 = mpo.dimension(3);
-    auto dim2                 = mpo.dimension(0);
-    auto dim3                 = mpo.dimension(1);
-    auto dim_ddm              = dim0 * dim1 * dim2;
-    auto mpo_rank2            = Eigen::Tensor<Scalar, 2>(mpo.shuffle(tenx::array4{2, 3, 0, 1}).reshape(tenx::array2{dim_ddm, dim3}));
-    auto mpo_map              = tenx::MatrixMap(mpo_rank2);
-    using RealScalar          = decltype(std::real(std::declval<Scalar>()));
-    using MatrixType          = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-    static constexpr auto nan = std::numeric_limits<RealScalar>::quiet_NaN();
-    auto                  tol = static_cast<RealScalar>(std::clamp(static_cast<double>(std::numeric_limits<RealScalar>::epsilon()), 1e-7, 1e-15));
-    // auto rows     = mpo_map.rows();
+    auto dim0                     = mpo.dimension(2);
+    auto dim1                     = mpo.dimension(3);
+    auto dim2                     = mpo.dimension(0);
+    auto dim3                     = mpo.dimension(1);
+    auto dim_ddm                  = dim0 * dim1 * dim2;
+    auto mpo_rank2                = Eigen::Tensor<Scalar, 2>(mpo.shuffle(tenx::array4{2, 3, 0, 1}).reshape(tenx::array2{dim_ddm, dim3}));
+    auto mpo_map                  = tenx::MatrixMap(mpo_rank2);
+    using RealScalar              = decltype(std::real(std::declval<Scalar>()));
+    using MatrixType              = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    static constexpr auto nan     = std::numeric_limits<RealScalar>::quiet_NaN();
+    static constexpr auto eps     = std::numeric_limits<RealScalar>::epsilon();
+    static constexpr auto tol_rel = eps * 10;
+    static constexpr auto tol_abs = RealScalar{0};
+
     auto cols     = mpo_map.cols();
     auto col_keep = std::vector<long>{};
     auto mat_xfer = MatrixType(cols, cols);
     mat_xfer.setZero();
     for(long jdx = 0; jdx < mpo_map.cols(); ++jdx) { // checked col index
-        if(col_keep.size() == 0 and mpo_map.col(jdx).norm() != RealScalar{0}) {
-            // Keep if none are already kept
-            mat_xfer(0l, jdx) = Scalar{1};
-            col_keep.emplace_back(jdx);
+        if(mpo_map.col(jdx).norm() == RealScalar{0}) {
+            // Leave mat_xfer(:, jdx) all zeros, do not keep jdx
             continue;
         }
         auto kmax     = static_cast<long>(col_keep.size()); // col_keep.size() increases inside the for loop
         bool keep_jdx = true;
         for(long kdx = 0; kdx < kmax; ++kdx) { // Kept col index
             // Check if the previous col(idx) is parallel to the current col(jdx)
-            auto col_jdx = mpo_map.col(jdx);                                // A new column in mpo_map
-            auto col_kdx = mpo_map.col(col_keep[static_cast<size_t>(kdx)]); // A kept column from cols_keep
-
-            // Find the row index with the first nonzero element in both col_kdx and col_jdx
-            auto prefactor = Scalar{}; // Factor between the two columns
-            if constexpr(sfinae::is_std_complex_v<Scalar>)
-                prefactor = Scalar(nan, nan);
-            else
-                prefactor = nan;
-
-            for(long rdx = 0; rdx < std::min(col_kdx.size(), col_jdx.size()); ++rdx) { // row index
-                if(std::abs(col_kdx[rdx]) != RealScalar{0} and std::abs(col_jdx[rdx]) != RealScalar{0}) {
-                    prefactor = col_jdx[rdx] / col_kdx[rdx];
-                    break;
-                }
-            }
-            if(std::isnan(std::real(prefactor)) or std::isnan(std::imag(prefactor)))
-                continue; // The factor could not be set. This can happen if the columns are orthogonal.
-            bool is_parallel = true;
-            // Check that all nonzero elements agree on this prefactor
-            for(long rdx = 0; rdx < std::min(col_kdx.size(), col_jdx.size()); ++rdx) { // row index
-                auto diff = col_kdx[rdx] * prefactor - col_jdx[rdx];
-                if(std::abs(diff) > tol) {
-                    is_parallel = false;
-                    break;
-                }
-            }
-
+            auto col_jdx                  = mpo_map.col(jdx);                                // A new column in mpo_map
+            auto col_kdx                  = mpo_map.col(col_keep[static_cast<size_t>(kdx)]); // A kept column from cols_keep
+            auto [is_parallel, prefactor] = is_parallel_least_squares(col_kdx, col_jdx, tol_rel, tol_abs);
             if(is_parallel) { // can be discarded
                 mat_xfer(kdx, jdx) = prefactor;
                 keep_jdx           = false;
@@ -230,29 +223,26 @@ std::pair<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> deparallelize_mpo_
      * Finally shuffle back with  {0, 3, 1, 2}
      */
 
-    auto dim0                  = mpo.dimension(0);
-    auto dim1                  = mpo.dimension(2);
-    auto dim2                  = mpo.dimension(3);
-    auto dim3                  = mpo.dimension(1);
-    auto dim_ddm               = dim1 * dim2 * dim3;
-    auto mpo_rank2             = Eigen::Tensor<Scalar, 2>(mpo.shuffle(tenx::array4{0, 2, 3, 1}).reshape(tenx::array2{dim0, dim_ddm}));
-    auto mpo_map               = tenx::MatrixMap(mpo_rank2);
-    using RealScalar           = decltype(std::real(std::declval<Scalar>()));
-    using MatrixType           = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-    static constexpr auto nan  = std::numeric_limits<RealScalar>::quiet_NaN();
-    auto                  tol  = static_cast<RealScalar>(std::clamp(static_cast<double>(std::numeric_limits<RealScalar>::epsilon()), 1e-7, 1e-15));
-    auto                  rows = mpo_map.rows();
-    // auto cols     = mpo_map.cols();
+    auto dim0                     = mpo.dimension(0);
+    auto dim1                     = mpo.dimension(2);
+    auto dim2                     = mpo.dimension(3);
+    auto dim3                     = mpo.dimension(1);
+    auto dim_ddm                  = dim1 * dim2 * dim3;
+    auto mpo_rank2                = Eigen::Tensor<Scalar, 2>(mpo.shuffle(tenx::array4{0, 2, 3, 1}).reshape(tenx::array2{dim0, dim_ddm}));
+    auto mpo_map                  = tenx::MatrixMap(mpo_rank2);
+    using RealScalar              = decltype(std::real(std::declval<Scalar>()));
+    using MatrixType              = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    static constexpr auto nan     = std::numeric_limits<RealScalar>::quiet_NaN();
+    static constexpr auto eps     = std::numeric_limits<RealScalar>::epsilon();
+    static constexpr auto tol_rel = eps * 10;
+    static constexpr auto tol_abs = RealScalar{0};
+    auto                  rows    = mpo_map.rows();
+
     auto row_keep = std::vector<long>{};
     auto mat_xfer = MatrixType(rows, rows);
     mat_xfer.setZero();
     for(long idx = 0; idx < mpo_map.rows(); ++idx) { // checked row index
-        if(row_keep.size() == 0 and mpo_map.row(idx).norm() != RealScalar{0}) {
-            // Keep if none are already kept
-            mat_xfer(idx, 0l) = Scalar{1};
-            row_keep.emplace_back(idx);
-            continue;
-        }
+        if(mpo_map.row(idx).norm() == RealScalar{0}) { continue; }
         auto kmax     = safe_cast<long>(row_keep.size()); // row_keep.size() increases inside the for loop
         bool keep_idx = true;
         for(long kdx = 0; kdx < kmax; ++kdx) { // Kept row index
@@ -260,31 +250,7 @@ std::pair<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> deparallelize_mpo_
             auto row_idx = mpo_map.row(idx);                                // A new row in mpo_map
             auto row_kdx = mpo_map.row(row_keep[static_cast<size_t>(kdx)]); // A kept row from cols_keep
 
-            // Find the col index with the first nonzero element in both row_kdx and row_jdx
-            auto prefactor = Scalar{0}; // Factor between the two columns
-            if constexpr(sfinae::is_std_complex_v<Scalar>)
-                prefactor = Scalar(nan, nan);
-            else
-                prefactor = nan;
-
-            for(long cdx = 0; cdx < std::min(row_kdx.size(), row_idx.size()); ++cdx) { // col index
-                if(std::abs(row_kdx[cdx]) != RealScalar{0} and std::abs(row_idx[cdx]) != RealScalar{0}) {
-                    prefactor = row_idx[cdx] / row_kdx[cdx];
-                    break;
-                }
-            }
-            if(std::isnan(std::real(prefactor)) or std::isnan(std::imag(prefactor)))
-                continue; // The factor could not be set. This can happen if the rows are orthogonal.
-            bool is_parallel = true;
-            // Check that all nonzero elements agree on this prefactor
-            for(long cdx = 0; cdx < std::min(row_kdx.size(), row_idx.size()); ++cdx) { // row index
-                auto diff = row_kdx[cdx] * prefactor - row_idx[cdx];
-                if(std::abs(diff) > tol) {
-                    is_parallel = false;
-                    break;
-                }
-            }
-
+            auto [is_parallel, prefactor] = is_parallel_least_squares(row_kdx, row_idx, tol_rel, tol_abs);
             if(is_parallel) { // can be discarded
                 mat_xfer(idx, kdx) = prefactor;
                 keep_idx           = false;

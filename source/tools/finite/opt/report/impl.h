@@ -44,13 +44,13 @@ template<typename Scalar>
 void tools::finite::opt::reports::eigs_log<Scalar>::print_eigs_report(std::optional<size_t> max_entries) {
     if(entries.empty()) return;
     auto level = spdlog::level::trace;
-    for(const auto & entry : entries ) level = std::max(level, entry.level);
+    for(const auto &entry : entries) level = std::max(level, entry.level);
     if(level < tools::log->level()) {
         entries.clear();
         return;
     }
     /* clang-format off */
-    tools::log->log(level, "{:<37} {:<7} {:<4} {:<5} {:<4} {:<4} {:<4} {:<4} {:<8} {:<22} {:<22} {:<10} {:<22} {:<18} {:<18} {:<8} {:<8} {:<9} {:<5} {:<7} {:<7} {:<10} {:<10} {:<10} {:<10} {:<10}",
+    tools::log->log(level, "{:<37} {:<7} {:<4} {:<5} {:<4} {:<4} {:<4} {:<4} {:<8} {:<23} {:<23} {:<11} {:<22} {:<8} {:<8} {:<8} {:<8} {:<9} {:<5} {:<7} {:<7} {:<10} {:<10} {:<10} {:<10} {:<10}",
                       "Optimization report",
                       "size",
                       "ritz",
@@ -64,8 +64,8 @@ void tools::finite::opt::reports::eigs_log<Scalar>::print_eigs_report(std::optio
                       "⟨H²⟩",
                       "⟨H²⟩-⟨H⟩²", // Special characters are counted properly in fmt 1.7.0
                       "λ",
-                      "overlap",
-                      "norm",
+                      "1-⟨φ|ψ⟩",
+                      "1-⟨ψ|ψ⟩",
                       "rnorm",
                       "|Hv-Ev|",
                       "|H²v-E²v|",
@@ -82,14 +82,14 @@ void tools::finite::opt::reports::eigs_log<Scalar>::print_eigs_report(std::optio
         if(max_entries and max_entries.value() <= idx) break;
         double mv_freq = entry.mv == 0 or entry.time_mv == 0 ? 0 : static_cast<double>(entry.mv)/entry.time_mv;
         double pc_freq = entry.pc == 0 or entry.time_pc == 0 ? 0 : static_cast<double>(entry.pc)/entry.time_pc;
-        tools::log->log(level, "- {:<35} {:<7} {:<4} {:<5} {:<4} {:<4} {:<4} {:<4} {:<8.2e} {:<+22.15f} {:<+22.15f} {:<10.4e} {:<+22.15f} {:<18.15f} {:<18.15f} {:<8.2e} {:<8.2e} {:<9.2e} {:<5} {:<7} {:<7} {:<10.2e} {:<10.2e} {:<10.2e} {:<10.2e} {:<10.2e}",
+        tools::log->log(level, "- {:<35} {:<7} {:<4} {:<5} {:<4} {:<4} {:<4} {:<4} {:<8.2e} {:<+22.16e} {:<+22.16e} {:<10.4e} {:<+22.15f} {:<5.2e} {:<5.2e} {:<8.2e} {:<8.2e} {:<9.2e} {:<5} {:<7} {:<7} {:<10.2e} {:<10.2e} {:<10.2e} {:<10.2e} {:<10.2e}",
                           entry.description,
                           entry.size, entry.ritz,entry.type, entry.idx, entry.nev, entry.ncv, entry.jcb, fp(entry.tol),
                           fp(entry.energy),
                           fp(entry.hsquared),
                           fp(entry.variance),
                           fp(entry.eigval),
-                          fp(entry.overlap),fp(entry.norm), fp(entry.rnorm), fp(entry.rnorm_H1), fp(entry.rnorm_H2),
+                          fp(Real{1}-entry.overlap),fp(Real{1}-entry.norm), fp(entry.rnorm), fp(entry.rnorm_H1), fp(entry.rnorm_H2),
                           entry.iter, entry.mv, entry.pc,
                           entry.time,
                           entry.time_mv,

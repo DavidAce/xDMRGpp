@@ -1,11 +1,18 @@
 add_source_target(xdmrg++-tools-finite-env
         TARGET_SOURCES
-        cx32.cpp
-        cx64.cpp
-        cx128.cpp
-        fp32.cpp
-        fp64.cpp
-        fp128.cpp
+        env/cx32.cpp
+        env/cx64.cpp
+        env/cx128.cpp
+        env/fp32.cpp
+        env/fp64.cpp
+        env/fp128.cpp
+
+        env_x2/cx32.cpp
+        env_x2/cx64.cpp
+        env_x2/cx128.cpp
+        env_x2/fp32.cpp
+        env_x2/fp64.cpp
+        env_x2/fp128.cpp
 
         bond_expansion_postopt_1site/cx32.cpp
         bond_expansion_postopt_1site/cx64.cpp

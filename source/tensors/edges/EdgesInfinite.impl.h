@@ -134,10 +134,10 @@ env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_var_bl
     return {varL->get_block(), varR->get_block()};
 }
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_ene_blk() {
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesInfinite<Scalar>::get_env_ene_blk() {
     return {eneL->get_block(), eneR->get_block()};
 }
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_var_blk() {
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesInfinite<Scalar>::get_env_var_blk() {
     return {varL->get_block(), varR->get_block()};
 }

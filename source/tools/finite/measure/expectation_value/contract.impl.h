@@ -30,25 +30,103 @@ TN<Scalar, 0> contract_Ledge3_Redge3_012_012(const TN<Scalar, 3> &Ledge3, const 
     res.device(*threads->dev) = Ledge3.contract(Redge3, tenx::idx({0, 1, 2}, {0, 1, 2}));
     return res;
 }
+//
+// template<typename Scalar>
+// void contract_mps1_mpo_mps2_0_2_4_0(TN<Scalar, 4> &result, const TN<Scalar, 3> &bra, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &ket,
+//                                     const ThreadPtr &threads) {
+//     auto           dim4 = tenx::array4{bra.dimension(1) * mpo.dimension(0) * ket.dimension(1), bra.dimension(2), mpo.dimension(1), ket.dimension(2)};
+//     constexpr auto shf6 = tenx::array6{0, 2, 4, 1, 3, 5};
+//     result.resize(dim4);
+//     result.device(*threads->dev) = bra.conjugate().contract(mpo, tenx::idx({0}, {3})).contract(ket, tenx::idx({4}, {0})).shuffle(shf6).reshape(dim4);
+// }
 
 template<typename Scalar>
-void contract_mps1_mpo_mps2_0_2_4_0(TN<Scalar, 4> &result, const TN<Scalar, 3> &mps1, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &mps2,
+void contract_mps1_mpo_mps2_0_2_4_0(TN<Scalar, 4> &result, const TN<Scalar, 3> &bra, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &ket,
                                     const ThreadPtr &threads) {
-    auto           dim4 = tenx::array4{mpo.dimension(0) * mps1.dimension(1) * mps2.dimension(1), mps1.dimension(2), mpo.dimension(1), mps2.dimension(2)};
+    const long bd = bra.dimension(0);
+    const long bL = bra.dimension(1);
+    const long bR = bra.dimension(2);
+
+    const long kd = ket.dimension(0);
+    const long kL = ket.dimension(1);
+    const long kR = ket.dimension(2);
+
+    const long wL  = mpo.dimension(0);
+    const long wR  = mpo.dimension(1);
+    const long wdi = mpo.dimension(2);
+    const long wdo = mpo.dimension(3);
+
+    assert(bd == wdo);
+    assert(kd == wdi);
+
+    // Shuffled order after building the full 6-index tensor:
     constexpr auto shf6 = tenx::array6{0, 2, 4, 1, 3, 5};
-    result.resize(dim4);
-    result.device(*threads->dev) = mps1.contract(mpo, tenx::idx({0}, {2})).contract(mps2, tenx::idx({4}, {0})).shuffle(shf6).reshape(dim4);
+
+    TN<Scalar, 5> t1(tenx::array5{bL, bR, wL, wR, wdi});
+    t1.device(*threads->dev) = bra.conjugate().contract(mpo, tenx::idx({0}, {3})); // bra phys with dout
+
+    TN<Scalar, 6> t2(tenx::array6{bL, bR, wL, wR, kL, kR});
+    t2.device(*threads->dev) = t1.contract(ket, tenx::idx({4}, {0})); // wdi with ket phys
+
+    TN<Scalar, 6> t3(tenx::array6{bL, wL, kL, bR, wR, kR});
+    t3.device(*threads->dev) = t2.shuffle(shf6);
+
+    // Final result dims: (bL*wL*kL, bR, wR, kR)
+    const auto out4 = tenx::array4{bL * wL * kL, bR, wR, kR};
+    result.resize(out4);
+    result.device(*threads->dev) = t3.reshape(out4);
 }
 
+// template<typename Scalar>
+// void contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(TN<Scalar, 4> &tmp, const TN<Scalar, 4> &result, const TN<Scalar, 3> &bra, const TN<Scalar, 4> &mpo,
+//                                                     const TN<Scalar, 3> &ket, const ThreadPtr &threads) {
+//     auto dim4 = tenx::array4{result.dimension(0), bra.dimension(2), mpo.dimension(1), ket.dimension(2)};
+//     tmp.resize(dim4);
+//     tmp.device(*threads->dev) = result
+//                                     .contract(bra.conjugate(), tenx::idx({1}, {1})) //
+//                                     .contract(mpo, tenx::idx({1, 3}, {0, 3}))       //
+//                                     .contract(ket, tenx::idx({1, 4}, {1, 0}));      //
+// }
+
 template<typename Scalar>
-void contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(TN<Scalar, 4> &tmp, const TN<Scalar, 4> &result, const TN<Scalar, 3> &mps1, const TN<Scalar, 4> &mpo,
-                                                    const TN<Scalar, 3> &mps2, const ThreadPtr &threads) {
-    auto dim4 = tenx::array4{result.dimension(0), mps1.dimension(2), mpo.dimension(1), mps2.dimension(2)};
-    tmp.resize(dim4);
-    tmp.device(*threads->dev) = result
-                                    .contract(mps1.conjugate(), tenx::idx({1}, {1})) //
-                                    .contract(mpo, tenx::idx({1, 3}, {0, 2}))        //
-                                    .contract(mps2, tenx::idx({1, 4}, {1, 0}));      //
+void contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(TN<Scalar, 4> &tmp, const TN<Scalar, 4> &result, const TN<Scalar, 3> &bra, const TN<Scalar, 4> &mpo,
+                                                    const TN<Scalar, 3> &ket, const ThreadPtr &threads) {
+    const long bd = bra.dimension(0);
+    const long bL = bra.dimension(1);
+    const long bR = bra.dimension(2);
+
+    const long kd = ket.dimension(0);
+    const long kL = ket.dimension(1);
+    const long kR = ket.dimension(2);
+
+    const long wL  = mpo.dimension(0);
+    const long wR  = mpo.dimension(1);
+    const long wdi = mpo.dimension(2);
+    const long wdo = mpo.dimension(3);
+
+    // result dims are whatever your sweep builds; name them explicitly
+    const long r0 = result.dimension(0); // aggregated left index (includes earlier bL*wL*kL)
+    const long r1 = result.dimension(1); // bra bond to be contracted with bra bL
+    const long r2 = result.dimension(2); // mpo left bond to be contracted with wL
+    const long r3 = result.dimension(3); // ket bond carried along
+
+    assert(r1 == bL);
+    assert(r2 == wL);
+    assert(bd == wdo);
+    assert(kd == wdi);
+
+    // t1 = result ⋅ bra*  over (r1 == bL)
+    TN<Scalar, 5> t1(tenx::array5{r0, r2, r3, bd, bR});
+    t1.device(*threads->dev) = result.contract(bra.conjugate(), tenx::idx({1}, {1}));
+
+    // t2 = t1 ⋅ mpo over (r2 == wL) and (bra phys == dout)
+    // Remaining mpo phys is wdi, remaining mpo bond is wR
+    TN<Scalar, 5> t2(tenx::array5{r0, r3, bR, wR, wdi});
+    t2.device(*threads->dev) = t1.contract(mpo, tenx::idx({1, 3}, {0, 3}));
+
+    // tmp = t2 ⋅ ket over (r3 == kL) and (wdi == ket phys)
+    tmp.resize(tenx::array4{r0, bR, wR, kR});
+    tmp.device(*threads->dev) = t2.contract(ket, tenx::idx({1, 4}, {1, 0}));
 }
 
 template<typename Scalar>

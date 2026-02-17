@@ -120,6 +120,7 @@ TensorsFinite<Scalar>::TensorsFinite(const StateFinite<Scalar> &state_, const Mo
     sync_active_sites();
 }
 
+
 /* clang-format off */
 template<typename Scalar> StateFinite<Scalar>       &TensorsFinite<Scalar>::get_state() { return *state; }
 template<typename Scalar> ModelFinite<Scalar>       &TensorsFinite<Scalar>::get_model() { return *model; }

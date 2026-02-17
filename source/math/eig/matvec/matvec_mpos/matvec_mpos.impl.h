@@ -15,9 +15,9 @@
 #include "tensors/site/mpo/MpoSite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
+#include "tools/common/contraction/contraction_policy.h"
 #include "tools/common/contraction/IterativeLinearSolverConfig.h"
 #include "tools/common/contraction/MatrixLikeOperator.h"
-#include "tools/common/contraction/matvec_policy.h"
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
 #include <h5pp/h5pp.h>
@@ -1880,23 +1880,30 @@ bool MatVecMPOS<Scalar>::isReadyShift() const {
 
 template<typename Scalar>
 typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters, RealScalar reltol) const {
-    if(!std::isnan(op_norm) and max_op_norm_iters <= op_norm_iters) return op_norm;
-
-    auto opts      = tools::common::contraction::internal::matvec_options_active();
+    if(!std::isnan(op_norm_krylov) and max_op_norm_iters <= op_norm_krylov_iters) return op_norm_krylov;
     auto shape_mpo = std::array<Eigen::Index, 4>{envL_A.dimension(2), envR_A.dimension(2), shape_mps[0], shape_mps[0]};
-    if(opts.H1_dims == shape_mpo) {
-        op_norm = opts.H1_norm;
-        return opts.H1_norm;
-    }
-    if(opts.H2_dims == shape_mpo) {
-        op_norm = opts.H2_norm;
-        return opts.H2_norm;
+
+    {
+        auto h1info = tools::common::contraction::internal::get_info_h1mv();
+        auto h2info = tools::common::contraction::internal::get_info_h2mv();
+        if(h1info.H1_local_dims == shape_mpo) {
+            op_norm_krylov = static_cast<RealScalar>(h1info.H1_local_norm);
+            return op_norm_krylov;
+        }
+        if(h2info.H2_local_dims == shape_mpo) {
+            op_norm_krylov = static_cast<RealScalar>(h2info.H2_local_norm);
+            return op_norm_krylov;
+        }
     }
 
     using Real    = RealScalar;
     using VecType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     using MatType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using VecReal = Eigen::Matrix<Real, Eigen::Dynamic, 1>;
+
+
+    auto         h1info    = SetH1MvInfo(ContractionBackend::TBLIS, shape_mpo); // Use high-precision matvec
+    auto         h2info    = SetH2MvInfo(ContractionBackend::TBLIS, shape_mpo); // Use high-precision matvec
 
     Eigen::Tensor<Scalar, 3> vt(shape_mps);
     Eigen::Tensor<Scalar, 3> wt(shape_mps);
@@ -1905,11 +1912,10 @@ typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::I
 
     VecType v = VecType::Random(size_mps).normalized();
 
-    auto mvopts = MatVecRaiiOptions(MatVecBackend::TBLIS);
-
     Real         lambda    = Real{0};
     Eigen::Index krylovdim = 3;
-    for(Eigen::Index iter = 0; iter < max_op_norm_iters; ++iter) {
+    Eigen::Index iter      = 0;
+    for(iter = 0; iter < max_op_norm_iters; ++iter) {
         const Eigen::Index p = std::max<Eigen::Index>(2, krylovdim);
 
         // Build Krylov matrix K = [v, Av, A^2 v, ...]
@@ -1932,7 +1938,7 @@ typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::I
         for(Eigen::Index j = 0; j < p; ++j) diag_abs(j) = std::abs(QR(j, j));
 
         const Real diag0    = (p > 0) ? diag_abs(0) : Real{0};
-        const Real drop_tol = std::max(Real{1e-20}, Real{1e-12} * diag0);
+        const Real drop_tol = std::max(Real{1e-20f}, Real{1e-12f} * diag0);
 
         Eigen::Index k_eff = 0;
         for(Eigen::Index j = 0; j < p; ++j) {
@@ -1982,10 +1988,11 @@ typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::I
 
         v      = std::move(y);
         lambda = lambda_new;
-        tools::log->debug("MatVecMPOS: iter {:<2}: lambda = {:.8e}", iter, fp(lambda));
-
         if(lambda > Real{0} && r_norm < static_cast<Real>(reltol) * lambda) break;
     }
+    op_norm_krylov_iters = max_op_norm_iters;
+    op_norm_krylov       = lambda;
+    tools::log->debug("MatVecMPOS: iter {:<2}: lambda = {:.8e}", iter, fp(op_norm_krylov));
 
     return lambda;
 }

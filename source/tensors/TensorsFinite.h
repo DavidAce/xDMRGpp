@@ -77,6 +77,8 @@ class TensorsFinite {
     TensorsFinite &operator=(const TensorsFinite &other); // copy assign
     TensorsFinite(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position);
     TensorsFinite(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges);
+    template<typename T>
+    TensorsFinite<T> cast() const;
 
     StateFinite<Scalar>       &get_state();
     ModelFinite<Scalar>       &get_model();
@@ -173,6 +175,17 @@ class TensorsFinite {
 
 template<typename T>
 Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen::Tensor<T, 3> &envL, const Eigen::Tensor<T, 3> &envR);
+
+template<typename Scalar>
+template<typename T>
+TensorsFinite<T> TensorsFinite<Scalar>::cast() const {
+    TensorsFinite<T> t;
+    t.active_sites = this->active_sites;
+    t.state        = std::make_unique<StateFinite<T>>(this->state->template cast<T>());
+    t.model        = std::make_unique<ModelFinite<T>>(this->model->template cast<T>());
+    t.edges        = std::make_unique<EdgesFinite<T>>(this->edges->template cast<T>());
+    return t;
+}
 
 template<typename Scalar>
 template<typename T>

@@ -14,6 +14,9 @@ template<typename Scalar> class StateFinite;
  */
 template<typename Scalar>
 class xdmrg : public AlgorithmFinite<Scalar> {
+    private:
+    using AlgorithmFinite<Scalar>::H_norm_estimate;
+
     public:
     using OptMeta    = typename AlgorithmFinite<Scalar>::OptMeta;
     using RealScalar = typename AlgorithmFinite<Scalar>::RealScalar;

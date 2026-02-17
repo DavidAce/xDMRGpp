@@ -38,7 +38,7 @@ class IsingRandomField : public MpoSite<Scalar> {
     void                                           set_parameter(std::string_view name, std::any value) final;
     void                                           print_parameter_names() const final;
     void                                           print_parameter_values() const final;
-    void                                           set_parameters(TableMap &parameters) final;
+    void                                           set_parameters(const TableMap &parameters) final;
     void                                           randomize_hamiltonian() final;
     void                                           set_averages(std::vector<TableMap> all_parameters, bool infinite = false) final;
 

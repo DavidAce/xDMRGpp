@@ -16,19 +16,36 @@ class EdgesFinite {
     public:
     std::vector<size_t> active_sites;
 
-    private:
     std::vector<std::unique_ptr<EnvEne<Scalar>>> eneL;
     std::vector<std::unique_ptr<EnvEne<Scalar>>> eneR;
     std::vector<std::unique_ptr<EnvVar<Scalar>>> varL;
     std::vector<std::unique_ptr<EnvVar<Scalar>>> varR;
 
-    public:
     EdgesFinite();
     ~EdgesFinite();                                       // Read comment on implementation
     EdgesFinite(EdgesFinite &&other) noexcept;            // default move ctor
     EdgesFinite &operator=(EdgesFinite &&other) noexcept; // default move assign
     EdgesFinite(const EdgesFinite &other);                // copy ctor
     EdgesFinite &operator=(const EdgesFinite &other);     // copy assign
+
+    template<typename T>
+    EdgesFinite<T> cast() const {
+        if constexpr(std::is_same_v<T, Scalar>) {
+            return *this;
+        } else {
+            EdgesFinite<T> e;
+            e.active_sites = this->active_sites;
+            e.eneL.reserve(this->eneL.size());
+            e.eneR.reserve(this->eneR.size());
+            e.varL.reserve(this->varL.size());
+            e.varR.reserve(this->varR.size());
+            for(const auto &env : this->eneL) e.eneL.emplace_back(env->template cast<T>());
+            for(const auto &env : this->eneR) e.eneR.emplace_back(env->template cast<T>());
+            for(const auto &env : this->varL) e.varL.emplace_back(env->template cast<T>());
+            for(const auto &env : this->varR) e.varR.emplace_back(env->template cast<T>());
+            return e;
+        }
+    }
 
     void initialize(size_t model_size);
 
@@ -76,15 +93,15 @@ class EdgesFinite {
     /* clang-format off */
     [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_ene_blk(size_t posL, size_t posR) const;
     [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_var_blk(size_t posL, size_t posR) const;
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3> &>       get_env_ene_blk(size_t posL, size_t posR);
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3> &>       get_env_var_blk(size_t posL, size_t posR);
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_env_ene_blk(size_t posL, size_t posR);
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_env_var_blk(size_t posL, size_t posR);
     template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_ene_blk_as(size_t posL, size_t posR) const;
     template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_var_blk_as(size_t posL, size_t posR) const;
 
     [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_multisite_env_ene_blk(std::optional<std::vector<size_t>> sites = std::nullopt) const;
     [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_multisite_env_var_blk(std::optional<std::vector<size_t>> sites = std::nullopt) const;
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3> &>       get_multisite_env_ene_blk(std::optional<std::vector<size_t>> sites = std::nullopt);
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3> &>       get_multisite_env_var_blk(std::optional<std::vector<size_t>> sites = std::nullopt);
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_multisite_env_ene_blk(std::optional<std::vector<size_t>> sites = std::nullopt);
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_multisite_env_var_blk(std::optional<std::vector<size_t>> sites = std::nullopt);
 
     template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_ene_blk_as(std::optional<std::vector<size_t>> sites = std::nullopt) const;
     template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_var_blk_as(std::optional<std::vector<size_t>> sites = std::nullopt) const;

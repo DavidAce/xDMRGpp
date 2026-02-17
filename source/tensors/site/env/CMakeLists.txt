@@ -1,6 +1,14 @@
 add_source_target(xdmrg++-tensors-env
         TARGET_SOURCES
         EnvPair.cpp
+
+        EnvFactory/cx32.cpp
+        EnvFactory/cx64.cpp
+        EnvFactory/cx128.cpp
+        EnvFactory/fp32.cpp
+        EnvFactory/fp64.cpp
+        EnvFactory/fp128.cpp
+
         EnvBase/cx32.cpp
         EnvBase/cx64.cpp
         EnvBase/cx128.cpp

@@ -12,7 +12,7 @@
 #include "math/linalg/tensor/to_string.h"
 #include "math/tenx.h"
 #include "tools/common/contraction.h"
-#include "tools/common/contraction/matvec_policy.h"
+#include "tools/common/contraction/contraction_policy.h"
 #include "tools/finite/opt_mps.h"
 #include <Eigen/Eigenvalues>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -1805,7 +1805,8 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &H1Y
 
     // Compress or randomize
     handle_masked_columns();
-    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2); // Use high-precision matvec
+    auto h1info = SetH1MvInfo(ContractionBackend::X2); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionBackend::X2); // Use high-precision matvec
     H1Y         = MultH1(Y);
     H2Y         = MultH2(Y);
     assert_l2_orthonormal(Y, m);
@@ -1918,7 +1919,8 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 
     // Compress or randomize
     handle_masked_columns();
-    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2); // Use high-precision matvec
+    auto h1info = SetH1MvInfo(ContractionBackend::X2); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionBackend::X2); // Use high-precision matvec
     HY          = MultH(Y);
     assert_l2_orthonormal(Y, m);
 }
@@ -2023,8 +2025,8 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType
     if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
-    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2); // Use more accurate matvec
-
+    auto h1info                = SetH1MvInfo(ContractionBackend::X2); // Use more accurate matvec
+    auto h2info                = SetH2MvInfo(ContractionBackend::X2); // Use more accurate matvec
     auto handle_masked_columns = [&]() {
         if(m.mask.sum() != Y.cols()) {
             MatrixType GI = m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols());
@@ -2060,7 +2062,6 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType
         using LScalar = std::conditional_t<tenx::sfinae::is_std_complex_v<Scalar>, std::complex<long double>, long double>;
         return static_cast<Scalar>(a.template cast<LScalar>().dot(b.template cast<LScalar>()));
     };
-
 
     // Column-wise orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
     m.mask        = VectorIdxT::Ones(Y.cols());
@@ -2314,7 +2315,8 @@ void solver_base<Scalar>::block_h2_orthonormalize_eig(MatrixType &Y, MatrixType 
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
     assert(m.maskPolicy == MaskPolicy::COMPRESS); // This operation does not preserve column order
 
-    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2);
+    auto h1info = SetH1MvInfo(ContractionBackend::X2); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionBackend::X2); // Use high-precision matvec
 
     // Orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
     m.analyze_h2_orthonormality(Y, H2Y);
@@ -2413,7 +2415,8 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
     if(X.cols() == 0 || Y.cols() == 0) return;
     if(m.mask.size() > 0 && m.mask.sum() == 0) return;
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product && "block_h2_orthogonalize is for H2 inner product");
-    auto mvopts = MatVecRaiiOptions(MatVecBackend::X2); // Use high-precision matvec
+    auto h1info = SetH1MvInfo(ContractionBackend::X2); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionBackend::X2); // Use high-precision matvec
     assert_allFinite(X);
     assert_allFinite(H1X);
     assert_allFinite(H2X);
@@ -3039,14 +3042,14 @@ solver_base<Scalar>::MatrixType solver_base<Scalar>::get_refined_ritz_eigenvecto
     assert(algo == OptAlgo::GDMRG);
     // assert(static_cast<size_t>(V.cols()) == optIdx.size());
     assert(Z.cols() == Y.size());
-    Eigen::JacobiSVD<MatrixType> svd;
-    MatrixType                   Z_ref(Z.rows(), Z.cols());
-    MatrixType                   T2Z_ref = MatrixType::Zero(Z.rows(), Z.cols()); // cache H2*zj
+    Eigen::JacobiSVD<MatrixType, Eigen::ComputeThinV> svd;
+    MatrixType                                        Z_ref(Z.rows(), Z.cols());
+    MatrixType                                        T2Z_ref = MatrixType::Zero(Z.rows(), Z.cols()); // cache H2*zj
     for(Eigen::Index j = 0; j < Y.size(); ++j) {
         const auto &theta = Y(j);
         MatrixType  M     = (H1Q - theta * H2Q);
 
-        svd.compute(M, Eigen::ComputeThinV);
+        svd.compute(M);
 
         if(svd.info() == Eigen::Success) {
             Eigen::Index min_idx;
@@ -3189,13 +3192,13 @@ solver_base<Scalar>::MatrixType solver_base<Scalar>::get_refined_ritz_eigenvecto
                                                                                        const MatrixType &HQ) {
     assert(algo != OptAlgo::GDMRG);
     assert(Z.cols() == Y.size());
-    Eigen::JacobiSVD<MatrixType> svd;
-    MatrixType                   Z_ref(Z.rows(), Z.cols());
-    MatrixType                   T2Z_ref = MatrixType::Zero(Z.rows(), Z.cols()); // cache H2*zj
+    Eigen::JacobiSVD<MatrixType, Eigen::ComputeThinV> svd;
+    MatrixType                                        Z_ref(Z.rows(), Z.cols());
+    MatrixType                                        T2Z_ref = MatrixType::Zero(Z.rows(), Z.cols()); // cache H2*zj
     for(Eigen::Index j = 0; j < Y.size(); ++j) {
         const auto &theta = Y(j);
         MatrixType  M     = HQ - theta * Q;
-        svd.compute(M, Eigen::ComputeThinV);
+        svd.compute(M);
 
         Eigen::Index min_idx;
         svd.singularValues().minCoeff(&min_idx);

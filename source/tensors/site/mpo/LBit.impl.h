@@ -81,17 +81,17 @@ void LBit<Scalar>::print_parameter_values() const {
 }
 
 template<typename Scalar>
-void LBit<Scalar>::set_parameters(TableMap &parameters) {
-    h5tb.param.J1_rand      = std::any_cast<decltype(h5tb.param.J1_rand)>(parameters["J1_rand"]);
-    h5tb.param.J2_rand      = std::any_cast<decltype(h5tb.param.J2_rand)>(parameters["J2_rand"]);
-    h5tb.param.J3_rand      = std::any_cast<decltype(h5tb.param.J3_rand)>(parameters["J3_rand"]);
-    h5tb.param.J1_wdth      = std::any_cast<decltype(h5tb.param.J1_wdth)>(parameters["J1_wdth"]);
-    h5tb.param.J2_wdth      = std::any_cast<decltype(h5tb.param.J2_wdth)>(parameters["J2_wdth"]);
-    h5tb.param.J3_wdth      = std::any_cast<decltype(h5tb.param.J3_wdth)>(parameters["J3_wdth"]);
-    h5tb.param.J2_span      = std::any_cast<decltype(h5tb.param.J2_span)>(parameters["J2_span"]);
-    h5tb.param.xi_Jcls      = std::any_cast<decltype(h5tb.param.xi_Jcls)>(parameters["xi_Jcls"]);
-    h5tb.param.spin_dim     = std::any_cast<decltype(h5tb.param.spin_dim)>(parameters["spin_dim"]);
-    h5tb.param.distribution = std::any_cast<decltype(h5tb.param.distribution)>(parameters["distribution"]);
+void LBit<Scalar>::set_parameters(const TableMap &parameters) {
+    h5tb.param.J1_rand      = std::any_cast<decltype(h5tb.param.J1_rand)>(parameters.at("J1_rand"));
+    h5tb.param.J2_rand      = std::any_cast<decltype(h5tb.param.J2_rand)>(parameters.at("J2_rand"));
+    h5tb.param.J3_rand      = std::any_cast<decltype(h5tb.param.J3_rand)>(parameters.at("J3_rand"));
+    h5tb.param.J1_wdth      = std::any_cast<decltype(h5tb.param.J1_wdth)>(parameters.at("J1_wdth"));
+    h5tb.param.J2_wdth      = std::any_cast<decltype(h5tb.param.J2_wdth)>(parameters.at("J2_wdth"));
+    h5tb.param.J3_wdth      = std::any_cast<decltype(h5tb.param.J3_wdth)>(parameters.at("J3_wdth"));
+    h5tb.param.J2_span      = std::any_cast<decltype(h5tb.param.J2_span)>(parameters.at("J2_span"));
+    h5tb.param.xi_Jcls      = std::any_cast<decltype(h5tb.param.xi_Jcls)>(parameters.at("xi_Jcls"));
+    h5tb.param.spin_dim     = std::any_cast<decltype(h5tb.param.spin_dim)>(parameters.at("spin_dim"));
+    h5tb.param.distribution = std::any_cast<decltype(h5tb.param.distribution)>(parameters.at("distribution"));
     // Adjust J2_span, it doesn't make sense to have it larger than the system size anyway, so we use a cutoff
     h5tb.param.J2_ctof               = std::min(h5tb.param.J2_span, settings::model::model_size - 1); // Range unsigned long
     all_mpo_parameters_have_been_set = true;

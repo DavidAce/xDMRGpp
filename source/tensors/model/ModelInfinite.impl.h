@@ -6,7 +6,7 @@
 #include "math/svd.h"
 #include "math/tenx.h"
 #include "ModelInfinite.h"
-#include "tensors/site/mpo/MpoFactory.h"
+#include "tensors/site/mpo/MpoSite.h"
 
 template<typename Scalar>
 ModelInfinite<Scalar>::ModelInfinite() = default;
@@ -88,8 +88,8 @@ template<typename Scalar>
 std::vector<Eigen::Tensor<Scalar, 4>> ModelInfinite<Scalar>::get_compressed_mpo_squared() {
     // First, rebuild the MPO's
     std::vector<Eigen::Tensor<Scalar, 4>> mpos_sq;
-    mpos_sq.emplace_back(HA->get_non_compressed_mpo_squared());
-    mpos_sq.emplace_back(HB->get_non_compressed_mpo_squared());
+    mpos_sq.emplace_back(HA->MPO2());
+    mpos_sq.emplace_back(HB->MPO2());
 
     // Setup SVD
     // Here we need a lot of precision:

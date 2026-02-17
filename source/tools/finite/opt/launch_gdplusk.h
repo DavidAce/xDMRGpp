@@ -264,15 +264,15 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_std(const opt_mps<Scalar>       &in
     using RealScalar = decltype(std::real(std::declval<Scalar>()));
     // using MatrixCT          = Eigen::Matrix<CalcType, Eigen::Dynamic, Eigen::Dynamic>;
     // using VectorCR          = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
-    auto           t_gdplusk = tid::tic_scope("gdplusk");
+    auto           t_gdplusk  = tid::tic_scope("gdplusk");
     auto           t_preamble = tid::tic_scope("preamble");
-    auto          &sites    = initial.get_sites();
-    auto           mpos     = tensors.get_model().get_mpo(sites);
-    auto           enve     = tensors.get_edges().get_multisite_env_ene(sites);
-    auto           envv     = tensors.get_edges().get_multisite_env_var(sites);
-    auto           size     = initial.get_tensor().size();
-    constexpr auto eps      = std::numeric_limits<CalcReal>::epsilon();
-    auto           nev      = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
+    auto          &sites      = initial.get_sites();
+    auto           mpos       = tensors.get_model().get_mpo(sites);
+    auto           enve       = tensors.get_edges().get_multisite_env_ene(sites);
+    auto           envv       = tensors.get_edges().get_multisite_env_var(sites);
+    auto           size       = initial.get_tensor().size();
+    constexpr auto eps        = std::numeric_limits<CalcReal>::epsilon();
+    auto           nev        = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
     // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
     if(ncv <= 0) {
         // Automatic selection
@@ -309,8 +309,8 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_std(const opt_mps<Scalar>       &in
     // BlockLanczos<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, initial.template get_tensor_as_matrix<CalcType>(), mpos, enve, envv);
     // solver_gdplusk<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, initial.template get_tensor_as_matrix<CalcType>(), H1, H2, H1H2);
     solver_gdplusk<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, bc.initial_guess.template get_tensor_as_matrix<CalcType>(), H1, H2, H1H2);
-    solver.abstol = opt_meta.eigs_abstol.has_value() ? static_cast<CalcReal>(opt_meta.eigs_abstol.value()) : eps * 10000;
-    solver.reltol = opt_meta.eigs_reltol.has_value() ? static_cast<CalcReal>(opt_meta.eigs_reltol.value()) : RealScalar{0};
+    solver.abstol = opt_meta.eigs_abstol.has_value() ? opt_meta.eigs_abstol.value() : eps * 10000;
+    solver.reltol = opt_meta.eigs_reltol.has_value() ? opt_meta.eigs_reltol.value() : RealScalar{0};
     eig::setLevel(spdlog::level::info);
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
@@ -459,7 +459,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_std(const opt_mps<Scalar>       &in
     // }
     decltype(auto) TLc = tenx::asScalarType<CalcType>(bc.TL);
     decltype(auto) TRc = tenx::asScalarType<CalcType>(bc.TR);
-    solver.V = tools::finite::opt::precond::common::transform_matrix(solver.V, solver.mps_shape, TLc, TRc);
+    solver.V           = tools::finite::opt::precond::common::transform_matrix(solver.V, solver.mps_shape, TLc, TRc);
     solver.V.colwise().normalize();
     auto res = std::vector<opt_mps<Scalar>>();
     extract_results(tensors, initial, opt_meta, solver, res);
@@ -484,8 +484,8 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
                                                  bool                         skipjcb,                         //
                                                  bool                         dev_thick_jd_projector,          //
                                                  bool                         use_jd_initial_guess,            //
-                                                 bool                         use_jd_h2_only,            //
-                                                 bool                         use_jd_def_solver, //
+                                                 bool                         use_jd_h2_only,                  //
+                                                 bool                         use_jd_def_solver,               //
                                                  Eigen::Index                 block_size,
                                                  Eigen::Index                 ncv,  //
                                                  BasisChangeConfig            bcfg, //
@@ -501,16 +501,16 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
     tools::log =
         spdlog::get(std::string(tag)) == nullptr ? spdlog::stdout_color_mt(std::string(tag), spdlog::color_mode::always) : spdlog::get(std::string(tag));
     tools::log->set_level(log_level);
-    auto           t_mixblk = tid::tic_token(tag);
-    auto           t_gdplusk = tid::tic_scope("gdplusk");
+    auto           t_mixblk   = tid::tic_token(tag);
+    auto           t_gdplusk  = tid::tic_scope("gdplusk");
     auto           t_preamble = tid::tic_scope("preamble");
-    auto          &sites    = initial.get_sites();
-    auto           mpos     = tensors.get_model().get_mpo(sites);
-    auto           enve     = tensors.get_edges().get_multisite_env_ene(sites);
-    auto           envv     = tensors.get_edges().get_multisite_env_var(sites);
-    auto           size     = initial.get_tensor().size();
-    constexpr auto eps      = std::numeric_limits<CalcReal>::epsilon();
-    auto           nev      = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
+    auto          &sites      = initial.get_sites();
+    auto           mpos       = tensors.get_model().get_mpo(sites);
+    auto           enve       = tensors.get_edges().get_multisite_env_ene(sites);
+    auto           envv       = tensors.get_edges().get_multisite_env_var(sites);
+    auto           size       = initial.get_tensor().size();
+    constexpr auto eps        = std::numeric_limits<CalcReal>::epsilon();
+    auto           nev        = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
     // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
     if(ncv <= 0) {
         // Automatic selection
@@ -716,7 +716,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
     // }
     decltype(auto) TLc = tenx::asScalarType<CalcType>(bc.TL);
     decltype(auto) TRc = tenx::asScalarType<CalcType>(bc.TR);
-    solver.V = tools::finite::opt::precond::common::transform_matrix(solver.V, solver.mps_shape, TLc, TRc);
+    solver.V           = tools::finite::opt::precond::common::transform_matrix(solver.V, solver.mps_shape, TLc, TRc);
     solver.V.colwise().normalize();
     auto res = std::vector<opt_mps<Scalar>>();
     extract_results(tensors, initial, opt_meta, solver, res);
@@ -750,16 +750,16 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
     using RealScalar = tools::finite::opt::RealScalar<CalcType>;
     // using MatrixCT          = Eigen::Matrix<CalcType, Eigen::Dynamic, Eigen::Dynamic>;
     // using VectorCR          = Eigen::Matrix<RealScalar, Eigen::Dynamic, 1>;
-    auto           t_tag = tid::tic_token(tag);
-    auto           t_gdplusk = tid::tic_scope("gdplusk");
+    auto           t_tag      = tid::tic_token(tag);
+    auto           t_gdplusk  = tid::tic_scope("gdplusk");
     auto           t_preamble = tid::tic_scope("preamble");
-    auto          &sites    = initial.get_sites();
-    auto           mpos     = tensors.get_model().get_mpo(sites);
-    auto           enve     = tensors.get_edges().get_multisite_env_ene(sites);
-    auto           envv     = tensors.get_edges().get_multisite_env_var(sites);
-    auto           size     = initial.get_tensor().size();
-    constexpr auto eps      = std::numeric_limits<RealScalar>::epsilon();
-    auto           nev      = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
+    auto          &sites      = initial.get_sites();
+    auto           mpos       = tensors.get_model().get_mpo(sites);
+    auto           enve       = tensors.get_edges().get_multisite_env_ene(sites);
+    auto           envv       = tensors.get_edges().get_multisite_env_var(sites);
+    auto           size       = initial.get_tensor().size();
+    constexpr auto eps        = std::numeric_limits<RealScalar>::epsilon();
+    auto           nev        = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
     // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
     if(ncv <= 0) {
         // Automatic selection
@@ -889,8 +889,6 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         return eigs_gdplusk_bc_std<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false,
                                              BasisChangeScale::NONE, 1, ncv * 1, "NONE    BC:JD b1 L2 h2", elog); // A:JD b1 L2 h2
     if(opt_meta.optAlgo == OptAlgo::GDMRG) {
-
-
         auto ewt_a = EnvWeightType::NO_PSI_TRACE;
         auto ewt_b = EnvWeightType::AB_TRACE;
         auto ewt_c = EnvWeightType::NO_PSI_SUM;
@@ -918,18 +916,15 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         auto tst_a = TransformSpectrumType::EnvAggregateSpectrum;
         auto tst_b = TransformSpectrumType::EnvProjectedDiagonal;
 
-
-
-        static auto bcfg_a0 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_0, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-        static auto bcfg_a1 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-        static auto bcfg_a2 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-        static auto bcfg_a3 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-        static auto bcfg_a4 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-        static auto bcfg_a5 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-        static auto bcfg_a6 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-        static auto bcfg_a7 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-        static auto bcfg_a8 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
-
+        static auto bcfg_a0 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_0, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
+        static auto bcfg_a1 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
+        static auto bcfg_a2 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
+        static auto bcfg_a3 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
+        static auto bcfg_a4 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
+        static auto bcfg_a5 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
+        static auto bcfg_a6 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
+        static auto bcfg_a7 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
+        static auto bcfg_a8 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a, .sym = sym_a, .tst = tst_b};
 
         // static auto bcfg_a2 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym =sym_a,  .tst=tst_b};
         // static auto bcfg_a3 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_a, .ewr = ewr_a, .eat = eat_a,.sym = sym_a,  .tst=tst_b};
@@ -937,30 +932,38 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         // static auto bcfg_b2 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_b, .ewr = ewr_a, .eat = eat_a,.sym = sym_a,  .tst=tst_b};
         // static auto bcfg_b3 = BasisChangeConfig{.alpha = 1.00, .ewt = ewt_b, .ewr = ewr_a, .eat = eat_a,.sym = sym_a,  .tst=tst_b};
 
+        // auto resultA0 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false,
+        // false, true, false, 1, ncv * 1, bcfg_a0, "A0 JD H2 h2", elog);
+        auto resultA1 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, true, false, false, false, false,
+                                                      true, false, 1, ncv * 1, bcfg_a1, "A1 JD H2 h2", elog);
+        // auto resultA2 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false,
+        // false, true, false, 1, ncv * 1, bcfg_a2, "A2 JD H2 h2", elog);
 
-        // auto resultA0 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, true, false, 1, ncv * 1, bcfg_a0, "A0 JD H2 h2", elog);
-        auto resultA1 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, true, false, false, false, false, true, false, 1, ncv * 1, bcfg_a1, "A1 JD H2 h2", elog);
-        // auto resultA2 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, true, false, 1, ncv * 1, bcfg_a2, "A2 JD H2 h2", elog);
+        // auto result_a1 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, true, false, false, false, false,
+        // true, 1, 2, bcfg_a1, "a1 JD H2 h2", elog); auto result_a2 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false,
+        // false, true, false, false, false, false, true, 1, 3, bcfg_a2, "a2 JD H2 h2", elog); auto result_a3 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors,
+        // opt_meta, 128, 16, 1, prt, rct, false, false, true, false, false, false, false, true, 1, 4, bcfg_a3, "a3 JD H2 h2", elog); auto result_a4 =
+        // eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, true, false, false, false, false, true, 1, 8, bcfg_a4,
+        // "a4 JD H2 h2", elog); auto result_a5 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, true, false,
+        // false, false, false, true, 1, 16,bcfg_a5, "a5 JD H2 h2", elog);
 
-        // auto result_a1 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, true, false, false, false, false, true, 1, 2, bcfg_a1, "a1 JD H2 h2", elog);
-        // auto result_a2 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, true, false, false, false, false, true, 1, 3, bcfg_a2, "a2 JD H2 h2", elog);
-        // auto result_a3 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, true, false, false, false, false, true, 1, 4, bcfg_a3, "a3 JD H2 h2", elog);
-        // auto result_a4 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, true, false, false, false, false, true, 1, 8, bcfg_a4, "a4 JD H2 h2", elog);
-        // auto result_a5 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, true, false, false, false, false, true, 1, 16,bcfg_a5, "a5 JD H2 h2", elog);
+        // auto result_a2 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, true, false, true, false, false, false, false, true,
+        // 1, ncv * 1,  bcfg_a2, "a2 JD H2 h2", elog); auto result_a3 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false,
+        // false, false, false, false, false, false, true, 1, ncv * 1,  bcfg_a4, "a3 JD L2 h2", elog); auto result_a4 = eigs_gdplusk_bc_gen<CalcType>(initial,
+        // tensors, opt_meta, 128, 16, 1, prt, rct, true, false, true, false, false, false, false, false, 1, ncv * 1, bcfg_a3, "a4 JD H2 h1-h2", elog); auto
+        // result_a5 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, false, false, false, false, false, true, 1,
+        // ncv * 1, bcfg_a5, "a5 JD L2 h1-h2", elog); auto result_a6 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false,
+        // false, false, false, false, false, false, false, 1, ncv * 1, bcfg_a6, "a6 JD b1 L2 h2", elog); auto result_a7 =
+        // eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, true, false, false, false, false, false, false, true, 1, ncv * 1,
+        // bcfg_a7, "a7 JD b1 L2 h2", elog); auto result_a8 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, true, false,
+        // false, false, false, false, false, false, 1, ncv * 1, bcfg_a8, "a8 JD b1 L2 h2", elog);
 
-
-        // auto result_a2 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, true, false, true, false, false, false, false, true, 1, ncv * 1,  bcfg_a2, "a2 JD H2 h2", elog);
-        // auto result_a3 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, false, false, false, false, false, true, 1, ncv * 1,  bcfg_a4, "a3 JD L2 h2", elog);
-        // auto result_a4 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, true, false, true, false, false, false, false, false, 1, ncv * 1, bcfg_a3, "a4 JD H2 h1-h2", elog);
-        // auto result_a5 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, false, false, false, false, false, true, 1, ncv * 1, bcfg_a5, "a5 JD L2 h1-h2", elog);
-        // auto result_a6 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, false, false, false, false, false, false, false, false, 1, ncv * 1, bcfg_a6, "a6 JD b1 L2 h2", elog);
-        // auto result_a7 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, true, false, false, false, false, false, false, true, 1, ncv * 1,  bcfg_a7, "a7 JD b1 L2 h2", elog);
-        // auto result_a8 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, 128, 16, 1, prt, rct, true, false, false, false, false, false, false, false, 1, ncv * 1, bcfg_a8, "a8 JD b1 L2 h2", elog);
-
-        // auto result_a3 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, 1, ncv * 1, bcfg_a3, "a3 BC:JD b1 L2 h2", elog);
-        // auto result_b1 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, 1, ncv * 1, bcfg_b1, "b1 BC:JD b1 L2 h2", elog);
-        // auto result_b2 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, 1, ncv * 1, bcfg_b2, "b2 BC:JD b1 L2 h2", elog);
-        // auto result_b3 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, 1, ncv * 1, bcfg_b3, "b3 BC:JD b1 L2 h2", elog);
+        // auto result_a3 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false,
+        // false, 1, ncv * 1, bcfg_a3, "a3 BC:JD b1 L2 h2", elog); auto result_b1 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1,
+        // prt, rct, false, false, false, false, false, false, false, 1, ncv * 1, bcfg_b1, "b1 BC:JD b1 L2 h2", elog); auto result_b2 =
+        // eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, 1, ncv * 1,
+        // bcfg_b2, "b2 BC:JD b1 L2 h2", elog); auto result_b3 = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false,
+        // false, false, false, false, false, false, 1, ncv * 1, bcfg_b3, "b3 BC:JD b1 L2 h2", elog);
 
         // if(initial.get_tensor().size() <= 2048) {
         //     auto resultAf = eigs_gdplusk_bc_gen<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false,
@@ -977,7 +980,6 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         // A2_num_mv += resultA2.front().get_mv();
         // A2_time_mv += tid::get("A2 JD H2 h2").get_last_interval() ;
 
-
         // bcfg_a1.num_mv += result_a1.front().get_mv();
         // bcfg_a2.num_mv += result_a2.front().get_mv();
         // bcfg_a3.num_mv += result_a3.front().get_mv();
@@ -987,9 +989,6 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         // bcfg_a7.num_mv += result_a7.front().get_mv();
         // bcfg_a8.num_mv += result_a8.front().get_mv();
 
-
-
-
         // bcfg_a1.time_mv += tid::get("a1 JD H2 h2") .get_last_interval() ;
         // bcfg_a2.time_mv += tid::get("a2 JD H2 h2") .get_last_interval() ;
         // bcfg_a3.time_mv += tid::get("a3 JD H2 h2") .get_last_interval() ;
@@ -998,10 +997,6 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         // bcfg_a6.time_mv += tid::get("a6 JD b1 L2 h2").get_last_interval() ;
         // bcfg_a7.time_mv += tid::get("a7 JD b1 L2 h2").get_last_interval() ;
         // bcfg_a8.time_mv += tid::get("a8 JD b1 L2 h2").get_last_interval() ;
-
-
-
-
 
         // tools::log->info("A1    : mv num = {}, time {:.3e} s", A1_num_mv, A1_time_mv);
         // tools::log->info("A2    : mv num = {}, time {:.3e} s", A2_num_mv, A2_time_mv);
@@ -1013,7 +1008,6 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         // tools::log->info("bcfg_a6: mv num = {}, time {:.3e} s", bcfg_a6.num_mv, bcfg_a6.time_mv);
         // tools::log->info("bcfg_a7: mv num = {}, time {:.3e} s", bcfg_a7.num_mv, bcfg_a7.time_mv);
         // tools::log->info("bcfg_a8: mv num = {}, time {:.3e} s", bcfg_a8.num_mv, bcfg_a8.time_mv);
-
 
         return resultA1;
         // return resultA2;

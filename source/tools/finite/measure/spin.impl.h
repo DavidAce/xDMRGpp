@@ -19,7 +19,7 @@ using tools::finite::measure::RealScalar;
 template<typename Scalar>
 std::array<RealScalar<Scalar>, 3> tools::finite::measure::spin_components(const StateFinite<Scalar> &state) {
     if(state.measurements.spin_components) return state.measurements.spin_components.value();
-    using Cplx = std::complex<RealScalar<Scalar>>;
+    using Cplx                         = std::complex<RealScalar<Scalar>>;
     RealScalar<Scalar> spin_x          = measure::spin_component<Scalar>(state, qm::spin::half::sx);
     RealScalar<Scalar> spin_y          = measure::spin_component<Cplx>(state, qm::spin::half::sy);
     RealScalar<Scalar> spin_z          = measure::spin_component<Scalar>(state, qm::spin::half::sz);
@@ -29,19 +29,23 @@ std::array<RealScalar<Scalar>, 3> tools::finite::measure::spin_components(const 
 
 template<typename CalcType, typename Scalar>
 RealScalar<Scalar> tools::finite::measure::spin_component(const StateFinite<Scalar> &state, const Eigen::Matrix2cd &paulimatrix) {
-    using Cplx = std::complex<RealScalar<CalcType>>;
+    using Real = RealScalar<CalcType>;
+    using Cplx = std::complex<Real>;
 
-    if constexpr(!sfinae::is_std_complex_v<CalcType>) {
-        if(!tenx::isReal(paulimatrix)) {
-            // Measurement of pauli y on a real state.
+    constexpr bool isRealCalcT  = std::is_floating_point_v<CalcType>;
+    auto           isRealPauli  = tenx::isReal(paulimatrix);
+    if constexpr(isRealCalcT) {
+        if(!isRealPauli) {
+            // Measurement of complex pauli y on a real state.
             return tools::finite::measure::spin_component<Cplx>(state, paulimatrix);
         }
     }
-    auto t_spn       = tid::tic_scope("spin", tid::level::highest);
-    auto [mpo, L, R] = qm::mpo::pauli_mpo<CalcType>(paulimatrix);
+
+    auto t_spn = tid::tic_scope("spin", tid::level::highest);
+    auto [mpo, L, R] = qm::mpo::pauli_mpo<CalcType>(paulimatrix); // Transform to CalcType
     Eigen::Tensor<CalcType, 3> temp;
     for(const auto &mps : state.mps_sites) {
-        tools::common::contraction::contract_env_mps_mpo(temp, L, mps->template get_M_as<CalcType>(), mpo);
+        tools::common::contraction::contract_envL_mps_mpo(temp, L, mps->template get_M_as<CalcType>(), mpo);
         L = temp;
     }
 

@@ -108,6 +108,10 @@ class MpsSite {
         V_stash               = std::nullopt;
         return *this;
     }
+    template<typename T>
+    MpsSite<T> cast() const {
+        return MpsSite<T>(*this);
+    }
 
     [[nodiscard]] bool                            is_real() const;
     [[nodiscard]] bool                            has_nan() const;

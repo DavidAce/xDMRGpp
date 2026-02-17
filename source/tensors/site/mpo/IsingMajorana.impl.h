@@ -43,13 +43,13 @@ void IsingMajorana<Scalar>::print_parameter_values() const {
 }
 
 template<typename Scalar>
-void IsingMajorana<Scalar>::set_parameters(TableMap &parameters) {
-    h5tb.param.g                     = std::any_cast<decltype(h5tb.param.g)>(parameters["g"]);
-    h5tb.param.delta                 = std::any_cast<decltype(h5tb.param.delta)>(parameters["delta"]);
-    h5tb.param.J_rand                = std::any_cast<decltype(h5tb.param.J_rand)>(parameters["J_rand"]);
-    h5tb.param.h_rand                = std::any_cast<decltype(h5tb.param.h_rand)>(parameters["h_rand"]);
-    h5tb.param.spin_dim              = std::any_cast<decltype(h5tb.param.spin_dim)>(parameters["spin_dim"]);
-    h5tb.param.distribution          = std::any_cast<decltype(h5tb.param.distribution)>(parameters["distribution"]);
+void IsingMajorana<Scalar>::set_parameters(const TableMap &parameters) {
+    h5tb.param.g                     = std::any_cast<decltype(h5tb.param.g)>(parameters.at("g"));
+    h5tb.param.delta                 = std::any_cast<decltype(h5tb.param.delta)>(parameters.at("delta"));
+    h5tb.param.J_rand                = std::any_cast<decltype(h5tb.param.J_rand)>(parameters.at("J_rand"));
+    h5tb.param.h_rand                = std::any_cast<decltype(h5tb.param.h_rand)>(parameters.at("h_rand"));
+    h5tb.param.spin_dim              = std::any_cast<decltype(h5tb.param.spin_dim)>(parameters.at("spin_dim"));
+    h5tb.param.distribution          = std::any_cast<decltype(h5tb.param.distribution)>(parameters.at("distribution"));
     all_mpo_parameters_have_been_set = true;
 }
 

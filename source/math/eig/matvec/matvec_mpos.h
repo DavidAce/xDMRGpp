@@ -53,8 +53,9 @@ class MatVecMPOS {
     std::vector<Eigen::Tensor<Scalar, 4>> mpos_A, mpos_B, mpos_A_shf, mpos_B_shf;
     Eigen::Tensor<Scalar, 3>              envL_A, envR_A, envL_B, envR_B;
 
-    using RealScalarL = std::conditional_t<std::is_same_v<RealScalar, float>, double, std::conditional_t<std::is_same_v<RealScalar, double>, long double, fp128>>;
-    using ScalarL     = std::conditional_t<std::is_floating_point_v<Scalar>, RealScalarL, std::complex<RealScalarL>>;
+    using RealScalarL =
+        std::conditional_t<std::is_same_v<RealScalar, float>, double, std::conditional_t<std::is_same_v<RealScalar, double>, long double, fp128>>;
+    using ScalarL = std::conditional_t<std::is_floating_point_v<Scalar>, RealScalarL, std::complex<RealScalarL>>;
     mutable std::vector<Eigen::Tensor<ScalarL, 4>> mpos_A_hp, mpos_B_hp, mpos_A_shf_hp, mpos_B_shf_hp; // For high precision contractions
     mutable Eigen::Tensor<ScalarL, 3>              envL_A_hp, envR_A_hp, envL_B_hp, envR_B_hp;         // For high precision contractions
 
@@ -263,6 +264,6 @@ class MatVecMPOS {
     RealScalar get_op_norm(Eigen::Index max_op_norm_iters = 5, RealScalar reltol = RealScalar{1e-3f}) const;
 
     private:
-    mutable Eigen::Index op_norm_iters = 0;
-    mutable RealScalar   op_norm = std::numeric_limits<double>::quiet_NaN();
+    mutable Eigen::Index op_norm_krylov_iters = 0;
+    mutable RealScalar   op_norm_krylov       = std::numeric_limits<double>::quiet_NaN();
 };

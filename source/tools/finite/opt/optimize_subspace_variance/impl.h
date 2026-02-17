@@ -20,7 +20,7 @@ using namespace tools::finite::opt;
 using namespace tools::finite::opt::internal;
 
 namespace settings {
-    [[maybe_unused]] static constexpr bool debug_subspace = false;
+    [[maybe_unused]] inline constexpr bool debug_subspace = false;
 }
 
 /*

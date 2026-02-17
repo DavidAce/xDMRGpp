@@ -47,7 +47,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     dump.svd_save = svd_save;
     if(dump.svd_save != svd::save::NONE) dump.A = mat;
 
-    Eigen::BDCSVD<MatrixType<Scalar>> SVD;
+    Eigen::BDCSVD<MatrixType<Scalar>,Eigen::ComputeThinU | Eigen::ComputeThinV> SVD;
 
     // Set up the SVD solver
     if(switchsize_gesdd == -1ul) {
@@ -66,12 +66,13 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         log->debug("Running Eigen::JacobiSVD {}", svd_info);
         // Run the svd
         //        auto t_jcb = tid::tic_token(fmt::format("jcb{}", t_suffix), tid::highest);
-        SVD.compute(mat, Eigen::ComputeFullU | Eigen::ComputeFullV | Eigen::FullPivHouseholderQRPreconditioner);
+        Eigen::JacobiSVD<MatrixType<Scalar>, Eigen::ComputeThinU | Eigen::ComputeThinV | Eigen::ColPivHouseholderQRPreconditioner> JSVD;
+        JSVD.compute(mat);
     } else {
         log->debug("Running Eigen::BDCSVD {}", svd_info);
         // Run the svd
         //        auto t_bdc = tid::tic_token(fmt::format("bdc{}", t_suffix), tid::highest);
-        SVD.compute(mat, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        SVD.compute(mat );
     }
 
     long rank_lim   = rank_max > 0 ? std::min(minRC, rank_max) : minRC;

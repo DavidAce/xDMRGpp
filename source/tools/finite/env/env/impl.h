@@ -1,6 +1,6 @@
-#include "../env.h"
-#include "BondExpansionConfig.h"
-#include "BondExpansionResult.h"
+#include "../../env.h"
+#include "../BondExpansionConfig.h"
+#include "../BondExpansionResult.h"
 #include "config/debug.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
@@ -28,7 +28,7 @@
 #include <Eigen/Eigenvalues>
 
 namespace settings {
-    inline constexpr bool debug_edges = false;
+    inline constexpr bool debug_edges = true;
 }
 
 template<typename Scalar>
@@ -161,8 +161,9 @@ void tools::finite::env::rebuild_edges_ene(const StateFinite<Scalar> &state, con
         throw except::runtime_error("All active sites are not equal: state {} | model {} | edges {}", state.active_sites, model.active_sites,
                                     edges.active_sites);
     auto   t_reb   = tid::tic_scope("rebuild_edges_ene", tid::higher);
+    size_t L       = state.template get_length<size_t>();
     size_t min_pos = 0;
-    size_t max_pos = state.get_length() - 1;
+    size_t max_pos = L - 1;
 
     // If there are no active sites then we can build up until current position
     /*
@@ -208,26 +209,28 @@ void tools::finite::env::rebuild_edges_ene(const StateFinite<Scalar> &state, con
                                     " being used. Make sure to only run this rebuild after\n"
                                     " activating sites.");
 
-    long current_position = state.template get_position<long>();
-    // size_t posL_active      = edges.active_sites.front();
-    // size_t posR_active      = edges.active_sites.back();
-
+    const long current_position = state.template get_position<long>();
     // These back and front positions will seem reversed: we need extra edges for optimal subspace expansion: see the Log from 2024-07-23
-    size_t posL_active = edges.active_sites.back();
-    size_t posR_active = edges.active_sites.front();
+    const size_t posL_active = edges.active_sites.back();
+    const size_t posR_active = edges.active_sites.front();
+    assert(posL_active < L && posL_active <= posR_active);
+    assert(posR_active < L && posR_active >= posL_active);
     if constexpr(settings::debug_edges)
         tools::log->trace("rebuild_edges_ene: pos {} | dir {} | "
                           "inspecting edges eneL from [{} to {}]",
                           current_position, state.get_direction(), min_pos, posL_active);
     std::vector<size_t> env_pos_log;
-    for(size_t pos = min_pos; pos <= posL_active; pos++) {
-        auto &env_here = edges.get_env_eneL(pos);
-        auto  id_here  = env_here.get_unique_id();
-        if(pos == 0) env_here.set_edge_dims(state.get_mps_site(pos), model.get_mpo(pos));
-        if(not env_here.has_block()) throw except::runtime_error("rebuild_edges_ene: No eneL block detected at pos {}", pos);
-        if(pos >= std::min(posL_active, state.get_length() - 1)) continue;
-        auto &env_rght = edges.get_env_eneL(pos + 1);
-        auto  id_rght  = env_rght.get_unique_id();
+    { // Seed left boundary
+
+        auto &env0 = edges.get_env_eneL(0);
+        env0.set_edge_dims(state.get_mps_site(0), model.get_mpo(0));
+    }
+    const size_t stopL = std::min(posL_active, L - 1);
+    for(size_t pos = min_pos; pos < stopL; pos++) {
+        const auto &env_here = edges.get_env_eneL(pos);
+        auto       &env_rght = edges.get_env_eneL(pos + 1);
+        auto        id_here  = env_here.get_unique_id();
+        auto        id_rght  = env_rght.get_unique_id();
         env_rght.refresh(env_here, state.get_mps_site(pos), model.get_mpo(pos));
         if(id_here != env_here.get_unique_id()) env_pos_log.emplace_back(env_here.get_position());
         if(id_rght != env_rght.get_unique_id()) env_pos_log.emplace_back(env_rght.get_position());
@@ -239,14 +242,16 @@ void tools::finite::env::rebuild_edges_ene(const StateFinite<Scalar> &state, con
         tools::log->trace("rebuild_edges_ene: pos {} | dir {} | "
                           "inspecting edges eneR from [{} to {}]",
                           current_position, state.get_direction(), posR_active, max_pos);
-    for(size_t pos = max_pos; pos >= posR_active and pos < state.get_length(); --pos) {
-        auto &env_here = edges.get_env_eneR(pos);
-        auto  id_here  = env_here.get_unique_id();
-        if(pos == state.get_length() - 1) env_here.set_edge_dims(state.get_mps_site(pos), model.get_mpo(pos));
-        if(not env_here.has_block()) throw except::runtime_error("rebuild_edges_ene: No eneR block detected at pos {}", pos);
-        if(pos <= std::max(posR_active, 0ul)) continue;
-        auto &env_left = edges.get_env_eneR(pos - 1);
-        auto  id_left  = env_left.get_unique_id();
+    { // Seed right boundary (this is where set_edge_dims belongs)
+        auto &envN = edges.get_env_eneR(L - 1);
+        envN.set_edge_dims(state.get_mps_site(L - 1), model.get_mpo(L - 1));
+    }
+    const size_t stopR = std::min(posR_active, L - 1); // smallest valid envR index
+    for(size_t pos = max_pos; pos > stopR; --pos) {
+        const auto &env_here = edges.get_env_eneR(pos);
+        auto       &env_left = edges.get_env_eneR(pos - 1);
+        auto        id_here  = env_here.get_unique_id();
+        auto        id_left  = env_left.get_unique_id();
         env_left.refresh(env_here, state.get_mps_site(pos), model.get_mpo(pos));
         if(id_here != env_here.get_unique_id()) env_pos_log.emplace_back(env_here.get_position());
         if(id_left != env_left.get_unique_id()) env_pos_log.emplace_back(env_left.get_position());
@@ -266,10 +271,10 @@ void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, con
     if(not num::all_equal(state.active_sites, model.active_sites, edges.active_sites))
         throw except::runtime_error("rebuild_edges_var: All active sites are not equal: state {} | model {} | edges {}", state.active_sites, model.active_sites,
                                     edges.active_sites);
-    auto t_reb = tid::tic_scope("rebuild_edges_var", tid::level::higher);
-
-    size_t min_pos = 0;
-    size_t max_pos = state.get_length() - 1;
+    auto         t_reb   = tid::tic_scope("rebuild_edges_var", tid::level::higher);
+    const size_t L       = state.template get_length<size_t>();
+    const size_t min_pos = 0;
+    const size_t max_pos = L - 1;
 
     // If there are no active sites, we shouldn't be rebuilding edges.
     // For instance, the active sites are cleared after a move of the center site.
@@ -285,13 +290,15 @@ void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, con
                                     " being used. Make sure to only run this assertion after\n"
                                     " activating sites.");
 
-    long current_position = state.template get_position<long>();
+    const long current_position = state.template get_position<long>();
     // size_t posL_active      = edges.active_sites.front();
     // size_t posR_active      = edges.active_sites.back();
 
     // These back and front positions will seem reversed: we need extra edges for optimal subspace expansion: see the Log from 2024-07-23
-    size_t posL_active = edges.active_sites.back();
-    size_t posR_active = edges.active_sites.front();
+    const size_t posL_active = edges.active_sites.back();
+    const size_t posR_active = edges.active_sites.front();
+    assert(posL_active < L && posL_active <= posR_active);
+    assert(posR_active < L && posR_active >= posL_active);
     if constexpr(settings::debug_edges) {
         tools::log->trace("rebuild_edges_var: pos {} | dir {} | "
                           "inspecting edges varL from [{} to {}]",
@@ -299,14 +306,16 @@ void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, con
     }
 
     std::vector<size_t> env_pos_log;
-    for(size_t pos = min_pos; pos <= posL_active; pos++) {
-        auto &env_here = edges.get_env_varL(pos);
-        auto  id_here  = env_here.get_unique_id();
-        if(pos == 0) env_here.set_edge_dims(state.get_mps_site(pos), model.get_mpo(pos));
-        if(not env_here.has_block()) throw except::runtime_error("rebuild_edges_var: No varL block detected at pos {}", pos);
-        if(pos >= std::min(posL_active, state.get_length() - 1)) continue;
-        auto &env_rght = edges.get_env_varL(pos + 1);
-        auto  id_rght  = env_rght.get_unique_id();
+    { // Seed left boundary
+        auto &env0 = edges.get_env_varL(0);
+        env0.set_edge_dims(state.get_mps_site(0), model.get_mpo(0));
+    }
+    const size_t stopL = std::min(posL_active, L - 1);
+    for(size_t pos = min_pos; pos < stopL; pos++) {
+        const auto &env_here = edges.get_env_varL(pos);
+        auto       &env_rght = edges.get_env_varL(pos + 1);
+        auto        id_here  = env_here.get_unique_id();
+        auto        id_rght  = env_rght.get_unique_id();
         env_rght.refresh(env_here, state.get_mps_site(pos), model.get_mpo(pos));
         if(id_here != env_here.get_unique_id()) env_pos_log.emplace_back(env_here.get_position());
         if(id_rght != env_rght.get_unique_id()) env_pos_log.emplace_back(env_rght.get_position());
@@ -319,15 +328,16 @@ void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, con
                           "inspecting edges varR from [{} to {}]",
                           current_position, state.get_direction(), posR_active, max_pos);
     }
-
-    for(size_t pos = max_pos; pos >= posR_active and pos < state.get_length(); --pos) {
-        auto &env_here = edges.get_env_varR(pos);
-        auto  id_here  = env_here.get_unique_id();
-        if(pos == state.get_length() - 1) env_here.set_edge_dims(state.get_mps_site(pos), model.get_mpo(pos));
-        if(not env_here.has_block()) throw except::runtime_error("rebuild_edges_var: No varR block detected at pos {}", pos);
-        if(pos <= std::max(posR_active, 0ul)) continue;
-        auto &env_left = edges.get_env_varR(pos - 1);
-        auto  id_left  = env_left.get_unique_id();
+    { // Seed right boundary
+        auto &envN = edges.get_env_varR(L - 1);
+        envN.set_edge_dims(state.get_mps_site(L - 1), model.get_mpo(L - 1));
+    }
+    const size_t stopR = std::min(posR_active, L - 1); // smallest valid envR index
+    for(size_t pos = max_pos; pos > stopR; --pos) {
+        const auto &env_here = edges.get_env_varR(pos);
+        auto       &env_left = edges.get_env_varR(pos - 1);
+        auto        id_here  = env_here.get_unique_id();
+        auto        id_left  = env_left.get_unique_id();
         env_left.refresh(env_here, state.get_mps_site(pos), model.get_mpo(pos));
         if(id_here != env_here.get_unique_id()) env_pos_log.emplace_back(env_here.get_position());
         if(id_left != env_left.get_unique_id()) env_pos_log.emplace_back(env_left.get_position());
@@ -341,6 +351,7 @@ void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, con
 template<typename Scalar>
 void tools::finite::env::rebuild_edges(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges) {
     if(state.get_algorithm() == AlgorithmType::fLBIT) return;
+    // #pragma message "REMOVE x2 edge building"
     rebuild_edges_ene(state, model, edges);
     rebuild_edges_var(state, model, edges);
 }

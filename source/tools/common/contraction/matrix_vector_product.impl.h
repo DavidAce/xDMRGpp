@@ -1,8 +1,8 @@
 #pragma once
 #include "../contraction.h"
-#include "internal/gemm_x2.h"
+#include "contraction_policy.h"
 #include "math/tenx.h"
-#include "matvec_policy.h"
+#include "math/x2/gemm.h"
 #include "tid/tid.h"
 #if defined(DMRG_ENABLE_TBLIS)
     // #include <tblis/util/configs.h>
@@ -30,14 +30,14 @@ namespace settings {
     static constexpr bool tblis_use_openmp = false;
 #endif
 
-    static constexpr bool debug_contraction = false;
+    inline constexpr bool debug_contraction = false;
 }
 
 #include "tools/common/log.h"
 
 namespace tools::common::contraction::internal {
     template<typename Scalar>
-    struct Info {
+    struct StatsMv {
         using RealScalar              = decltype(std::real(std::declval<Scalar>()));
         bool       contract_left      = true;
         RealScalar mps_norm           = std::numeric_limits<RealScalar>::quiet_NaN();
@@ -50,16 +50,16 @@ namespace tools::common::contraction::internal {
         RealScalar cancelation_factor = std::numeric_limits<RealScalar>::quiet_NaN();
         RealScalar highprec_threshold = RealScalar{10} / std::sqrt(std::numeric_limits<RealScalar>::epsilon());
         template<typename T>
-        Info<Scalar> &operator=(const Info<T> &info_) {
-            this->contract_left      = info_.contract_left;
-            this->mps_norm           = static_cast<RealScalar>(info_.mps_norm);
-            this->mpo_norm           = static_cast<RealScalar>(info_.mpo_norm);
-            this->envL_norm          = static_cast<RealScalar>(info_.envL_norm);
-            this->envR_norm          = static_cast<RealScalar>(info_.envR_norm);
-            this->ST1                = static_cast<RealScalar>(info_.ST1);
-            this->ST2                = static_cast<RealScalar>(info_.ST2);
-            this->ST3                = static_cast<RealScalar>(info_.ST3);
-            this->cancelation_factor = static_cast<RealScalar>(info_.cancelation_factor);
+        StatsMv<Scalar> &operator=(const StatsMv<T> &stats_) {
+            this->contract_left      = stats_.contract_left;
+            this->mps_norm           = static_cast<RealScalar>(stats_.mps_norm);
+            this->mpo_norm           = static_cast<RealScalar>(stats_.mpo_norm);
+            this->envL_norm          = static_cast<RealScalar>(stats_.envL_norm);
+            this->envR_norm          = static_cast<RealScalar>(stats_.envR_norm);
+            this->ST1                = static_cast<RealScalar>(stats_.ST1);
+            this->ST2                = static_cast<RealScalar>(stats_.ST2);
+            this->ST3                = static_cast<RealScalar>(stats_.ST3);
+            this->cancelation_factor = static_cast<RealScalar>(stats_.cancelation_factor);
             return *this;
         }
     };
@@ -73,15 +73,14 @@ namespace tools::common::contraction::internal {
     auto get_norm(const Scalar *const ptr, const auto &dims) -> decltype(std::real(std::declval<Scalar>())) {
         return Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(ptr, get_size(dims)).norm();
     }
-
     template<typename Scalar>
-    Info<Scalar> contract_with_eigen(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
+    StatsMv<Scalar> contract_with_eigen(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
         assert(mps.dimension(1) == envL.dimension(0));
         assert(mps.dimension(2) == envR.dimension(0));
         assert(mps.dimension(0) == mpo.dimension(2));
         assert(envL.dimension(2) == mpo.dimension(0));
         assert(envR.dimension(2) == mpo.dimension(1));
-        Info<Scalar> info;
+        StatsMv<Scalar> info;
         info.contract_left = mps.dimension(1) >= mps.dimension(2);
 
         auto                                 &threads = tenx::threads::get();
@@ -118,7 +117,7 @@ namespace tools::common::contraction::internal {
     }
 
     template<typename Scalar>
-    Info<Scalar> contract_with_tblis(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
+    StatsMv<Scalar> contract_with_tblis(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
         static_assert(settings::tblis_enabled);
         if constexpr(settings::tblis_enabled) {
             assert(mps.dimension(1) == envL.dimension(0));
@@ -133,7 +132,7 @@ namespace tools::common::contraction::internal {
                 contraction::contract_tblis(A.data(), A.dimensions(), B.data(), B.dimensions(), C.data(), C.dimensions(), la, lb, lc, cfg);
             };
 
-            Info<Scalar> info;
+            StatsMv<Scalar> info;
             info.contract_left = mps.dimension(1) >= mps.dimension(2);
 
             thread_local Eigen::Tensor<Scalar, 4> T1;
@@ -166,8 +165,8 @@ namespace tools::common::contraction::internal {
     }
 
     template<typename Scalar>
-    Info<Scalar> contract_with_gemm_x2(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
-        Info<Scalar> info;
+    StatsMv<Scalar> contract_with_gemm_x2(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
+        StatsMv<Scalar> info;
         info.contract_left = mps.dimension(1) >= mps.dimension(2);
 
         Eigen::Tensor<Scalar, 4> mpo_shf  = mpo.shuffle(std::array{0, 3, 2, 1});
@@ -180,41 +179,41 @@ namespace tools::common::contraction::internal {
         Eigen::Index wR = mpo.dimension(1);
         Eigen::Index wd = mpo.dimension(3);
 
-        auto mps_x2      = TensorX2<Scalar, 3>(mps);
-        auto mpo_shf_x2  = TensorX2<Scalar, 4>(mpo_shf);
-        auto envL_shf_x2 = TensorX2<Scalar, 3>(envL_shf);
-        auto envR_x2     = TensorX2<Scalar, 3>(envR);
-        auto res_shf_x2  = TensorX2<Scalar, 3>(wd, mR, mL);
+        auto mps_x2      = x2::Tensor<Scalar, 3>(mps);
+        auto mpo_shf_x2  = x2::Tensor<Scalar, 4>(mpo_shf);
+        auto envL_shf_x2 = x2::Tensor<Scalar, 3>(envL_shf);
+        auto envR_x2     = x2::Tensor<Scalar, 3>(envR);
+        auto res_shf_x2  = x2::Tensor<Scalar, 3>(wd, mR, mL);
 
-        thread_local TensorX2<Scalar, 4> T1;
-        thread_local TensorX2<Scalar, 4> T2;
+        thread_local x2::Tensor<Scalar, 4> T1;
+        thread_local x2::Tensor<Scalar, 4> T2;
 
         T1.resize(std::array{md, mL, mR, wR});
         T2.resize(std::array{wL, wd, mL, mR});
 
         // Map the DD tensors to DD matrices
-        auto mps_mat_x2  = ConstMatrixX2Map<Scalar>(mps_x2.hi.data(), mps_x2.lo.data(), md * mL, mR);
-        auto envR_mat_x2 = ConstMatrixX2Map<Scalar>(envR_x2.hi.data(), envR_x2.lo.data(), mR, mR * wR);
+        auto mps_mat_x2  = x2::ConstMatrixMap<Scalar>(mps_x2.hi_data(), mps_x2.lo_data(), md * mL, mR);
+        auto envR_mat_x2 = x2::ConstMatrixMap<Scalar>(envR_x2.hi_data(), envR_x2.lo_data(), mR, mR * wR);
 
         {
-            auto T1_mat_x2 = MatrixX2Map<Scalar>(T1.hi.data(), T1.lo.data(), md * mL, mR * wR);
+            auto T1_mat_x2 = x2::MatrixMap<Scalar>(T1.hi_data(), T1.lo_data(), md * mL, mR * wR);
             gemm_x2(T1_mat_x2, mps_mat_x2, envR_mat_x2);
         }
 
         {
-            auto T2_mat_x2      = MatrixX2Map<Scalar>(T2.hi.data(), T2.lo.data(), wL * wd, mL * mR);
-            auto mpo_shf_mat_x2 = ConstMatrixX2Map<Scalar>(mpo_shf_x2.hi.data(), mpo_shf_x2.lo.data(), wL * wd, md * wR);
+            auto T2_mat_x2      = x2::MatrixMap<Scalar>(T2.hi_data(), T2.lo_data(), wL * wd, mL * mR);
+            auto mpo_shf_mat_x2 = x2::ConstMatrixMap<Scalar>(mpo_shf_x2.hi_data(), mpo_shf_x2.lo_data(), wL * wd, md * wR);
             T1.shuffle(std::array{0, 3, 1, 2});
-            auto T1_mat_x2 = ConstMatrixX2Map<Scalar>(T1.hi.data(), T1.lo.data(), md * wR, mL * mR);
+            auto T1_mat_x2 = x2::ConstMatrixMap<Scalar>(T1.hi_data(), T1.lo_data(), md * wR, mL * mR);
 
             gemm_x2(T2_mat_x2, mpo_shf_mat_x2, T1_mat_x2);
         }
 
         {
-            auto res_shf_mat_x2 = MatrixX2Map<Scalar>(res_shf_x2.hi.data(), res_shf_x2.lo.data(), wd * mR, mL);
+            auto res_shf_mat_x2 = x2::MatrixMap<Scalar>(res_shf_x2.hi_data(), res_shf_x2.lo_data(), wd * mR, mL);
             T2.shuffle(std::array{1, 3, 2, 0});
-            auto T2_mat_x2   = ConstMatrixX2Map<Scalar>(T2.hi.data(), T2.lo.data(), wd * mR, mL * wL);
-            auto envL_mat_x2 = ConstMatrixX2Map<Scalar>(envL_shf_x2.hi.data(), envL_shf_x2.lo.data(), mL * wL, mL);
+            auto T2_mat_x2   = x2::ConstMatrixMap<Scalar>(T2.hi_data(), T2.lo_data(), wd * mR, mL * wL);
+            auto envL_mat_x2 = x2::ConstMatrixMap<Scalar>(envL_shf_x2.hi_data(), envL_shf_x2.lo_data(), mL * wL, mL);
             gemm_x2(res_shf_mat_x2, T2_mat_x2, envL_mat_x2);
         }
         // final permutation back to tensor layout
@@ -230,9 +229,9 @@ namespace tools::common::contraction::internal {
         info.ST3                = res_shf_x2.norm();
         auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
         info.cancelation_factor = Smax / info.ST3;
-        // if constexpr(settings::debug_contraction)
-        tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} envR {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e}", fp(info.mps_norm),
-                         fp(info.mpo_norm), fp(info.envL_norm), fp(info.envR_norm), fp(info.ST1), fp(info.ST2), fp(info.ST3), fp(info.cancelation_factor));
+        if constexpr(settings::debug_contraction)
+            tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} envR {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e}", fp(info.mps_norm),
+                             fp(info.mpo_norm), fp(info.envL_norm), fp(info.envR_norm), fp(info.ST1), fp(info.ST2), fp(info.ST3), fp(info.cancelation_factor));
         return info;
     }
 }
@@ -266,31 +265,51 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
     auto mpsv = Eigen::Map<const VectorType>(mps.data(), mps.size());
     auto resv = Eigen::Map<VectorType>(res.data(), res.size());
 
-    internal::Info<Scalar>       info;
+    internal::StatsMv<Scalar>       info;
     [[maybe_unused]] std::string msg;
 
-    const internal::MatVecOptions opts           = internal::matvec_options_active();
-    const MatVecBackend           backend_active = opts.backend;
+    const internal::InfoH1Mv h1info         = internal::get_info_h1mv();
+    const internal::InfoH2Mv h2info         = internal::get_info_h2mv();
+    ContractionBackend       backend_active = ContractionBackend::AUTO;
+
+    if(h1info.backend != ContractionBackend::AUTO) backend_active = h1info.backend;
+    if(h2info.backend != ContractionBackend::AUTO) backend_active = h2info.backend;
+
+    if(mpo_dims == h1info.H1_local_dims and h1info.backend == ContractionBackend::AUTO) backend_active = h1info.backend;
+    if(mpo_dims == h2info.H2_local_dims and h2info.backend == ContractionBackend::AUTO) backend_active = h2info.backend;
 
     switch(backend_active) {
-        case MatVecBackend::X2: info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR); break;
-        case MatVecBackend::EIGEN: info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR); break;
-        case MatVecBackend::TBLIS: {
+        case ContractionBackend::X2: info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR); break;
+        case ContractionBackend::EIGEN: info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR); break;
+        case ContractionBackend::TBLIS: {
             if constexpr(use_tblis) {
                 info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
                 break;
             } else {
-                tools::log->debug("matrix_vector_product: Detected MatVecBackend::TBLIS, but use_tblis==false. Switching to Eigen.");
+                tools::log->debug("matrix_vector_product: Detected ContractionBackend::TBLIS, but use_tblis==false. Switching to Eigen.");
                 info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
                 break;
             }
         }
-        case MatVecBackend::AUTO: {
+        case ContractionBackend::FP80: {
+            using ScalarL = std::conditional_t<std::is_floating_point_v<Scalar>, long double, std::complex<long double>>;
+            Eigen::Tensor<ScalarL, 3> res_fp(mps.dimensions());
+            Eigen::Tensor<ScalarL, 3> mps_fp  = mps.template cast<ScalarL>();
+            Eigen::Tensor<ScalarL, 4> mpo_fp  = mpo.template cast<ScalarL>();
+            Eigen::Tensor<ScalarL, 3> envL_fp = envL.template cast<ScalarL>();
+            Eigen::Tensor<ScalarL, 3> envR_fp = envR.template cast<ScalarL>();
+            info                              = internal::contract_with_eigen<ScalarL>(res_fp, mps_fp, mpo_fp, envL_fp, envR_fp);
+            res                               = res_fp.template cast<Scalar>();
+            break;
+        }
+        case ContractionBackend::AUTO: {
             auto get_op_norm = [&]() -> RealScalar {
                 using namespace internal;
-                if(mpo_dims == opts.H1_dims) return static_cast<RealScalar>(opts.H1_norm);
-                if(mpo_dims == opts.H2_dims) return static_cast<RealScalar>(opts.H2_norm);
-                return std::max({get_norm(envL.data(), envL.dimensions()), get_norm(envR.data(), envR.dimensions())});
+                if(mpo_dims == h1info.H1_local_dims and std::isfinite(h1info.H1_local_norm)) return static_cast<RealScalar>(h1info.H1_local_norm);
+                if(mpo_dims == h2info.H2_local_dims and std::isfinite(h2info.H2_local_norm)) return static_cast<RealScalar>(h2info.H2_local_norm);
+                if constexpr(settings::debug_contraction) { tools::log->debug("matrix_vector_product: no registered norms for local H1 or H2: using envs"); }
+                auto env_max_norm = std::max({get_norm(envL.data(), envL.dimensions()), get_norm(envR.data(), envR.dimensions())});
+                return env_max_norm;
             };
 
             Eigen::Index md = mps_dims[0];
@@ -302,22 +321,32 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
             const Eigen::Index cplx_factor = Eigen::NumTraits<Scalar>::IsComplex == 0 ? 1 : 4;
             const RealScalar   k_eff =
                 static_cast<RealScalar>(cplx_factor * std::max({md * wL, md * wR, mL * wL, mR * wR})); // inner dimension of the dot products
-            const RealScalar eps          = std::numeric_limits<RealScalar>::epsilon();
-            const RealScalar gamma        = (k_eff * eps) / (RealScalar(1) - k_eff * eps);
-            const RealScalar x2_redoTol   = RealScalar{10} / gamma;
-            const RealScalar x2_switchTol = RealScalar{1} / gamma;
-            const RealScalar xnorm2       = mpsv.squaredNorm();
-            const RealScalar opnorm       = get_op_norm();
-            const RealScalar crit_switch  = opnorm * xnorm2;
-            const bool       use_x2       = !std::isfinite(crit_switch) or crit_switch > x2_switchTol;
+            const RealScalar eps   = std::numeric_limits<RealScalar>::epsilon();
+            const RealScalar gamma = (k_eff * eps) / (RealScalar(1) - k_eff * eps); // Slightly larger than eps
+            const RealScalar q0Tol = RealScalar{1} / gamma;
+            const RealScalar q2Tol = RealScalar{10} / gamma;
+            const RealScalar q4Tol = RealScalar{1e-9f};
+
+            const RealScalar xnorm2 = mpsv.squaredNorm();
+            const RealScalar xnorm  = std::sqrt(xnorm2);
+            const RealScalar opnorm = get_op_norm();
+            const RealScalar q0     = opnorm * xnorm2;
+            const bool       use_x2 = !std::isfinite(q0) or q0 > q0Tol;
             if(xnorm2 == RealScalar{0}) {
                 resv.setZero();
                 return;
             }
             if(use_x2) {
-                tools::log->debug("Switching matvec to x2:  opnorm={:.4e} xnorm2={:.4e} criterion: {:.4e}  switchTol {:.4e}", fp(opnorm), fp(xnorm2),
-                                  fp(opnorm * xnorm2), fp(x2_switchTol));
-                info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+                info                    = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+                const Scalar     xAx    = mpsv.dot(resv);
+                const RealScalar denom  = std::abs(xAx);
+                const RealScalar Axnorm = resv.norm();
+                const RealScalar q2     = opnorm * xnorm2 / std::max(denom, eps);
+                const RealScalar q4     = gamma * opnorm * xnorm / std::max(Axnorm, eps); // E.g. q4 > 1e-2: 2 digits lost
+
+                if constexpr(settings::debug_contraction)
+                    tools::log->debug("Switched matvec to x2:  opnorm={:.4e} xnorm={:.4e} q0={:.4e} q2={:.4e} q4={:.4e} q0Tol {:.4e} q2Tol {:.4e}", fp(opnorm),
+                                      fp(xnorm), fp(q0), fp(q2), fp(q4), fp(q0Tol), fp(q2Tol));
             } else {
                 if constexpr(use_tblis) {
                     info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
@@ -326,27 +355,39 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
                 }
 
                 // Decide redo: If |A|/(xAx/xx) is too large, there is catastrophic cancellation in the matvec.
-                // Then we better switch to MatVecBackend::X2 (more precise) if the backend is AUTO.
-                const Scalar     xAx       = mpsv.dot(resv);
-                const RealScalar denom     = std::abs(xAx);
-                const RealScalar crit_redo = opnorm * xnorm2 / std::max(denom, eps);
-                const bool       do_redo   = !std::isfinite(crit_redo) or crit_redo > x2_redoTol;
+                // Then we better switch to ContractionBackend::X2 (more precise) if the backend is AUTO.
+                const Scalar     xAx    = mpsv.dot(resv);
+                const RealScalar denom  = std::abs(xAx);
+                const RealScalar Axnorm = resv.norm();
+                const RealScalar q2     = opnorm * xnorm2 / std::max(denom, eps);
+                const RealScalar q4     = gamma * opnorm * xnorm / std::max(Axnorm, eps);
 
-                if(do_redo) {
+                const bool q2_redo = !std::isfinite(q2) or q2 > q2Tol;
+                const bool q4_redo = !std::isfinite(q4) or q4 > q4Tol;
+                // tools::log->debug("matrix_vector_product:  opnorm={:.4e} xAx={:.4e} xnorm={:.4e} "
+                // "q0={:.4e} q2={:.4e} q4={:.4e} q2Tol={:.4e} q4Tol={:.4e}",
+                // fp(opnorm), fp(std::real(xAx)), fp(xnorm), fp(q0), fp(q2), fp(q4), fp(q2Tol), fp(q4Tol));
+                if(q2_redo or q4_redo) {
                     VectorType resv_old = resv;
                     info                = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
 
-                    const Scalar     xAx_x2   = mpsv.dot(resv);
-                    const RealScalar xAx_diff = std::abs(xAx_x2 - xAx);
-                    const RealScalar Ax_diff  = (resv - resv_old).norm();
-                    tools::log->debug("matrix_vector_product: Redo matvec in x2:  opnorm={:.4e} xAx={:.4e} xnorm2={:.4e} criterion={:.4e}  redoTol={:.4e} "
-                                      "|xAx-xAx|={:.16e} | |Ax-Ax|={:.16e}",
-                                      fp(opnorm), fp(std::real(xAx)), fp(xnorm2), fp(crit_redo), fp(x2_redoTol), fp(xAx_diff), fp(Ax_diff));
+                    const Scalar     xAx_x2     = mpsv.dot(resv);
+                    const RealScalar Axnorm_x2  = resv.norm();
+                    const RealScalar xAx_diff   = std::abs(xAx_x2 - xAx);
+                    const RealScalar Ax_diff    = (resv - resv_old).norm();
+                    const RealScalar Ax_reldiff = (resv - resv_old).norm() / Axnorm_x2;
+                    const RealScalar f          = Ax_reldiff / q4;
+                    if constexpr(settings::debug_contraction)
+                        tools::log->debug("matrix_vector_product: Redo matvec in x2:  opnorm={:.4e} xnorm={:.4e} Axnorm {:.4e} xAx={:.4e} -> {:.4e} "
+                                          "q0={:.4e} q2={:.4e} q4={:.4e} q0Tol={:.4e} q2Tol={:.4e} q4Tol={:.4e} |xAx-xAx|={:.16e} "
+                                          "|Ax-Ax_x2|={:.4e} |Ax-Ax_x2|/|Ax|={:.16e} f={:.4e}",
+                                          fp(opnorm), fp(xnorm), fp(Axnorm), fp(std::real(xAx)), fp(std::real(xAx_x2)), fp(q0), fp(q2), fp(q4), fp(q0Tol),
+                                          fp(q2Tol), fp(q4Tol), fp(xAx_diff), fp(Ax_diff), fp(Ax_reldiff), fp(f));
                 }
             }
             break;
         }
-        default: throw std::runtime_error("matrix_vector_product: Unknown MatVecBackend");
+        default: throw std::runtime_error("matrix_vector_product: Unknown ContractionBackend");
     }
 
     if constexpr(settings::debug_contraction)

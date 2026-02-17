@@ -8,12 +8,12 @@
 
 #if defined(NDEBUG)
 namespace rnd {
-    static constexpr bool debug = false;
+    inline constexpr bool debug = false;
 }
 #else
     #include <omp.h>
 namespace rnd {
-    static constexpr bool debug = true;
+    inline constexpr bool debug = true;
 }
 #endif
 

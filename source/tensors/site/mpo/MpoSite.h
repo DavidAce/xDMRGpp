@@ -4,6 +4,7 @@
 #include "h5tb/h5tb.h"
 #include "math/float.h"
 #include "math/tenx.h"
+#include "MpoFactory.h"
 #include <any>
 #include <map>
 #include <memory>
@@ -93,11 +94,12 @@ class MpoSite {
     void                                              clear_mpo_squared();
     [[nodiscard]] bool                                has_mpo() const;
     [[nodiscard]] bool                                has_mpo_squared() const;
-    [[nodiscard]] Eigen::Tensor<Scalar, 4>            get_non_compressed_mpo_squared() const;
+    [[nodiscard]] Eigen::Tensor<Scalar, 4>            get_mpo_squared(const Eigen::Tensor<Scalar, 4> &mpo) const;
     [[nodiscard]] const Eigen::Tensor<Scalar, 4>     &MPO() const;
     [[nodiscard]] const Eigen::Tensor<QuadScalar, 4> &MPO_q() const;
     [[nodiscard]] Eigen::Tensor<Scalar, 4>            MPO_energy_shifted_view(Scalar energy_shift_per_site) const;
     [[nodiscard]] Eigen::Tensor<QuadScalar, 4>        MPO_energy_shifted_view_q(Scalar energy_shift_per_site) const;
+    [[nodiscard]] Eigen::Tensor<Scalar, 4>            MPO2_energy_shifted_view(Scalar energy_shift_per_site) const;
     [[nodiscard]] Eigen::Tensor<Scalar, 4>            MPO_nbody_view(std::optional<std::vector<size_t>> nbody,
                                                                      std::optional<std::vector<size_t>> skip = std::nullopt) const;
     [[nodiscard]] Eigen::Tensor<QuadScalar, 4>        MPO_nbody_view_q(std::optional<std::vector<size_t>> nbody,
@@ -120,17 +122,19 @@ class MpoSite {
     [[nodiscard]] Scalar                           get_energy_shift_mpo() const;
     [[nodiscard]] Scalar                           get_energy_shift_mpo2() const;
     [[nodiscard]] double                           get_global_energy_upper_bound() const;
+    void                                           set_global_energy_upper_bound(RealScalar energy);
     [[nodiscard]] double                           get_local_energy_upper_bound() const;
+    void                                           set_local_energy_upper_bound(RealScalar energy);
+    [[nodiscard]] virtual std::unique_ptr<MpoSite> clone() const = 0;
     [[nodiscard]] long                             size() const;
     [[nodiscard]] std::array<long, 4>              dimensions() const;
-    [[nodiscard]] virtual std::unique_ptr<MpoSite> clone() const                                                             = 0;
     [[nodiscard]] virtual long                     get_spin_dimension() const                                                = 0;
     [[nodiscard]] virtual TableMap                 get_parameters() const                                                    = 0;
     [[nodiscard]] virtual std::any                 get_parameter(std::string_view name) const                                = 0;
     virtual void                                   set_parameter(std::string_view name, std::any value)                      = 0;
     virtual void                                   print_parameter_names() const                                             = 0;
     virtual void                                   print_parameter_values() const                                            = 0;
-    virtual void                                   set_parameters(TableMap &parameters)                                      = 0;
+    virtual void                                   set_parameters(const TableMap &parameters)                                = 0;
     virtual void                                   randomize_hamiltonian()                                                   = 0;
     virtual void                                   set_averages(std::vector<TableMap> all_parameters, bool infinite = false) = 0;
     virtual void                                   save_hamiltonian(h5pp::File &file, std::string_view model_prefix) const   = 0;
@@ -139,6 +143,39 @@ class MpoSite {
     void                                           load_mpo(const h5pp::File &file, std::string_view model_prefix);
     std::size_t                                    get_unique_id() const;
     std::size_t                                    get_unique_id_sq() const;
+
+    // In MpoSite<Scalar>:
+    template<typename T>
+    std::unique_ptr<MpoSite<T>> cast() const {
+        if constexpr(std::is_same_v<Scalar, T>) {
+            return this->clone(); // already returns std::unique_ptr<MpoSite<Scalar>>
+        } else {
+            auto mpo_new = MpoFactory<T>::create_mpo(this->get_position(), this->model_type);
+            // 1) Transfer base parameters
+            if constexpr(std::is_floating_point_v<Scalar>) {
+                mpo_new->set_energy_shift_mpo(this->energy_shift_mpo);
+            } else {
+                using RealT             = Eigen::NumTraits<T>::Real;
+                auto energy_shift_mpo_T = T(static_cast<RealT>(std::real(this->energy_shift_mpo)), static_cast<RealT>(std::imag(this->energy_shift_mpo)));
+                mpo_new->set_energy_shift_mpo(energy_shift_mpo_T);
+            }
+            mpo_new->set_parity_shift_mpo(this->parity_shift_ritz_mpo, this->parity_shift_sign_mpo, this->parity_shift_axus_mpo);
+            mpo_new->set_parity_shift_mpo_squared(this->parity_shift_sign_mpo2, this->parity_shift_axus_mpo2);
+            mpo_new->set_global_energy_upper_bound(this->global_energy_upper_bound);
+            mpo_new->set_local_energy_upper_bound(this->local_energy_upper_bound);
+
+            // 2) Transfer derived parameters
+            mpo_new->set_parameters(this->get_parameters());
+
+            // 3) Force rebuild of MPO in the new precision
+            mpo_new->build_mpo();
+            mpo_new->build_mpo_q();
+            mpo_new->build_mpo_squared();
+
+            mpo_new->assert_validity();
+            return mpo_new;
+        }
+    }
 
     template<typename T>
     [[nodiscard]] decltype(auto) MPO_as() const {

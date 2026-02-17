@@ -47,17 +47,17 @@ void IsingSelfDual<Scalar>::print_parameter_values() const {
 }
 
 template<typename Scalar>
-void IsingSelfDual<Scalar>::set_parameters(TableMap &parameters) {
-    h5tb.param.J_mean                = std::any_cast<double>(parameters["J_mean"]);
-    h5tb.param.J_wdth                = std::any_cast<double>(parameters["J_wdth"]);
-    h5tb.param.J_rand                = std::any_cast<double>(parameters["J_rand"]);
-    h5tb.param.h_mean                = std::any_cast<double>(parameters["h_mean"]);
-    h5tb.param.h_wdth                = std::any_cast<double>(parameters["h_wdth"]);
-    h5tb.param.h_rand                = std::any_cast<double>(parameters["h_rand"]);
-    h5tb.param.lambda                = std::any_cast<double>(parameters["lambda"]);
-    h5tb.param.delta                 = std::any_cast<double>(parameters["delta"]);
-    h5tb.param.spin_dim              = std::any_cast<long>(parameters["spin_dim"]);
-    h5tb.param.distribution          = std::any_cast<h5pp::vstr_t>(parameters["distribution"]);
+void IsingSelfDual<Scalar>::set_parameters(const TableMap &parameters) {
+    h5tb.param.J_mean                = std::any_cast<double>(parameters.at("J_mean"));
+    h5tb.param.J_wdth                = std::any_cast<double>(parameters.at("J_wdth"));
+    h5tb.param.J_rand                = std::any_cast<double>(parameters.at("J_rand"));
+    h5tb.param.h_mean                = std::any_cast<double>(parameters.at("h_mean"));
+    h5tb.param.h_wdth                = std::any_cast<double>(parameters.at("h_wdth"));
+    h5tb.param.h_rand                = std::any_cast<double>(parameters.at("h_rand"));
+    h5tb.param.lambda                = std::any_cast<double>(parameters.at("lambda"));
+    h5tb.param.delta                 = std::any_cast<double>(parameters.at("delta"));
+    h5tb.param.spin_dim              = std::any_cast<long>(parameters.at("spin_dim"));
+    h5tb.param.distribution          = std::any_cast<h5pp::vstr_t>(parameters.at("distribution"));
     all_mpo_parameters_have_been_set = true;
 }
 

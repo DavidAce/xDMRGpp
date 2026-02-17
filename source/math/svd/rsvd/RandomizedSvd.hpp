@@ -122,7 +122,7 @@ namespace Rsvd {
 
             const auto b{q.adjoint() * a};
             //    Eigen::JacobiSVD<MatrixType> svd(b, Eigen::ComputeThinU | Eigen::ComputeThinV);
-            Eigen::BDCSVD<MatrixType> svd(b, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            Eigen::BDCSVD<MatrixType, Eigen::ComputeThinU | Eigen::ComputeThinV> svd(b);
 
             m_leftSingularVectors.noalias() = q * svd.matrixU().leftCols(rank);
             m_singularValues                = svd.singularValues().head(rank);

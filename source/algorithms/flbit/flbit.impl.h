@@ -365,7 +365,7 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
     if(u_and.size() != 16) throw except::logic_error("u_and.size() != 16");
     Eigen::VectorXcd hamiltonian_eff_diagonal;
     {
-        const auto mpos = tensors.model->get_compressed_mpos(MposWithEdges::ON);
+        const auto mpos = tensors.model->get_mpo_tensors(0, MposWithEdges::ON, MpoCompress::AUTO);
         //        const auto mpos = tensors.model->get_mpos(MposWithEdges::ON);
         auto t_ham      = tid::tic_scope("ham");
         auto num_states = static_cast<Eigen::Index>(std::pow(2, sites.size()));

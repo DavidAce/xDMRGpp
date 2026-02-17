@@ -41,6 +41,10 @@ namespace tools::finite::env {
     template<typename Scalar> void                           rebuild_edges_var(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges);
     template<typename Scalar> void                           rebuild_edges_ene(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges);
 
+    template<typename Scalar> void                           rebuild_edges_x2(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges);
+    template<typename Scalar> void                           rebuild_edges_var_x2(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges);
+    template<typename Scalar> void                           rebuild_edges_ene_x2(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges);
+
     /* clang-format on */
 
 }

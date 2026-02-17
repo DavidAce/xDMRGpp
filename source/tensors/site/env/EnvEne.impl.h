@@ -7,10 +7,11 @@
 #include "tensors/site/mpo/MpoSite.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tools/common/log.h"
+#include <tools/common/contraction/contraction_policy.h>
 #include <utility>
 
 namespace settings {
-    inline constexpr bool debug_edges_ene = false;
+    inline constexpr bool debug_edges_ene = true;
 }
 
 template<typename Scalar>
@@ -28,12 +29,13 @@ EnvEne<Scalar> EnvEne<Scalar>::enlarge(const MpsSite<Scalar> &mps, const MpoSite
                                       get_position(), mps.get_position(), mpo.get_position());
 
     EnvEne<Scalar> env = *this;
-    if(env.sites == 0 and (not block or block->size() == 0)) {
+    if(env.sites == 0 and (not blkx2 or blkx2->size() == 0)) {
         env.set_edge_dims(mps, mpo);
         env.position = mps.get_position();
         return env;
     }
-    env.enlarge(mps.template get_M_bare_as<Scalar>(), mpo.template MPO_as<Scalar>());
+    env.enlarge(mps.template get_M_bare_as<Scalar>(), mpo.template MPO_as<Scalar>()); // calls base
+
     // Update positions assuming this is a finite chain.
     // This needs to be corrected (on the right side) on infinite chains
     if(env.side == "L")
@@ -49,9 +51,9 @@ EnvEne<Scalar> EnvEne<Scalar>::enlarge(const MpsSite<Scalar> &mps, const MpoSite
     env.unique_id_mps = mps.get_unique_id();
     env.unique_id_mpo = mpo.get_unique_id();
     if constexpr(settings::debug_edges_ene) {
-        tools::log->trace("class_env_{}::enlarge(mps,mpo): side({}), pos({}): unique_id_env: {}", tag, side, get_position(), env.unique_id_env.value());
-        tools::log->trace("class_env_{}::enlarge(mps,mpo): side({}), pos({}): unique_id_mps: {}", tag, side, get_position(), env.unique_id_mps.value());
-        tools::log->trace("class_env_{}::enlarge(mps,mpo): side({}), pos({}): unique_id_mpo: {}", tag, side, get_position(), env.unique_id_mpo.value());
+        tools::log->trace("EnvEne::enlarge(mps,mpo): side({}), pos({}): unique_id_env: {}", side, get_position(), env.unique_id_env.value());
+        tools::log->trace("EnvEne::enlarge(mps,mpo): side({}), pos({}): unique_id_mps: {}", side, get_position(), env.unique_id_mps.value());
+        tools::log->trace("EnvEne::enlarge(mps,mpo): side({}), pos({}): unique_id_mpo: {}", side, get_position(), env.unique_id_mpo.value());
     }
     return env;
 }
@@ -62,8 +64,8 @@ void EnvEne<Scalar>::refresh(const EnvEne &env, const MpsSite<Scalar> &mps, cons
     // If side == R, env,mps and mpo are all corresponding to the neighbor on the right
     if constexpr(settings::debug)
         if(not num::all_equal(env.get_position(), mps.get_position(), mpo.get_position()))
-            throw except::logic_error("class_env_{}::enlarge(): side({}), pos({}),: All positions are not equal: env {} | mps {} | mpo {}", tag, side,
-                                      get_position(), get_position(), mps.get_position(), mpo.get_position());
+            throw except::logic_error("EnvEne::enlarge(): side({}), pos({}),: All positions are not equal: env {} | mps {} | mpo {}", side, get_position(),
+                                      get_position(), mps.get_position(), mpo.get_position());
 
     if(side == "L" and get_position() != mps.get_position() + 1)
         throw except::logic_error(
@@ -114,12 +116,13 @@ void EnvEne<Scalar>::refresh(const EnvEne &env, const MpsSite<Scalar> &mps, cons
             unique_id_bef = get_unique_id();
             tools::log->trace("Refreshing {} env{}({}): modified {}", tag, side, get_position(), reason);
         }
+        build_blkx2(env.get_blkx2(), mps.template get_M_bare_as<Scalar>(), mpo.template MPO_as<Scalar>());
 
-        build_block(*env.block, mps.template get_M_bare_as<Scalar>(), mpo.template MPO_as<Scalar>());
         // Store id's to objects used to create this env.
         unique_id_env = env.get_unique_id();
         unique_id_mps = mps.get_unique_id();
         unique_id_mpo = mpo.get_unique_id();
+        unique_id     = std::nullopt;
 
         if constexpr(settings::debug_edges_ene) {
             if(unique_id_bef == get_unique_id()) tools::log->debug("Refreshing {} env{}({}): id did not change: {}", tag, side, get_position(), unique_id_bef);
@@ -127,6 +130,51 @@ void EnvEne<Scalar>::refresh(const EnvEne &env, const MpsSite<Scalar> &mps, cons
             //                unique_id_bef);
         }
     }
+}
+
+template<typename Scalar>
+void EnvEne<Scalar>::set_block(const Eigen::Tensor<Scalar, 3> &blk, const EnvEne &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) {
+    // If side == L, env,mps and mpo are all corresponding to the neighbor on the left
+    // If side == R, env,mps and mpo are all corresponding to the neighbor on the right
+    if constexpr(settings::debug)
+        if(not num::all_equal(env.get_position(), mps.get_position(), mpo.get_position()))
+            throw except::logic_error("EnvEne::set_block(): side({}), pos({}),: positions are not equal: mps {} | mpo {}", side, get_position(), get_position(),
+                                      mps.get_position(), mpo.get_position());
+
+    if(side == "L" and get_position() != mps.get_position() + 1)
+        throw except::logic_error(
+            fmt::format("EnvEne<Scalar>::set_block(pos == {}): This env{} needs env, mps and mpo at position {}", get_position(), side, get_position() - 1));
+    if(side == "R" and get_position() + 1 != mps.get_position())
+        throw except::logic_error(
+            fmt::format("EnvEne<Scalar>::set_block(pos == {}): This env{} needs env, mps and mpo at position {}", get_position(), side, get_position() + 1));
+    if(not blkx2) blkx2 = std::make_unique<x2::Tensor<Scalar, 3>>();
+    *blkx2 = blk;
+
+    auto envinfo = tools::common::contraction::internal::get_info_env();
+    if(envinfo.backend == ContractionBackend::X2) { blkx2->renorm(); }
+
+    // Store id's to objects used to create this env.
+    unique_id     = get_unique_id();
+    unique_id_env = env.get_unique_id();
+    unique_id_mps = mps.get_unique_id();
+    unique_id_mpo = mpo.get_unique_id();
+    assert_unique_id(env, mps, mpo);
+}
+
+template<typename Scalar>
+void EnvEne<Scalar>::set_block_raw(const Eigen::Tensor<Scalar, 3> &blk) {
+    // This is used for example during preconditioning, where we make a special env to host a preconditioned block that is not derived from mpo, mps and env
+    if(not blkx2) blkx2 = std::make_unique<x2::Tensor<Scalar, 3>>();
+    *blkx2 = blk;
+
+    auto envinfo = tools::common::contraction::internal::get_info_env();
+    if(envinfo.backend == ContractionBackend::X2) { blkx2->renorm(); }
+
+    // Store id's to objects used to create this env.
+    unique_id = get_unique_id();
+    unique_id_env.reset();
+    unique_id_mps.reset();
+    unique_id_mpo.reset();
 }
 
 template<typename Scalar>

@@ -75,6 +75,19 @@ class ModelFinite {
     ModelFinite(const ModelFinite &other);            // copy ctor
     ModelFinite &operator=(const ModelFinite &other); // copy assign
 
+    template<typename T>
+    ModelFinite<T> cast() const {
+        if constexpr(std::is_same_v<T, Scalar>)
+            return *this;
+        else {
+            ModelFinite<T> m;
+            m.MPO.reserve(this->MPO.size());
+            for(const auto &other_mpo : this->MPO) m.MPO.emplace_back(other_mpo->template cast<T>());
+            m.active_sites = this->active_sites;
+            m.model_type   = this->model_type;
+            return m;
+        }
+    }
     void                                                                     initialize(ModelType model_type_, size_t model_size);
     void                                                                     randomize();
     void                                                                     assert_validity() const;
@@ -91,11 +104,13 @@ class ModelFinite {
     [[nodiscard]] std::vector<std::reference_wrapper<MpoSite<Scalar>>>       get_mpo(const std::vector<size_t> &sites);
     [[nodiscard]] std::vector<std::reference_wrapper<const MpoSite<Scalar>>> get_mpo_active() const;
     [[nodiscard]] std::vector<std::reference_wrapper<MpoSite<Scalar>>>       get_mpo_active();
-    [[nodiscard]] std::vector<Eigen::Tensor<Scalar, 4>>                      get_all_mpo_tensors(MposWithEdges withEdges = MposWithEdges::OFF);
-    [[nodiscard]] std::vector<Eigen::Tensor<QuadScalar, 4>>                  get_all_mpo_tensors_t(MposWithEdges withEdges = MposWithEdges::OFF);
-    [[nodiscard]] std::vector<Eigen::Tensor<Scalar, 4>>                      get_compressed_mpos(MposWithEdges withEdges = MposWithEdges::OFF);
-    [[nodiscard]] std::vector<Eigen::Tensor<Scalar, 4>>                      get_compressed_mpos_squared(MposWithEdges withEdges = MposWithEdges::OFF);
-    [[nodiscard]] std::vector<Eigen::Tensor<Scalar, 4>>                      get_mpos_energy_shifted_view(Scalar energy_per_site) const;
+    [[nodiscard]] std::vector<Eigen::Tensor<Scalar, 4>>     get_mpo_tensors(Scalar energy_shift_per_site = 0, MposWithEdges withEdges = MposWithEdges::ON,
+                                                                            MpoCompress compress = MpoCompress::AUTO) const;
+    [[nodiscard]] std::vector<Eigen::Tensor<QuadScalar, 4>> get_mpo_tensors_q(Scalar energy_shift_per_site = 0, MposWithEdges withEdges = MposWithEdges::ON,
+                                                                              MpoCompress compress = MpoCompress::AUTO) const;
+
+    [[nodiscard]] std::vector<Eigen::Tensor<Scalar, 4>> get_mpo2_tensors(Scalar energy_shift_per_site = 0, MposWithEdges withEdges = MposWithEdges::ON,
+                                                                         MpoCompress compress = MpoCompress::AUTO) const;
 
     [[nodiscard]] bool has_mpo() const;
     [[nodiscard]] bool has_mpo_squared() const;

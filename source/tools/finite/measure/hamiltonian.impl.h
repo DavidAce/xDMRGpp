@@ -12,7 +12,7 @@
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
-#include "tools/common/contraction/matvec_policy.h"
+#include "tools/common/contraction/contraction_policy.h"
 #include "tools/common/log.h"
 #include <Eigen/Eigenvalues>
 
@@ -161,7 +161,8 @@ RealScalar<Scalar> tools::finite::measure::local_operator_norm_estimate(const Ei
 
     VecType v = VecType::Random(size_mps).normalized();
 
-    auto mvopts = MatVecRaiiOptions(MatVecBackend::TBLIS);
+    auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, mpo.dimensions());
+    auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo.dimensions());
 
     Real         lambda    = Real{0};
     Eigen::Index krylovdim = 3;
@@ -667,7 +668,7 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
         if(multisite_mps.dimension(0) != mpo2.dimension(2))
             throw std::runtime_error(fmt::format("State and model have incompatible physical dimension: state dim {} | model dim {}",
                                                  multisite_mps.dimension(0), mpo2.dimension(2)));
-        H2 = tools::common::contraction::expectation_value(multisite_mps, mpo2, env2.L, env2.R);
+        H2          = tools::common::contraction::expectation_value(multisite_mps, mpo2, env2.L, env2.R);
     } else {
         // Split the multisite mps first
         const auto mpos = model.get_mpo_active();
