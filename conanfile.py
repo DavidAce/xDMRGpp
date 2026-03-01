@@ -1,4 +1,5 @@
 from conan import ConanFile
+from conan.tools.cmake import CMakeConfigDeps
 from conan.tools.layout import basic_layout
 from conan.tools.files import copy
 from conan.tools.microsoft import is_msvc
@@ -7,7 +8,7 @@ from conan.tools.scm import Version
 from conan.errors import ConanInvalidConfiguration
 import os
 
-required_conan_version = ">=1.54.0"
+required_conan_version = ">=2.0"
 
 class DMRGConan(ConanFile):
     name = "xDMRG++"
@@ -19,7 +20,7 @@ class DMRGConan(ConanFile):
     url = "https://github.com/DavidAce/DMRG"
     license = "MIT"
     settings = "os", "compiler", "build_type", "arch"
-    generators = "CMakeDeps"
+    generators = ("CMakeToolchain", "CMakeDeps", "CMakeConfigDeps")
     no_copy_source = True
     short_paths = True
     exports_sources = "include/*"
@@ -83,7 +84,7 @@ class DMRGConan(ConanFile):
         self.requires("h5pp/[>=1.11.3 <2]")
         self.requires("spdlog/[>=1.16.0 <2]")
         self.requires("fmt/[>=12 <13]")
-        self.requires("eigen/5.0.0")
+        self.requires("eigen/5.0.1", force=True)
         # self.requires("ceres-solver/2.2.0")
         self.requires("cli11/2.6.0")
         self.requires("backward-cpp/1.6")

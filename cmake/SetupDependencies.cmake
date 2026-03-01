@@ -30,7 +30,7 @@ find_package(OpenMP                       REQUIRED BYPASS_PROVIDER COMPONENTS CX
 find_package(gfortran                     REQUIRED BYPASS_PROVIDER OPTIONAL_COMPONENTS quadmath)
 find_package(Lapacke                      REQUIRED BYPASS_PROVIDER MODULE)
 find_package(pcg-cpp                      REQUIRED)
-find_package(Eigen3       5.0.0           REQUIRED)                                         # Eigen3 numerical library
+find_package(Eigen3       5.0.1           REQUIRED)                                         # Eigen3 numerical library
 find_package(h5pp         1.11.0...1.11.3 REQUIRED)                                         # h5pp for writing to file binary in format
 find_package(spdlog       1.11.0...1.16.0 REQUIRED)
 find_package(fmt          11.0.0...11.9.0 REQUIRED)
@@ -42,6 +42,7 @@ find_package(toml11       4.4.0           REQUIRED)
 
 include(cmake/CheckCompile.cmake)
 check_compile(Lapacke lapacke::lapacke REQUIRED)
+
 
 
 # Install dependencies that need manual installation
@@ -99,6 +100,8 @@ endif()
 
 # Configure Eigen
 if(TARGET Eigen3::Eigen)
+    set_property(TARGET Eigen3::Eigen APPEND PROPERTY INTERFACE_COMPILE_OPTIONS $<$<CXX_COMPILER_ID:GNU>:-Wno-psabi>) # Silence ABI warnings
+
     if(EIGEN_USE_THREADS)
         target_compile_definitions(Eigen3::Eigen INTERFACE EIGEN_USE_THREADS)
     endif()
