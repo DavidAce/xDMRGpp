@@ -8,6 +8,10 @@ class EnvEne;
 template<typename Scalar>
 class EnvVar;
 
+namespace x2 {
+    template<typename Scalar, int rank> class Tensor;
+}
+
 template<typename Scalar>
 class EdgesInfinite {
     private:
@@ -37,8 +41,13 @@ class EdgesInfinite {
     [[nodiscard]] env_pair<EnvEne<Scalar> &>       get_ene();
     [[nodiscard]] env_pair<EnvVar<Scalar> &>       get_var();
 
-    env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_ene_blk() const;
-    env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_var_blk() const;
-    env_pair<Eigen::Tensor<Scalar, 3>>       get_env_ene_blk();
-    env_pair<Eigen::Tensor<Scalar, 3>>       get_env_var_blk();
+    env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_ene_block() const;
+    env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_var_block() const;
+    env_pair<Eigen::Tensor<Scalar, 3>>         get_env_ene_block();
+    env_pair<Eigen::Tensor<Scalar, 3>>         get_env_var_block();
+
+    env_pair<const x2::Tensor<Scalar, 3> &> get_env_ene_blkx2() const;
+    env_pair<const x2::Tensor<Scalar, 3> &> get_env_var_blkx2() const;
+    env_pair<x2::Tensor<Scalar, 3>>         get_env_ene_blkx2();
+    env_pair<x2::Tensor<Scalar, 3>>         get_env_var_blkx2();
 };

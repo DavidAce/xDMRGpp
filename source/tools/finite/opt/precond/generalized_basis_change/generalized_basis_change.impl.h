@@ -87,7 +87,7 @@ auto GeneralizedBasisChange<Scalar>::matrix_norm(const MatrixType &A) -> MatrixT
 };
 
 template<typename Scalar>
-void GeneralizedBasisChange<Scalar>::regularize(Eigen::Tensor<Scalar, 1> &w, const EnvWeightRegularizer ewr, std::string_view tag) {
+void GeneralizedBasisChange<Scalar>::regularize(Eigen::Tensor<Scalar, 1> &w, const EnvWeightRegularizer ewr, [[maybe_unused]] std::string_view tag) {
     // print_stats(w, tag);
     Eigen::Map<VectorType> wmap = tenx::VectorMap(w);
     switch(ewr) {
@@ -439,13 +439,13 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
 
     // Compress the environments using SVD
 
-    auto get_P_from_env = [](const Eigen::Tensor<Scalar, 3> &env, Eigen::Index rank_max) -> MatrixType {
-        auto cfg        = svd::config(rank_max, 1e-12);
-        auto sv         = svd::solver(cfg);
-        auto envmap     = MapConstMatType(env.data(), env.dimension(0), env.dimension(1) * env.dimension(2));
-        auto [U, S, VT] = sv.do_svd(envmap, cfg);
-        return U;
-    };
+    // auto get_P_from_env = [](const Eigen::Tensor<Scalar, 3> &env, Eigen::Index rank_max) -> MatrixType {
+    //     auto cfg        = svd::config(rank_max, 1e-12);
+    //     auto sv         = svd::solver(cfg);
+    //     auto envmap     = MapConstMatType(env.data(), env.dimension(0), env.dimension(1) * env.dimension(2));
+    //     auto [U, S, VT] = sv.do_svd(envmap, cfg);
+    //     return U;
+    // };
 
     auto get_PL_from_psi = [](const Eigen::Tensor<Scalar, 3> &psi, Eigen::Index rank_max) -> MatrixType {
         const auto               shf3   = std::array<Eigen::Index, 3>{1, 0, 2};
@@ -465,12 +465,12 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
         return VT.transpose();
     };
 
-    auto get_env_zip = [&get_P_from_env](const Eigen::Tensor<Scalar, 3> &env, Eigen::Index rank_max) -> std::pair<Eigen::Tensor<Scalar, 3>, MatrixType> {
-        auto P       = get_P_from_env(env, rank_max); // The P matrix is a projector to a space of smaller bond dimension
-        auto Pmap    = Eigen::TensorMap<Eigen::Tensor<Scalar, 2>>(P.data(), P.rows(), P.cols());
-        auto env_zip = env.contract(Pmap, tenx::idx({0}, {0})).contract(Pmap.conjugate(), tenx::idx({0}, {0})).shuffle(std::array<Eigen::Index, 3>{1, 2, 0});
-        return {env_zip, P};
-    };
+    // auto get_env_zip = [&get_P_from_env](const Eigen::Tensor<Scalar, 3> &env, Eigen::Index rank_max) -> std::pair<Eigen::Tensor<Scalar, 3>, MatrixType> {
+    //     auto P       = get_P_from_env(env, rank_max); // The P matrix is a projector to a space of smaller bond dimension
+    //     auto Pmap    = Eigen::TensorMap<Eigen::Tensor<Scalar, 2>>(P.data(), P.rows(), P.cols());
+    //     auto env_zip = env.contract(Pmap, tenx::idx({0}, {0})).contract(Pmap.conjugate(), tenx::idx({0}, {0})).shuffle(std::array<Eigen::Index, 3>{1, 2, 0});
+    //     return {env_zip, P};
+    // };
 
     auto get_envL_zip_from_psi = [&get_PL_from_psi](const Eigen::Tensor<Scalar, 3> &env, const Eigen::Tensor<Scalar, 3> &psi,
                                                     Eigen::Index rank_max) -> std::pair<Eigen::Tensor<Scalar, 3>, MatrixType> {
@@ -597,10 +597,14 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
 }
 
 template<typename Scalar>
-auto GeneralizedBasisChange<Scalar>::get_generalized_transforms(const Eigen::Tensor<Scalar, 3> &env1, const Eigen::Tensor<Scalar, 3> &env2,
-                                                                const Eigen::Tensor<Scalar, 2> &env1_agg, const Eigen::Tensor<Scalar, 2> &env2_agg,
-                                                                const Eigen::Tensor<Scalar, 1> &w1, const Eigen::Tensor<Scalar, 1> &w2,
-                                                                const Eigen::Tensor<Scalar, 2> &P1, const Eigen::Tensor<Scalar, 2> P2)
+auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]] const Eigen::Tensor<Scalar, 3> &env1,     //
+                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 3> &env2,     //
+                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 2> &env1_agg, //
+                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 2> &env2_agg, //
+                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 1> &w1,       //
+                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 1> &w2,       //
+                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 2> &P1,       //
+                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 2>  P2)
     -> std::tuple<MatrixType, MatrixType, MatrixType, RealScalar> {
     if(env1_agg.dimension(0) != env2_agg.dimension(0))
         throw except::runtime_error("env1_agg/env2_agg dimension mismatch: {} vs {}", env1_agg.dimension(0), env2_agg.dimension(0));
@@ -872,8 +876,8 @@ GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(const GeneralizedBasisCha
 
 template<typename Scalar>
 GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(const GeneralizedBasisChange<Scalar> &bc, BasisChangeConfig bcfg_)
-    : GeneralizedBasisChange(bc.initial_guess, bc.mpo1, bc.mpo2, bc.get_enve_pair(), bc.get_envv_pair(), bc.bcfg) {
-    if(bcfg.ewt == EnvWeightType::OFF) return;
+    : GeneralizedBasisChange(bc.initial_guess, bc.mpo1, bc.mpo2, bc.get_enve_pair(), bc.get_envv_pair(), bcfg_) {
+    if(bc.bcfg.ewt == EnvWeightType::OFF) return;
     // bc now has the old basis, and "this" object now has the new transformed basis.
     pass = bc.pass + 1;
     // We need to update the transforms so that we can undo the transformation.

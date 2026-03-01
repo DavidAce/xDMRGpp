@@ -309,8 +309,8 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_std(const opt_mps<Scalar>       &in
     // BlockLanczos<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, initial.template get_tensor_as_matrix<CalcType>(), mpos, enve, envv);
     // solver_gdplusk<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, initial.template get_tensor_as_matrix<CalcType>(), H1, H2, H1H2);
     solver_gdplusk<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, bc.initial_guess.template get_tensor_as_matrix<CalcType>(), H1, H2, H1H2);
-    solver.abstol = opt_meta.eigs_abstol.has_value() ? opt_meta.eigs_abstol.value() : eps * 10000;
-    solver.reltol = opt_meta.eigs_reltol.has_value() ? opt_meta.eigs_reltol.value() : RealScalar{0};
+    solver.abstol = opt_meta.eigs_abstol.has_value() ? narrow_cast<CalcReal>(opt_meta.eigs_abstol.value()) : eps * 10000;
+    solver.reltol = opt_meta.eigs_reltol.has_value() ? narrow_cast<CalcReal>(opt_meta.eigs_reltol.value()) : CalcReal{0};
     eig::setLevel(spdlog::level::info);
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
@@ -501,16 +501,16 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
     tools::log =
         spdlog::get(std::string(tag)) == nullptr ? spdlog::stdout_color_mt(std::string(tag), spdlog::color_mode::always) : spdlog::get(std::string(tag));
     tools::log->set_level(log_level);
-    auto           t_mixblk   = tid::tic_token(tag);
-    auto           t_gdplusk  = tid::tic_scope("gdplusk");
-    auto           t_preamble = tid::tic_scope("preamble");
-    auto          &sites      = initial.get_sites();
-    auto           mpos       = tensors.get_model().get_mpo(sites);
-    auto           enve       = tensors.get_edges().get_multisite_env_ene(sites);
-    auto           envv       = tensors.get_edges().get_multisite_env_var(sites);
-    auto           size       = initial.get_tensor().size();
-    constexpr auto eps        = std::numeric_limits<CalcReal>::epsilon();
-    auto           nev        = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
+    auto  t_mixblk   = tid::tic_token(tag);
+    auto  t_gdplusk  = tid::tic_scope("gdplusk");
+    auto  t_preamble = tid::tic_scope("preamble");
+    auto &sites      = initial.get_sites();
+    auto  mpos       = tensors.get_model().get_mpo(sites);
+    // auto           enve       = tensors.get_edges().get_multisite_env_ene(sites);
+    // auto           envv       = tensors.get_edges().get_multisite_env_var(sites);
+    auto           size = initial.get_tensor().size();
+    constexpr auto eps  = std::numeric_limits<CalcReal>::epsilon();
+    auto           nev  = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
     // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
     if(ncv <= 0) {
         // Automatic selection
@@ -561,8 +561,8 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
     // BlockLanczos<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, initial.template get_tensor_as_matrix<CalcType>(), mpos, enve, envv);
     // solver_gdplusk<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, initial.template get_tensor_as_matrix<CalcType>(), H1, H2, H1H2);
     solver_gdplusk<CalcType> solver(nev, ncv, opt_meta.optAlgo, opt_meta.optRitz, bc.initial_guess.template get_tensor_as_matrix<CalcType>(), H1, H2, H1H2);
-    solver.abstol = opt_meta.eigs_abstol.has_value() ? static_cast<CalcReal>(opt_meta.eigs_abstol.value()) : eps * 10000;
-    solver.reltol = opt_meta.eigs_reltol.has_value() ? static_cast<CalcReal>(opt_meta.eigs_reltol.value()) : RealScalar{0};
+    solver.abstol = opt_meta.eigs_abstol.has_value() ? narrow_cast<CalcReal>(opt_meta.eigs_abstol.value()) : eps * 10000;
+    solver.reltol = opt_meta.eigs_reltol.has_value() ? narrow_cast<CalcReal>(opt_meta.eigs_reltol.value()) : CalcReal{0};
     eig::setLevel(spdlog::level::info);
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
@@ -1009,6 +1009,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
         // tools::log->info("bcfg_a7: mv num = {}, time {:.3e} s", bcfg_a7.num_mv, bcfg_a7.time_mv);
         // tools::log->info("bcfg_a8: mv num = {}, time {:.3e} s", bcfg_a8.num_mv, bcfg_a8.time_mv);
 
+        // return resultA0;
         return resultA1;
         // return resultA2;
     }

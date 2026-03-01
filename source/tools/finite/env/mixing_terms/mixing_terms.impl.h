@@ -75,11 +75,10 @@ void tools::finite::env::internal::merge_mixing_terms_N0_MP(const StateFinite<T>
     //           * MP is [CB, P]^T            <--- Note that we use full AC(i)! Not bare A(i)
 
     tools::log->trace("merge_mixing_terms_N0_MP: ({}{},{}{}) {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), svd_cfg.to_string());
-    using Real = decltype(std::real(std::declval<T>()));
-    svd::solver svd;
-    auto        posL = mpsL.get_position();
-    auto        labL = mpsL.get_label();
-    auto        labR = mpsR.get_label();
+    svd::solver           svd;
+    auto                  posL = mpsL.get_position();
+    [[maybe_unused]] auto labL = mpsL.get_label();
+    [[maybe_unused]] auto labR = mpsR.get_label();
     assert(labL == "AC");
     assert(labR == "B");
     auto [U, S, V] = svd.schmidt_into_right_normalized(MP, mpsR.spin_dim(), svd_cfg);
@@ -133,7 +132,6 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> tools::finite::env::internal
     assert(P1.size() == 0 or P1.dimension(0) == M.dimension(0));
     assert(P2.size() == 0 or P2.dimension(1) == M.dimension(1));
     assert(P2.size() == 0 or P2.dimension(0) == M.dimension(0));
-    using MatrixType = typename Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using RealScalar = typename Eigen::Tensor<T, 3>::RealScalar;
 
     auto offM  = Eigen::DSizes<long, 3>{0, 0, 0};

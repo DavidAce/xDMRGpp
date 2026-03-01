@@ -24,7 +24,7 @@ template Scalar  tools::finite::measure::expval_hamiltonian_squared(const Eigen:
 
 template Scalar  tools::finite::measure::expval_hamiltonian_squared(const TensorsFinite<Scalar> &tensors);
 
-template RealScalar<Scalar> tools::finite::measure::local_operator_norm_estimate      (const Eigen::Tensor<Scalar, 4> &mpo, const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR,Eigen::Index maxiter, fp32 reltolf);
+template RealScalar<Scalar> tools::finite::measure::local_operator_norm_estimate      (const Eigen::Tensor<Scalar, 4> &mpo, const x2::Tensor<Scalar, 3> &envL, const x2::Tensor<Scalar, 3> &envR,Eigen::Index maxiter, fp32 reltolf);
 
 template RealScalar<Scalar> tools::finite::measure::local_hamiltonian_norm             (const TensorsFinite<Scalar> & tensors,Eigen::Index maxiter, fp32 reltolf);
 

@@ -370,7 +370,7 @@ template<typename Scalar>
 }
 template<typename Scalar>
 void MpoSite<Scalar>::set_global_energy_upper_bound(RealScalar energy) {
-    global_energy_upper_bound = energy;
+    global_energy_upper_bound = static_cast<double>(energy);
 }
 template<typename Scalar>
 [[nodiscard]] double MpoSite<Scalar>::get_local_energy_upper_bound() const {
@@ -378,7 +378,7 @@ template<typename Scalar>
 }
 template<typename Scalar>
 void MpoSite<Scalar>::set_local_energy_upper_bound(RealScalar energy) {
-    local_energy_upper_bound = energy;
+    local_energy_upper_bound = static_cast<double>(energy);
 }
 
 template<typename Scalar>

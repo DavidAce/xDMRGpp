@@ -1246,9 +1246,8 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix2(const std::vector<
     return lbit_corrmat.real();
 }
 
-template<typename Scalar>
-Eigen::Tensor<qm::lbit::RealScalar<Scalar>, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<std::vector<qm::Gate>> &unitary_circuit, size_t sites,
-                                                                                     size_t max_num_states, double tol) {
+Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<std::vector<qm::Gate>> &unitary_circuit, size_t sites, size_t max_num_states,
+                                                             double tol) {
     /*! \brief Calculates the correlation < τ^z_i σ^z_j > for a product state with spins aligned along +x = [(1,1)^T]^{\otimes L}
      *
      * We make the approximation of the correlator
@@ -1288,11 +1287,11 @@ Eigen::Tensor<qm::lbit::RealScalar<Scalar>, 2> qm::lbit::get_lbit_correlation_ma
         return -1l;
     };
 
-    auto state            = StateFinite(AlgorithmType::fLBIT, sites, 0, 2);
+    auto state            = StateFinite<fp64>(AlgorithmType::fLBIT, sites, 0, 2);
     auto num_states       = static_cast<Eigen::Index>(std::pow(2, sites));
     auto ssites           = static_cast<Eigen::Index>(sites);
-    auto szi              = tenx::TensorCast(qm::spin::half::sz);
-    auto szj              = tenx::TensorCast(qm::spin::half::sz);
+    auto szi              = tenx::TensorCast(qm::spin::half::sz.real());
+    auto szj              = tenx::TensorCast(qm::spin::half::sz.real());
     auto lbit_corrmat_vec = std::vector<Eigen::Tensor<fp64, 2>>();
     auto lbit_corrmat_avg = Eigen::Tensor<fp64, 2>(ssites, ssites);
     auto lbit_corrmat_typ = Eigen::Tensor<fp64, 2>(ssites, ssites);
@@ -1322,14 +1321,14 @@ Eigen::Tensor<qm::lbit::RealScalar<Scalar>, 2> qm::lbit::get_lbit_correlation_ma
         tools::finite::mps::init::set_product_state_on_axis_using_pattern(state, StateInitType::REAL, "x", bstr);
         auto lbit_corrmat = Eigen::Tensor<cx64, 2>(ssites, ssites);
         lbit_corrmat.setZero();
-        StateFinite<Scalar> state_ud = state;
+        StateFinite<fp64> state_ud = state;
         tools::finite::mps::apply_circuit(state_ud, unitary_circuit, CircuitOp::ADJ, false, GateMove::ON, svd_cfg); // Apply U† on state_ud
         bond_maxu = std::max<long>(bond_maxu, state_ud.get_largest_bond());
         t_r.toc();
 
         for(long i = 0; i < ssites; i++) {
             t_i.tic();
-            StateFinite<Scalar> state_i = state_ud; // Make a copy of state_ud
+            StateFinite<fp64> state_i = state_ud;   // Make a copy of state_ud
             state_i.get_mps_site(i).apply_mpo(szi); // Apply σ^z_i on state_i
             t_i_u.tic();
 
@@ -1353,10 +1352,10 @@ Eigen::Tensor<qm::lbit::RealScalar<Scalar>, 2> qm::lbit::get_lbit_correlation_ma
                     }
                 }
 
-                StateFinite<Scalar> state_j = state;
+                StateFinite<fp64> state_j = state;
                 state_j.get_mps_site(j).apply_mpo(szj); // Apply σ^z_j on state j
                 bond_maxj          = std::max<long>(bond_maxj, state_j.get_largest_bond());
-                auto sziszj_ev     = tools::finite::ops::overlap<Scalar>(state_i, state_j);
+                auto sziszj_ev     = tools::finite::ops::overlap<fp64>(state_i, state_j);
                 lbit_corrmat(i, j) = sziszj_ev;
                 t_j.toc();
             }

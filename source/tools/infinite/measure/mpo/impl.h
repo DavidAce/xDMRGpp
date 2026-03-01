@@ -5,7 +5,7 @@
 #include "tensors/state/StateInfinite.h"
 #include "tensors/TensorsInfinite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
+#include "tools/common/contraction/expectation_value.h"
 #include "tools/common/log.h"
 #include "tools/infinite/measure.h"
 using tools::infinite::measure::RealScalar;
@@ -18,7 +18,7 @@ RealScalar<Scalar> tools::infinite::measure::energy_minus_energy_shift(const sta
     } else {
         tools::log->trace("Measuring energy mpo");
         const auto &mpo          = model.get_2site_mpo_AB();
-        const auto &env          = edges.get_env_ene_blk();
+        const auto &env          = edges.get_env_ene_block();
         auto        t_ene        = tid::tic_scope("ene");
         auto        e_minus_ered = tools::common::contraction::expectation_value(state, mpo, env.L, env.R);
         assert(std::abs(std::imag(e_minus_ered)) < RealScalar<Scalar>{1e-10f});
@@ -67,7 +67,7 @@ RealScalar<Scalar> tools::infinite::measure::energy_variance_mpo(const state_or_
             energy = tools::infinite::measure::energy_mpo(state, model, edges);
         RealScalar<Scalar> E2  = energy * energy;
         const auto        &mpo = model.get_2site_mpo_AB();
-        const auto        &env = edges.get_env_var_blk();
+        const auto        &env = edges.get_env_var_block();
         tools::log->trace("Measuring energy variance mpo");
         auto t_var = tid::tic_scope("var");
         auto H2    = tools::common::contraction::expectation_value(state, mpo, env.L, env.R);

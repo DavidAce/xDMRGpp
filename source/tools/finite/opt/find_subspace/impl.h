@@ -17,7 +17,7 @@
 #include "tensors/state/StateFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
+#include "tools/common/contraction/matrix_vector_product.h"
 #include "tools/common/log.h"
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/opt/opt-internal.h"
@@ -584,7 +584,7 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite<Scalar> &m
             throw std::runtime_error("One eigvec is not a basis vector. When constructing a hamiltonian subspace matrix, make sure the candidates are all "
                                      "eigenvectors/basis vectors");
 
-    const auto &env1 = edges.template get_multisite_env_ene_blk_as<T>();
+    const auto &env1 = edges.template get_multisite_env_ene_block_as<T>();
     const auto &mpo1 = model.template get_multisite_mpo<T>();
 
     tools::log->trace("Generating H² in a subspace of {} eigenvectors of H", eigvecs.size());
@@ -632,7 +632,7 @@ MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<Sc
             throw std::runtime_error("One eigvec is not a basis vector. When constructing a hamiltonian subspace matrix, make sure the candidates are all "
                                      "eigenvectors/basis vectors");
 
-    const auto &env2 = edges.template get_multisite_env_var_blk_as<T>();
+    const auto &env2 = edges.template get_multisite_env_var_block_as<T>();
     const auto &mpo2 = model.template get_multisite_mpo_squared<T>();
 
     tools::log->trace("Generating H² in a subspace of {} eigenvectors of H", eigvecs.size());

@@ -404,7 +404,7 @@ SeeProgress<Scalar> check_see_progress(const RealArrayXX<Scalar> &see, LogPolicy
     sp.bits_minus = (sp.info < 0).select(sp.info, 0).sum();
     sp.progress   = (see.isNaN()).select(Real{0}, RealArrayXX<Scalar>::Ones(see.rows(), see.cols())).sum() /
                   (L * (L + Real{1}) / Real{2}); // Found entries in the top left triangle
-    if constexpr(!tenx::sfinae::is_quadruple_prec_v<Scalar>) {
+    if constexpr(!sfinae::is_quadruple_prec_v<Scalar>) {
         if(log_policy == LogPolicy::VERBOSE) {
             tools::log->log(lvl, "see: \n{}\n", linalg::matrix::to_string(see, 10));
             tools::log->log(lvl, "info: \n{}\n", linalg::matrix::to_string(sp.info, 6));

@@ -29,6 +29,7 @@ class EnvEne : public EnvBase<Scalar_> {
     [[nodiscard]] EnvEne<Scalar> enlarge(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) const;
     void                         refresh(const EnvEne &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo);
     void                         set_block(const Eigen::Tensor<Scalar, 3> &blk, const EnvEne &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo);
+    void                         set_blkx2(const x2::Tensor<Scalar, 3> &blk, const EnvEne &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo);
     void                         set_block_raw(const Eigen::Tensor<Scalar, 3> &blk);
     void                         set_edge_dims(const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) final;
 

@@ -11,6 +11,10 @@
 template<typename Scalar> class EnvEne;
 template<typename Scalar> class EnvVar;
 
+namespace x2 {
+    template<typename Scalar, int rank> class Tensor;
+}
+
 template<typename Scalar>
 class EdgesFinite {
     public:
@@ -91,21 +95,32 @@ class EdgesFinite {
     [[nodiscard]] env_pair<EnvVar<Scalar> &>       get_multisite_env_var(std::optional<std::vector<size_t>> sites = std::nullopt);
 
     /* clang-format off */
-    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_ene_blk(size_t posL, size_t posR) const;
-    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_var_blk(size_t posL, size_t posR) const;
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_env_ene_blk(size_t posL, size_t posR);
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_env_var_blk(size_t posL, size_t posR);
-    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_ene_blk_as(size_t posL, size_t posR) const;
-    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_var_blk_as(size_t posL, size_t posR) const;
+    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_ene_block(size_t posL, size_t posR) const;
+    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_env_var_block(size_t posL, size_t posR) const;
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_env_ene_block(size_t posL, size_t posR);
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_env_var_block(size_t posL, size_t posR);
+    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_ene_block_as(size_t posL, size_t posR) const;
+    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_env_var_block_as(size_t posL, size_t posR) const;
 
-    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_multisite_env_ene_blk(std::optional<std::vector<size_t>> sites = std::nullopt) const;
-    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_multisite_env_var_blk(std::optional<std::vector<size_t>> sites = std::nullopt) const;
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_multisite_env_ene_blk(std::optional<std::vector<size_t>> sites = std::nullopt);
-    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>       get_multisite_env_var_blk(std::optional<std::vector<size_t>> sites = std::nullopt);
+    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_multisite_env_ene_block(std::optional<std::vector<size_t>> sites = std::nullopt) const;
+    [[nodiscard]] env_pair<const Eigen::Tensor<Scalar, 3> &> get_multisite_env_var_block(std::optional<std::vector<size_t>> sites = std::nullopt) const;
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>         get_multisite_env_ene_block(std::optional<std::vector<size_t>> sites = std::nullopt);
+    [[nodiscard]] env_pair<Eigen::Tensor<Scalar, 3>>         get_multisite_env_var_block(std::optional<std::vector<size_t>> sites = std::nullopt);
+    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_ene_block_as(std::optional<std::vector<size_t>> sites = std::nullopt) const;
+    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_var_block_as(std::optional<std::vector<size_t>> sites = std::nullopt) const;
 
-    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_ene_blk_as(std::optional<std::vector<size_t>> sites = std::nullopt) const;
-    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_var_blk_as(std::optional<std::vector<size_t>> sites = std::nullopt) const;
-    /* clang-format on */
+
+    [[nodiscard]] env_pair<const x2::Tensor<Scalar, 3> &>         get_env_ene_blkx2(size_t posL, size_t posR) const;
+    [[nodiscard]] env_pair<const x2::Tensor<Scalar, 3> &>         get_env_var_blkx2(size_t posL, size_t posR) const;
+    [[nodiscard]] env_pair<x2::Tensor<Scalar, 3>>                 get_env_ene_blkx2(size_t posL, size_t posR);
+    [[nodiscard]] env_pair<x2::Tensor<Scalar, 3>>                 get_env_var_blkx2(size_t posL, size_t posR);
+
+    [[nodiscard]] env_pair<const x2::Tensor<Scalar, 3> &>     get_multisite_env_ene_blkx2(std::optional<std::vector<size_t>> sites = std::nullopt) const;
+    [[nodiscard]] env_pair<const x2::Tensor<Scalar, 3> &>     get_multisite_env_var_blkx2(std::optional<std::vector<size_t>> sites = std::nullopt) const;
+    [[nodiscard]] env_pair<x2::Tensor<Scalar, 3>>             get_multisite_env_ene_blkx2(std::optional<std::vector<size_t>> sites = std::nullopt);
+    [[nodiscard]] env_pair<x2::Tensor<Scalar, 3>>             get_multisite_env_var_blkx2(std::optional<std::vector<size_t>> sites = std::nullopt);
+
+  /* clang-format on */
 
     [[nodiscard]] std::pair<std::vector<size_t>, std::vector<size_t>> get_active_ids() const;
 

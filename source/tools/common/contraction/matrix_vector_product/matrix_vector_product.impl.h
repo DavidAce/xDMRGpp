@@ -1,41 +1,25 @@
 #pragma once
-#include "../contraction.h"
-#include "contraction_policy.h"
+#include "../contraction_policy.h"
+#include "../contraction_tblis.h"
+#include "../matrix_vector_product.h"
 #include "math/tenx.h"
 #include "math/x2/gemm.h"
+#include "tensors/site/env/EnvEne.h"
+#include "tensors/site/env/EnvVar.h"
 #include "tid/tid.h"
 #if defined(DMRG_ENABLE_TBLIS)
-    // #include <tblis/util/configs.h>
-    // #include <tblis/util/thread.h>
-    // #include <tci/tci_config.h>
-    // #if defined(TCI_USE_OPENMP_THREADS)
-    // #include <omp.h>
-    // #endif
     #include <tblis.h>
     #include <tblis_config.h>
 #endif
 
-using namespace tools::common::contraction;
+#include "tools/common/log.h"
 
 namespace settings {
-#if defined(DMRG_ENABLE_TBLIS)
-    static constexpr bool tblis_enabled = true;
-#else
-    static constexpr bool tblis_enabled = false;
-#endif
-
-#if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
-    static constexpr bool tblis_use_openmp = true;
-#else
-    static constexpr bool tblis_use_openmp = false;
-#endif
-
     inline constexpr bool debug_contraction = false;
 }
 
-#include "tools/common/log.h"
-
 namespace tools::common::contraction::internal {
+
     template<typename Scalar>
     struct StatsMv {
         using RealScalar              = decltype(std::real(std::declval<Scalar>()));
@@ -69,10 +53,77 @@ namespace tools::common::contraction::internal {
         for(Eigen::Index i = 0; i < static_cast<Eigen::Index>(dims.size()); ++i) size *= dims[i];
         return size;
     }
+
     template<typename Scalar>
     auto get_norm(const Scalar *const ptr, const auto &dims) -> decltype(std::real(std::declval<Scalar>())) {
         return Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(ptr, get_size(dims)).norm();
     }
+
+    template<typename Scalar>
+    StatsMv<Scalar> contract_with_gemm_x2(Eigen::Tensor<Scalar, 3>       &res,  //
+                                          const Eigen::Tensor<Scalar, 3> &mps,  //
+                                          const Eigen::Tensor<Scalar, 4> &mpo,  //
+                                          const x2::Tensor<Scalar, 3>    &envL, //
+                                          const x2::Tensor<Scalar, 3>    &envR) {
+        StatsMv<Scalar> info;
+        info.contract_left = false;
+
+        // Eigen::Tensor<Scalar, 4> mpo_shf  = mpo.shuffle(std::array{0, 3, 2, 1});
+        // Eigen::Tensor<Scalar, 3> envL_shf = envL.shuffle(std::array{0, 2, 1});
+
+        Eigen::Index md = mps.dimension(0);
+        Eigen::Index mL = mps.dimension(1);
+        Eigen::Index mR = mps.dimension(2);
+        Eigen::Index wL = mpo.dimension(0);
+        Eigen::Index wR = mpo.dimension(1);
+        Eigen::Index wd = mpo.dimension(3);
+
+        thread_local x2::Tensor<Scalar, 4> T1;
+        thread_local x2::Tensor<Scalar, 4> T2;
+
+        T1.resize(std::array{md, mL, mR, wR});
+        T2.resize(std::array{wL, wd, mL, mR});
+
+        // Map the DD tensors to DD matrices
+        {
+            auto mps_mat   = x2::as_const_matrix(mps, {0, 1}, {2});
+            auto envR_mat  = x2::as_const_matrix_x2<Scalar, 3>(envR, {0}, {1, 2});
+            auto T1_mat_x2 = x2::as_matrix_x2<Scalar, 4>(T1, {0, 1}, {2, 3});
+            x2::gemm_x2(T1_mat_x2, mps_mat, envR_mat);
+        }
+
+        {
+            auto mpo_mat   = x2::as_const_matrix(mpo, {0, 3}, {1, 2});
+            auto T1_mat_x2 = x2::as_const_matrix_x2<Scalar, 4>(T1, {3, 0}, {1, 2});
+            auto T2_mat_x2 = x2::as_matrix_x2<Scalar, 4>(T2, {0, 1}, {2, 3});
+            x2::gemm_x2(T2_mat_x2, mpo_mat, T1_mat_x2);
+        }
+        auto res_x2 = x2::Tensor<Scalar, 3>(wd, mL, mR);
+
+        {
+            auto envL_mat   = x2::as_const_matrix_x2<Scalar, 3>(envL, {0, 2}, {1});
+            auto T2_mat_x2  = x2::as_const_matrix_x2<Scalar, 4>(T2, {1, 3}, {2, 0});
+            auto res_mat_x2 = x2::as_matrix_x2<Scalar, 3>(res_x2, {0, 2}, {1});
+            x2::gemm_x2(res_mat_x2, T2_mat_x2, envL_mat);
+        }
+
+        res = res_x2.to_EigenTensor();
+
+        info.mps_norm           = get_norm(mps.data(), mps.dimensions());
+        info.mpo_norm           = get_norm(mpo.data(), mpo.dimensions());
+        info.envL_norm          = envL.norm();
+        info.envR_norm          = envR.norm();
+        info.ST1                = T1.norm();
+        info.ST2                = T2.norm();
+        info.ST3                = get_norm(res.data(), res.dimensions());
+        auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
+        info.cancelation_factor = Smax / info.ST3;
+        if constexpr(settings::debug_contraction)
+            tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} envR {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e}", fp(info.mps_norm),
+                             fp(info.mpo_norm), fp(info.envL_norm), fp(info.envR_norm), fp(info.ST1), fp(info.ST2), fp(info.ST3), fp(info.cancelation_factor));
+        return info;
+    }
+
     template<typename Scalar>
     StatsMv<Scalar> contract_with_eigen(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
         assert(mps.dimension(1) == envL.dimension(0));
@@ -129,7 +180,7 @@ namespace tools::common::contraction::internal {
             if constexpr(settings::tblis_use_openmp) { tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads())); }
             auto contract_tblis_wrapper = [](const auto &A, const auto &B, auto &C, std::string_view la, std::string_view lb, std::string_view lc,
                                              const tblis::tblis_config *cfg) {
-                contraction::contract_tblis(A.data(), A.dimensions(), B.data(), B.dimensions(), C.data(), C.dimensions(), la, lb, lc, cfg);
+                contract_tblis(A.data(), A.dimensions(), B.data(), B.dimensions(), C.data(), C.dimensions(), la, lb, lc, cfg);
             };
 
             StatsMv<Scalar> info;
@@ -167,10 +218,7 @@ namespace tools::common::contraction::internal {
     template<typename Scalar>
     StatsMv<Scalar> contract_with_gemm_x2(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
         StatsMv<Scalar> info;
-        info.contract_left = mps.dimension(1) >= mps.dimension(2);
-
-        Eigen::Tensor<Scalar, 4> mpo_shf  = mpo.shuffle(std::array{0, 3, 2, 1});
-        Eigen::Tensor<Scalar, 3> envL_shf = envL.shuffle(std::array{0, 2, 1});
+        info.contract_left = false;
 
         Eigen::Index md = mps.dimension(0);
         Eigen::Index mL = mps.dimension(1);
@@ -179,54 +227,43 @@ namespace tools::common::contraction::internal {
         Eigen::Index wR = mpo.dimension(1);
         Eigen::Index wd = mpo.dimension(3);
 
-        auto mps_x2      = x2::Tensor<Scalar, 3>(mps);
-        auto mpo_shf_x2  = x2::Tensor<Scalar, 4>(mpo_shf);
-        auto envL_shf_x2 = x2::Tensor<Scalar, 3>(envL_shf);
-        auto envR_x2     = x2::Tensor<Scalar, 3>(envR);
-        auto res_shf_x2  = x2::Tensor<Scalar, 3>(wd, mR, mL);
-
         thread_local x2::Tensor<Scalar, 4> T1;
         thread_local x2::Tensor<Scalar, 4> T2;
 
         T1.resize(std::array{md, mL, mR, wR});
         T2.resize(std::array{wL, wd, mL, mR});
 
-        // Map the DD tensors to DD matrices
-        auto mps_mat_x2  = x2::ConstMatrixMap<Scalar>(mps_x2.hi_data(), mps_x2.lo_data(), md * mL, mR);
-        auto envR_mat_x2 = x2::ConstMatrixMap<Scalar>(envR_x2.hi_data(), envR_x2.lo_data(), mR, mR * wR);
-
         {
-            auto T1_mat_x2 = x2::MatrixMap<Scalar>(T1.hi_data(), T1.lo_data(), md * mL, mR * wR);
-            gemm_x2(T1_mat_x2, mps_mat_x2, envR_mat_x2);
+            auto mps_mat   = x2::as_const_matrix(mps, {0, 1}, {2});
+            auto envR_mat  = x2::as_const_matrix(envR, {0}, {1, 2});
+            auto T1_mat_x2 = x2::as_matrix_x2<Scalar, 4>(T1, {0, 1}, {2, 3});
+            x2::gemm_x2(T1_mat_x2, mps_mat, envR_mat);
         }
 
         {
-            auto T2_mat_x2      = x2::MatrixMap<Scalar>(T2.hi_data(), T2.lo_data(), wL * wd, mL * mR);
-            auto mpo_shf_mat_x2 = x2::ConstMatrixMap<Scalar>(mpo_shf_x2.hi_data(), mpo_shf_x2.lo_data(), wL * wd, md * wR);
-            T1.shuffle(std::array{0, 3, 1, 2});
-            auto T1_mat_x2 = x2::ConstMatrixMap<Scalar>(T1.hi_data(), T1.lo_data(), md * wR, mL * mR);
-
-            gemm_x2(T2_mat_x2, mpo_shf_mat_x2, T1_mat_x2);
+            auto mpo_mat   = x2::as_const_matrix(mpo, {0, 3}, {1, 2});
+            auto T1_mat_x2 = x2::as_const_matrix_x2<Scalar, 4>(T1, {3, 0}, {1, 2});
+            auto T2_mat_x2 = x2::as_matrix_x2<Scalar, 4>(T2, {0, 1}, {2, 3});
+            x2::gemm_x2(T2_mat_x2, mpo_mat, T1_mat_x2);
         }
+        auto res_x2 = x2::Tensor<Scalar, 3>(wd, mL, mR);
 
         {
-            auto res_shf_mat_x2 = x2::MatrixMap<Scalar>(res_shf_x2.hi_data(), res_shf_x2.lo_data(), wd * mR, mL);
-            T2.shuffle(std::array{1, 3, 2, 0});
-            auto T2_mat_x2   = x2::ConstMatrixMap<Scalar>(T2.hi_data(), T2.lo_data(), wd * mR, mL * wL);
-            auto envL_mat_x2 = x2::ConstMatrixMap<Scalar>(envL_shf_x2.hi_data(), envL_shf_x2.lo_data(), mL * wL, mL);
-            gemm_x2(res_shf_mat_x2, T2_mat_x2, envL_mat_x2);
+            auto envL_mat   = x2::as_const_matrix(envL, {0, 2}, {1});
+            auto T2_mat_x2  = x2::as_const_matrix_x2<Scalar, 4>(T2, {1, 3}, {2, 0});
+            auto res_mat_x2 = x2::as_matrix_x2<Scalar, 3>(res_x2, {0, 2}, {1});
+            x2::gemm_x2(res_mat_x2, T2_mat_x2, envL_mat);
         }
-        // final permutation back to tensor layout
-        res_shf_x2.shuffle(std::array{0, 2, 1});
-        res = res_shf_x2.to_TensorType();
 
-        info.mps_norm           = mps_x2.norm();
-        info.mpo_norm           = mpo_shf_x2.norm();
-        info.envL_norm          = envL_shf_x2.norm();
-        info.envR_norm          = envR_x2.norm();
+        res = res_x2.to_EigenTensor();
+
+        info.mps_norm           = get_norm(mps.data(), mps.dimensions());
+        info.mpo_norm           = get_norm(mpo.data(), mpo.dimensions());
+        info.envL_norm          = get_norm(envL.data(), envL.dimensions());
+        info.envR_norm          = get_norm(envR.data(), envR.dimensions());
         info.ST1                = T1.norm();
         info.ST2                = T2.norm();
-        info.ST3                = res_shf_x2.norm();
+        info.ST3                = get_norm(res.data(), res.dimensions());
         auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
         info.cancelation_factor = Smax / info.ST3;
         if constexpr(settings::debug_contraction)
@@ -241,8 +278,7 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
                                                        const Scalar *const mps_ptr, std::array<long, 3> mps_dims,   //
                                                        const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims,   //
                                                        const Scalar *const envL_ptr, std::array<long, 3> envL_dims, //
-                                                       const Scalar *const envR_ptr, std::array<long, 3> envR_dims  //
-) {
+                                                       const Scalar *const envR_ptr, std::array<long, 3> envR_dims) {
     // This applies the mpo's with corresponding environments to local multisite mps
     // This is usually the operation H|psi>  or H²|psi>
 
@@ -251,7 +287,7 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
     assert(mps_dims[0] == mpo_dims[2]);
     assert(envL_dims[2] == mpo_dims[0]);
     assert(envR_dims[2] == mpo_dims[1]);
-
+    assert(mpo_dims[3] == mps_dims[0]);
     using RealScalar         = decltype(std::real(std::declval<Scalar>()));
     using VectorType         = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
     constexpr bool use_tblis = settings::tblis_enabled and (std::is_same_v<RealScalar, fp32> or std::is_same_v<RealScalar, fp64>);
@@ -265,21 +301,26 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
     auto mpsv = Eigen::Map<const VectorType>(mps.data(), mps.size());
     auto resv = Eigen::Map<VectorType>(res.data(), res.size());
 
-    internal::StatsMv<Scalar>       info;
+    internal::StatsMv<Scalar>    info;
     [[maybe_unused]] std::string msg;
 
     const internal::InfoH1Mv h1info         = internal::get_info_h1mv();
     const internal::InfoH2Mv h2info         = internal::get_info_h2mv();
     ContractionBackend       backend_active = ContractionBackend::AUTO;
 
-    if(h1info.backend != ContractionBackend::AUTO) backend_active = h1info.backend;
-    if(h2info.backend != ContractionBackend::AUTO) backend_active = h2info.backend;
-
-    if(mpo_dims == h1info.H1_local_dims and h1info.backend == ContractionBackend::AUTO) backend_active = h1info.backend;
-    if(mpo_dims == h2info.H2_local_dims and h2info.backend == ContractionBackend::AUTO) backend_active = h2info.backend;
+    if(mpo_dims == h1info.H1_local_dims)
+        backend_active = h1info.backend;
+    else if(mpo_dims == h2info.H2_local_dims)
+        backend_active = h2info.backend;
 
     switch(backend_active) {
-        case ContractionBackend::X2: info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR); break;
+        case ContractionBackend::X2: {
+            info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+            // info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
+
+            // TODO: compare with eigen
+            break;
+        }
         case ContractionBackend::EIGEN: info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR); break;
         case ContractionBackend::TBLIS: {
             if constexpr(use_tblis) {
@@ -396,9 +437,84 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
                              fp(info.cancelation_factor), msg);
 }
 
+template<typename Scalar>
+void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3> &res, const Eigen::Tensor<Scalar, 3> &mps, //
+                                                       const Eigen::Tensor<Scalar, 4> &mpo,                                //
+                                                       const x2::Tensor<Scalar, 3>    &envL,                               //
+                                                       const x2::Tensor<Scalar, 3>    &envR) {
+    // This applies the mpo's with corresponding environments to local multisite mps
+    // This is usually the operation H|psi>  or H²|psi>
+
+    assert(mps.dimension(1) == envL.dimension(0));
+    assert(mps.dimension(2) == envR.dimension(0));
+    assert(mps.dimension(0) == mpo.dimension(2));
+    assert(envL.dimension(2) == mpo.dimension(0));
+    assert(envR.dimension(2) == mpo.dimension(1));
+    assert(mpo.dimension(3) == mps.dimension(0));
+
+    const internal::InfoH1Mv h1info         = internal::get_info_h1mv();
+    const internal::InfoH2Mv h2info         = internal::get_info_h2mv();
+    ContractionBackend       backend_active = ContractionBackend::AUTO;
+
+    if(mpo.dimensions() == h1info.H1_local_dims)
+        backend_active = h1info.backend;
+    else if(mpo.dimensions() == h2info.H2_local_dims)
+        backend_active = h2info.backend;
+
+    if(backend_active == ContractionBackend::X2) {
+        internal::StatsMv<Scalar>    info;
+        [[maybe_unused]] std::string msg;
+        info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+        if constexpr(settings::debug_contraction)
+            if(!msg.empty())
+                tools::log->info("matrix_vector_product: ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e} {}", fp(info.ST1), fp(info.ST2), fp(info.ST3),
+                                 fp(info.cancelation_factor), msg);
+    } else {
+        matrix_vector_product(res, mps, mpo, envL.to_EigenTensor(), envR.to_EigenTensor());
+    }
+}
+
+template<typename Scalar>
+requires(sfinae::is_any_v<typename Eigen::NumTraits<Scalar>::Real, fp32, fp64, fp128>)
+void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3>       &res,  //
+                                                       const Eigen::Tensor<Scalar, 3> &mps,  //
+                                                       const Eigen::Tensor<Scalar, 4> &mpo,  //
+                                                       const EnvEne<Scalar>           &envL, //
+                                                       const EnvEne<Scalar>           &envR) {
+    const internal::InfoH1Mv h1info         = internal::get_info_h1mv();
+    ContractionBackend       backend_active = ContractionBackend::AUTO;
+
+    if(mpo.dimensions() == h1info.H1_local_dims) backend_active = h1info.backend;
+    if(backend_active == ContractionBackend::X2) {
+        matrix_vector_product(res, mps, mpo, envL.template get_blkx2_as<Scalar>(), envR.template get_blkx2_as<Scalar>());
+    } else {
+        matrix_vector_product(res, mps, mpo, envL.template get_block_as<Scalar>(), envR.template get_block_as<Scalar>());
+    }
+}
+
+template<typename Scalar>
+requires(sfinae::is_any_v<typename Eigen::NumTraits<Scalar>::Real, fp32, fp64, fp128>)
+void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3>       &res,  //
+                                                       const Eigen::Tensor<Scalar, 3> &mps,  //
+                                                       const Eigen::Tensor<Scalar, 4> &mpo,  //
+                                                       const EnvVar<Scalar>           &envL, //
+                                                       const EnvVar<Scalar>           &envR) {
+    const internal::InfoH2Mv h2info         = internal::get_info_h2mv();
+    ContractionBackend       backend_active = ContractionBackend::AUTO;
+
+    if(mpo.dimensions() == h2info.H2_local_dims) backend_active = h2info.backend;
+    if(backend_active == ContractionBackend::X2) {
+        matrix_vector_product(res, mps, mpo, envL.template get_blkx2_as<Scalar>(), envR.template get_blkx2_as<Scalar>());
+    } else {
+        matrix_vector_product(res, mps, mpo, envL.template get_block_as<Scalar>(), envR.template get_block_as<Scalar>());
+    }
+}
+
 template<typename Scalar, typename mpo_type>
-void tools::common::contraction::matrix_vector_product(Scalar *res_ptr, const Scalar *const mps_ptr, std::array<long, 3> mps_dims,
-                                                       const std::vector<mpo_type> &mpos_shf, const Scalar *const envL_ptr, std::array<long, 3> envL_dims,
+void tools::common::contraction::matrix_vector_product(Scalar             *res_ptr,                                 //
+                                                       const Scalar *const mps_ptr, std::array<long, 3> mps_dims,   //
+                                                       const std::vector<mpo_type> &mpos_shf,                       //
+                                                       const Scalar *const envL_ptr, std::array<long, 3> envL_dims, //
                                                        const Scalar *const envR_ptr, std::array<long, 3> envR_dims) {
     // Make sure the mpos are pre-shuffled. If not, shuffle and call this function again
     bool is_shuffled = mpos_shf.front().dimension(2) == envL_dims[2] and mpos_shf.back().dimension(3) == envR_dims[2];
@@ -510,4 +626,15 @@ void tools::common::contraction::matrix_vector_product(Scalar *res_ptr, const Sc
     {
         mps_out.device(*threads->dev) = mps_tmp1.reshape(tenx::array4{d0, d1, d2, d3}).contract(envR, tenx::idx({0, 3}, {0, 2})).shuffle(tenx::array3{1, 0, 2});
     }
+}
+
+template<typename Scalar>
+void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3>                    &res,     //
+                                                       const Eigen::Tensor<Scalar, 3>              &mps,     //
+                                                       const std::vector<Eigen::Tensor<Scalar, 4>> &mpo_shf, //
+                                                       const x2::Tensor<Scalar, 3>                 &envL,    //
+                                                       const x2::Tensor<Scalar, 3>                 &envR) {
+    auto envLt = envL.to_EigenTensor();
+    auto envRt = envR.to_EigenTensor();
+    matrix_vector_product(res.data(), mps.data(), mps.dimensions(), mpo_shf, envLt.data(), envLt.dimensions(), envRt.data(), envRt.dimensions());
 }

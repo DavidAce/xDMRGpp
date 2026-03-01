@@ -67,31 +67,6 @@
     #error Could not include arpack headers correctly
 #endif
 
-template class eig::solver_arpack<MatVecMPOS<fp32>>;
-template class eig::solver_arpack<MatVecMPOS<fp64>>;
-template class eig::solver_arpack<MatVecMPOS<cx32>>;
-template class eig::solver_arpack<MatVecMPOS<cx64>>;
-//
-template class eig::solver_arpack<MatVecMPO<fp32>>;
-template class eig::solver_arpack<MatVecMPO<fp64>>;
-template class eig::solver_arpack<MatVecMPO<cx32>>;
-template class eig::solver_arpack<MatVecMPO<cx64>>;
-//
-template class eig::solver_arpack<MatVecDense<fp32>>;
-template class eig::solver_arpack<MatVecDense<fp64>>;
-template class eig::solver_arpack<MatVecDense<cx32>>;
-template class eig::solver_arpack<MatVecDense<cx64>>;
-//
-template class eig::solver_arpack<MatVecSparse<fp32>>;
-template class eig::solver_arpack<MatVecSparse<fp64>>;
-template class eig::solver_arpack<MatVecSparse<cx32>>;
-template class eig::solver_arpack<MatVecSparse<cx64>>;
-//
-template class eig::solver_arpack<MatVecZero<fp32>>;
-template class eig::solver_arpack<MatVecZero<fp64>>;
-template class eig::solver_arpack<MatVecZero<cx32>>;
-template class eig::solver_arpack<MatVecZero<cx64>>;
-
 namespace tc = sfinae;
 using namespace eig;
 
@@ -116,7 +91,8 @@ void eig::solver_arpack<MatrixType>::eigs() {
     matrix.set_side(config.side.value());
 
     // Dispatch to symmetric or nonsymmetric. If complex, there's only a nonsymmetric option available.
-    if constexpr(std::is_same_v<Scalar, cx64>) {
+
+    if constexpr(sfinae::is_any_v<Scalar, cx32, cx64>) {
         eigs_comp_rc();
     } else {
         if(config.form == Form::SYMM)
@@ -537,8 +513,7 @@ void eig::solver_arpack<MatrixType>::copy_solution(Derived &solver) {
                 eigvecs_cplx.resize(eigvecsize_t);
                 std::copy(solver.RawEigenvectors(), solver.RawEigenvectors() + eigvecsize, eigvecs_cplx.begin());
             } else {
-                auto &eigvecs_cplx = result.get_eigvecs<eigvec_type, Side::L>();
-                eigvecs_cplx.resize(eigvecsize_t);
+                auto &eigvecs_cplx = result.get_eigvecs<eigvec_type, Side::R>();
                 eigvecs_cplx.resize(eigvecsize_t);
                 std::copy(solver.RawEigenvectors(), solver.RawEigenvectors() + eigvecsize, eigvecs_cplx.begin());
             }
@@ -560,16 +535,27 @@ template<typename MatrixType>
 template<typename eval_t, typename evec_t, Side side>
 void eig::solver_arpack<MatrixType>::compute_residual_norms() {
     using VType = Eigen::Matrix<evec_t, Eigen::Dynamic, 1>;
+    using MType = Eigen::Matrix<evec_t, Eigen::Dynamic, Eigen::Dynamic>;
+
     if(matrix.get_side() != side) throw std::logic_error("Matrix has different side");
-    auto eigvalsize_t = safe_cast<size_t>(result.meta.cols);
-    result.meta.residual_norms.resize(eigvalsize_t);
+
+    const Eigen::Index rows = static_cast<Eigen::Index>(result.meta.rows);
+    const Eigen::Index cols = static_cast<Eigen::Index>(result.meta.cols);
+
     auto &eigvals = result.get_eigvals<eval_t>();
     auto &eigvecs = result.get_eigvecs<evec_t, side>();
-    for(size_t i = 0; i < eigvalsize_t; i++) {
-        auto eigvec_i   = Eigen::Map<VType>(eigvecs.data() + safe_cast<long>(i) * result.meta.cols, result.meta.rows);
-        auto A_eigvec_i = VType(result.meta.rows);
-        matrix.MultAx(eigvec_i.data(), A_eigvec_i.data());
-        result.meta.residual_norms.at(i) = (A_eigvec_i - eigvec_i * eigvals.at(i)).norm();
+
+    if(static_cast<Eigen::Index>(eigvecs.size()) != rows * cols) throw std::logic_error("eigvecs buffer has incorrect size");
+
+    auto V = Eigen::Map<MType>(eigvecs.data(), rows, cols);
+
+    result.meta.residual_norms.resize(static_cast<size_t>(cols));
+    VType Av(rows);
+
+    for(Eigen::Index i = 0; i < cols; ++i) {
+        auto v = V.col(i); // length = rows, contiguous in col-major
+        matrix.MultAx(v.data(), Av.data());
+        result.meta.residual_norms[static_cast<size_t>(i)] = static_cast<double>((Av - v * eigvals[static_cast<size_t>(i)]).norm());
     }
 }
 
@@ -579,3 +565,28 @@ void eig::solver_arpack<MatrixType>::compute_residual_norms() {
 #elif defined(__GNUC__) && (__GNUC__ >= 12)
     #pragma GCC diagnostic pop
 #endif
+
+template class eig::solver_arpack<MatVecMPOS<fp32>>;
+template class eig::solver_arpack<MatVecMPOS<fp64>>;
+template class eig::solver_arpack<MatVecMPOS<cx32>>;
+template class eig::solver_arpack<MatVecMPOS<cx64>>;
+//
+template class eig::solver_arpack<MatVecMPO<fp32>>;
+template class eig::solver_arpack<MatVecMPO<fp64>>;
+template class eig::solver_arpack<MatVecMPO<cx32>>;
+template class eig::solver_arpack<MatVecMPO<cx64>>;
+//
+template class eig::solver_arpack<MatVecDense<fp32>>;
+template class eig::solver_arpack<MatVecDense<fp64>>;
+template class eig::solver_arpack<MatVecDense<cx32>>;
+template class eig::solver_arpack<MatVecDense<cx64>>;
+//
+template class eig::solver_arpack<MatVecSparse<fp32>>;
+template class eig::solver_arpack<MatVecSparse<fp64>>;
+template class eig::solver_arpack<MatVecSparse<cx32>>;
+template class eig::solver_arpack<MatVecSparse<cx64>>;
+//
+template class eig::solver_arpack<MatVecZero<fp32>>;
+template class eig::solver_arpack<MatVecZero<fp64>>;
+template class eig::solver_arpack<MatVecZero<cx32>>;
+template class eig::solver_arpack<MatVecZero<cx64>>;

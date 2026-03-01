@@ -113,7 +113,7 @@ template<typename Scalar>
 opt_mps<Scalar> internal::optimize_energy(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, OptMeta &meta,
                                           reports::eigs_log<Scalar> &elog) {
     if(meta.optSolver == OptSolver::EIG) return optimize_energy_eig(tensors, initial_mps, meta, elog);
-    if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
+    if constexpr(sfinae::is_quadruple_prec_v<Scalar> or sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_energy_eigs(): not implemented for type {}", enum2sv(meta.optType));
     }
     tools::log->debug("optimize_energy_eigs: ritz {} | type {} | algo {}", enum2sv(meta.optRitz), enum2sv(meta.optType), enum2sv(meta.optAlgo));

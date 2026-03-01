@@ -115,7 +115,7 @@ namespace tools::finite::opt {
 
         [[nodiscard]] bool        is_initialized() const;
         [[nodiscard]] const auto &get_tensor() const { return get(tensor, "tensor"); }
-        [[nodiscard]] const auto  get_vector() const { return tenx::VectorMap(get_tensor()); }
+        [[nodiscard]] auto        get_vector() const { return tenx::VectorMap(get_tensor()); }
         template<typename T>
         [[nodiscard]] decltype(auto) get_tensor_as() const {
             return tenx::asScalarType<T>(get_tensor());

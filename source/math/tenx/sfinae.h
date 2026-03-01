@@ -1,9 +1,9 @@
 #pragma once
+#include "math/float_eigen.h"
 #include <array>
 #include <complex>
-#include <utility>
 #include <Eigen/Core>
-
+#include <utility>
 /*!
  * \brief A collection of type-detection and type-analysis utilities using SFINAE on Eigen types
  */
@@ -212,16 +212,6 @@ namespace tenx::sfinae {
     template<typename T>
     inline constexpr bool is_eigen_rowmajor_v = is_eigen_rowmajor<T>::value;
 
-    template<typename T>
-    concept is_single_prec_v = type_is<T, fp32> or type_is<T, cx32>;
 
-    template<typename T>
-    concept is_double_prec_v = type_is<T, fp64> or type_is<T, cx64>;
-
-    template<typename T>
-    concept is_long_double_prec_v = type_is<T, long double> or type_is<T, std::complex<long double>>;
-
-    template<typename T>
-    concept is_quadruple_prec_v = type_is<T, fp128> or type_is<T, cx128>;
 
 }

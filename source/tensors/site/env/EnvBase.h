@@ -107,18 +107,17 @@ class EnvBase {
     [[nodiscard]] decltype(auto) get_block_as() const {
         return tenx::asScalarType<T>(get_block());
     }
-    [[nodiscard]] bool                has_block() const;
-    [[nodiscard]] std::array<long, 3> dimensions() const;
-    [[nodiscard]] std::array<long, 3> get_dims() const;
-    [[nodiscard]] bool                is_real() const;
-    [[nodiscard]] bool                has_nan() const;
-    [[nodiscard]] size_t              get_position() const;
-    [[nodiscard]] size_t              get_sites() const;
+    [[nodiscard]] bool                        has_block() const;
+    [[nodiscard]] std::array<Eigen::Index, 3> dimensions() const;
+    [[nodiscard]] Eigen::Index                dimension(Eigen::Index d) const;
+    [[nodiscard]] std::array<Eigen::Index, 3> get_dims() const;
+    [[nodiscard]] bool                        is_real() const;
+    [[nodiscard]] bool                        has_nan() const;
+    [[nodiscard]] size_t                      get_position() const;
+    [[nodiscard]] size_t                      get_sites() const;
 
     virtual void set_edge_dims(const MpsSite<Scalar> &MPS, const MpoSite<Scalar> &MPO) = 0;
 
-    // void                       set_mixing_factor(double alpha);
-    // double                     get_mixing_factor() const;
     std::size_t                get_unique_id() const;
     std::optional<std::size_t> get_unique_id_env() const;
     std::optional<std::size_t> get_unique_id_mps() const;

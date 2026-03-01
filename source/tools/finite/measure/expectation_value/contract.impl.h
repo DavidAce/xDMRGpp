@@ -43,18 +43,18 @@ TN<Scalar, 0> contract_Ledge3_Redge3_012_012(const TN<Scalar, 3> &Ledge3, const 
 template<typename Scalar>
 void contract_mps1_mpo_mps2_0_2_4_0(TN<Scalar, 4> &result, const TN<Scalar, 3> &bra, const TN<Scalar, 4> &mpo, const TN<Scalar, 3> &ket,
                                     const ThreadPtr &threads) {
-    const long bd = bra.dimension(0);
-    const long bL = bra.dimension(1);
-    const long bR = bra.dimension(2);
+    [[maybe_unused]] const long bd = bra.dimension(0);
+    [[maybe_unused]] const long bL = bra.dimension(1);
+    [[maybe_unused]] const long bR = bra.dimension(2);
 
-    const long kd = ket.dimension(0);
-    const long kL = ket.dimension(1);
-    const long kR = ket.dimension(2);
+    [[maybe_unused]] const long kd = ket.dimension(0);
+    [[maybe_unused]] const long kL = ket.dimension(1);
+    [[maybe_unused]] const long kR = ket.dimension(2);
 
-    const long wL  = mpo.dimension(0);
-    const long wR  = mpo.dimension(1);
-    const long wdi = mpo.dimension(2);
-    const long wdo = mpo.dimension(3);
+    [[maybe_unused]] const long wL  = mpo.dimension(0);
+    [[maybe_unused]] const long wR  = mpo.dimension(1);
+    [[maybe_unused]] const long wdi = mpo.dimension(2);
+    [[maybe_unused]] const long wdo = mpo.dimension(3);
 
     assert(bd == wdo);
     assert(kd == wdi);
@@ -91,24 +91,24 @@ void contract_mps1_mpo_mps2_0_2_4_0(TN<Scalar, 4> &result, const TN<Scalar, 3> &
 template<typename Scalar>
 void contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(TN<Scalar, 4> &tmp, const TN<Scalar, 4> &result, const TN<Scalar, 3> &bra, const TN<Scalar, 4> &mpo,
                                                     const TN<Scalar, 3> &ket, const ThreadPtr &threads) {
-    const long bd = bra.dimension(0);
-    const long bL = bra.dimension(1);
-    const long bR = bra.dimension(2);
+    [[maybe_unused]] const long bd = bra.dimension(0);
+    [[maybe_unused]] const long bL = bra.dimension(1);
+    [[maybe_unused]] const long bR = bra.dimension(2);
 
-    const long kd = ket.dimension(0);
-    const long kL = ket.dimension(1);
-    const long kR = ket.dimension(2);
+    [[maybe_unused]] const long kd = ket.dimension(0);
+    [[maybe_unused]] const long kL = ket.dimension(1);
+    [[maybe_unused]] const long kR = ket.dimension(2);
 
-    const long wL  = mpo.dimension(0);
-    const long wR  = mpo.dimension(1);
-    const long wdi = mpo.dimension(2);
-    const long wdo = mpo.dimension(3);
+    [[maybe_unused]] const long wL  = mpo.dimension(0);
+    [[maybe_unused]] const long wR  = mpo.dimension(1);
+    [[maybe_unused]] const long wdi = mpo.dimension(2);
+    [[maybe_unused]] const long wdo = mpo.dimension(3);
 
     // result dims are whatever your sweep builds; name them explicitly
-    const long r0 = result.dimension(0); // aggregated left index (includes earlier bL*wL*kL)
-    const long r1 = result.dimension(1); // bra bond to be contracted with bra bL
-    const long r2 = result.dimension(2); // mpo left bond to be contracted with wL
-    const long r3 = result.dimension(3); // ket bond carried along
+    [[maybe_unused]] const long r0 = result.dimension(0); // aggregated left index (includes earlier bL*wL*kL)
+    [[maybe_unused]] const long r1 = result.dimension(1); // bra bond to be contracted with bra bL
+    [[maybe_unused]] const long r2 = result.dimension(2); // mpo left bond to be contracted with wL
+    [[maybe_unused]] const long r3 = result.dimension(3); // ket bond carried along
 
     assert(r1 == bL);
     assert(r2 == wL);

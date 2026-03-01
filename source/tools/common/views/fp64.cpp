@@ -2,4 +2,4 @@
 
 using Scalar = fp64;
 
-template class tools::common::views<Scalar>;
+template struct tools::common::views<Scalar>;

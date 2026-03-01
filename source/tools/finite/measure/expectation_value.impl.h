@@ -12,6 +12,8 @@
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
+#include "tools/common/contraction/expectation_value.h"
+#include "tools/common/contraction/matrix_vector_product.h"
 #include "tools/common/log.h"
 #include "tools/common/split.h"
 #include "tools/finite/mpo.h"

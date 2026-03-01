@@ -19,6 +19,7 @@
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
+#include "tools/common/contraction/contraction_policy.h"
 #include "tools/common/log.h"
 #include "tools/finite/measure/dimensions.h"
 #include "tools/finite/measure/hamiltonian.h"
@@ -28,7 +29,7 @@
 #include <Eigen/Eigenvalues>
 
 namespace settings {
-    inline constexpr bool debug_edges = true;
+    inline constexpr bool debug_edges = false;
 }
 
 template<typename Scalar>
@@ -351,7 +352,87 @@ void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, con
 template<typename Scalar>
 void tools::finite::env::rebuild_edges(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges) {
     if(state.get_algorithm() == AlgorithmType::fLBIT) return;
-    // #pragma message "REMOVE x2 edge building"
+    [[maybe_unused]] auto assert_equal_block = [](const Eigen::Tensor<Scalar, 3> &blk1, const Eigen::Tensor<Scalar, 3> &blk2) {
+        using Real = Eigen::NumTraits<Scalar>::Real;
+        if(blk1.data() == nullptr and blk2.data() == nullptr) return;
+        auto vec1 = tenx::VectorMap(blk1);
+        auto vec2 = tenx::VectorMap(blk2);
+        Real err  = (vec1 - vec2).norm() / vec1.norm();
+        if(err > Real{1e-12f}) throw except::runtime_error("assert_equal_block: err {:.4e} > 1e-12", fp(err));
+    };
+    [[maybe_unused]] auto assert_equal_blkx2 = [](const x2::Tensor<Scalar, 3> &A, const x2::Tensor<Scalar, 3> &B) {
+        using Real = Eigen::NumTraits<Scalar>::Real;
+        if(A.dimensions() != B.dimensions()) throw except::runtime_error("A dims {} != B dims {}", A.dimensions(), B.dimensions());
+        const auto n = A.size();
+
+        Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>> Ahi(A.hi_data(), n);
+        Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>> Alo(A.lo_data(), n);
+        Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>> Bhi(B.hi_data(), n);
+        Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, 1>> Blo(B.lo_data(), n);
+
+        // Force temporaries so we do not keep maps alive across anything that may reallocate.
+        const auto Asum = (Ahi + Alo).eval();
+        const auto Bsum = (Bhi + Blo).eval();
+
+        const Real denom = Asum.norm();
+        const Real err   = (Asum - Bsum).norm() / (denom > Real(0) ? denom : Real(1));
+        if(err > Real{1e-12f}) throw except::runtime_error("assert_equal_blkx2: err {:.4e} > 1e-12", fp(err));
+    };
+
+    [[maybe_unused]] auto assert_equal = [assert_equal_block, assert_equal_blkx2](const EdgesFinite<Scalar> &e1, const EdgesFinite<Scalar> &e2) {
+        if(e1.eneL.size() != e2.eneL.size()) throw std::runtime_error("eneL size mismatch");
+        if(e1.varL.size() != e2.varL.size()) throw std::runtime_error("varL size mismatch");
+        if(e1.eneR.size() != e2.eneR.size()) throw std::runtime_error("eneR size mismatch");
+        if(e1.varR.size() != e2.varR.size()) throw std::runtime_error("varR size mismatch");
+        for(size_t i = 0; i < e1.eneL.size(); ++i) {
+            assert_equal_blkx2(e1.eneL[i]->get_blkx2(), e2.eneL[i]->get_blkx2());
+            assert_equal_block(e1.eneL[i]->get_block(), e2.eneL[i]->get_block());
+        }
+        for(size_t i = 0; i < e1.eneR.size(); ++i) {
+            assert_equal_blkx2(e1.eneR[i]->get_blkx2(), e2.eneR[i]->get_blkx2());
+            assert_equal_block(e1.eneR[i]->get_block(), e2.eneR[i]->get_block());
+        }
+        for(size_t i = 0; i < e1.varL.size(); ++i) {
+            assert_equal_blkx2(e1.varL[i]->get_blkx2(), e2.varL[i]->get_blkx2());
+            assert_equal_block(e1.varL[i]->get_block(), e2.varL[i]->get_block());
+        }
+        for(size_t i = 0; i < e1.varR.size(); ++i) {
+            assert_equal_blkx2(e1.varR[i]->get_blkx2(), e2.varR[i]->get_blkx2());
+            assert_equal_block(e1.varR[i]->get_block(), e2.varR[i]->get_block());
+        }
+    };
+    // auto e1 = edges;
+    // auto e2 = edges;
+    // auto e3 = edges;
+    // auto e4 = edges;
+    //
+    // {
+    //     auto envinfo = SetEnvInfo(ContractionBackend::TBLIS);
+    //     rebuild_edges_ene(state, model, e1);
+    //     rebuild_edges_var(state, model, e1);
+    // }
+    // {
+    //     auto envinfo = SetEnvInfo(ContractionBackend::X2);
+    //     rebuild_edges_ene(state, model, e2);
+    //     rebuild_edges_var(state, model, e2);
+    // }
+    // {
+    //     auto envinfo = SetEnvInfo(ContractionBackend::TBLIS);
+    //     rebuild_edges_ene_x2(state, model, e3);
+    //     rebuild_edges_var_x2(state, model, e3);
+    // }
+    // {
+    //     auto envinfo = SetEnvInfo(ContractionBackend::X2);
+    //     rebuild_edges_ene_x2(state, model, e4);
+    //     rebuild_edges_var_x2(state, model, e4);
+    // }
+    // auto envinfo = SetEnvInfo(ContractionBackend::TBLIS);
+
     rebuild_edges_ene(state, model, edges);
     rebuild_edges_var(state, model, edges);
+
+    // assert_equal(e1, e2);
+    // assert_equal(e1, e3);
+    // assert_equal(e1, e4);
+    // assert_equal(e1, edges);
 }

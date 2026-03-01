@@ -126,18 +126,35 @@ env_pair<EnvVar<Scalar> &> EdgesInfinite<Scalar>::get_var() {
 }
 
 template<typename Scalar>
-env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_ene_blk() const {
+env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_ene_block() const {
     return {eneL->get_block(), eneR->get_block()};
 }
 template<typename Scalar>
-env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_var_blk() const {
+env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_var_block() const {
     return {varL->get_block(), varR->get_block()};
 }
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3>> EdgesInfinite<Scalar>::get_env_ene_blk() {
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesInfinite<Scalar>::get_env_ene_block() {
     return {eneL->get_block(), eneR->get_block()};
 }
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3>> EdgesInfinite<Scalar>::get_env_var_blk() {
+env_pair<Eigen::Tensor<Scalar, 3>> EdgesInfinite<Scalar>::get_env_var_block() {
     return {varL->get_block(), varR->get_block()};
+}
+
+template<typename Scalar>
+env_pair<const x2::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_ene_blkx2() const {
+    return {eneL->get_blkx2(), eneR->get_blkx2()};
+}
+template<typename Scalar>
+env_pair<const x2::Tensor<Scalar, 3> &> EdgesInfinite<Scalar>::get_env_var_blkx2() const {
+    return {varL->get_blkx2(), varR->get_blkx2()};
+}
+template<typename Scalar>
+env_pair<x2::Tensor<Scalar, 3>> EdgesInfinite<Scalar>::get_env_ene_blkx2() {
+    return {eneL->get_blkx2(), eneR->get_blkx2()};
+}
+template<typename Scalar>
+env_pair<x2::Tensor<Scalar, 3>> EdgesInfinite<Scalar>::get_env_var_blkx2() {
+    return {varL->get_blkx2(), varR->get_blkx2()};
 }

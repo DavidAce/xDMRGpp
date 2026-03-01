@@ -1,21 +1,13 @@
 #pragma once
 #include "config/enums.h"
-#include "io/fmt_custom.h"
 #include "math/eig/matvec/matvec_mpos.h"
-#include "math/eig/solver.h"
-#include "math/eig/view.h"
 #include "math/float.h"
-#include "math/linalg/matrix/gramSchmidt.h"
-#include "math/linalg/matrix/to_string.h"
 #include "math/tenx.h"
 #include "StopReason.h"
-#include <spdlog/spdlog.h>
-// #include "tensors/site/env/EnvEne.h"
-// #include "tensors/site/env/EnvPair.h"
-// #include "tensors/site/env/EnvVar.h"
 #include "tid/tid.h"
 #include <Eigen/Eigenvalues>
 #include <source_location>
+#include <spdlog/spdlog.h>
 
 template<typename Scalar> class JacobiDavidsonOperator;
 enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON, AUTO };

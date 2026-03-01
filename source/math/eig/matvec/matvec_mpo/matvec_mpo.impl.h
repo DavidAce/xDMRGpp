@@ -7,6 +7,7 @@
 #include "math/tenx.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
+#include "tools/common/contraction/matrix_vector_product.h"
 #include "tools/common/contraction/MatrixLikeOperator.h"
 #include <Eigen/Cholesky>
 #include <primme/primme.h>
@@ -49,10 +50,9 @@ void MatVecMPO<T>::FactorOP() {
     MatrixType A_matrix = get_matrix();
     if(not readyShift and std::abs(get_shift()) != Real{0}) {
         if constexpr(sfinae::is_std_complex_v<T>) {
-            A_matrix.diagonal() -= VectorType::Constant(rows(), get_shift());
-
+            A_matrix.diagonal().array() -= get_shift();
         } else {
-            A_matrix.diagonal() -= VectorType::Constant(rows(), std::real(get_shift()));
+            A_matrix.diagonal().array() -= std::real(get_shift());
         }
     }
 

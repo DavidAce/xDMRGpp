@@ -1,6 +1,6 @@
 #include "expectation_value.impl.h"
 
-using Scalar = fp64;
+using Scalar = fp32;
 
 template Scalar tools::common::contraction::expectation_value(const Scalar *const mps_ptr, std::array<long, 3> mps_dims,    //
                                                               const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims,    //
@@ -12,3 +12,13 @@ template Scalar tools::common::contraction::expectation_value(const Scalar *cons
                                                               const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims,    //
                                                               const Scalar *const envL_ptr, std::array<long, 3> envL_dims,  //
                                                               const Scalar *const envR_ptr, std::array<long, 3> envR_dims); //
+
+template Scalar tools::common::contraction::expectation_value(const Eigen::Tensor<Scalar, 3> &mps,  //
+                                                              const Eigen::Tensor<Scalar, 4> &mpo,  //
+                                                              const EnvEne<Scalar>           &envL, //
+                                                              const EnvEne<Scalar>           &envR);
+
+template Scalar tools::common::contraction::expectation_value(const Eigen::Tensor<Scalar, 3> &mps,  //
+                                                              const Eigen::Tensor<Scalar, 4> &mpo,  //
+                                                              const EnvVar<Scalar>           &envL, //
+                                                              const EnvVar<Scalar>           &envR);

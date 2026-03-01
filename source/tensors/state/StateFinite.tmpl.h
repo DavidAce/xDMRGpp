@@ -602,8 +602,9 @@ template<typename Scalar>
 template<typename T>
 typename StateFinite<Scalar>::template optional_tensor4ref<T> StateFinite<Scalar>::load_trf_from_cache(const std::string &key) const {
     if(key.empty()) return {};
-    auto it = std::find_if(get_cache<T>.trf.begin(), get_cache<T>.trf.end(), [&key](const auto &elem) -> bool { return elem.first == key; });
-    if(it != get_cache<T>.trf.end()) {
+    auto &cache = this->template get_cache<T>();
+    auto  it    = std::find_if(cache.trf.begin(), cache.trf.end(), [&key](const auto &elem) -> bool { return elem.first == key; });
+    if(it != cache.trf.end()) {
         if constexpr(debug_cache) tools::log->trace("load_trf_from_cache<{}>: cache_hit: {} | {} | {}", sfinae::type_name<T>(), key, it->second.dimensions());
         return std::cref(it->second);
     }
@@ -625,13 +626,14 @@ template<typename Scalar>
 template<typename T>
 void StateFinite<Scalar>::save_trf_into_cache(const Eigen::Tensor<T, 4> &trf, const std::string &key) const {
     if(key.empty()) return;
-    auto it = std::find_if(get_cache<T>().trf.rbegin(), get_cache<T>().trf.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
+    auto &cache = this->template get_cache<T>();
+    auto  it    = std::find_if(cache.trf.rbegin(), cache.trf.rend(), [&key](const auto &elem) -> bool { return elem.first == key; });
     if constexpr(debug_cache) {
         // if(!cache.trf_real.contains(key)) tools::log->trace("save_trf_into_cache: key: {} | {}", key, trf.dimensions());
-        if(it == get_cache<T>().trf.rend()) tools::log->trace("save_trf_into_cache<{}>: key: {} | {}", sfinae::type_name<T>(), key, trf.dimensions());
+        if(it == cache.trf.rend()) tools::log->trace("save_trf_into_cache<{}>: key: {} | {}", sfinae::type_name<T>(), key, trf.dimensions());
     }
     // cache.trf_real[key] = trf;
-    if(it == get_cache<T>().trf.rend()) get_cache<T>().trf.emplace_back(std::make_pair(key, trf));
+    if(it == cache.trf.rend()) cache.trf.emplace_back(std::make_pair(key, trf));
     shrink_cache();
 }
 

@@ -5,7 +5,7 @@
 
 template<typename Scalar>
 StateFinite<Scalar> tools::finite::mps::add_states(const StateFinite<Scalar> &stateA, const StateFinite<Scalar> &stateB) {
-    auto algo_type  = stateA.template get_algorithm();
+    auto algo_type  = stateA.get_algorithm();
     auto model_size = stateA.template get_length<size_t>();
     auto position   = stateA.template get_position<long>();
     if(model_size != stateB.template get_length<size_t>())

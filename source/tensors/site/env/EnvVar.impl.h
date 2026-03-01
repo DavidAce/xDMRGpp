@@ -11,7 +11,7 @@
 #include <utility>
 
 namespace settings {
-    inline constexpr bool debug_edges_var = true;
+    inline constexpr bool debug_edges_var = false;
 }
 
 template<typename Scalar>
@@ -139,8 +139,8 @@ void EnvVar<Scalar>::set_block(const Eigen::Tensor<Scalar, 3> &blk, const EnvVar
     // If side == R, env,mps and mpo are all corresponding to the neighbor on the right
     if constexpr(settings::debug)
         if(not num::all_equal(env.get_position(), mps.get_position(), mpo.get_position()))
-            throw except::logic_error("EnvVar::set_block(): side({}), pos({}),: positions are not equal: mps {} | mpo {}", side, get_position(),
-                                      get_position(), mps.get_position(), mpo.get_position());
+            throw except::logic_error("EnvVar::set_block(): side({}), pos({}),: positions are not equal: mps {} | mpo {}", side, get_position(), get_position(),
+                                      mps.get_position(), mpo.get_position());
 
     if(side == "L" and get_position() != mps.get_position() + 1)
         throw except::logic_error(
@@ -153,16 +153,51 @@ void EnvVar<Scalar>::set_block(const Eigen::Tensor<Scalar, 3> &blk, const EnvVar
     *blkx2 = blk;
 
     auto envinfo = tools::common::contraction::internal::get_info_env();
-    if(envinfo.backend == ContractionBackend::X2) { blkx2->renorm(); }
+    if(envinfo.backend == ContractionBackend::X2) {
+        blkx2->renorm();
+        unique_id = std::nullopt;
+    }
 
     // Store id's to objects used to create this env.
-    unique_id     = get_unique_id();
+    unique_id     = std::nullopt;
     unique_id_env = env.get_unique_id();
     unique_id_mps = mps.get_unique_id();
     unique_id_mpo = mpo.get_unique_id_sq();
     assert_unique_id(env, mps, mpo);
 }
 
+template<typename Scalar>
+void EnvVar<Scalar>::set_blkx2(const x2::Tensor<Scalar, 3> &blk, const EnvVar &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo) {
+    // If side == L, env,mps and mpo are all corresponding to the neighbor on the left
+    // If side == R, env,mps and mpo are all corresponding to the neighbor on the right
+    if constexpr(settings::debug)
+        if(not num::all_equal(env.get_position(), mps.get_position(), mpo.get_position()))
+            throw except::logic_error("EnvVar::set_block(): side({}), pos({}),: positions are not equal: mps {} | mpo {}", side, get_position(), get_position(),
+                                      mps.get_position(), mpo.get_position());
+
+    if(side == "L" and get_position() != mps.get_position() + 1)
+        throw except::logic_error(
+            fmt::format("EnvVar<Scalar>::set_block(pos == {}): This env{} needs env, mps and mpo at position {}", get_position(), side, get_position() - 1));
+    if(side == "R" and get_position() + 1 != mps.get_position())
+        throw except::logic_error(
+            fmt::format("EnvVar<Scalar>::set_block(pos == {}): This env{} needs env, mps and mpo at position {}", get_position(), side, get_position() + 1));
+
+    if(not blkx2) blkx2 = std::make_unique<x2::Tensor<Scalar, 3>>();
+    *blkx2 = blk;
+
+    auto envinfo = tools::common::contraction::internal::get_info_env();
+    if(envinfo.backend == ContractionBackend::X2) {
+        blkx2->renorm();
+        unique_id = std::nullopt;
+    }
+
+    // Store id's to objects used to create this env.
+    unique_id     = std::nullopt;
+    unique_id_env = env.get_unique_id();
+    unique_id_mps = mps.get_unique_id();
+    unique_id_mpo = mpo.get_unique_id_sq();
+    assert_unique_id(env, mps, mpo);
+}
 
 template<typename Scalar>
 void EnvVar<Scalar>::set_block_raw(const Eigen::Tensor<Scalar, 3> &blk) {
@@ -171,13 +206,16 @@ void EnvVar<Scalar>::set_block_raw(const Eigen::Tensor<Scalar, 3> &blk) {
     *blkx2 = blk;
 
     auto envinfo = tools::common::contraction::internal::get_info_env();
-    if(envinfo.backend == ContractionBackend::X2) { blkx2->renorm(); }
+    if(envinfo.backend == ContractionBackend::X2) {
+        blkx2->renorm();
+        unique_id = std::nullopt;
+    }
 
-    // Store id's to objects used to create this env.
-    unique_id = get_unique_id();
-    unique_id_env.reset();
-    unique_id_mps.reset();
-    unique_id_mpo.reset();
+    // Clear id's to objects used to create this env.
+    unique_id     = std::nullopt;
+    unique_id_env = std::nullopt;
+    unique_id_mps = std::nullopt;
+    unique_id_mpo = std::nullopt;
 }
 
 template<typename Scalar>
@@ -191,7 +229,7 @@ void EnvVar<Scalar>::set_edge_dims(const MpsSite<Scalar> &mps, const MpoSite<Sca
 
     if constexpr(settings::debug_edges_var) tools::log->trace("EnvVar<Scalar>::set_edge_dims: {}{}({}): {}", tag, side, get_position(), edge.dimensions());
     set_edge_dims(mps.template get_M_bare_as<Scalar>(), mpo.template MPO2_as<Scalar>(), edge);
-    unique_id     = get_unique_id();
+    unique_id     = std::nullopt;
     unique_id_env = unique_id_edge;
     unique_id_mps = mps.get_unique_id();
     unique_id_mpo = mpo.get_unique_id_sq();

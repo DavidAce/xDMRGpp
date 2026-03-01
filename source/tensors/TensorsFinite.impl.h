@@ -175,12 +175,12 @@ void TensorsFinite<Scalar>::normalize_state(std::optional<svd::config> svd_cfg, 
 }
 
 template<typename Scalar>
-env_pair<const Eigen::Tensor<Scalar, 3> &> TensorsFinite<Scalar>::get_multisite_env_ene_blk() const {
-    return get_edges().get_multisite_env_ene_blk();
+env_pair<const Eigen::Tensor<Scalar, 3> &> TensorsFinite<Scalar>::get_multisite_env_ene_block() const {
+    return get_edges().get_multisite_env_ene_block();
 }
 template<typename Scalar>
-env_pair<const Eigen::Tensor<Scalar, 3> &> TensorsFinite<Scalar>::get_multisite_env_var_blk() const {
-    return get_edges().get_multisite_env_var_blk();
+env_pair<const Eigen::Tensor<Scalar, 3> &> TensorsFinite<Scalar>::get_multisite_env_var_block() const {
+    return get_edges().get_multisite_env_var_block();
 }
 
 template<typename Scalar>

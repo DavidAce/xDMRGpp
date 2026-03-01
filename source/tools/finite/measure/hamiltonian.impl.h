@@ -13,6 +13,8 @@
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/contraction/contraction_policy.h"
+#include "tools/common/contraction/expectation_value.h"
+#include "tools/common/contraction/matrix_vector_product.h"
 #include "tools/common/log.h"
 #include <Eigen/Eigenvalues>
 
@@ -142,9 +144,11 @@ Scalar tools::finite::measure::expval_hamiltonian_squared(const TensorsFinite<Sc
 }
 
 template<typename Scalar>
-RealScalar<Scalar> tools::finite::measure::local_operator_norm_estimate(const Eigen::Tensor<Scalar, 4> &mpo, const Eigen::Tensor<Scalar, 3> &envL,
-                                                                        const Eigen::Tensor<Scalar, 3> &envR, Eigen::Index maxiter,
-                                                                        fp32 reltol // e.g. 1e-3
+RealScalar<Scalar> tools::finite::measure::local_operator_norm_estimate(const Eigen::Tensor<Scalar, 4> &mpo,     //
+                                                                        const x2::Tensor<Scalar, 3>    &envL,    //
+                                                                        const x2::Tensor<Scalar, 3>    &envR,    //
+                                                                        Eigen::Index                    maxiter, //
+                                                                        fp32                            reltol   // e.g. 1e-3
 ) {
     using Real    = RealScalar<Scalar>;
     using VecType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
@@ -260,8 +264,8 @@ template<typename Scalar> RealScalar<Scalar>
                                                    const env_pair<const EnvEne<Scalar> &> &envs, Eigen::Index maxiter, fp32 reltol) {
     using Scalar32 = typename std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, cx32, fp32>;
     if(mpo_refs.size() != 1) { throw except::runtime_error("norm_hamiltonian_squared: Expected 1-site mpo. Got {} mpo sites.", mpo_refs.size()); }
-    Eigen::Tensor<Scalar32, 3> envL = envs.L.template get_block_as<Scalar32>();
-    Eigen::Tensor<Scalar32, 3> envR = envs.R.template get_block_as<Scalar32>();
+    x2::Tensor<Scalar32, 3>    envL = envs.L.template get_blkx2_as<Scalar32>();
+    x2::Tensor<Scalar32, 3>    envR = envs.R.template get_blkx2_as<Scalar32>();
     Eigen::Tensor<Scalar32, 4> mpo  = mpo_refs.front().get().template MPO_as<Scalar32>();
     return static_cast<RealScalar<Scalar>>(local_operator_norm_estimate(mpo, envL, envR, maxiter, reltol));
 }
@@ -281,8 +285,8 @@ template<typename Scalar> RealScalar<Scalar>
                                                            const env_pair<const EnvVar<Scalar> &> &envs, Eigen::Index maxiter, fp32 reltol) {
     using Scalar32 = typename std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, cx32, fp32>;
     if(mpo_refs.size() != 1) { throw except::runtime_error("norm_hamiltonian_squared: Expected 1-site mpo. Got {} mpo sites.", mpo_refs.size()); }
-    Eigen::Tensor<Scalar32, 3> envL = envs.L.template get_block_as<Scalar32>();
-    Eigen::Tensor<Scalar32, 3> envR = envs.R.template get_block_as<Scalar32>();
+    x2::Tensor<Scalar32, 3>    envL = envs.L.template get_blkx2_as<Scalar32>();
+    x2::Tensor<Scalar32, 3>    envR = envs.R.template get_blkx2_as<Scalar32>();
     Eigen::Tensor<Scalar32, 4> mpo2 = mpo_refs.front().get().template MPO2_as<Scalar32>();
     return static_cast<RealScalar<Scalar>>(local_operator_norm_estimate(mpo2, envL, envR, maxiter, reltol));
 }
@@ -310,12 +314,10 @@ template<typename Scalar> RealScalar<Scalar>
         throw except::runtime_error("global_hamiltonian_trace: Position mismatch: envs.L and sites.front():  {} != {}", envs.L.get_position(), sites.front());
     if(envs.R.get_position() != sites.back())
         throw except::runtime_error("global_hamiltonian_trace: Position mismatch: envs.R and sites.front():  {} != {}", envs.R.get_position(), sites.front());
-    if(mpo_refs.front().get().MPO().dimension(0) != envs.L.get_block().dimension(2))
-        throw except::runtime_error("mpo and env.L virtual bond dimension mismatch {} != {}", mpo_refs.front().get().MPO().dimension(0),
-                                    envs.L.get_block().dimension(2));
-    if(mpo_refs.back().get().MPO().dimension(1) != envs.R.get_block().dimension(2))
-        throw except::runtime_error("mpo and env.R virtual bond dimension mismatch {} != {}", mpo_refs.back().get().MPO().dimension(1),
-                                    envs.R.get_block().dimension(2));
+    if(mpo_refs.front().get().MPO().dimension(0) != envs.L.dimension(2))
+        throw except::runtime_error("mpo and env.L virtual bond dimension mismatch {} != {}", mpo_refs.front().get().MPO().dimension(0), envs.L.dimension(2));
+    if(mpo_refs.back().get().MPO().dimension(1) != envs.R.dimension(2))
+        throw except::runtime_error("mpo and env.R virtual bond dimension mismatch {} != {}", mpo_refs.back().get().MPO().dimension(1), envs.R.dimension(2));
 
     auto  t_mpo   = tid::tic_scope("global_hamiltonian_trace", tid::level::highest);
     auto &threads = tenx::threads::get();
@@ -395,12 +397,10 @@ template<typename Scalar> RealScalar<Scalar>
         throw except::runtime_error("global_hamiltonian_trace: Position mismatch: envs.L and sites.front():  {} != {}", envs.L.get_position(), sites.front());
     if(envs.R.get_position() != sites.back())
         throw except::runtime_error("global_hamiltonian_trace: Position mismatch: envs.R and sites.front():  {} != {}", envs.R.get_position(), sites.front());
-    if(mpo_refs.front().get().MPO2().dimension(0) != envs.L.get_block().dimension(2))
-        throw except::runtime_error("mpo2 and env.L virtual bond dimension mismatch {} != {}", mpo_refs.front().get().MPO2().dimension(0),
-                                    envs.L.get_block().dimension(2));
-    if(mpo_refs.back().get().MPO2().dimension(1) != envs.R.get_block().dimension(2))
-        throw except::runtime_error("mpo2 and env.R virtual bond dimension mismatch {} != {}", mpo_refs.back().get().MPO2().dimension(1),
-                                    envs.R.get_block().dimension(2));
+    if(mpo_refs.front().get().MPO2().dimension(0) != envs.L.dimension(2))
+        throw except::runtime_error("mpo2 and env.L virtual bond dimension mismatch {} != {}", mpo_refs.front().get().MPO2().dimension(0), envs.L.dimension(2));
+    if(mpo_refs.back().get().MPO2().dimension(1) != envs.R.dimension(2))
+        throw except::runtime_error("mpo2 and env.R virtual bond dimension mismatch {} != {}", mpo_refs.back().get().MPO2().dimension(1), envs.R.dimension(2));
 
     auto  t_mpo   = tid::tic_scope("global_hamiltonian_trace", tid::level::highest);
     auto &threads = tenx::threads::get();
@@ -475,7 +475,7 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const State
         [[maybe_unused]] constexpr auto tol           = static_cast<RealScalar<Scalar>>(1e-12);
         const auto                     &multisite_mps = state.template get_multisite_mps<Scalar>();
         const auto                     &multisite_mpo = model.template get_multisite_mpo<Scalar>();
-        const auto                     &multisite_env = edges.get_multisite_env_ene_blk();
+        const auto                     &multisite_env = edges.get_multisite_env_ene_block();
         auto                            edbg = tools::common::contraction::expectation_value(multisite_mps, multisite_mpo, multisite_env.L, multisite_env.R);
         tools::log->trace("e_minus_ered: {:.16f}", fp(e_minus_ered));
         tools::log->trace("e_minus_edbg: {:.16f}", fp(edbg));
@@ -513,7 +513,7 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen
     if(model.active_sites.size() <= 3) {
         // Contract directly
         const auto &mpo = model.template get_multisite_mpo<Scalar>();
-        const auto &env = edges.get_multisite_env_ene_blk();
+        const auto &env = edges.get_multisite_env_ene_block();
         if constexpr(settings::debug_hamiltonian)
             tools::log->trace("Measuring energy: multisite_mps dims {} | model sites {} dims {} | edges sites {} dims [L{} R{}]", multisite_mps.dimensions(),
                               model.active_sites, mpo.dimensions(), edges.active_sites, env.L.dimensions(), env.R.dimensions());
@@ -542,7 +542,7 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen
         if constexpr(settings::debug_hamiltonian) {
             [[maybe_unused]] constexpr auto tol  = static_cast<RealScalar<Scalar>>(1e-14);
             const auto                     &mpo  = model.template get_multisite_mpo<Scalar>();
-            const auto                     &env  = edges.get_multisite_env_ene_blk();
+            const auto                     &env  = edges.get_multisite_env_ene_block();
             const auto                      edbg = tools::common::contraction::expectation_value(multisite_mps, mpo, env.L, env.R);
             tools::log->trace("e_minus_ered: {:.16f}", fp(e_minus_ered));
             tools::log->trace("e_minus_edbg: {:.16f}", fp(edbg));
@@ -660,7 +660,7 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
     if(model.active_sites.size() <= 3) {
         // Direct contraction
         const auto &mpo2 = model.template get_multisite_mpo_squared<Scalar>();
-        const auto &env2 = edges.get_multisite_env_var_blk();
+        const auto &env2 = edges.get_multisite_env_var_block();
         if constexpr(settings::debug)
             tools::log->trace("Measuring energy variance: state dims {} | model sites {} dims {} | edges sites {} dims [L{} R{}]", multisite_mps.dimensions(),
                               model.active_sites, mpo2.dimensions(), edges.active_sites, env2.L.dimensions(), env2.R.dimensions());
@@ -668,7 +668,7 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
         if(multisite_mps.dimension(0) != mpo2.dimension(2))
             throw std::runtime_error(fmt::format("State and model have incompatible physical dimension: state dim {} | model dim {}",
                                                  multisite_mps.dimension(0), mpo2.dimension(2)));
-        H2          = tools::common::contraction::expectation_value(multisite_mps, mpo2, env2.L, env2.R);
+        H2 = tools::common::contraction::expectation_value(multisite_mps, mpo2, env2.L, env2.R);
     } else {
         // Split the multisite mps first
         const auto mpos = model.get_mpo_active();
@@ -678,7 +678,7 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
         H2 = tools::finite::measure::expectation_value<Scalar>(multisite_mps, multisite_mps, mpos, envs, svd_cfg);
         if constexpr(settings::debug_hamiltonian) {
             const auto &mpo   = model.template get_multisite_mpo_squared<Scalar>();
-            const auto &env   = edges.get_multisite_env_var_blk();
+            const auto &env   = edges.get_multisite_env_var_block();
             const auto  H2dbg = tools::common::contraction::expectation_value(multisite_mps, mpo, env.L, env.R);
             tools::log->trace("H2   : {:.16f}", fp(H2));
             tools::log->trace("H2dbg: {:.16f}", fp(H2dbg));

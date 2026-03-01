@@ -17,6 +17,7 @@
 #include "tools/common/contraction.h"
 #include "tools/common/contraction/contraction_policy.h"
 #include "tools/common/contraction/IterativeLinearSolverConfig.h"
+#include "tools/common/contraction/matrix_vector_product.h"
 #include "tools/common/contraction/MatrixLikeOperator.h"
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
@@ -1161,24 +1162,26 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
             Eigen::Index offset, extent;
         };
         std::vector<BlockSpec> blockSpecs;
-        Eigen::Index           blkidx = 0;
-        Eigen::Index           blkoff = 0;
-        Eigen::Index           blkext = 0;
-        Eigen::Index           maxidx = size_mps / (jcbBlockSize - 1) + 1;
-        while(blkoff + blkext < size_mps) {
-            blkoff = std::max<long>(0, blkidx * jcbBlockSize -
-                                           jcbOverlapSize); // std::clamp<long>(blkidx * jcbBlockSize - jcbOverlapSize, 0, size_mps - jcbBlockSize - 1);
-            blkext = std::min(jcbBlockSize, size_mps - blkoff);
-            if(size_mps - blkoff < 2 * jcbBlockSize) {
-                // Just absorb the last block (which would have been smaller)
-                blkext = size_mps - blkoff;
+        {
+            Eigen::Index blkidx = 0;
+            Eigen::Index blkoff = 0;
+            Eigen::Index blkext = 0;
+            Eigen::Index maxidx = size_mps / (jcbBlockSize - 1) + 1;
+            while(blkoff + blkext < size_mps) {
+                blkoff = std::max<long>(0, blkidx * jcbBlockSize -
+                                               jcbOverlapSize); // std::clamp<long>(blkidx * jcbBlockSize - jcbOverlapSize, 0, size_mps - jcbBlockSize - 1);
+                blkext = std::min(jcbBlockSize, size_mps - blkoff);
+                if(size_mps - blkoff < 2 * jcbBlockSize) {
+                    // Just absorb the last block (which would have been smaller)
+                    blkext = size_mps - blkoff;
+                }
+                blockSpecs.emplace_back(BlockSpec{.offset = blkoff, .extent = blkext});
+                // eig::log->info("blkidx {} | blkoff {} | blkext {}", blkidx, blkoff, blkext);
+                blkidx++;
+                if(blkidx > maxidx)
+                    throw except::runtime_error("Too many blocks! blkidx {} | blkoff {} | blkext {} | size_mps {} | jcb_os {}", blkidx, blkoff, blkext,
+                                                size_mps, jcbOverlapSize);
             }
-            blockSpecs.emplace_back(BlockSpec{.offset = blkoff, .extent = blkext});
-            // eig::log->info("blkidx {} | blkoff {} | blkext {}", blkidx, blkoff, blkext);
-            blkidx++;
-            if(blkidx > maxidx)
-                throw except::runtime_error("Too many blocks! blkidx {} | blkoff {} | blkext {} | size_mps {} | jcb_os {}", blkidx, blkoff, blkext, size_mps,
-                                            jcbOverlapSize);
         }
         long nblocks = static_cast<long>(blockSpecs.size());
         eig::log->debug("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} | overlap {}...",
@@ -1186,7 +1189,10 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
 #pragma omp parallel for ordered schedule(dynamic, 1)
         for(long blkidx = 0; blkidx < nblocks; ++blkidx) {
             eig::Factorization factorization_internal = factorization;
-            auto [offset, extent]                     = blockSpecs.at(static_cast<size_t>(blkidx));
+            auto               specs                  = blockSpecs.at(static_cast<size_t>(blkidx));
+            auto               offset                 = specs.offset;
+            auto               extent                 = specs.extent;
+
             // long               offset                 = blkidx * jcbBlockSize;
             // long               extent                 = std::min((blkidx + 1) * jcbBlockSize - offset + jcbOverlapSize, size_mps - offset);
 
@@ -1901,9 +1907,8 @@ typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::I
     using MatType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using VecReal = Eigen::Matrix<Real, Eigen::Dynamic, 1>;
 
-
-    auto         h1info    = SetH1MvInfo(ContractionBackend::TBLIS, shape_mpo); // Use high-precision matvec
-    auto         h2info    = SetH2MvInfo(ContractionBackend::TBLIS, shape_mpo); // Use high-precision matvec
+    auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, shape_mpo); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, shape_mpo); // Use high-precision matvec
 
     Eigen::Tensor<Scalar, 3> vt(shape_mps);
     Eigen::Tensor<Scalar, 3> wt(shape_mps);

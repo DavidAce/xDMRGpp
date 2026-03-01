@@ -212,7 +212,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
             // GDMRG are not
             mixedColOk.emplace_back(i);
         }
-        if constexpr(!tenx::sfinae::is_quadruple_prec_v<T>) {
+        if constexpr(!sfinae::is_quadruple_prec_v<T>) {
             if(mixedColOk.size() <= 1) {
                 tools::log->debug("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8));
                 tools::log->debug("K2                     : \n{}\n", linalg::matrix::to_string(K2, 8));

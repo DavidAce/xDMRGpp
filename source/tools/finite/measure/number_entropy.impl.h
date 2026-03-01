@@ -659,7 +659,7 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::number_entropies(const S
     //    tools::finite::mps::move_center_point_to_pos(state_copy, state_copy.get_length<long>() - 1);
     //    tools::finite::mps::move_center_point_to_pos(state_copy,state_copy.get_length<long>()-1);
     auto state_pos       = state_copy.template get_position<long>();
-    auto state_len       = state_copy.template get_length();
+    auto state_len       = state_copy.template get_length<size_t>();
     auto state_llen      = state_copy.template get_length<long>();
     auto von_neumann_sum = [](RealScalar<Scalar> sum, const RealScalar<Scalar> p) { return p > 0 ? sum + p * std::log(p) : sum; };
 

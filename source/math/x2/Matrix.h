@@ -1,5 +1,4 @@
 #pragma once
-#pragma once
 #include "util.h"
 #include <cassert>
 #include <cmath>
@@ -93,13 +92,9 @@ namespace x2 {
 
         MatrixType to_MatrixType_copy() const { return MatrixType(to_MatrixType()); }
 
-        // Cheap renormalization: enforce hi carries the leading bits
         void renorm() {
-            MatrixType s = (hi_ + lo_);
-            MatrixType e = (lo_ - (s - hi_));
-            hi_.swap(s);
-            lo_.swap(e);
             invalidate_cache_();
+            x2_detail::renorm(hi_.data(), lo_.data(), size());
         }
 
         RealScalar norm() const {
@@ -154,6 +149,8 @@ namespace x2 {
         }
 
         Eigen::Index size() const { return hi_.size(); }
+
+        void renorm() { x2_detail::renorm(hi_.data(), lo_.data(), size()); }
 
         RealScalar norm() const {
             assert(hi_.size() == lo_.size());

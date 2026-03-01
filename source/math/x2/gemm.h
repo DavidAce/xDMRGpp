@@ -2,6 +2,7 @@
 #include "gemm_kernel.h"
 #include "Matrix.h"
 #include "Tensor.h"
+#include "view.h"
 #include <cassert>
 #include <limits>
 
@@ -41,33 +42,40 @@ namespace x2 {
         A_dd.lo = (A - A_dd.hi()); // exact residual in fp64 arithmetic
     }
 
-    template<typename Scalar>
-    void gemm_x2(Matrix<Scalar> &C_out, const Matrix<Scalar> &A_in, const Matrix<Scalar> &B_in) {
-        const Eigen::Index m = A_in.rows();
-        const Eigen::Index k = A_in.cols();
-        const Eigen::Index n = B_in.cols();
-        assert(B_in.rows() == k);
-        assert(A_in.allFinite());
-        assert(B_in.allFinite());
 
-        C_out.resize(m, n);
-        gemm_x2_kernel_fused_packed(C_out.hi(), C_out.lo(), A_in.hi(), A_in.lo(), B_in.hi(), B_in.lo());
-    }
-
-    template<typename Scalar>
-    void gemm_x2(MatrixMap<Scalar> &C_out, const ConstMatrixMap<Scalar> &A_in, const ConstMatrixMap<Scalar> &B_in) {
-        assert(A_in.cols() == B_in.rows());
+    template<typename Scalar, int rankC, int rankA, int rankB>
+    void gemm_x2(X2TensorAsMatrixView<Scalar, rankC> &C_out, const ConstX2TensorAsMatrixView<Scalar, rankA> &A_in,
+                 const ConstX2TensorAsMatrixView<Scalar, rankB> &B_in) {
         assert(C_out.rows() == A_in.rows());
         assert(C_out.cols() == B_in.cols());
-
-        gemm_x2_kernel_fused_packed(C_out.hi(), C_out.lo(), A_in.hi(), A_in.lo(), B_in.hi(), B_in.lo());
+        assert(B_in.rows() == A_in.cols());
+        gemm_x2_kernel_fused_packed_Cx2_Ax2_Bx2(C_out.hi, C_out.lo, A_in.hi, A_in.lo, B_in.hi, B_in.lo);
     }
 
-    template<typename Scalar>
-    void gemm_x2(Matrix<Scalar> &C_out, const typename Matrix<Scalar>::MatrixType &A_in, const typename Matrix<Scalar>::MatrixType &B_in) {
-        Matrix<Scalar> A_dd, B_dd;
-        x2_split(A_dd, A_in);
-        x2_split(B_dd, B_in);
-        gemm_x2(C_out, A_dd, B_dd);
+    template<typename Scalar, int rankC, int rankA, int rankB>
+    void gemm_x2(X2TensorAsMatrixView<Scalar, rankC> &C_out, const ConstTensorAsMatrixView<Scalar, rankA> &A_in,
+                 const ConstX2TensorAsMatrixView<Scalar, rankB> &B_in) {
+        assert(C_out.rows() == A_in.rows());
+        assert(C_out.cols() == B_in.cols());
+        assert(B_in.rows() == A_in.cols());
+        gemm_x2_kernel_fused_packed_Cx2_A_Bx2(C_out.hi, C_out.lo, A_in, B_in.hi, B_in.lo);
+    }
+
+    template<typename Scalar, int rankC, int rankA, int rankB>
+    void gemm_x2(X2TensorAsMatrixView<Scalar, rankC> &C_out, const ConstX2TensorAsMatrixView<Scalar, rankA> &A_in,
+                 const ConstTensorAsMatrixView<Scalar, rankB> &B_in) {
+        assert(C_out.rows() == A_in.rows());
+        assert(C_out.cols() == B_in.cols());
+        assert(B_in.rows() == A_in.cols());
+        gemm_x2_kernel_fused_packed_Cx2_Ax2_B(C_out.hi, C_out.lo, A_in.hi, A_in.lo, B_in);
+    }
+
+    template<typename Scalar, int rankC, int rankA, int rankB>
+    void gemm_x2(X2TensorAsMatrixView<Scalar, rankC> &C_out, const ConstTensorAsMatrixView<Scalar, rankA> &A_in,
+                 const ConstTensorAsMatrixView<Scalar, rankB> &B_in) {
+        assert(C_out.rows() == A_in.rows());
+        assert(C_out.cols() == B_in.cols());
+        assert(B_in.rows() == A_in.cols());
+        gemm_x2_kernel_fused_packed_Cx2_A_B(C_out.hi, C_out.lo, A_in, B_in);
     }
 }

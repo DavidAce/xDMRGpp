@@ -3,7 +3,7 @@
 #include <utility>
 
 template<typename T> struct BondExpansionResult;
-template<typename T> struct MpsSite;
+template<typename T> class MpsSite;
 
 namespace tools::finite::env::internal {
 

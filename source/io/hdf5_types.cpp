@@ -10,19 +10,6 @@
 #include <unordered_map>
 #include <vector>
 
-template class h5pp_table_measurements_finite<fp32>;
-template class h5pp_table_measurements_finite<fp64>;
-template class h5pp_table_measurements_finite<fp128>;
-template class h5pp_table_measurements_finite<cx32>;
-template class h5pp_table_measurements_finite<cx64>;
-template class h5pp_table_measurements_finite<cx128>;
-
-template class h5pp_table_measurements_infinite<fp32>;
-template class h5pp_table_measurements_infinite<fp64>;
-template class h5pp_table_measurements_infinite<fp128>;
-template class h5pp_table_measurements_infinite<cx32>;
-template class h5pp_table_measurements_infinite<cx64>;
-template class h5pp_table_measurements_infinite<cx128>;
 
 h5pp::hid::h5t &h5_enum_storage_event::get_h5t() {
     create();
@@ -325,3 +312,18 @@ void h5pp_ur::register_table_type() {
     H5Tinsert(h5_type, "level", HOFFSET(item, level), h5_level_type);
     H5Tinsert(h5_type, "count", HOFFSET(item, count), H5T_NATIVE_UINT64);
 }
+
+
+template class h5pp_table_measurements_finite<fp32>;
+template class h5pp_table_measurements_finite<fp64>;
+template class h5pp_table_measurements_finite<fp128>;
+template class h5pp_table_measurements_finite<cx32>;
+template class h5pp_table_measurements_finite<cx64>;
+template class h5pp_table_measurements_finite<cx128>;
+
+template class h5pp_table_measurements_infinite<fp32>;
+template class h5pp_table_measurements_infinite<fp64>;
+template class h5pp_table_measurements_infinite<fp128>;
+template class h5pp_table_measurements_infinite<cx32>;
+template class h5pp_table_measurements_infinite<cx64>;
+template class h5pp_table_measurements_infinite<cx128>;

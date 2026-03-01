@@ -2,4 +2,4 @@
 
 using Scalar = cx32;
 
-template class svd::internal::DumpSVD<Scalar>;
+template struct svd::internal::DumpSVD<Scalar>;

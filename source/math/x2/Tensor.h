@@ -5,19 +5,10 @@
 #include <cassert>
 
 namespace x2 {
-    template<typename Scalar, int Rank> struct Tensor;
-
-    template<typename Scalar, int Rank, typename Perm>
-    void shuffle_inplace(Tensor<Scalar, Rank> &T, const Perm &perm) {
-        // Avoid aliasing issues by shuffling into temporaries and swapping
-        auto hi_new = Eigen::Tensor<Scalar, Rank>(T.hi.shuffle(perm));
-        auto lo_new = Eigen::Tensor<Scalar, Rank>(T.lo.shuffle(perm));
-        T.hi        = std::move(hi_new);
-        T.lo        = std::move(lo_new);
-    }
 
     template<typename Scalar_, int rank>
-    struct Tensor {
+    class Tensor {
+        public:
         using Scalar     = Scalar_;
         using RealScalar = Eigen::NumTraits<Scalar>::Real;
         using TensorType = Eigen::Tensor<Scalar, rank>;
@@ -95,7 +86,6 @@ namespace x2 {
             invalidate_cache_();
             return *this;
         }
-
         void resize(const Eigen::array<Eigen::Index, rank> &dims) {
             hi_.resize(dims);
             lo_.resize(dims);
@@ -174,13 +164,13 @@ namespace x2 {
 
         // Cached downcast view (hi + lo). Returns a const reference to internal cache.
         // If you assign it to a value, you still get a copy as usual.
-        const TensorType &to_TensorType() const {
+        const TensorType &to_EigenTensor() const {
             ensure_cache_();
             return cache_sum_;
         }
 
         // Returns a copy by value
-        TensorType to_TensorType_copy() const { return to_TensorType(); }
+        TensorType to_EigenTensor_copy() const { return to_EigenTensor(); }
 
         template<typename T>
         decltype(auto) cast() const {
@@ -192,14 +182,10 @@ namespace x2 {
             }
         }
 
-        // Cheap renormalization: enforce hi carries the leading bits
+        // In-place TwoSum renorm: (hi,lo) <- TwoSum(hi,lo) elementwise
         void renorm() {
             invalidate_cache_();
-            TensorType s = (hi_ + lo_);
-            TensorType e = (lo_ - (s - hi_));
-            hi_          = std::move(s);
-            lo_          = std::move(e);
-            assert(allFinite());
+            x2_detail::renorm(hi_.data(), lo_.data(), size());
         }
 
         void shuffle(const Eigen::array<int, rank> &perm) {
@@ -225,7 +211,8 @@ namespace x2 {
     };
 
     template<typename Scalar_, int rank>
-    struct TensorMap {
+    class TensorMap {
+        public:
         using Scalar     = Scalar_;
         using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
         using TensorType = Eigen::Tensor<Scalar, rank>;
@@ -273,7 +260,8 @@ namespace x2 {
     };
 
     template<typename Scalar_, int rank>
-    struct ConstTensorMap {
+    class ConstTensorMap {
+        public:
         using Scalar     = Scalar_;
         using RealScalar = typename Eigen::NumTraits<Scalar>::Real;
         using TensorType = Eigen::Tensor<Scalar, rank>;
@@ -307,196 +295,5 @@ namespace x2 {
             return x2::norm(hi.data(), lo.data(), hi.size());
         }
     };
-
-    // template<typename Scalar_, int rank>
-    // struct Tensor {
-    //     using Scalar     = Scalar_;
-    //     using RealScalar = Eigen::NumTraits<Scalar>::Real;
-    //     using TensorType = Eigen::Tensor<Scalar, rank>;
-    //     TensorType hi, lo;
-    //
-    //     Tensor() = default;
-    //     Tensor(const Eigen::array<Eigen::Index, rank> &dims) {
-    //         hi.resize(dims);
-    //         lo.resize(dims);
-    //     }
-    //     template<typename... Dims>
-    //     requires(std::integral<Dims> && ...)
-    //     Tensor(Dims... dims) {
-    //         static_assert(sizeof...(Dims) == rank);
-    //         hi.resize(dims...);
-    //         lo.resize(dims...);
-    //     }
-    //     Tensor(const Eigen::TensorRef<const TensorType> &A) {
-    //         this->hi = A;
-    //         this->lo.resize(A.dimensions());
-    //         this->lo.setZero();
-    //     }
-    //     Tensor(const Eigen::TensorRef<const TensorType> &hi, const Eigen::TensorRef<const TensorType> &lo) {
-    //         this->hi = hi;
-    //         this->lo = lo;
-    //     }
-    //     Tensor &operator=(const Eigen::TensorRef<const TensorType> &A) {
-    //         this->hi = A;
-    //         this->lo.resize(A.dimensions());
-    //         this->lo.setZero();
-    //         return *this;
-    //     }
-    //     void resize(const Eigen::array<Eigen::Index, rank> &dims) {
-    //         hi.resize(dims);
-    //         lo.resize(dims);
-    //     }
-    //     template<typename... Dims>
-    //     void resize(Dims... dims) {
-    //         static_assert(sizeof...(Dims) == rank);
-    //         hi.resize(dims...);
-    //         lo.resize(dims...);
-    //     }
-    //
-    //     Eigen::Index size() const { return hi.size(); }
-    //
-    //     Eigen::array<Eigen::Index, rank> dimensions() const {
-    //         assert(hi.dimensions() == lo.dimensions());
-    //         return hi.dimensions();
-    //     }
-    //     Eigen::Index dimension(Eigen::Index n) const {
-    //         assert(hi.dimension(n) == lo.dimension(n));
-    //         assert(static_cast<size_t>(n) < hi.dimensions().size());
-    //         return hi.dimension(n);
-    //     }
-    //
-    //     void setZero() {
-    //         hi.setZero();
-    //         lo.setZero();
-    //     }
-    //     bool allFinite() const {
-    //         for(Eigen::Index i = 0; i < hi.size(); ++i) {
-    //             Scalar elem = hi.data()[i];
-    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex) {
-    //                 if(!std::isfinite(std::real(elem)) or !std::isfinite(std::imag(elem))) return false;
-    //             } else {
-    //                 if(!std::isfinite(elem)) return false;
-    //             }
-    //         }
-    //         for(Eigen::Index i = 0; i < lo.size(); ++i) {
-    //             Scalar elem = lo.data()[i];
-    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex) {
-    //                 if(!std::isfinite(std::real(elem)) or !std::isfinite(std::imag(elem))) return false;
-    //             } else {
-    //                 if(!std::isfinite(elem)) return false;
-    //             }
-    //         }
-    //         return true;
-    //     }
-    //
-    //     // Final downcast (do not use for intermediates)
-    //     TensorType to_TensorType() const { return (hi + lo); }
-    //
-    //     template<typename T>
-    //     decltype(auto) cast() const {
-    //         static_assert(std::is_floating_point_v<RealScalar> or std::is_same_v<RealScalar, fp128>);
-    //         if constexpr(std::is_same_v<Scalar, T>) {
-    //             return (*this); // Returns the exact same object as a reference
-    //         } else {
-    //             // Cast between different precisions, e.g. fp64 to fp32
-    //             return x2::Tensor<T, rank>(hi.template cast<T>(), lo.template cast<T>());
-    //         }
-    //     }
-    //
-    //     // Cheap renormalization: enforce hi carries the leading bits
-    //     void renorm() {
-    //         // two_sum per entry: (hi, lo) := hi + lo exactly split back into hi+lo
-    //         // Vectorized-ish form:
-    //         TensorType s = (hi + lo);
-    //         TensorType e = (lo - (s - hi));
-    //         hi           = s;
-    //         lo           = e;
-    //         assert(allFinite());
-    //     }
-    //
-    //     void shuffle(const Eigen::array<int, rank> &perm) {
-    //         hi = Eigen::Tensor<Scalar, rank>(hi.shuffle(perm));
-    //         lo = Eigen::Tensor<Scalar, rank>(lo.shuffle(perm));
-    //         assert(allFinite());
-    //     }
-    //
-    //     void conjugate() {
-    //         hi = Tensor<Scalar, rank>(hi.conjugate());
-    //         lo = Tensor<Scalar, rank>(lo.conjugate());
-    //     }
-    //     // Frobenius norm of (hi + lo)
-    //     RealScalar norm() const {
-    //         assert(hi.size() == lo.size());
-    //         return x2::norm(hi.data(), lo.data(), hi.size());
-    //     }
-    // };
-
-    // template<typename Scalar_, Eigen::Index rank>
-    // struct TensorMap {
-    //     using Scalar     = Scalar_;
-    //     using RealScalar = Eigen::NumTraits<Scalar>::Real;
-    //     using TensorType = Eigen::Tensor<Scalar, rank>;
-    //     Eigen::TensorMap<TensorType> hi;
-    //     Eigen::TensorMap<TensorType> lo;
-    //
-    //     TensorMap(Scalar *hi_ptr, Scalar *lo_ptr, Eigen::array<Eigen::Index, rank> dims) : hi(hi_ptr, dims), lo(lo_ptr, dims) {}
-    //     TensorMap(TensorType &t) : hi(t.hi.data(), t.hi.dimensions()), lo(t.lo.data(), t.lo.dimensions()) {}
-    //
-    //     TensorMap &operator=(const Tensor<Scalar, rank> &other) {
-    //         assert(this->dimensions() == other.dimensions());
-    //         assert(this->lo.dimensions() == other.hi.dimensions());
-    //         this->hi = other.hi;
-    //         this->lo = other.lo;
-    //         return *this;
-    //     }
-    //
-    //     // Cheap renormalization: enforce hi carries the leading bits
-    //     void renorm() {
-    //         // two_sum per entry: (hi, lo) := hi + lo exactly split back into hi+lo
-    //         // Vectorized-ish form:
-    //         TensorType s = (hi + lo);
-    //         TensorType e = (lo - (s - hi));
-    //         hi           = s;
-    //         lo           = e;
-    //     }
-    //     Eigen::array<Eigen::Index, rank> dimensions() const {
-    //         assert(hi.dimensions() == lo.dimensions());
-    //         return hi.dimensions();
-    //     }
-    //     Eigen::Index dimension(Eigen::Index n) const {
-    //         assert(hi.dimension(n) == lo.dimension(n));
-    //         return hi.dimension(n);
-    //     }
-    //
-    //     RealScalar norm() const {
-    //         assert(hi.size() == lo.size());
-    //         return x2::norm(hi.data(), lo.data(), hi.size());
-    //     }
-    // };
-    //
-    // template<typename Scalar_, Eigen::Index rank>
-    // struct ConstTensorMap {
-    //     using Scalar     = Scalar_;
-    //     using RealScalar = Eigen::NumTraits<Scalar>::Real;
-    //     using TensorType = Eigen::Tensor<Scalar, rank>;
-    //     Eigen::TensorMap<const TensorType> hi;
-    //     Eigen::TensorMap<const TensorType> lo;
-    //
-    //     ConstTensorMap(const Scalar *hi_ptr, const Scalar *lo_ptr, Eigen::array<Eigen::Index, rank> dims) : hi(hi_ptr, dims), lo(lo_ptr, dims) {}
-    //     ConstTensorMap(const TensorType &t) : hi(t.hi.data(), t.hi.dimensions()), lo(t.lo.data(), t.lo.dimensions()) {}
-    //
-    //     Eigen::array<Eigen::Index, rank> dimensions() const {
-    //         assert(hi.dimensions() == lo.dimensions());
-    //         return hi.dimensions();
-    //     }
-    //     Eigen::Index dimension(Eigen::Index n) const {
-    //         assert(hi.dimension(n) == lo.dimension(n));
-    //         return hi.dimension(n);
-    //     }
-    //     RealScalar norm() const {
-    //         assert(hi.size() == lo.size());
-    //         return x2::norm(hi.data(), lo.data(), hi.size());
-    //     }
-    // };
 
 }

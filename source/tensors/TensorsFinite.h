@@ -96,10 +96,10 @@ class TensorsFinite {
     template<typename T> [[nodiscard]] const Eigen::Tensor<T, 3>            &get_multisite_mps() const { return state-> template get_multisite_mps<T>();}
     template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo() const { return model->template get_multisite_mpo<T>();}
     template<typename T> [[nodiscard]] const Eigen::Tensor<T, 4>            &get_multisite_mpo_squared() const { return model-> template get_multisite_mpo_squared<T>();}
-    [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_ene_blk() const;
-    [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_var_blk() const;
-    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_ene_blk_as() const;
-    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_var_blk_as() const;
+    [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_ene_block() const;
+    [[nodiscard]]                           env_pair<const Eigen::Tensor<Scalar, 3> &>   get_multisite_env_var_block() const;
+    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_ene_block_as() const;
+    template<typename T> [[nodiscard]] env_pair<Eigen::Tensor<T, 3>> get_multisite_env_var_block_as() const;
     template<typename T> [[nodiscard]] const Eigen::Tensor<T, 2> &get_effective_hamiltonian() const;
     template<typename T> [[nodiscard]] const Eigen::Tensor<T, 2> &get_effective_hamiltonian_squared() const;
     /* clang-format on */
@@ -208,7 +208,7 @@ const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian() co
     auto &cache = get_cache<T>();
     if(cache.effective_hamiltonian and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian.value();
     const auto &mpo = get_multisite_mpo<T>();
-    const auto &env = get_multisite_env_ene_blk_as<T>();
+    const auto &env = get_multisite_env_ene_block_as<T>();
     tools::log->trace("Contracting effective multisite Hamiltonian");
     cache.cached_sites_hamiltonian = active_sites;
     cache.effective_hamiltonian    = contract_mpo_env<T>(mpo, env.L, env.R);
@@ -224,7 +224,7 @@ const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian_squa
 
     tools::log->trace("TensorsFinite<Scalar>::get_effective_hamiltonian_squared(): contracting active sites {}", active_sites);
     const auto &mpo                        = get_multisite_mpo_squared<T>();
-    const auto &env                        = get_multisite_env_var_blk_as<T>();
+    const auto &env                        = get_multisite_env_var_block_as<T>();
     cache.cached_sites_hamiltonian_squared = active_sites;
     cache.effective_hamiltonian_squared    = contract_mpo_env<T>(mpo, env.L, env.R);
     return cache.effective_hamiltonian_squared.value();
@@ -232,14 +232,14 @@ const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian_squa
 
 template<typename Scalar>
 template<typename T>
-env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_var_blk_as() const {
-    return std::as_const(*edges).template get_multisite_env_var_blk_as<T>();
+env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_var_block_as() const {
+    return std::as_const(*edges).template get_multisite_env_var_block_as<T>();
 }
 
 template<typename Scalar>
 template<typename T>
-env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_ene_blk_as() const {
-    return std::as_const(*edges).template get_multisite_env_ene_blk_as<T>();
+env_pair<Eigen::Tensor<T, 3>> TensorsFinite<Scalar>::get_multisite_env_ene_block_as() const {
+    return std::as_const(*edges).template get_multisite_env_ene_block_as<T>();
 }
 
 template<typename Scalar>

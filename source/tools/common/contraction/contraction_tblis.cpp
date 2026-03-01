@@ -1,4 +1,4 @@
-#include "../contraction.h"
+#include "contraction_tblis.h"
 #include "math/tenx.h"
 #if defined(DMRG_ENABLE_TBLIS)
     #include <tblis/tblis.h>

@@ -173,7 +173,7 @@ class IterativeLinearSolverPreconditioner {
         }
         VectorType y = b;
         assert(y.allFinite());
-        if constexpr(matrix->has_projector_op) {
+        if constexpr(MatrixLikeType::has_projector_op) {
             // Project out an operator if present here
             y = matrix->ProjectOpL(b);
         }
@@ -207,7 +207,7 @@ class IterativeLinearSolverPreconditioner {
             // x = b;
         }
 
-        if constexpr(matrix->has_projector_op) {
+        if constexpr(MatrixLikeType::has_projector_op) {
             // Project out an operator if present here
             x = matrix->ProjectOpR(x);
         }
@@ -270,7 +270,7 @@ class IterativeLinearSolverPreconditioner {
         // RealScalar quad = std::real(r.dot(y));
         // if constexpr(std::is_same_v<RealScalar, double>) std::printf("[coarse] quadratic form rᵀ(Z C Zᵀ) r = %.3e\n", quad);
 
-        if constexpr(matrix->has_projector_op) {
+        if constexpr(MatrixLikeType::has_projector_op) {
             x.noalias() += matrix->ProjectOpR(Zalpha);
         } else {
             x.noalias() += Zalpha;

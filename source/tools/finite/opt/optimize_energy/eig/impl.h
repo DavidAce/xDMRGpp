@@ -63,7 +63,7 @@ void optimize_energy_eig_executor(const TensorsFinite<Scalar> &tensors, const op
 template<typename Scalar>
 opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, OptMeta &meta,
                                               reports::eigs_log<Scalar> &elog) {
-    if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar> or tenx::sfinae::is_single_prec_v<Scalar>) {
+    if constexpr(sfinae::is_quadruple_prec_v<Scalar> or sfinae::is_single_prec_v<Scalar>) {
         throw except::runtime_error("optimize_energy_eig(): not implemented for type {}", enum2sv(meta.optType));
     }
     if(meta.optAlgo != OptAlgo::DMRG)

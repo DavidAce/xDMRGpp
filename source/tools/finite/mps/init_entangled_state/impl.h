@@ -228,7 +228,6 @@ Eigen::Tensor<Scalar, 3> get_random_spinor_tensor(const std::array<long, 3> &dim
         G.setZero();
         auto   Gmap       = Eigen::Map<MatrixType>(G.data(), dims[0] * dims[1], dims[2]);
         auto   ext        = std::array<long, 3>{2, 1, 1};
-        size_t rounds     = 0;
         bool   isIdentity = false;
         while(true) {
             for(long j = 0; j < dims[2]; ++j) {
@@ -246,7 +245,6 @@ Eigen::Tensor<Scalar, 3> get_random_spinor_tensor(const std::array<long, 3> &dim
                 isIdentity = GtG.isIdentity(RealScalar{1e-12f});
                 if(isIdentity) break;
             }
-            rounds++;
             if(isIdentity) break;
         }
         return G;

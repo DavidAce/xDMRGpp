@@ -2,16 +2,14 @@
 #include "config/settings.h"
 #include "debug/info.h"
 #include "io/fmt_custom.h"
-#include "math/float.h"
-#include "math/num.h"
 #include "math/tenx.h"
 #include "norm.h"
-#include "tensors/site/mpo/MpoSite.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
+#include <algorithm>
 
 using tools::finite::measure::RealScalar;
 
@@ -64,4 +62,97 @@ RealScalar<Scalar> tools::finite::measure::norm_state(const StateFinite<Scalar> 
     if(normErr > normTol) tools::log->debug("norm_state: far from unity: {:.5e}", fp(normErr));
     state.measurements.norm = std::abs(norm);
     return state.measurements.norm.value();
+}
+
+template<typename Scalar>
+Eigen::Tensor<Scalar, 2> tools::finite::measure::isometry_left(const StateFinite<Scalar> &state, Eigen::Index pos) {
+    auto t_iso = tid::tic_scope("isometry_left", tid::level::highest);
+
+    const auto L = state.template get_length<Eigen::Index>();
+    if(L == 0) return Eigen::Tensor<Scalar, 2>();
+
+    // Clamp pos into a sensible range (assumes positions are 0..L-1)
+    pos = std::clamp<Eigen::Index>(pos, 0, L - 1);
+
+    auto &threads = tenx::threads::get();
+
+    // Start with identity on the left boundary bond dimension of the first site
+    const auto &M0  = state.mps_sites.front()->get_M();
+    const auto  chi = M0.dimension(1);
+
+    Eigen::Tensor<Scalar, 2> chain(chi, chi);
+    chain.setZero();
+    for(Eigen::Index i = 0; i < chi; ++i) chain(i, i) = Scalar{1};
+
+    Eigen::Tensor<Scalar, 2> temp;
+
+    for(const auto &mps : state.mps_sites) {
+        const auto  mps_pos = mps->template get_position<Eigen::Index>();
+        const auto &M       = mps->get_M();
+
+        // Sanity checks
+        assert(chain.dimension(0) == chain.dimension(1));
+        assert(chain.dimension(0) == M.dimension(1));
+
+        temp.resize(tenx::array2{M.dimension(2), M.dimension(2)});
+
+        // Your original update:
+        // temp(β,β') = Σ_{α,α',s} chain(α,α') * M(s,α,β) * conj(M(s,α',β'))
+        temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
+
+        chain = std::move(temp);
+
+        // Stop after including site `pos`
+        if(mps_pos >= pos) break;
+    }
+
+    return chain;
+}
+
+template<typename Scalar>
+Eigen::Tensor<Scalar, 2> tools::finite::measure::isometry_right(const StateFinite<Scalar> &state, Eigen::Index pos) {
+    auto t_iso = tid::tic_scope("isometry_right", tid::level::highest);
+
+    const auto L = state.template get_length<Eigen::Index>();
+    if(L == 0) return Eigen::Tensor<Scalar, 2>();
+
+    // Clamp pos into a sensible range (assumes positions are 0..L-1)
+    pos = std::clamp<Eigen::Index>(pos, 0, L - 1);
+
+    auto &threads = tenx::threads::get();
+
+    // Start with identity on the right boundary bond dimension of the last site
+    const auto &ML  = state.mps_sites.back()->get_M();
+    const auto  chi = ML.dimension(2);
+
+    Eigen::Tensor<Scalar, 2> chain(chi, chi);
+    chain.setZero();
+    for(Eigen::Index i = 0; i < chi; ++i) chain(i, i) = Scalar{1};
+
+    Eigen::Tensor<Scalar, 2> temp;
+
+    // Iterate from right to left
+    for(auto it = state.mps_sites.rbegin(); it != state.mps_sites.rend(); ++it) {
+        const auto &mps     = *it;
+        const auto  mps_pos = mps->template get_position<Eigen::Index>();
+        const auto &M       = mps->get_M();
+
+        // Sanity checks
+        assert(chain.dimension(0) == chain.dimension(1));
+        assert(chain.dimension(0) == M.dimension(2));
+
+        // After absorbing this site, the chain lives on the left bond
+        temp.resize(tenx::array2{M.dimension(1), M.dimension(1)});
+
+        // Mirror update:
+        // temp(α,α') = Σ_{β,β',s} chain(β,β') * M(s,α,β) * conj(M(s,α',β'))
+        temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {2})).contract(M.conjugate(), tenx::idx({0, 1}, {2, 0}));
+
+        chain = std::move(temp);
+
+        // Stop after including site `pos`
+        if(mps_pos <= pos) break;
+    }
+
+    return chain;
 }

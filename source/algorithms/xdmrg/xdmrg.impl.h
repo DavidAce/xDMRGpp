@@ -15,6 +15,8 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
+#include "tools/common/contraction/contraction_policy.h"
+#include "tools/common/contraction/matrix_vector_product.h"
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
@@ -22,16 +24,15 @@
 #include "tools/finite/env/BondExpansionResult.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/hamiltonian.h"
+#include "tools/finite/measure/norm.impl.h"
+#include "tools/finite/measure/residual.impl.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
 #include "tools/finite/ops.h"
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
-#include <h5pp/details/h5ppFile.h>
-#include <tools/common/contraction/contraction_policy.h>
-#include <tools/finite/measure/norm.impl.h>
-#include <tools/finite/measure/residual.impl.h>
+#include <h5pp/h5pp.h>
 
 template<typename Scalar>
 xdmrg<Scalar>::xdmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmFinite<Scalar>(std::move(h5ppFile_), settings::xdmrg::ritz, AlgorithmType::xDMRG) {
@@ -318,19 +319,26 @@ void xdmrg<Scalar>::run_algorithm() {
     auto get_backend = [&]() {
         auto       position = tensors.template get_position<long>();
         RealScalar h2norm   = H_norm_estimate * H_norm_estimate;
+        RealScalar quot     = std::numeric_limits<RealScalar>::quiet_NaN();
+        RealScalar vh2v     = std::numeric_limits<RealScalar>::quiet_NaN();
+        RealScalar eps      = std::numeric_limits<RealScalar>::epsilon();
         if(position >= 0 and h2norm > RealScalar{0}) {
-            RealScalar eps  = std::numeric_limits<RealScalar>::epsilon();
-            RealScalar vh2v = std::abs(tools::finite::measure::expval_hamiltonian_squared(tensors));
-            auto       quot = vh2v / h2norm; // Assume the state is normalized (vv = 1)
-            if(quot < eps * 100 or !std::isfinite(vh2v)) return ContractionBackend::X2;
+            vh2v = std::abs(tools::finite::measure::expval_hamiltonian_squared(tensors));
+            quot = vh2v / h2norm; // Assume the state is normalized (vv = 1)
         }
-        return ContractionBackend::TBLIS;
+        if(quot < eps * 1000 or !std::isfinite(vh2v)) {
+            tools::log->warn("Switched to X2 backend: <H²>/|H²| = {:.4e} < 1000 * eps", fp(quot));
+            return ContractionBackend::X2;
+        } else {
+            tools::log->info("Selected TBLIS backend: <H²>/|H²| = {:.4e} > 1000 * eps", fp(quot));
+            return ContractionBackend::TBLIS;
+        }
     };
 
     while(true) {
         auto backend = get_backend();
-        auto h1info  = SetH1MvInfo(backend);
-        auto h2info  = SetH2MvInfo(backend);
+        auto h1info  = SetH1MvInfo(ContractionBackend::X2);
+        auto h2info  = SetH2MvInfo(ContractionBackend::X2);
         auto envinfo = SetEnvInfo(ContractionBackend::X2);
 
         tools::log->trace("Starting step {}, iter {}, pos {}, dir {}, backend:{}", status.step, status.iter, status.position, status.direction,
@@ -379,6 +387,7 @@ void xdmrg<Scalar>::update_state() {
     {
         auto h1info      = SetH1MvInfo(ContractionBackend::TBLIS);
         auto h2info      = SetH2MvInfo(ContractionBackend::TBLIS);
+        auto envinfo     = SetEnvInfo(ContractionBackend::X2);
         auto bexp_result = expand_bonds(BondExpansionOrder::PREOPT);
     }
 
@@ -465,68 +474,196 @@ void xdmrg<Scalar>::update_state() {
 
     if(var_mrg < 0) {
         tools::log->info("Variance is negative! {:.16e}", fp(var_mrg));
+        // Disable mpo compression
+        settings::precision::use_compressed_mpo         = MpoCompress::NONE;
+        settings::precision::use_compressed_mpo_squared = MpoCompress::NONE;
         {
-            using ScalarL     = std::conditional_t<std::is_floating_point_v<Scalar>, fp128, std::complex<fp128>>;
-            using RealScalarL = decltype(std::real(std::declval<ScalarL>()));
-            auto tensorsL     = tensors.template cast<ScalarL>();
-            tensorsL.get_edges().eject_edges_all();
-            tensorsL.rebuild_edges();
-            const auto &mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
-            const auto &mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
-            const auto &mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
-            const auto &enve = tensorsL.get_edges().get_multisite_env_ene_blk();
-            const auto &envv = tensorsL.get_edges().get_multisite_env_var_blk();
-            auto        H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
-            auto        H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
-            tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L, enve.R);
-            {
-                auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo2.dimensions());
-                tools::log->info("contracting with tblis");
-                tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L, envv.R);
-            }
-            auto        v     = tenx::VectorMap(mps);
-            auto        H1v   = tenx::VectorMap(H1t);
-            auto        H2v   = tenx::VectorMap(H2t);
-            RealScalarL v_H1v = std::real(v.dot(H1v));
-            RealScalarL v_H2v = std::real(v.dot(H2v));
+            using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+            auto       pos   = tensors.template get_position<Eigen::Index>();
+            auto       NL    = tools::finite::measure::isometry_left(tensors.get_state(), pos - 1);
+            auto       NR    = tools::finite::measure::isometry_right(tensors.get_state(), pos + 1);
+            auto       NLm   = tenx::MatrixMap(NL);
+            auto       NRm   = tenx::MatrixMap(NR);
+            auto       IL    = MatrixType::Identity(NLm.rows(), NLm.cols());
+            auto       IR    = MatrixType::Identity(NRm.rows(), NRm.cols());
+            RealScalar NLerr = (NLm - IL).norm() / IL.norm();
+            RealScalar NRerr = (NRm - IR).norm() / IR.norm();
+            tools::log->info("NL err: {:.16e}", fp(NLerr));
+            tools::log->info("NR err: {:.16e}", fp(NRerr));
+        }
 
-            tools::log->info("FP128 var_opt            = {:.16e}", fp(opt_state.get_variance()));
-            tools::log->info("FP128 var_mrg            = {:.16e}", fp(var_mrg));
-            tools::log->info("FP128 v_H2v              = {:.16e}", fp(v_H2v));
-            tools::log->info("FP128 energy             = {:.16e}", fp(v_H1v));
-            tools::log->info("FP128 energy variance    = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
+        {
+            auto                t_res      = tid::tic_token("<ψ|H²_global ψ>");
+            StateFinite<Scalar> tmp_state1 = tensors.get_state();
+            StateFinite<Scalar> tmp_state2 = tensors.get_state();
+            auto                mpos1      = tensors.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
+            auto                mpos2      = tensors.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
+            auto                svdcfg     = svd::config(8192, 1e-20);
+            svdcfg.svd_lib                 = svd::lib::lapacke;
+            svdcfg.svd_rtn                 = svd::rtn::gesdd;
+            tools::finite::ops::apply_mpos_general(tmp_state1, mpos1, svdcfg);
+            tools::finite::ops::apply_mpos_general(tmp_state2, mpos2, svdcfg);
+            RealScalar E1_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state1, tensors.get_state()));
+            RealScalar E2_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state2, tensors.get_state()));
+            tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", fp(E2_global),
+                             t_res->get_last_interval());
+
+            RealScalar VarH = E2_global - E1_global * E1_global;
+            tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
         }
         {
-            using ScalarL     = std::conditional_t<std::is_floating_point_v<Scalar>, double, std::complex<double>>;
-            using RealScalarL = decltype(std::real(std::declval<ScalarL>()));
-            auto tensorsL     = tensors.template cast<ScalarL>();
+            auto                t_res        = tid::tic_token("<ψ (H_global-E_local) | (H_global-E_local) ψ>");
+            StateFinite<Scalar> tmp_state    = tensors.get_state();
+            auto                L            = tensors.template get_length<RealScalar>();
+            auto                mpos_shifted = tensors.get_model().get_mpo_tensors(ene_mrg / L, MposWithEdges::ON, MpoCompress::NONE);
+            auto                svdcfg       = svd::config(8192, 1e-20);
+            tools::finite::ops::apply_mpos_general(tmp_state, mpos_shifted, svdcfg);
+            RealScalar VarH_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
+            tools::log->info("energy variance <ψ (H_global-E_local) | (H_global-E_local) ψ>   = {:.16e} | t = {:.4e}", fp(VarH_global),
+                             t_res->get_last_interval());
+        }
+        {
+            using ScalarL       = Scalar;
+            using RealScalarL   = Eigen::NumTraits<ScalarL>::Real;
+            using RealScalar128 = fp128;
+            using Scalar128     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalar128>, RealScalar128>;
+
+            auto tensorsL = tensors.template cast<ScalarL>();
+            auto envi     = SetEnvInfo(ContractionBackend::X2);
+            auto mv1i     = SetH1MvInfo(ContractionBackend::X2);
+            auto mv2i     = SetH2MvInfo(ContractionBackend::X2);
+            tensorsL.get_model().build_mpo();
+            tensorsL.get_model().build_mpo_squared();
             tensorsL.get_edges().eject_edges_all();
             tensorsL.rebuild_edges();
+            tensorsL.clear_measurements();
+            tensorsL.clear_cache();
             auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
             auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
             auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
-            auto enve = tensorsL.get_edges().get_multisite_env_ene_blk();
-            auto envv = tensorsL.get_edges().get_multisite_env_var_blk();
+
+            auto enve = tensorsL.get_edges().get_multisite_env_ene();
+            auto envv = tensorsL.get_edges().get_multisite_env_var();
             auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
             auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
             tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L, enve.R);
-            {
-                auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo2.dimensions());
-                tools::log->info("contracting with tblis");
-                tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L, envv.R);
-            }
+            tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L, envv.R);
+
+            auto          v           = tenx::VectorMap(mps);
+            auto          H1v         = tenx::VectorMap(H1t);
+            auto          H2v         = tenx::VectorMap(H2t);
+            RealScalarL   v_H1v       = std::real(v.dot(H1v));
+            RealScalarL   v_H2v       = std::real(v.dot(H2v));
+            RealScalar128 v_H2v_fp128 = std::real(v.template cast<Scalar128>().dot(H2v.template cast<Scalar128>()));
+
+            RealScalarL enveLnorm = enve.L.get_blkx2().norm();
+            RealScalarL enveRnorm = enve.R.get_blkx2().norm();
+            RealScalarL envvLnorm = envv.L.get_blkx2().norm();
+            RealScalarL envvRnorm = envv.R.get_blkx2().norm();
+
+            tools::log->info("X2    var_opt            = {:.16e}", fp(opt_state.get_variance()));
+            tools::log->info("X2    var_mrg            = {:.16e}", fp(var_mrg));
+            tools::log->info("X2    |H1v|              = {:.16e}", fp(H1v.norm()));
+            tools::log->info("X2    |H2v|              = {:.16e}", fp(H2v.norm()));
+            tools::log->info("X2    v_H1v              = {:.16e}", fp(v_H1v));
+            tools::log->info("X2    v_H2v              = {:.16e}", fp(v_H2v));
+            tools::log->info("X2    v_H2v    (fp128)   = {:.16e}", fp(v_H2v_fp128));
+            tools::log->info("X2    energy variance    = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
+            tools::log->info("X2    |enveL|            = {:.16e}", fp(enveLnorm));
+            tools::log->info("X2    |enveR|            = {:.16e}", fp(enveRnorm));
+            tools::log->info("X2    |envvL|            = {:.16e}", fp(envvLnorm));
+            tools::log->info("X2    |envvR|            = {:.16e}", fp(envvRnorm));
+        }
+        {
+            using RealScalarL = fp64;
+            using ScalarL     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalarL>, RealScalarL>;
+            auto tensorsL     = tensors.template cast<ScalarL>();
+            auto envi         = SetEnvInfo(ContractionBackend::EIGEN);
+            auto mv1i         = SetH1MvInfo(ContractionBackend::EIGEN);
+            auto mv2i         = SetH2MvInfo(ContractionBackend::EIGEN);
+            tensorsL.get_model().build_mpo();
+            tensorsL.get_model().build_mpo_squared();
+            tensorsL.get_edges().eject_edges_all();
+            tensorsL.rebuild_edges();
+            tensorsL.clear_measurements();
+            tensorsL.clear_cache();
+            auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
+            auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
+            auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
+            auto enve = tensorsL.get_edges().get_multisite_env_ene();
+            auto envv = tensorsL.get_edges().get_multisite_env_var();
+            auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+            auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+            tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+            tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
+
             auto        v     = tenx::VectorMap(mps);
             auto        H1v   = tenx::VectorMap(H1t);
             auto        H2v   = tenx::VectorMap(H2t);
             RealScalarL v_H1v = std::real(v.dot(H1v));
             RealScalarL v_H2v = std::real(v.dot(H2v));
 
-            tools::log->info("FP64  var_opt            = {:.16e}", fp(opt_state.get_variance()));
-            tools::log->info("FP64  var_mrg            = {:.16e}", fp(var_mrg));
+            RealScalarL enveLnorm = enve.L.get_blkx2().norm();
+            RealScalarL enveRnorm = enve.R.get_blkx2().norm();
+            RealScalarL envvLnorm = envv.L.get_blkx2().norm();
+            RealScalarL envvRnorm = envv.R.get_blkx2().norm();
+
+            tools::log->info("FP64  |H1v|              = {:.16e}", fp(H1v.norm()));
+            tools::log->info("FP64  |H2v|              = {:.16e}", fp(H2v.norm()));
+            tools::log->info("FP64  v_H1v              = {:.16e}", fp(v_H1v));
             tools::log->info("FP64  v_H2v              = {:.16e}", fp(v_H2v));
-            tools::log->info("FP64  energy             = {:.16e}", fp(v_H1v));
             tools::log->info("FP64  energy variance    = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
+            tools::log->info("FP64  |enveL|            = {:.16e}", fp(enveLnorm));
+            tools::log->info("FP64  |enveR|            = {:.16e}", fp(enveRnorm));
+            tools::log->info("FP64  |envvL|            = {:.16e}", fp(envvLnorm));
+            tools::log->info("FP64  |envvR|            = {:.16e}", fp(envvRnorm));
         }
+
+        {
+            using RealScalarL = fp128;
+            using ScalarL     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalarL>, RealScalarL>;
+            auto tensorsL     = tensors.template cast<ScalarL>();
+            auto envi         = SetEnvInfo(ContractionBackend::EIGEN);
+            auto mv1i         = SetH1MvInfo(ContractionBackend::EIGEN);
+            auto mv2i         = SetH2MvInfo(ContractionBackend::EIGEN);
+            tensorsL.get_model().build_mpo();
+            tensorsL.get_model().build_mpo_squared();
+            tensorsL.get_edges().eject_edges_all();
+            tensorsL.rebuild_edges();
+            tensorsL.clear_measurements();
+            tensorsL.clear_cache();
+            auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
+            auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
+            auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
+            auto enve = tensorsL.get_edges().get_multisite_env_ene();
+            auto envv = tensorsL.get_edges().get_multisite_env_var();
+            auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+            auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+            tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+            tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
+
+            auto        v     = tenx::VectorMap(mps);
+            auto        H1v   = tenx::VectorMap(H1t);
+            auto        H2v   = tenx::VectorMap(H2t);
+            RealScalarL v_H1v = std::real(v.dot(H1v));
+            RealScalarL v_H2v = std::real(v.dot(H2v));
+
+            RealScalarL enveLnorm = enve.L.get_blkx2().norm();
+            RealScalarL enveRnorm = enve.R.get_blkx2().norm();
+            RealScalarL envvLnorm = envv.L.get_blkx2().norm();
+            RealScalarL envvRnorm = envv.R.get_blkx2().norm();
+
+            tools::log->info("FP128 |H1v|              = {:.16e}", fp(H1v.norm()));
+            tools::log->info("FP128 |H2v|              = {:.16e}", fp(H2v.norm()));
+            tools::log->info("FP128 v_H1v              = {:.16e}", fp(v_H1v));
+            tools::log->info("FP128 v_H2v              = {:.16e}", fp(v_H2v));
+            tools::log->info("FP128 energy variance    = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
+            tools::log->info("FP128 |enveL|            = {:.16e}", fp(enveLnorm));
+            tools::log->info("FP128 |enveR|            = {:.16e}", fp(enveRnorm));
+            tools::log->info("FP128 |envvL|            = {:.16e}", fp(envvLnorm));
+            tools::log->info("FP128 |envvR|            = {:.16e}", fp(envvRnorm));
+        }
+
         std::vector<std::string> msg1;
         std::vector<std::string> msg2;
         {
@@ -546,11 +683,11 @@ void xdmrg<Scalar>::update_state() {
             tensors.clear_cache();
             tensors.clear_measurements();
 
-            const auto & mps  = tensors.get_state().template get_multisite_mps<Scalar>();
-            const auto & mpo1 = tensors.get_model().template get_multisite_mpo<Scalar>();
-            const auto & mpo2 = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
-            const auto & enve = tensors.get_edges().get_multisite_env_ene_blk();
-            const auto & envv = tensors.get_edges().get_multisite_env_var_blk();
+            const auto &mps  = tensors.get_state().template get_multisite_mps<Scalar>();
+            const auto &mpo1 = tensors.get_model().template get_multisite_mpo<Scalar>();
+            const auto &mpo2 = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
+            const auto &enve = tensors.get_edges().get_multisite_env_ene();
+            const auto &envv = tensors.get_edges().get_multisite_env_var();
 
             auto H1t   = Eigen::Tensor<Scalar, 3>(mps.dimensions());
             auto H1tx2 = Eigen::Tensor<Scalar, 3>(mps.dimensions());
@@ -562,8 +699,8 @@ void xdmrg<Scalar>::update_state() {
                 auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, mpo1.dimensions());
                 auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo2.dimensions());
                 tools::log->info("contracting with tblis");
-                tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L, enve.R);
-                tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L, envv.R);
+                tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+                tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
             }
             {
                 auto h1info = SetH1MvInfo(ContractionBackend::X2, mpo1.dimensions());
@@ -581,10 +718,10 @@ void xdmrg<Scalar>::update_state() {
                 Eigen::Tensor<ScalarQ, 3> mps_q   = mps.template cast<ScalarQ>();
                 Eigen::Tensor<ScalarQ, 4> mpo1_q  = mpo1.template cast<ScalarQ>();
                 Eigen::Tensor<ScalarQ, 4> mpo2_q  = mpo2.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> enveL_q = enve.L.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> enveR_q = enve.R.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> envvL_q = envv.L.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> envvR_q = envv.R.template cast<ScalarQ>();
+                Eigen::Tensor<ScalarQ, 3> enveL_q = enve.L.template get_block_as<ScalarQ>();
+                Eigen::Tensor<ScalarQ, 3> enveR_q = enve.R.template get_block_as<ScalarQ>();
+                Eigen::Tensor<ScalarQ, 3> envvL_q = envv.L.template get_block_as<ScalarQ>();
+                Eigen::Tensor<ScalarQ, 3> envvR_q = envv.R.template get_block_as<ScalarQ>();
                 tools::common::contraction::matrix_vector_product(H1t_q, mps_q, mpo1_q, enveL_q, enveR_q);
                 tools::common::contraction::matrix_vector_product(H2t_q, mps_q, mpo2_q, envvL_q, envvR_q);
                 H1tQ = H1t_q.template cast<Scalar>();
@@ -643,23 +780,23 @@ void xdmrg<Scalar>::update_state() {
             for(const auto &env : tensors.get_edges().eneR) {
                 msg2.emplace_back(fmt::format("eneR[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
             }
-            const auto & mps   = tensors.get_state().template get_multisite_mps<Scalar>();
-            const auto & mpo1  = tensors.get_model().template get_multisite_mpo<Scalar>();
-            const auto & mpo2  = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
-            const auto & enve  = tensors.get_edges().get_multisite_env_ene_blk();
-            const auto & envv  = tensors.get_edges().get_multisite_env_var_blk();
-            auto H1t   = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H1tx2 = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H1tQ  = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H2t   = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H2tx2 = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H2tQ  = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+            const auto &mps   = tensors.get_state().template get_multisite_mps<Scalar>();
+            const auto &mpo1  = tensors.get_model().template get_multisite_mpo<Scalar>();
+            const auto &mpo2  = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
+            const auto &enve  = tensors.get_edges().get_multisite_env_ene();
+            const auto &envv  = tensors.get_edges().get_multisite_env_var();
+            auto        H1t   = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+            auto        H1tx2 = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+            auto        H1tQ  = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+            auto        H2t   = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+            auto        H2tx2 = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+            auto        H2tQ  = Eigen::Tensor<Scalar, 3>(mps.dimensions());
             {
                 auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, mpo1.dimensions());
                 auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo2.dimensions());
                 tools::log->info("contracting with tblis");
-                tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L, enve.R);
-                tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L, envv.R);
+                tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+                tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
             }
             {
                 auto h1info = SetH1MvInfo(ContractionBackend::X2, mpo1.dimensions());
@@ -677,10 +814,10 @@ void xdmrg<Scalar>::update_state() {
                 Eigen::Tensor<ScalarQ, 3> mps_q   = mps.template cast<ScalarQ>();
                 Eigen::Tensor<ScalarQ, 4> mpo1_q  = mpo1.template cast<ScalarQ>();
                 Eigen::Tensor<ScalarQ, 4> mpo2_q  = mpo2.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> enveL_q = enve.L.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> enveR_q = enve.R.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> envvL_q = envv.L.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> envvR_q = envv.R.template cast<ScalarQ>();
+                Eigen::Tensor<ScalarQ, 3> enveL_q = enve.L.template get_block_as<ScalarQ>();
+                Eigen::Tensor<ScalarQ, 3> enveR_q = enve.R.template get_block_as<ScalarQ>();
+                Eigen::Tensor<ScalarQ, 3> envvL_q = envv.L.template get_block_as<ScalarQ>();
+                Eigen::Tensor<ScalarQ, 3> envvR_q = envv.R.template get_block_as<ScalarQ>();
                 tools::common::contraction::matrix_vector_product(H1t_q, mps_q, mpo1_q, enveL_q, enveR_q);
                 tools::common::contraction::matrix_vector_product(H2t_q, mps_q, mpo2_q, envvL_q, envvR_q);
                 H1tQ = H1t_q.template cast<Scalar>();
@@ -836,7 +973,7 @@ void xdmrg<Scalar>::set_energy_shift_mpo() {
         auto energy_shift = tools::finite::measure::energy(tensors);
         tensors.set_energy_shift_mpo(energy_shift);
     } else {
-        Scalar energy_shift = static_cast<Scalar>(status.energy_tgt);
+        Scalar energy_shift = narrow_cast<Scalar>(std::real(status.energy_tgt));
         tensors.set_energy_shift_mpo(energy_shift);
     }
 }

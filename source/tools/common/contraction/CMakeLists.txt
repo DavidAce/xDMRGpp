@@ -16,12 +16,12 @@ add_source_target(xdmrg++-tools-common-contraction
         contract_mps_bnd.fp64.cpp
         contract_mps_bnd.fp128.cpp
 
-        contract_env_mps_mpo.cx32.cpp
-        contract_env_mps_mpo.cx64.cpp
-        contract_env_mps_mpo.cx128.cpp
-        contract_env_mps_mpo.fp32.cpp
-        contract_env_mps_mpo.fp64.cpp
-        contract_env_mps_mpo.fp128.cpp
+        env/contract_env_mps_mpo.cx32.cpp
+        env/contract_env_mps_mpo.cx64.cpp
+        env/contract_env_mps_mpo.cx128.cpp
+        env/contract_env_mps_mpo.fp32.cpp
+        env/contract_env_mps_mpo.fp64.cpp
+        env/contract_env_mps_mpo.fp128.cpp
 
         contract_mps_mps.cx32.cpp
         contract_mps_mps.cx64.cpp
@@ -45,12 +45,12 @@ add_source_target(xdmrg++-tools-common-contraction
         contract_mps_mps_partial.fp128.cpp
 
         contraction_tblis.cpp
-        expectation_value.cx32.cpp
-        expectation_value.cx64.cpp
-        expectation_value.cx128.cpp
-        expectation_value.fp32.cpp
-        expectation_value.fp64.cpp
-        expectation_value.fp128.cpp
+        expectation_value/expectation_value.cx32.cpp
+        expectation_value/expectation_value.cx64.cpp
+        expectation_value/expectation_value.cx128.cpp
+        expectation_value/expectation_value.fp32.cpp
+        expectation_value/expectation_value.fp64.cpp
+        expectation_value/expectation_value.fp128.cpp
 
         matrix_inverse_vector_product.cx32.cpp
         matrix_inverse_vector_product.cx64.cpp
@@ -59,14 +59,14 @@ add_source_target(xdmrg++-tools-common-contraction
         matrix_inverse_vector_product.fp64.cpp
         matrix_inverse_vector_product.fp128.cpp
 
-        matrix_vector_product.cx32.cpp
-        matrix_vector_product.cx64.cpp
-        matrix_vector_product.cx80.cpp
-        matrix_vector_product.cx128.cpp
-        matrix_vector_product.fp32.cpp
-        matrix_vector_product.fp64.cpp
-        matrix_vector_product.fp80.cpp
-        matrix_vector_product.fp128.cpp
+        matrix_vector_product/matrix_vector_product.cx32.cpp
+        matrix_vector_product/matrix_vector_product.cx64.cpp
+        matrix_vector_product/matrix_vector_product.cx80.cpp
+        matrix_vector_product/matrix_vector_product.cx128.cpp
+        matrix_vector_product/matrix_vector_product.fp32.cpp
+        matrix_vector_product/matrix_vector_product.fp64.cpp
+        matrix_vector_product/matrix_vector_product.fp80.cpp
+        matrix_vector_product/matrix_vector_product.fp128.cpp
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

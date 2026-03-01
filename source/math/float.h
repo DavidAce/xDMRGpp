@@ -15,8 +15,8 @@ using fp32 = float;
 using fp64 = double;
 using cx32 = std::complex<fp32>;
 using cx64 = std::complex<fp64>;
-using fp80  = long double;
-using cx80  = std::complex<long double>;
+using fp80 = long double;
+using cx80 = std::complex<long double>;
 #if defined(DMRG_USE_QUADMATH)
     #include <quadmath.h>
 __extension__ typedef __float128 fp128;
@@ -32,10 +32,25 @@ using cx128 = std::complex<long double>;
 
 namespace sfinae {
     template<typename T>
+    using Real = decltype(std::real(std::declval<std::remove_cvref_t<T>>()));
+
+    template<typename T>
     concept is_native_float = std::is_same_v<T, float> || std::is_same_v<T, double> || std::is_same_v<T, long double>;
 
     template<typename T>
     concept is_extended_float = std::is_floating_point_v<T> && !is_native_float<T>;
+
+    template<typename T>
+    concept is_single_prec_v = std::same_as<Real<T>, fp32>;
+
+    template<typename T>
+    concept is_double_prec_v = std::same_as<Real<T>, fp64>;
+
+    template<typename T>
+    concept is_long_double_prec_v = std::same_as<Real<T>, long double>;
+
+    template<typename T>
+    concept is_quadruple_prec_v = std::same_as<Real<T>, fp128>;
 }
 
 template<typename Lhs, typename Rhs>

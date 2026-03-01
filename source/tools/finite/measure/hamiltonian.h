@@ -26,6 +26,10 @@ class EnvVar;
 template<typename T>
 struct env_pair;
 
+namespace x2 {
+    template<typename Scalar, int rank> class Tensor;
+}
+
 namespace tools::finite::measure {
     /* clang-format off */
     template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
@@ -42,7 +46,7 @@ namespace tools::finite::measure {
     template<typename Scalar> [[nodiscard]] Scalar expval_hamiltonian_squared               (const std::vector<size_t> & sites, const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges);
 
 
-    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> local_operator_norm_estimate      (const Eigen::Tensor<Scalar, 4> &mpo, const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR, Eigen::Index maxiter = 10, fp32 reltol = 1e-3f);
+    template<typename Scalar> [[nodiscard]] RealScalar<Scalar> local_operator_norm_estimate      (const Eigen::Tensor<Scalar, 4> &mpo, const x2::Tensor<Scalar, 3> &envL, const x2::Tensor<Scalar, 3> &envR, Eigen::Index maxiter = 10, fp32 reltol = 1e-3f);
 
     template<typename Scalar> [[nodiscard]] RealScalar<Scalar> local_hamiltonian_norm             (const TensorsFinite<Scalar> & tensors, Eigen::Index maxiter = 10, fp32 reltol = 1e-3f);
     template<typename Scalar> [[nodiscard]] RealScalar<Scalar> local_hamiltonian_norm             (const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, Eigen::Index maxiter = 10, fp32 reltol = 1e-3f);

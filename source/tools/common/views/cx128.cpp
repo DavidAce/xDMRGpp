@@ -2,4 +2,4 @@
 
 using Scalar = cx128;
 
-template class tools::common::views<Scalar>;
+template struct tools::common::views<Scalar>;

@@ -11,9 +11,9 @@
 #include "tensors/site/mpo/MpoSite.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tools/common/contraction.h"
-#include "tools/common/contraction/contract_env_x2.h"
+#include "tools/common/contraction/contraction_policy.h"
+#include "tools/common/contraction/env.h"
 #include "tools/common/log.h"
-#include <tools/common/contraction/contract_env_mps_mpo.impl.h>
 #include <utility>
 
 // We need to define the destructor and other special functions
@@ -101,7 +101,6 @@ void EnvBase<Scalar>::build_blkx2(const x2::Tensor<Scalar, 3> &otherblock, const
     is_real_cached = std::nullopt;
     has_nan_cached = std::nullopt;
     if(not blkx2) blkx2 = std::make_unique<x2::Tensor<Scalar, 3>>();
-    auto envinfo = tools::common::contraction::internal::get_info_env();
     if(side == "L") {
         /*! # Left environment block contraction
          *   [       ]--0         [       ]--0 0--[LB]--1 1--[  GA    ]--2
@@ -169,7 +168,6 @@ void EnvBase<Scalar>::enlarge(const Eigen::Tensor<Scalar, 3> &mps, const Eigen::
     // There is no way to check the positions here, so checks should be done before calling this function
 
     assert_block();
-    assert(get_blkx2().dimensions() == get_block().dimensions());
     x2::Tensor<Scalar, 3> thisblock = get_blkx2();
     build_blkx2(thisblock, mps, mpo);
 
@@ -186,16 +184,8 @@ template<typename Scalar>
 void EnvBase<Scalar>::clear() {
     assert_block();
     if(blkx2) blkx2->resize(Eigen::array<Eigen::Index, 3>{0, 0, 0}); // = Eigen::Tensor<Scalar,3>();
-    tools::log->trace("Ejected env{} pos {}", side, get_position());
-    unique_id = std::nullopt;
-
-    // Do not clear the empty edge
-    //    if(sites > 0) {
-    //        block->resize(0, 0, 0); // = Eigen::Tensor<Scalar,3>();
-    //        tools::log->trace("Ejected env{} pos {}", side, get_position());
-    //        unique_id = std::nullopt;
-    //    }
-
+    // tools::log->trace("Ejected env{} pos {}", side, get_position());
+    unique_id      = std::nullopt;
     unique_id_env  = std::nullopt;
     unique_id_mps  = std::nullopt;
     unique_id_mpo  = std::nullopt;
@@ -217,13 +207,13 @@ x2::Tensor<Scalar, 3> &EnvBase<Scalar>::get_blkx2() {
 template<typename Scalar>
 const Eigen::Tensor<Scalar, 3> &EnvBase<Scalar>::get_block() const {
     assert_block();
-    return blkx2->to_TensorType();
+    return blkx2->to_EigenTensor();
 }
 
 template<typename Scalar>
 Eigen::Tensor<Scalar, 3> EnvBase<Scalar>::get_block_copy() {
     assert_block();
-    return blkx2->to_TensorType();
+    return blkx2->to_EigenTensor_copy();
 }
 
 template<typename Scalar>
@@ -232,13 +222,17 @@ bool EnvBase<Scalar>::has_block() const {
 }
 
 template<typename Scalar>
-std::array<long, 3> EnvBase<Scalar>::dimensions() const {
+std::array<Eigen::Index, 3> EnvBase<Scalar>::dimensions() const {
     assert_block();
     return blkx2->dimensions();
 }
-
 template<typename Scalar>
-std::array<long, 3> EnvBase<Scalar>::get_dims() const {
+Eigen::Index EnvBase<Scalar>::dimension(Eigen::Index d) const {
+    assert_block();
+    return blkx2->dimension(d);
+}
+template<typename Scalar>
+std::array<Eigen::Index, 3> EnvBase<Scalar>::get_dims() const {
     assert_block();
     return blkx2->dimensions();
 }

@@ -1424,7 +1424,8 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
     energy_variance_local = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy_variance(t);
 
     auto H2_local = tools::finite::measure::expval_hamiltonian_squared(t);
-    tools::log->info("energy          <H_local>                                       = {:.16e}", fp(energy));
+    tools::log->info("H               <ψ | H_local | ψ>                               = {:.16e}", fp(energy));
+    tools::log->info("H²              <ψ | H²_local | ψ>                              = {:.16e}", fp(H2_local));
     tools::log->info("energy variance <H²_local>-<H_local>²                           = {:.16e}", fp(energy_variance_local));
 
     [[maybe_unused]] RealScalar E1_global1 = 0;
@@ -1450,81 +1451,79 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
     //     auto E1_global2L = static_cast<RealScalar>(std::real(tools::finite::measure::expectation_value<LongScalar>(t.get_state(), t.get_state(), mpos)));
     //     tools::log->info("E               <ψ | H_global | ψ>          (long double)       = {:.16e} | t = {:.4e}", fp(E1_global2L), t_res->restart_lap());
     // }
-    tools::log->info("H²              <ψ | H²_local | ψ>                              = {:.16e}", fp(H2_local));
-    {
-        auto                t_res     = tid::tic_token("<ψ H_global | H_global ψ>");
-        StateFinite<Scalar> tmp_state = t.get_state();
-        auto                mpos      = t.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
-        auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
-        tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
-        E2_global1 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
-        tools::log->info("H²              <ψ H_global | H_global ψ>                       = {:.16e} | t = {:.4e}", fp(E2_global1), t_res->get_last_interval());
-    }
-    {
-        auto                t_res     = tid::tic_token("<ψ H_global | H_global ψ>");
-        StateFinite<Scalar> tmp_state = t.get_state();
-        auto                mpos      = t.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
-        auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
-        tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
-        E2_global1 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
-        tools::log->info("H²              <ψ H_global | H_global ψ>    DPL                = {:.16e} | t = {:.4e}", fp(E2_global1), t_res->get_last_interval());
-    }
-    {
-        auto                t_res     = tid::tic_token("<ψ|H²_global|ψ>");
-        StateFinite<Scalar> tmp_state = t.get_state();
-        auto                mpos      = t.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
-        using LongScalar              = std::conditional_t<sfinae::is_std_complex_v<Scalar>, std::complex<fp128>, fp128>;
-        E2_global2                    = std::real(tools::finite::measure::expectation_value<Scalar>(t.get_state(), t.get_state(), mpos));
-        // auto E2_global2L = static_cast<RealScalar>(std::real(tools::finite::measure::expectation_value<LongScalar>(t.get_state(), t.get_state(), mpos)));
-        tools::log->info("H²              <ψ| H²_global | ψ>                              = {:.16e} | t = {:.4e}", fp(E2_global2), t_res->get_last_interval());
-        // tools::log->info("H²              <ψ| H²_global | ψ>            (long double)     = {:.16e} | t = {:.4e}", fp(E2_global2L),
-        // t_res->get_last_interval());
-        RealScalar VarH = E2_global2 - E1_global1 * E1_global1;
-        tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
-    }
-    {
-        auto                t_res     = tid::tic_token("<ψ|H²_global ψ>");
-        StateFinite<Scalar> tmp_state = t.get_state();
-        auto                mpos      = t.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
-        auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
-        svdcfg.svd_lib                = svd::lib::lapacke;
-        svdcfg.svd_rtn                = svd::rtn::gesdd;
-        tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
-        E2_global2 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, t.get_state()));
-        tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", fp(E2_global2), t_res->get_last_interval());
-        RealScalar VarH = E2_global2 - E1_global1 * E1_global1;
-        tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
-    }
+    // {
+    //     auto                t_res     = tid::tic_token("<ψ H_global | H_global ψ>");
+    //     StateFinite<Scalar> tmp_state = t.get_state();
+    //     auto                mpos      = t.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
+    //     auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
+    //     tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
+    //     E2_global1 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
+    //     tools::log->info("H²              <ψ H_global | H_global ψ>                       = {:.16e} | t = {:.4e}", fp(E2_global1), t_res->get_last_interval());
+    // }
+    // {
+    //     auto                t_res     = tid::tic_token("<ψ H_global | H_global ψ>");
+    //     StateFinite<Scalar> tmp_state = t.get_state();
+    //     auto                mpos      = t.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
+    //     auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
+    //     tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
+    //     E2_global1 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
+    //     tools::log->info("H²              <ψ H_global | H_global ψ>    DPL                = {:.16e} | t = {:.4e}", fp(E2_global1), t_res->get_last_interval());
+    // }
+    // {
+    //     auto                t_res     = tid::tic_token("<ψ|H²_global|ψ>");
+    //     StateFinite<Scalar> tmp_state = t.get_state();
+    //     auto                mpos      = t.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
+    //     E2_global2                    = std::real(tools::finite::measure::expectation_value<Scalar>(t.get_state(), t.get_state(), mpos));
+    //     // auto E2_global2L = static_cast<RealScalar>(std::real(tools::finite::measure::expectation_value<LongScalar>(t.get_state(), t.get_state(), mpos)));
+    //     tools::log->info("H²              <ψ| H²_global | ψ>                              = {:.16e} | t = {:.4e}", fp(E2_global2), t_res->get_last_interval());
+    //     // tools::log->info("H²              <ψ| H²_global | ψ>            (long double)     = {:.16e} | t = {:.4e}", fp(E2_global2L),
+    //     // t_res->get_last_interval());
+    //     RealScalar VarH = E2_global2 - E1_global1 * E1_global1;
+    //     tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
+    // }
+    // {
+    //     auto                t_res     = tid::tic_token("<ψ|H²_global ψ>");
+    //     StateFinite<Scalar> tmp_state = t.get_state();
+    //     auto                mpos      = t.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
+    //     auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
+    //     svdcfg.svd_lib                = svd::lib::lapacke;
+    //     svdcfg.svd_rtn                = svd::rtn::gesdd;
+    //     tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
+    //     E2_global2 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, t.get_state()));
+    //     tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", fp(E2_global2), t_res->get_last_interval());
+    //     RealScalar VarH = E2_global2 - E1_global1 * E1_global1;
+    //     tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
+    // }
 
     {
         auto t_res         = tid::tic_token("<ψ | (H_global-E)² | ψ>");
         auto L             = t.template get_length<RealScalar>();
-        auto mpos2_shifted = t.get_model().get_mpo2_tensors(E1_global1 / L, MposWithEdges::ON, MpoCompress::AUTO);
+        auto mpos2_shifted = t.get_model().get_mpo2_tensors(E1_global1 / L, MposWithEdges::ON, MpoCompress::NONE);
         auto VarE          = std::real(tools::finite::measure::expectation_value<Scalar>(t.get_state(), t.get_state(), mpos2_shifted));
         tools::log->info("energy variance  <ψ | (H_global-E_global)² | ψ>                 = {:.16e} | t = {:.4e}", fp(VarE), t_res->get_last_interval());
     }
-    {
-        auto                t_res        = tid::tic_token("<ψ (H_global-E_local) | (H_global-E_local) ψ>");
-        StateFinite<Scalar> tmp_state    = t.get_state();
-        auto                L            = t.template get_length<RealScalar>();
-        auto                mpos_shifted = t.get_model().get_mpo_tensors(energy / L, MposWithEdges::ON, MpoCompress::NONE);
-        auto                svdcfg       = svd::config(status.bond_max, status.trnc_min);
-        tools::finite::ops::apply_mpos_general(tmp_state, mpos_shifted, svdcfg);
-        energy_variance_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
-        tools::log->info("energy variance <ψ (H_global-E_local) | (H_global-E_local) ψ>   = {:.16e} | t = {:.4e}", fp(energy_variance_global),
-                         t_res->get_last_interval());
-    }
-    {
-        auto                t_res        = tid::tic_token("energy variance (residual)");
-        StateFinite<Scalar> tmp_state    = t.get_state();
-        auto                L            = t.template get_length<RealScalar>();
-        auto                mpos_shifted = t.get_model().get_mpo_tensors(E1_global1 / L, MposWithEdges::ON, MpoCompress::NONE);
-        auto                svdcfg       = svd::config(status.bond_max, status.trnc_min);
-        tools::finite::ops::apply_mpos_general(tmp_state, mpos_shifted, svdcfg);
-        energy_variance_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
-        tools::log->info("energy variance <ψ (H_global-E_global) | (H_global-E_global) ψ> = {:.16e} | t = {:.4e}", fp(energy_variance_global),
-                         t_res->get_last_interval());
-    }
+    // {
+    //     auto                t_res        = tid::tic_token("<ψ (H_global-E_local) | (H_global-E_local) ψ>");
+    //     StateFinite<Scalar> tmp_state    = t.get_state();
+    //     auto                L            = t.template get_length<RealScalar>();
+    //     auto                mpos_shifted = t.get_model().get_mpo_tensors(energy / L, MposWithEdges::ON, MpoCompress::DPL);
+    //     auto                svdcfg       = svd::config(status.bond_max, status.trnc_min);
+    //     tools::finite::ops::apply_mpos_general(tmp_state, mpos_shifted, svdcfg);
+    //     energy_variance_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
+    //     tools::log->info("energy variance <ψ (H_global-E_local) | (H_global-E_local) ψ>   = {:.16e} | t = {:.4e}", fp(energy_variance_global),
+    //                      t_res->get_last_interval());
+    // }
+    // {
+    //     auto                t_res        = tid::tic_token("energy variance (residual)");
+    //     StateFinite<Scalar> tmp_state    = t.get_state();
+    //     auto                L            = t.template get_length<RealScalar>();
+    //     auto                mpos_shifted = t.get_model().get_mpo_tensors(E1_global1 / L, MposWithEdges::ON, MpoCompress::DPL);
+    //     auto                svdcfg       = svd::config(status.bond_max, status.trnc_min);
+    //     tools::finite::ops::apply_mpos_general(tmp_state, mpos_shifted, svdcfg);
+    //     energy_variance_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
+    //     tools::log->info("energy variance <ψ (H_global-E_global) | (H_global-E_global) ψ> = {:.16e} | t = {:.4e}", fp(energy_variance_global),
+    //                      t_res->get_last_interval());
+    // }
 
     // RealScalar rnorm_local  = tools::finite::measure::residual_norm_H1(t);
     // RealScalar rnorm_global = tools::finite::measure::residual_norm_full(t);

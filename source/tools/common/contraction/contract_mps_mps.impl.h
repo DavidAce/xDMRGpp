@@ -3,25 +3,7 @@
 #include "debug/exceptions.h"
 #include "math/tenx.h"
 // #include "tid/tid.h"
-// #if defined(DMRG_ENABLE_TBLIS)
-#include <tblis/tblis_config.h>
-// #include <tblis/util/configs.h>
-// #endif
-
-namespace settings {
-#if defined(DMRG_ENABLE_TBLIS)
-    inline constexpr bool tblis_enabled = true;
-#else
-    inline constexpr bool tblis_enabled = false;
-#endif
-
-#if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
-    inline constexpr bool tblis_use_openmp = true;
-#else
-    inline constexpr bool tblis_use_openmp = false;
-#endif
-}
-
+#include "contraction_tblis.h"
 /* clang-format off */
 using namespace tools::common::contraction;
 

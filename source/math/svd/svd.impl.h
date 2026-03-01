@@ -92,7 +92,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                 else
                     return do_svd_eigen(mat_ptr, rows, cols);
             } catch(const std::exception &ex) {
-                if constexpr(tenx::sfinae::is_quadruple_prec_v<Scalar>) {
+                if constexpr(sfinae::is_quadruple_prec_v<Scalar>) {
                     throw except::runtime_error("{} {} failed to perform SVD: {} | No other libraries to try with quadruple precision", enum2sv(svd_lib),
                                                 enum2sv(svd_rtn), std::string_view(ex.what()));
                 } else {
@@ -229,7 +229,7 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
     auto Smax                          = S.real().maxCoeff();
     // Stabilize by inserting avgS *  1/avgS
     Eigen::Index nonZeros = (S.cwiseAbs().array() > 0).count();
-    auto avgS = num::next_power_of_two<Real>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
+    auto         avgS     = num::next_power_of_two<Real>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
     if(avgS > 1) {
         S /= avgS;
         std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
@@ -301,9 +301,9 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
     auto Smax = S.real().maxCoeff();
 
     // Stabilize by inserting avgS *  1/avgS
-    using R   = RealScalar<Scalar>;
+    using R               = RealScalar<Scalar>;
     Eigen::Index nonZeros = (S.cwiseAbs().array() > 0).count();
-    auto avgS = num::next_power_of_two<R>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
+    auto         avgS     = num::next_power_of_two<R>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
     if(avgS > 1) {
         S /= avgS;
         std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);

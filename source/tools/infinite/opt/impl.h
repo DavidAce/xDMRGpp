@@ -23,7 +23,7 @@ Eigen::Tensor<Scalar, 3> tools::infinite::opt::find_ground_state(const TensorsIn
 
     auto        shape_mps = tensors.state->dimensions();
     const auto &mpo       = tensors.model->get_2site_mpo_AB();
-    const auto &env       = tensors.edges->get_env_ene_blk();
+    const auto &env       = tensors.edges->get_env_ene_block();
 
     MatVecMPO<cx64> matrix(tenx::asScalarType<cx64>(env.L), tenx::asScalarType<cx64>(env.R), tenx::asScalarType<cx64>(mpo));
     eig::solver     solver;

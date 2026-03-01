@@ -20,16 +20,20 @@ class EnvVar;
 template<typename T>
 struct env_pair;
 
+namespace x2 {
+    template<typename Scalar, int rank> class Tensor;
+}
+
 namespace tools::finite::measure {
     template<typename T> using RealScalar = decltype(std::real(std::declval<T>()));
     // template<typename Scalar>
     // using RealScalar = decltype(std::real(std::declval<Scalar>()));
     /* clang-format off */
     template<typename Scalar>
-    [[nodiscard]] RealScalar<Scalar> residual_norm       (const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo, const Eigen::Tensor<Scalar, 3> &envL, const Eigen::Tensor<Scalar, 3> &envR);
+    [[nodiscard]] RealScalar<Scalar> residual_norm       (const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo, const x2::Tensor<Scalar, 3> &envL, const x2::Tensor<Scalar, 3> &envR);
 
     template<typename Scalar>
-    [[nodiscard]] RealScalar<Scalar> residual_norm       (const Eigen::Tensor<Scalar, 3> &mps, const std::vector<Eigen::Tensor<Scalar, 4>> &mpos,const Eigen::Tensor<Scalar, 3> &envL,const Eigen::Tensor<Scalar, 3> &envR);
+    [[nodiscard]] RealScalar<Scalar> residual_norm       (const Eigen::Tensor<Scalar, 3> &mps, const std::vector<Eigen::Tensor<Scalar, 4>> &mpos,const x2::Tensor<Scalar, 3> &envL,const x2::Tensor<Scalar, 3> &envR);
 
     template<typename Scalar>
     [[nodiscard]] RealScalar<Scalar> residual_norm       (const Eigen::Tensor<Scalar, 3> &mps, const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpo_refs, const env_pair<const EnvEne<Scalar> &> &envs);

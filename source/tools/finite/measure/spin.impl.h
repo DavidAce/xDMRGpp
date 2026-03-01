@@ -12,6 +12,7 @@
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
+#include "tools/common/contraction/env.h"
 #include "tools/common/log.h"
 
 using tools::finite::measure::RealScalar;
@@ -32,8 +33,8 @@ RealScalar<Scalar> tools::finite::measure::spin_component(const StateFinite<Scal
     using Real = RealScalar<CalcType>;
     using Cplx = std::complex<Real>;
 
-    constexpr bool isRealCalcT  = std::is_floating_point_v<CalcType>;
-    auto           isRealPauli  = tenx::isReal(paulimatrix);
+    constexpr bool isRealCalcT = std::is_floating_point_v<CalcType>;
+    auto           isRealPauli = tenx::isReal(paulimatrix);
     if constexpr(isRealCalcT) {
         if(!isRealPauli) {
             // Measurement of complex pauli y on a real state.
@@ -41,7 +42,7 @@ RealScalar<Scalar> tools::finite::measure::spin_component(const StateFinite<Scal
         }
     }
 
-    auto t_spn = tid::tic_scope("spin", tid::level::highest);
+    auto t_spn       = tid::tic_scope("spin", tid::level::highest);
     auto [mpo, L, R] = qm::mpo::pauli_mpo<CalcType>(paulimatrix); // Transform to CalcType
     Eigen::Tensor<CalcType, 3> temp;
     for(const auto &mps : state.mps_sites) {

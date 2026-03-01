@@ -10,6 +10,7 @@
 template<typename Scalar> class MatrixLikeOperator;
 template<typename Scalar> struct IterativeLinearSolverConfig;
 
+
 namespace tools::common::contraction {
     template<typename T> using VectorType = Eigen::Matrix<T, Eigen::Dynamic, 1>;
     template<typename T> using MatrixType = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
@@ -18,163 +19,15 @@ namespace tools::common::contraction {
     template<typename T>
     using TensorRead = Eigen::TensorBase<T, Eigen::ReadOnlyAccessors>;
 
-    class dimlist : public std::vector<long> {
-        public:
-        using base_t = std::vector<long>;
-        using base_t::base_t;
-        template<auto rank>
-        dimlist(std::array<long, rank> arr) : base_t(arr.begin(), arr.end()) {}
-    };
-
-    // std::string get_tblis_arch();
-
-    template<typename Scalar>
-    void contract_tblis(const Scalar *aptr, dimlist adim,         //
-                        const Scalar *bptr, dimlist bdim,         //
-                        Scalar *cptr, dimlist cdim,               //
-                        std::string_view la, std::string_view lb, //
-                        std::string_view lc, const void *tblis_config_ptr);
-
-    // template<typename A_t, typename B_t, typename C_t>
-    // void contract_tblis(const TensorRead<A_t> &ea, const TensorRead<B_t> &eb, TensorWrite<C_t> &ec, std::string_view la, std::string_view lb,
-    //                     std::string_view lc, const void *tblis_config_ptr);
-
     /* clang-format off */
-    template<typename Scalar>
-    Scalar expectation_value(const Scalar * const ket_ptr, std::array<long,3> ket_dims,
-                             const Scalar * const mpo_ptr, std::array<long,4> mpo_dims,
-                             const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                             const Scalar * const envR_ptr, std::array<long,3> envR_dims);
-
-    template<typename Scalar>
-    Scalar expectation_value(const Scalar * const bra_ptr, std::array<long,3> bra_dims,
-                             const Scalar * const ket_ptr, std::array<long,3> ket_dims,
-                             const Scalar * const mpo_ptr, std::array<long,4> mpo_dims,
-                             const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                             const Scalar * const envR_ptr, std::array<long,3> envR_dims);
-
-    template<typename Scalar>
-    void matrix_vector_product(Scalar * res_ptr,
-                               const Scalar * const mps_ptr, std::array<long,3> mps_dims,
-                               const Scalar * const mpo_ptr, std::array<long,4> mpo_dims,
-                               const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                               const Scalar * const envR_ptr, std::array<long,3> envR_dims);
 
 
-    template<typename Scalar, typename mpo_type>
-    void matrix_vector_product(Scalar * res_ptr,
-                               const Scalar * const mps_ptr, std::array<long,3> mps_dims,
-                               const std::vector<mpo_type> & mpos_shf,
-                               const Scalar * const envL_ptr, std::array<long,3> envL_dims,
-                               const Scalar * const envR_ptr, std::array<long,3> envR_dims);
 
     template<typename Scalar>
     VectorType<Scalar> matrix_inverse_vector_product(MatrixLikeOperator<Scalar> &MatrixOp,     //
                                                      const Scalar *rhs_ptr,                    //
                                                      const IterativeLinearSolverConfig<Scalar> &cfg);
 
-
-    template<typename mps_type, typename mpo_type, typename env_type>
-    auto expectation_value(const TensorRead<mps_type> & mps,
-                           const TensorRead<mpo_type> & mpo,
-                           const TensorRead<env_type> & envL,
-                           const TensorRead<env_type> & envR){
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of expectation_value");
-        static_assert(mpo_type::NumIndices == 4 and "Wrong mpo tensor rank != 4 passed to calculation of expectation_value");
-        static_assert(env_type::NumIndices == 3 and "Wrong env tensor rank != 3 passed to calculation of expectation_value");
-        auto  mps_eval = tenx::asEval(mps);
-        auto  mpo_eval = tenx::asEval(mpo);
-        auto  envL_eval = tenx::asEval(envL);
-        auto  envR_eval = tenx::asEval(envR);
-
-
-        return expectation_value(
-            mps_eval.data(), mps_eval.dimensions(),
-            mpo_eval.data(), mpo_eval.dimensions(),
-            envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions());
-    }
-
-    template<typename bra_type,typename ket_type,  typename mpo_type, typename env_type>
-    auto expectation_value(const TensorRead<bra_type> & bra,
-                           const TensorRead<ket_type> & ket,
-                           const TensorRead<mpo_type> & mpo,
-                           const TensorRead<env_type> & envL,
-                           const TensorRead<env_type> & envR){
-        static_assert(bra_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of expectation_value");
-        static_assert(ket_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of expectation_value");
-        static_assert(mpo_type::NumIndices == 4 and "Wrong mpo tensor rank != 4 passed to calculation of expectation_value");
-        static_assert(env_type::NumIndices == 3 and "Wrong env tensor rank != 3 passed to calculation of expectation_value");
-        auto  bra_eval = tenx::asEval(bra);
-        auto  ket_eval = tenx::asEval(ket);
-        auto  mpo_eval = tenx::asEval(mpo);
-        auto  envL_eval = tenx::asEval(envL);
-        auto  envR_eval = tenx::asEval(envR);
-
-
-        return expectation_value(
-            bra_eval.data(), bra_eval.dimensions(),
-            ket_eval.data(), ket_eval.dimensions(),
-            mpo_eval.data(), mpo_eval.dimensions(),
-            envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions());
-    }
-
-
-    template<typename res_type, typename mps_type, typename mpo_type, typename env_type>
-    void matrix_vector_product(TensorWrite<res_type> &res,
-                               const TensorRead<mps_type> & mps,
-                               const TensorRead<mpo_type> & mpo,
-                               const TensorRead<env_type> & envL,
-                               const TensorRead<env_type> & envR){
-        static_assert(res_type::NumIndices == 3 and "Wrong res tensor rank != 3 passed to calculation of matrix_vector_product");
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of matrix_vector_product");
-        static_assert(mpo_type::NumIndices == 4 and "Wrong mpo tensor rank != 4 passed to calculation of matrix_vector_product");
-        static_assert(env_type::NumIndices == 3 and "Wrong env tensor rank != 3 passed to calculation of matrix_vector_product");
-        auto & res_ref = static_cast<res_type&>(res);
-        auto  mps_eval = tenx::asEval(mps);
-        auto  mpo_eval = tenx::asEval(mpo);
-        auto  envL_eval = tenx::asEval(envL);
-        auto  envR_eval = tenx::asEval(envR);
-        matrix_vector_product(
-            res_ref.data(),
-            mps_eval.data(), mps_eval.dimensions(),
-            mpo_eval.data(), mpo_eval.dimensions(),
-            envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions());
-    }
-
-    template<typename res_type, typename mps_type, typename mpo_type, typename env_type>
-    void matrix_vector_product(TensorWrite<res_type> &res,
-                               const TensorRead<mps_type> & mps,
-                               const std::vector<mpo_type> & mpos_shf,
-                               const TensorRead<env_type> & envL,
-                               const TensorRead<env_type> & envR){
-        static_assert(res_type::NumIndices == 3 and "Wrong res tensor rank != 3 passed to calculation of matrix_vector_product");
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3 passed to calculation of matrix_vector_product");
-        static_assert(env_type::NumIndices == 3 and "Wrong env tensor rank != 3 passed to calculation of matrix_vector_product");
-        auto & res_ref = static_cast<res_type&>(res);
-        auto  mps_eval = tenx::asEval(mps);
-        // auto  mpo_eval = tenx::asEval(mpo);
-        auto  envL_eval = tenx::asEval(envL);
-        auto  envR_eval = tenx::asEval(envR);
-        matrix_vector_product(
-            res_ref.data(),
-            mps_eval.data(), mps_eval.dimensions(),
-            mpos_shf,
-            envL_eval.data(), envL_eval.dimensions(),
-            envR_eval.data(), envR_eval.dimensions());
-    }
-
-    template<typename mps_type, typename mpo_type, typename env_type>
-    mps_type matrix_vector_product(const mps_type &mps, const mpo_type &mpo, const env_type &envL, const env_type &envR) {
-        using Scalar = typename mps_type::Scalar;
-        Eigen::Tensor<Scalar,3> result(mps.dimensions());
-        matrix_vector_product(result, mps, mpo, envL, envR);
-        return result;
-    }
-
-    /* clang-format on */
 
     template<typename Scalar>
     void contract_mps_bnd(Scalar *res_ptr, std::array<long, 3> res_dims, const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const bnd_ptr,
@@ -188,18 +41,7 @@ namespace tools::common::contraction {
     void contract_mps_mps(Scalar *res_ptr, std::array<long, 3> res_dims, const Scalar *const mpsL_ptr, std::array<long, 3> mpsL_dims,
                           const Scalar *const mpsR_ptr, std::array<long, 3> mpsR_dims);
 
-    template<typename Scalar>
-    void contract_envL_mps_mpo(Scalar *res_ptr, std::array<long, 2> res_dims, const Scalar *const env_ptr, std::array<long, 2> env_dims,
-                              const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 2> mpo_dims);
-    template<typename Scalar>
-    void contract_envL_mps_mpo(Scalar *res_ptr, std::array<long, 3> res_dims, const Scalar *const env_ptr, std::array<long, 3> env_dims,
-                              const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims);
-    template<typename Scalar>
-    void contract_envR_mps_mpo(Scalar *res_ptr, std::array<long, 2> res_dims, const Scalar *const env_ptr, std::array<long, 2> env_dims,
-                               const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 2> mpo_dims);
-    template<typename Scalar>
-    void contract_envR_mps_mpo(Scalar *res_ptr, std::array<long, 3> res_dims, const Scalar *const env_ptr, std::array<long, 3> env_dims,
-                               const Scalar *const mps_ptr, std::array<long, 3> mps_dims, const Scalar *const mpo_ptr, std::array<long, 4> mpo_dims);
+
 
     template<typename res_type, typename mps_type, typename bnd_type>
     void contract_mps_bnd(TensorWrite<res_type> &res, const TensorRead<mps_type> &mps, const TensorRead<bnd_type> &bnd) {
@@ -249,7 +91,7 @@ namespace tools::common::contraction {
         long                d0        = mpsL_eval.dimension(0) * mpsR_eval.dimension(0);
         long                d1        = mpsL_eval.dimension(1);
         long                d2        = mpsR_eval.dimension(2);
-        std::array<long, 3> res_dims  = {d0, d1, d2};
+        auto res_dims  = std::array<long, 3> {d0, d1, d2};
         res_ref.resize(res_dims);
         contract_mps_mps(res_ref.data(), res_ref.dimensions(), mpsL_eval.data(), mpsL_eval.dimensions(), mpsR_eval.data(), mpsR_eval.dimensions());
     }
@@ -322,80 +164,5 @@ namespace tools::common::contraction {
         return res;
     }
 
-    template<typename res_type, typename env_type, typename mps_type, typename mpo_type>
-    void contract_envL_mps_mpo(TensorWrite<res_type> &res, const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
-        static_assert((res_type::NumIndices == 2 or res_type::NumIndices == 3) and "Wrong res tensor rank != 2 or 3");
-        static_assert((env_type::NumIndices == 2 or env_type::NumIndices == 3) and "Wrong env tensor rank != 2 or 3");
-        static_assert((mpo_type::NumIndices == 2 or mpo_type::NumIndices == 4) and "Wrong mpo tensor rank != 2 or 4");
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3");
-        /* clang-format off */
-        auto &res_ref = static_cast<res_type &>(res);
-        auto env_eval = tenx::asEval(env);
-        auto mps_eval = tenx::asEval(mps);
-        auto mpo_eval = tenx::asEval(mpo);
-        if constexpr(env_type::NumIndices == 2){
-            res_ref.resize(mps_eval.dimension(2), mps_eval.dimension(2));
-            contract_envL_mps_mpo(res_ref.data(), res_ref.dimensions(),
-                                 env_eval.data(), env_eval.dimensions(),
-                                 mps_eval.data(), mps_eval.dimensions(),
-                                 mpo_eval.data(), mpo_eval.dimensions());
-        }
-        else {
-            res_ref.resize(mps_eval.dimension(2), mps_eval.dimension(2), mpo_eval.dimension(1));
-            contract_envL_mps_mpo(res_ref.data(), res_ref.dimensions(),
-                                 env_eval.data(), env_eval.dimensions(),
-                                 mps_eval.data(), mps_eval.dimensions(),
-                                 mpo_eval.data(), mpo_eval.dimensions());
-        }
-        /* clang-format on */
-    }
-    template<typename res_type, typename env_type, typename mps_type, typename mpo_type>
-    void contract_envR_mps_mpo(TensorWrite<res_type> &res, const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
-        static_assert((res_type::NumIndices == 2 or res_type::NumIndices == 3) and "Wrong res tensor rank != 2 or 3");
-        static_assert((env_type::NumIndices == 2 or env_type::NumIndices == 3) and "Wrong env tensor rank != 2 or 3");
-        static_assert((mpo_type::NumIndices == 2 or mpo_type::NumIndices == 4) and "Wrong mpo tensor rank != 2 or 4");
-        static_assert(mps_type::NumIndices == 3 and "Wrong mps tensor rank != 3");
-        /* clang-format off */
-        auto &res_ref = static_cast<res_type &>(res);
-        auto env_eval = tenx::asEval(env);
-        auto mps_eval = tenx::asEval(mps);
-        auto mpo_eval = tenx::asEval(mpo);
 
-
-        if constexpr(env_type::NumIndices == 2){
-            res_ref.resize(mps_eval.dimension(1), mps_eval.dimension(1));
-            contract_envR_mps_mpo(res_ref.data(), res_ref.dimensions(),
-                                 env_eval.data(), env_eval.dimensions(),
-                                 mps_eval.data(), mps_eval.dimensions(),
-                                 mpo_eval.data(), mpo_eval.dimensions());
-        }
-        else {
-            res_ref.resize(mps_eval.dimension(1), mps_eval.dimension(1), mpo_eval.dimension(0));
-            contract_envR_mps_mpo(res_ref.data(), res_ref.dimensions(),
-                                 env_eval.data(), env_eval.dimensions(),
-                                 mps_eval.data(), mps_eval.dimensions(),
-                                 mpo_eval.data(), mpo_eval.dimensions());
-        }
-        /* clang-format on */
-    }
-
-    template<typename env_type, typename mps_type, typename mpo_type>
-    [[nodiscard]] auto contract_envL_mps_mpo(const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
-        Eigen::Tensor<typename env_type::Scalar, env_type::NumIndices> res;
-        contract_envL_mps_mpo(res, env, mps, mpo);
-        return res;
-    }
-    template<typename env_type, typename mps_type, typename mpo_type>
-    [[nodiscard]] auto contract_envR_mps_mpo(const TensorRead<env_type> &env, const TensorRead<mps_type> &mps, const TensorRead<mpo_type> &mpo) {
-        Eigen::Tensor<typename env_type::Scalar, env_type::NumIndices> res;
-        contract_envR_mps_mpo(res, env, mps, mpo);
-        return res;
-    }
-    template<typename mps_type, typename mpo_type, typename env_type>
-    auto expectation_value(const mps_type &mps, const mpo_type &mpo, const env_type &envL, const env_type &envR) {
-        mps_type result;
-        result.resize(mps.dimensions());
-        matrix_vector_product(result, mps, mpo, envL, envR);
-        return contract_mps_overlap(mps, result);
-    }
 }

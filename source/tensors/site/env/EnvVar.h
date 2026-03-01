@@ -30,6 +30,7 @@ class EnvVar final : public EnvBase<Scalar_> {
     void                 refresh(const EnvVar &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo);
     void                 set_edge_dims(const MpsSite<Scalar> &MPS, const MpoSite<Scalar> &MPO) final;
     void                 set_block(const Eigen::Tensor<Scalar, 3> &blk, const EnvVar &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo);
+    void                 set_blkx2(const x2::Tensor<Scalar, 3> &blk, const EnvVar &env, const MpsSite<Scalar> &mps, const MpoSite<Scalar> &mpo);
     void                 set_block_raw(const Eigen::Tensor<Scalar, 3> &blk);
 
     template<typename T>

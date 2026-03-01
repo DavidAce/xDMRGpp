@@ -19,7 +19,7 @@ template<typename EnvType>
 requires sfinae::is_specialization_v<EnvType, EnvEne> || sfinae::is_specialization_v<EnvType, EnvVar>
 void diagonal_environment_padding(EnvType &env, typename EnvType::Scalar pad_value, Eigen::Index newChi, size_t unique_id_mps) {
     using Scalar                                = typename EnvType::Scalar;
-    Eigen::DSizes<Eigen::Index, 3> env_dims_old = env.get_block().dimensions();
+    Eigen::DSizes<Eigen::Index, 3> env_dims_old = env.dimensions();
     Eigen::DSizes<Eigen::Index, 3> env_dims_new = Eigen::DSizes<Eigen::Index, 3>{newChi, newChi, env_dims_old[2]};
     Eigen::Tensor<Scalar, 3>       new_block(env_dims_new);
     new_block.setZero();

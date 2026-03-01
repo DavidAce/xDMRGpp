@@ -153,7 +153,7 @@ class MpoSite {
             auto mpo_new = MpoFactory<T>::create_mpo(this->get_position(), this->model_type);
             // 1) Transfer base parameters
             if constexpr(std::is_floating_point_v<Scalar>) {
-                mpo_new->set_energy_shift_mpo(this->energy_shift_mpo);
+                mpo_new->set_energy_shift_mpo(static_cast<T>(this->energy_shift_mpo));
             } else {
                 using RealT             = Eigen::NumTraits<T>::Real;
                 auto energy_shift_mpo_T = T(static_cast<RealT>(std::real(this->energy_shift_mpo)), static_cast<RealT>(std::imag(this->energy_shift_mpo)));
@@ -179,7 +179,7 @@ class MpoSite {
 
     template<typename T>
     [[nodiscard]] decltype(auto) MPO_as() const {
-        if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
+        if constexpr(sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(MPO_q());
         } else {
             return tenx::asScalarType<T>(MPO());
@@ -188,7 +188,7 @@ class MpoSite {
 
     template<typename T>
     [[nodiscard]] Eigen::Tensor<T, 4> MPO_energy_shifted_view_as(Scalar energy_shift_per_site) const {
-        if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
+        if constexpr(sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(MPO_energy_shifted_view_q(energy_shift_per_site));
         } else {
             return tenx::asScalarType<T>(MPO_energy_shifted_view(energy_shift_per_site));
@@ -198,7 +198,7 @@ class MpoSite {
     template<typename T>
     [[nodiscard]] Eigen::Tensor<T, 4> MPO_nbody_view_as(std::optional<std::vector<size_t>> nbody,
                                                         std::optional<std::vector<size_t>> skip = std::nullopt) const {
-        if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
+        if constexpr(sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(MPO_nbody_view_q(nbody, skip));
         } else {
             return tenx::asScalarType<T>(MPO_nbody_view(nbody, skip));
@@ -218,7 +218,7 @@ class MpoSite {
 
     template<typename T>
     [[nodiscard]] Eigen::Tensor<T, 1> get_MPO_edge_left() const {
-        if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
+        if constexpr(sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(get_MPO_edge_left(mpo_internal_q));
         } else {
             return tenx::asScalarType<T>(get_MPO_edge_left(mpo_internal));
@@ -227,7 +227,7 @@ class MpoSite {
 
     template<typename T>
     [[nodiscard]] Eigen::Tensor<T, 1> get_MPO_edge_right() const {
-        if constexpr(tenx::sfinae::is_quadruple_prec_v<T>) {
+        if constexpr(sfinae::is_quadruple_prec_v<T>) {
             return tenx::asScalarType<T>(get_MPO_edge_right(mpo_internal_q));
         } else {
             return tenx::asScalarType<T>(get_MPO_edge_right(mpo_internal));

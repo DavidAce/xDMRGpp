@@ -73,7 +73,6 @@ void tools::finite::env::internal::merge_rexpansion_terms_MP_N0(MpsSite<Scalar> 
     auto offset_LC     = Eigen::DSizes<Eigen::Index, 1>{0};
     auto extent_LC     = Eigen::DSizes<Eigen::Index, 1>{std::min(bond_lim, LC_old.size())};
     auto extent_LC_pad = Eigen::DSizes<Eigen::Index, 1>{bond_lim};
-    using RealScalar   = Eigen::NumTraits<Scalar>::Real;
     Eigen::Tensor<Scalar, 1> LC_pad(extent_LC_pad);
     if(std::real(schmidt_pad_value) < 0) schmidt_pad_value = std::real(LC_old.coeff(LC_old.size() - 1));
     LC_pad.setConstant(schmidt_pad_value);

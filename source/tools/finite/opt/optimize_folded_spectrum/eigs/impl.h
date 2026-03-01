@@ -159,7 +159,7 @@ namespace folded_spectrum {
 
     template<typename CalcType, typename Scalar>
     RealScalar<CalcType> get_largest_eigenvalue_hamiltonian_squared(const TensorsFinite<Scalar> &tensors) {
-        auto env2                = tensors.edges->template get_multisite_env_var_blk_as<CalcType>();
+        auto env2                = tensors.edges->template get_multisite_env_var_block_as<CalcType>();
         auto hamiltonian_squared = MatVecMPO<CalcType>(env2.L, env2.R, tensors.template get_multisite_mpo_squared<CalcType>());
         tools::log->trace("Finding largest-magnitude eigenvalue");
         eig::solver solver; // Define a solver just to find the maximum eigenvalue

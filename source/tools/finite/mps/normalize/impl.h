@@ -16,7 +16,7 @@
 #include "tools/finite/measure/norm.h"
 
 namespace settings {
-    inline constexpr bool debug_normalization = true;
+    inline constexpr bool debug_normalization = false;
 }
 
 using tools::finite::mps::RealScalar;
