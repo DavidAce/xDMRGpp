@@ -7,21 +7,95 @@ void contract_op_M_1_0(TN<Scalar, 3> &temp, const TN<Scalar, 2> &op, const TN<Sc
     temp.device(*threads->dev) = op.contract(M, tenx::idx({1}, {0}));
 }
 
+// template<typename Scalar>
+// TN<Scalar, 2> contract_chain_M_Mconj_0_1_01_10(const TN<Scalar, 2> &chain, const TN<Scalar, 3> &M, const ThreadPtr &threads) {
+//     TN<Scalar, 2> temp;
+//     temp.resize(M.dimension(2), M.dimension(2));
+//     temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
+//     return temp;
+// }
 template<typename Scalar>
 TN<Scalar, 2> contract_chain_M_Mconj_0_1_01_10(const TN<Scalar, 2> &chain, const TN<Scalar, 3> &M, const ThreadPtr &threads) {
-    TN<Scalar, 2> temp;
-    temp.resize(M.dimension(2), M.dimension(2));
-    temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
+    assert(chain.dimension(0) == M.dimension(1)); // chain(0) with M(1)
+    assert(chain.dimension(1) == M.dimension(1)); // chain is square on its free index (so the intermediate makes sense)
+
+    // 1) t1 = chain ⋅ M, contracting chain(0) with M(1)
+    // Remaining dims order: chain dim [1], M dims [0,2] => (M(1), M(0), M(2))
+    const auto d1 = tenx::array3{
+        M.dimension(1), // t1(0) = chain(1)
+        M.dimension(0), // t1(1) = M(0)
+        M.dimension(2)  // t1(2) = M(2)
+    };
+    TN<Scalar, 3> t1(d1);
+    t1.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1}));
+
+    // 2) temp = t1 ⋅ conj(M), contracting t1(0,1) with M*(1,0)
+    // Remaining dims order: t1 dim [2], M* dim [2] => (M(2), M(2))
+    TN<Scalar, 3> M_conj;
+    M_conj.resize(M.dimensions());
+    M_conj.device(*threads->dev) = M.conjugate();
+
+    const auto d2 = tenx::array2{
+        M.dimension(2),
+        M.dimension(2),
+    };
+    TN<Scalar, 2> temp(d2);
+    temp.device(*threads->dev) = t1.contract(M_conj, tenx::idx({0, 1}, {1, 0}));
+
     return temp;
 }
 
+
 template<typename Scalar>
-void contract_M_Ledge3_mpo_Mconj_0_1_0_1_013_023(TN<Scalar, 3> &temp, const TN<Scalar, 3> &M, const TN<Scalar, 3> &Ledge3, const TN<Scalar, 4> &mpo,
+TN<Scalar, 2> contract_chain_M_Mconj_0_2_01_20(const TN<Scalar, 2> &chain, const TN<Scalar, 3> &M, const ThreadPtr &threads) {
+    assert(chain.dimension(0) == M.dimension(2)); // chain(0) with M(1)
+    assert(chain.dimension(1) == M.dimension(2)); // chain is square on its free index (so the intermediate makes sense)
+
+    // 1) t1 = chain ⋅ M, contracting chain(0) with M(1)
+    // Remaining dims order: chain dim [1], M dims [0,2] => (M(1), M(0), M(2))
+    const auto d1 = tenx::array3{
+        M.dimension(2), // t1(0) = chain(1)
+        M.dimension(0), // t1(1) = M(0)
+        M.dimension(1)  // t1(2) = M(2)
+    };
+    TN<Scalar, 3> t1(d1);
+    t1.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {2}));
+
+    // 2) temp = t1 ⋅ conj(M), contracting t1(0,1) with M*(1,0)
+    // Remaining dims order: t1 dim [2], M* dim [2] => (M(2), M(2))
+    TN<Scalar, 3> M_conj;
+    M_conj.resize(M.dimensions());
+    M_conj.device(*threads->dev) = M.conjugate();
+
+    const auto d2 = tenx::array2{
+        M.dimension(1),
+        M.dimension(1),
+    };
+    TN<Scalar, 2> temp(d2);
+    temp.device(*threads->dev) = t1.contract(M_conj, tenx::idx({0, 1}, {2, 0}));
+
+    return temp;
+}
+//
+// template<typename Scalar>
+// void contract_M_Ledge3_mpo_Mconj_0_1_0_1_013_023(TN<Scalar, 3> &temp, const TN<Scalar, 3> &M, const TN<Scalar, 3> &Ledge3, const TN<Scalar, 4> &mpo,
+//                                                  const ThreadPtr &threads) {
+//     temp.resize(M.dimension(2), M.dimension(2), mpo.dimension(1));
+//     temp.device(*threads->dev) = M.contract(Ledge3, tenx::idx({1}, {0})) //
+//                                      .contract(mpo, tenx::idx({0}, {1})) //
+//                                      .contract(M.conjugate(), tenx::idx({0, 1, 3}, {0, 2, 3}));
+// }
+
+template<typename Scalar>
+void contract_M_Ledge3_mpo_Mconj_1_1_12_03_01_30(TN<Scalar, 3> &temp, const TN<Scalar, 3> &M, const TN<Scalar, 3> &Ledge3, const TN<Scalar, 4> &mpo,
                                                  const ThreadPtr &threads) {
     temp.resize(M.dimension(2), M.dimension(2), mpo.dimension(1));
-    temp.device(*threads->dev) = M.contract(Ledge3, tenx::idx({0}, {1})) //
-                                     .contract(mpo, tenx::idx({0}, {1})) //
-                                     .contract(M.conjugate(), tenx::idx({0, 1, 3}, {0, 2, 3}));
+    Eigen::Tensor<Scalar, 4> T1(Ledge3.dimension(0), Ledge3.dimension(2), M.dimension(0), M.dimension(2));
+    Eigen::Tensor<Scalar, 4> T2(Ledge3.dimension(0), M.dimension(2), mpo.dimension(1), mpo.dimension(2));
+
+    T1.device(*threads->dev)   = Ledge3.contract(M.conjugate(), tenx::idx({1}, {1}));
+    T2.device(*threads->dev)   = T1.contract(mpo, tenx::idx({1, 2}, {0, 3}));
+    temp.device(*threads->dev) = M.contract(T2, tenx::idx({0, 1}, {3, 0}));
 }
 
 template<typename Scalar>
@@ -129,19 +203,73 @@ void contract_res_mps1conj_mpo_mps2_1_1_13_02_14_10(TN<Scalar, 4> &tmp, const TN
     tmp.device(*threads->dev) = t2.contract(ket, tenx::idx({1, 4}, {1, 0}));
 }
 
+// template<typename Scalar>
+// void contract_resL_ket_mpo_braconj_0_1_02_02_03_10(TN<Scalar, 3> &tmp, const TN<Scalar, 3> &resL, const TN<Scalar, 3> &ket, const TN<Scalar, 4> &mpo,
+//                                                    const TN<Scalar, 3> &bra, const ThreadPtr &threads) {
+//     auto dim3 = tenx::array3{ket.dimension(2), mpo.dimension(1), bra.dimension(2)};
+//     tmp.resize(dim3);
+//     tmp.device(*threads->dev) = resL.contract(ket, tenx::idx({0}, {1}))       //
+//                                     .contract(mpo, tenx::idx({0, 2}, {0, 2})) //
+//                                     .contract(bra.conjugate(), tenx::idx({0, 3}, {1, 0}));
+// }
+
 template<typename Scalar>
-void contract_resL_ket_mpo_braconj_0_1_02_02_03_10(TN<Scalar, 3> &tmp, const TN<Scalar, 3> &resL, const TN<Scalar, 3> &ket, const TN<Scalar, 4> &mpo,
-                                                   const TN<Scalar, 3> &bra, const ThreadPtr &threads) {
-    auto dim3 = tenx::array3{ket.dimension(2), mpo.dimension(1), bra.dimension(2)};
-    tmp.resize(dim3);
-    tmp.device(*threads->dev) = resL.contract(ket, tenx::idx({0}, {1}))       //
-                                    .contract(mpo, tenx::idx({0, 2}, {0, 2})) //
-                                    .contract(bra.conjugate(), tenx::idx({0, 3}, {1, 0}));
+void contract_resL_ket_mpo_braconj_0_1_02_02_03_10(TN<Scalar, 3>       &tmp,  //
+                                                   const TN<Scalar, 3> &resL, //
+                                                   const TN<Scalar, 3> &ket,  //
+                                                   const TN<Scalar, 4> &mpo,  //
+                                                   const TN<Scalar, 3> &bra,  //
+                                                   const ThreadPtr     &threads) {
+    assert(resL.dimension(0) == ket.dimension(1)); // resL(0) with ket(1)
+    assert(resL.dimension(1) == mpo.dimension(0)); // t1(0)=resL(1) with mpo(0)
+    assert(ket.dimension(0) == mpo.dimension(2));  // t1(2)=ket(0) with mpo(2)
+    assert(resL.dimension(2) == bra.dimension(1)); // t2(0)=resL(2) with bra(1)
+    assert(mpo.dimension(3) == bra.dimension(0));  // t2(3)=mpo(3) with bra(0)
+
+    // 1) t1 = resL ⋅ ket
+    // Remaining dims order is: resL dims [1,2], ket dims [0,2]
+    const auto d1 = tenx::array4{
+        resL.dimension(1), // t1(0)
+        resL.dimension(2), // t1(1)
+        ket.dimension(0),  // t1(2)
+        ket.dimension(2)   // t1(3)
+    };
+    TN<Scalar, 4> t1(d1);
+    t1.device(*threads->dev) = resL.contract(ket, tenx::idx({0}, {1}));
+
+    // 2) t2 = t1 ⋅ mpo, contracting t1(0,2) with mpo(0,2)
+    // Remaining dims order is: t1 dims [1,3], mpo dims [1,3]
+    const auto d2 = tenx::array4{
+        resL.dimension(2), // t2(0) = t1(1)
+        ket.dimension(2),  // t2(1) = t1(3)
+        mpo.dimension(1),  // t2(2) = mpo(1)
+        mpo.dimension(3)   // t2(3) = mpo(3)
+    };
+    TN<Scalar, 4> t2(d2);
+    t2.device(*threads->dev) = t1.contract(mpo, tenx::idx({0, 2}, {0, 2}));
+
+    // 3) tmp = t2 ⋅ conj(bra), contracting t2(0,3) with bra*(1,0)
+    // Remaining dims order is: t2 dims [1,2], bra dims [2]
+    TN<Scalar, 3> bra_conj;
+    bra_conj.resize(bra.dimensions());
+    bra_conj.device(*threads->dev) = bra.conjugate();
+
+    // Output dims: (ket.r, mpo.r, bra.r)
+    const auto dim = tenx::array3{ket.dimension(2), mpo.dimension(1), bra.dimension(2)};
+    tmp.resize(dim);
+    tmp.device(*threads->dev) = t2.contract(bra_conj, tenx::idx({0, 3}, {1, 0}));
 }
 
 template<typename Scalar>
 TN<Scalar, 0> contract_resL_envR_012_021(const TN<Scalar, 3> &resL, const TN<Scalar, 3> &envR, const ThreadPtr &threads) {
     TN<Scalar, 0> res;
     res.device(*threads->dev) = resL.contract(envR, tenx::idx({0, 1, 2}, {0, 2, 1}));
+    return res;
+}
+
+template<typename Scalar>
+TN<Scalar, 0> contract_envL_envR_012_012(const TN<Scalar, 3> &envL, const TN<Scalar, 3> &envR, const ThreadPtr &threads) {
+    TN<Scalar, 0> res;
+    res.device(*threads->dev) = envL.contract(envR, tenx::idx({0, 1, 2}, {0, 1, 2}));
     return res;
 }

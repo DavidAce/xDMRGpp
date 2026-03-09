@@ -133,7 +133,7 @@ void svd::solver::print_vector([[maybe_unused]] const Scalar *vec_ptr, [[maybe_u
 // template<typename Scalar>
 // std::pair<long, fp64> svd::solver::get_rank_from_truncation_error(const VectorType<Scalar> &S) const {
 //     VectorType<fp64> truncation_errors(S.size() + 1);
-//     for(long s = 0; s <= S.size(); s++) { truncation_errors[s] = S.bottomRows(S.size() - s).norm(); } // Last one should be zero, i.e. no truncation
+//     for(long s = 0; s <= S.size(); s++) { truncation_errors[s] = S.tail(S.size() - s).norm(); } // Last one should be zero, i.e. no truncation
 //     auto rank_    = (truncation_errors.array() >= truncation_lim).count();
 //     auto rank_lim = S.size();
 //     if(rank_max > 0) rank_lim = std::min(S.size(), rank_max);

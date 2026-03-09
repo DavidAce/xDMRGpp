@@ -34,12 +34,14 @@ template<typename Scalar>
 TensorsInfinite<Scalar> &TensorsInfinite<Scalar>::operator=(TensorsInfinite &&other) noexcept = default; // default move assign
 
 template<typename Scalar>
-TensorsInfinite<Scalar>::TensorsInfinite(const TensorsInfinite &other) noexcept
-    : state(std::make_unique<StateInfinite<Scalar>>(*other.state)), model(std::make_unique<ModelInfinite<Scalar>>(*other.model)),
-      edges(std::make_unique<EdgesInfinite<Scalar>>(*other.edges)), measurements(other.measurements) {}
+TensorsInfinite<Scalar>::TensorsInfinite(const TensorsInfinite &other)
+    : state(std::make_unique<StateInfinite<Scalar>>(*other.state)), //
+      model(std::make_unique<ModelInfinite<Scalar>>(*other.model)), //
+      edges(std::make_unique<EdgesInfinite<Scalar>>(*other.edges)), //
+      measurements(other.measurements) {}
 
 template<typename Scalar>
-TensorsInfinite<Scalar> &TensorsInfinite<Scalar>::operator=(const TensorsInfinite &other) noexcept {
+TensorsInfinite<Scalar> &TensorsInfinite<Scalar>::operator=(const TensorsInfinite &other) {
     // check for self-assignment
     if(this != &other) {
         state        = std::make_unique<StateInfinite<Scalar>>(*other.state);

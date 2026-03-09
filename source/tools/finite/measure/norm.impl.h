@@ -1,6 +1,7 @@
 #pragma once
 #include "config/settings.h"
 #include "debug/info.h"
+#include "expectation_value/contract.h"
 #include "io/fmt_custom.h"
 #include "math/tenx.h"
 #include "norm.h"
@@ -19,7 +20,7 @@ RealScalar<Scalar> tools::finite::measure::norm_1site(const StateFinite<Scalar> 
 
     auto t_norm = tid::tic_scope("norm", tid::level::highest);
     // We know the all sites are normalized. We can check that the current position is normalized
-    const auto  pos = std::clamp(state.template get_position<long>(), 0l, state.template get_length<long>());
+    const auto  pos = std::clamp(state.template get_position<long>(), 0l, state.template get_length<long>() - 1l);
     const auto &mps = state.get_mps_site(pos);
     tools::log->trace("Measuring norm using site {} with dimensions {}", pos, mps.dimensions());
     Scalar norm = tools::common::contraction::contract_mps_norm(mps.get_M());
@@ -49,10 +50,7 @@ RealScalar<Scalar> tools::finite::measure::norm_state(const StateFinite<Scalar> 
             first = false;
             continue;
         }
-        temp.resize(tenx::array2{M.dimension(2), M.dimension(2)});
-        temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
-
-        chain = std::move(temp);
+        chain = contract_chain_M_Mconj_0_1_01_10(chain, M, threads);
     }
     Scalar norm = tenx::MatrixMap(chain).trace();
 
@@ -94,13 +92,7 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::isometry_left(const StateFinite
         assert(chain.dimension(0) == chain.dimension(1));
         assert(chain.dimension(0) == M.dimension(1));
 
-        temp.resize(tenx::array2{M.dimension(2), M.dimension(2)});
-
-        // Your original update:
-        // temp(β,β') = Σ_{α,α',s} chain(α,α') * M(s,α,β) * conj(M(s,α',β'))
-        temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {1})).contract(M.conjugate(), tenx::idx({0, 1}, {1, 0}));
-
-        chain = std::move(temp);
+        chain = contract_chain_M_Mconj_0_1_01_10(chain, M, threads);
 
         // Stop after including site `pos`
         if(mps_pos >= pos) break;
@@ -140,15 +132,7 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::isometry_right(const StateFinit
         // Sanity checks
         assert(chain.dimension(0) == chain.dimension(1));
         assert(chain.dimension(0) == M.dimension(2));
-
-        // After absorbing this site, the chain lives on the left bond
-        temp.resize(tenx::array2{M.dimension(1), M.dimension(1)});
-
-        // Mirror update:
-        // temp(α,α') = Σ_{β,β',s} chain(β,β') * M(s,α,β) * conj(M(s,α',β'))
-        temp.device(*threads->dev) = chain.contract(M, tenx::idx({0}, {2})).contract(M.conjugate(), tenx::idx({0, 1}, {2, 0}));
-
-        chain = std::move(temp);
+        chain = contract_chain_M_Mconj_0_2_01_20(chain, M, threads);
 
         // Stop after including site `pos`
         if(mps_pos <= pos) break;

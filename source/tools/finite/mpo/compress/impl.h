@@ -138,7 +138,6 @@ std::pair<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> deparallelize_mpo_
     auto mpo_map                  = tenx::MatrixMap(mpo_rank2);
     using RealScalar              = decltype(std::real(std::declval<Scalar>()));
     using MatrixType              = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-    static constexpr auto nan     = std::numeric_limits<RealScalar>::quiet_NaN();
     static constexpr auto eps     = std::numeric_limits<RealScalar>::epsilon();
     static constexpr auto tol_rel = eps * 10;
     static constexpr auto tol_abs = RealScalar{0};
@@ -232,7 +231,6 @@ std::pair<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> deparallelize_mpo_
     auto mpo_map                  = tenx::MatrixMap(mpo_rank2);
     using RealScalar              = decltype(std::real(std::declval<Scalar>()));
     using MatrixType              = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-    static constexpr auto nan     = std::numeric_limits<RealScalar>::quiet_NaN();
     static constexpr auto eps     = std::numeric_limits<RealScalar>::epsilon();
     static constexpr auto tol_rel = eps * 10;
     static constexpr auto tol_abs = RealScalar{0};

@@ -1484,11 +1484,7 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
     CalcPc(shift); // Computes the diagonal jacobi blocks which are useful for both types of preconditioner.
 
     if(preconditioner == eig::Preconditioner::SOLVE) {
-        // auto        mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
-        // auto        mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
         const auto &mpos = mpos_B.empty() ? mpos_A : mpos_B;
-        // const auto &envL    = mpos_B.empty() ? envL_A : envL_B;
-        // const auto &envR    = mpos_B.empty() ? envR_A : envR_B;
         if(jcbMaxBlockSize == 1) {
             invJcbDiagonal             = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
             iLinSolvCfg.jacobi.invdiag = invJcbDiagonal.data();
@@ -1498,7 +1494,6 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
             auto MatrixOp = MatrixLikeOperator<Scalar>(size_mps, MultOp);
             auto mps_out  = Eigen::Map<VectorType>(mps_out_, size_mps);
             mps_out       = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, mps_in_, iLinSolvCfg);
-            // tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos.front(), envL, envR, iLinSolvCfg);
         } else if(!mpos_B_shf.empty()) {
             throw except::runtime_error("MatVecMPOS<{}>::MultInvBx(...) not implemented for multiple mpos", sfinae::type_name<Scalar>());
         }
@@ -1997,7 +1992,7 @@ typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::I
     }
     op_norm_krylov_iters = max_op_norm_iters;
     op_norm_krylov       = lambda;
-    tools::log->debug("MatVecMPOS: iter {:<2}: lambda = {:.8e}", iter, fp(op_norm_krylov));
+    // tools::log->debug("MatVecMPOS: iter {:<2}: lambda = {:.8e}", iter, fp(op_norm_krylov));
 
     return lambda;
 }

@@ -46,11 +46,11 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
 
     // Some sanity checks
     if(multisite_mps.dimension(1) != state.get_mps_site(sites.front()).get_chiL())
-        throw except::logic_error("merge_multisite_mps: mps dim1 {} != chiL {} on left-most site", multisite_mps.dimension(1),
+        throw except::logic_error("merge_multisite_mps: mps dim1 {} != chiL {} on left-most site {}", multisite_mps.dimension(1),
                                   state.get_mps_site(sites.front()).get_chiL(), sites.front());
 
     if(multisite_mps.dimension(2) != state.get_mps_site(sites.back()).get_chiR())
-        throw except::logic_error("merge_multisite_mps: mps dim2 {} != chiR {} on right-most site", multisite_mps.dimension(2),
+        throw except::logic_error("merge_multisite_mps: mps dim2 {} != chiR {} on right-most site {}", multisite_mps.dimension(2),
                                   state.get_mps_site(sites.back()).get_chiR(), sites.back());
     if constexpr(settings::debug_merge or settings::debug) {
         auto t_dbg = tid::tic_scope("debug");
@@ -81,7 +81,8 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
 
     // Can't set center on one of sites if the current center is too far away: we would end up with interleaved A's and B sites
     bool center_in_sites = center_position == std::clamp<long>(center_position, safe_cast<long>(sites.front()), safe_cast<long>(sites.back()));
-    bool center_in_range = current_position == std::clamp<long>(current_position, safe_cast<long>(sites.front()) - 1, safe_cast<long>(sites.back()));
+    // bool center_in_range = current_position == std::clamp<long>(current_position, safe_cast<long>(sites.front()) - 1, safe_cast<long>(sites.back()));
+    bool center_in_range = current_position == std::clamp<long>(current_position, safe_cast<long>(sites.front()) - 1, safe_cast<long>(sites.back())  + 1);
     if(center_in_sites and not center_in_range)
         throw except::runtime_error("merge_multisite_mps: cannot merge multisite_mps {} with new center at {}: current center {} is too far", sites,
                                     center_position, current_position);
@@ -91,6 +92,8 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
     spin_dims.reserve(sites.size());
     for(const auto &pos : sites) {
         spin_dims.emplace_back(state.get_mps_site(pos).spin_dim());
+        assert(spin_dims.back() > 0);
+        assert(spin_prod <= std::numeric_limits<long>::max() / spin_dims.back());
         spin_prod *= spin_dims.back();
     }
     if(spin_prod != multisite_mps.dimension(0))
@@ -113,7 +116,7 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
             // Case 2, swap-move: A[3]LC[3]B[4] -> A[3]A[4]LC[4]V, current_position == 3, center_position == 4. Then LC[3] is thrown away
             // Case 4, deep-move: A[3]A[4]LC[4]B[5]B[6]B[7] -> A[3]A[4]A[5]A[6]LC[6]B[7], current_position == 5, center_position == 6. Then LC[4] is thrown
             // Takeaway: LC is only held when LC is on the left edge, turning a B into an A which needs an L
-            // It's important that the last V is a diagonal matrix, otherwise it would truncate the site to the right.
+            // It's important that the last V is a square matrix, otherwise it would truncate the site to the right.
             if(current_position + 1 == pos_frnt) lc_move = stash<Eigen::Tensor<Scalar, 1>>{mps.get_LC(), mps.get_truncation_error_LC(), sites.front()};
         }
         // Detect left-move
@@ -130,13 +133,10 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
             // Case 3, full-move: A[3]A[4]LC[4] -> U[2]LC[2]B[3]B[4], current_position == 3, center_position == 4. Then LC[4] becomes L[4] on B[4]
             // Case 4, deep-move: A[3]A[4]LC[4]B[5]B[6]B[7] -> A[3]LC[4]B[4]B[5]B[6]B[7], current_position == 4 center_position == 3. Then LC[4] is thrown
             // Takeaway: LC is only held when LC is on the right edge, turning an AC into a B which needs an L.
-            // It's important that the front U is a diagonal matrix, otherwise it would truncate the site to the left.
+            // It's important that the front U is a square matrix, otherwise it would truncate the site to the left.
 
             if(current_position == pos_back) lc_move = stash<Eigen::Tensor<Scalar, 1>>{mps.get_LC(), mps.get_truncation_error_LC(), pos_curr};
         }
-        // Note that one of the positions on the split may contain a new center, so we need to unset
-        // the center in our current state so we don't get duplicate centers
-        mps.unset_LC();
     }
 
     if constexpr(settings::verbose_merge)
@@ -144,6 +144,15 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
 
     // Split the multisite mps into single-site mps objects
     auto mps_list = tools::common::split::split_mps<Scalar>(multisite_mps, spin_dims, sites, center_position, svd_cfg);
+
+    // Note that one of the positions on the split may contain a new center, so we need to unset
+    // the center in our current state so we don't get duplicate centers
+    if(center_position != current_position && current_position >= 0) {
+        auto &mps = state.get_mps_site(current_position);
+        mps.unset_LC();
+    }
+
+
     // Sanity checks
     if(sites.size() != mps_list.size())
         throw std::runtime_error(
@@ -207,69 +216,6 @@ size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const
     return moves;
 }
 
-// template<typename Scalar>
-// bool tools::finite::mps::normalize_state(StateFinite<Scalar> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy) {
-//     // When a state needs to be normalized it's enough to "move" the center position around the whole chain.
-//     // Each move performs an SVD decomposition which leaves unitaries behind, effectively normalizing the state.
-//     // NOTE! It IS important to start with the current position.
-//     auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
-//     if(norm_policy == NormPolicy::IFNEEDED) {
-//         // We may only go ahead with a normalization if it's really needed.
-//         tools::log->trace("normalize_state: checking if needed");
-//         if(state.is_normalized_on_all_sites(normTol)) return false; // Return false, i.e. did "not" perform a normalization.
-//         // Otherwise, we just do the normalization
-//     }
-//
-//     // Save the current position, direction and center status
-//     auto dir   = state.get_direction();
-//     auto pos   = state.template get_position<long>();
-//     auto cnt   = pos >= 0;
-//     auto steps = 0;
-//     if(tools::log->level() <= spdlog::level::debug)
-//         tools::log->debug("normalize_state: {} old local norm = {:.16f} | pos {} | dir {} | bond dims {}", enum2sv(norm_policy),
-//                           fp(tools::finite::measure::norm(state)), pos, dir, tools::finite::measure::bond_dimensions(state));
-//
-//     // Start with SVD at the current center position
-//     // NOTE: You have thought that this is unnecessary and removed it, only to find bugs much later.
-//     //       In particular, the bond dimension will shrink too much when doing projections, if this step is skipped.
-//     //       This makes sure chiL and chiR differ at most by factor spin_dim when we start the normalization
-//     if(pos >= 0) {
-//         auto &mps = state.get_mps_site(pos);
-//         // Make sure that the bond dimension does not increase faster than spin_dim per site
-//         tools::finite::mps::merge_multisite_mps(state, mps.get_M(), {static_cast<size_t>(pos)}, pos, MergeEvent::NORM, svd_cfg, LogPolicy::SILENT);
-//     }
-//     // Now we can move around the chain until we return to the original status
-//     while(steps++ < 2 or not state.position_is_at(pos, dir, cnt)) move_center_point_single_site(state, svd_cfg);
-//     state.assert_validity();
-//     state.clear_measurements();
-//     state.clear_cache();
-//     if(not state.is_normalized_on_all_sites(normTol)) {
-//         for(const auto &mps : state.mps_sites) {
-//             bool normalized_tag = state.get_normalization_tags()[mps->template get_position<size_t>()];
-//             tools::log->warn("{} | is_normalized {:<7} | L norm {:.16f} | norm tag {}", mps->get_tag(), mps->is_normalized(),
-//                              fp(tenx::VectorMap(mps->get_L()).norm()), normalized_tag);
-//             if(mps->isCenter()) tools::log->warn("LC({}) | norm {:.16f}", mps->get_position(), fp(tenx::VectorMap(mps->get_LC()).norm()));
-//         }
-//         auto norm_error = std::abs(tools::finite::measure::norm(state) - RealScalar<Scalar>{1});
-//         throw except::runtime_error("normalize_state: normalization failed. state norm error {:.3e} | max allowed norm error {:.3e} | norm tags {}",
-//                                     fp(norm_error), fp(normTol), state.get_normalization_tags());
-//     }
-//
-//     if(svd_cfg and svd_cfg->rank_max and state.get_largest_bond() > svd_cfg->rank_max.value())
-//         throw except::logic_error("normalize_state: a bond dimension exceeds bond limit: {} > {}", tools::finite::measure::bond_dimensions(state),
-//                                   svd_cfg->rank_max.value());
-//     if(tools::log->level() <= spdlog::level::debug)
-//         tools::log->debug("normalize_state: new local norm = {:.16f} | pos {} | dir {} | bond dims {}", fp(tools::finite::measure::norm(state)), pos, dir,
-//                           tools::finite::measure::bond_dimensions(state));
-//     return true;
-// }
-// template bool tools::finite::mps::normalize_state(StateFinite<fp32> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy);
-// template bool tools::finite::mps::normalize_state(StateFinite<fp64> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy);
-// template bool tools::finite::mps::normalize_state(StateFinite<fp128> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy);
-// template bool tools::finite::mps::normalize_state(StateFinite<cx32> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy);
-// template bool tools::finite::mps::normalize_state(StateFinite<cx64> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy);
-// template bool tools::finite::mps::normalize_state(StateFinite<cx128> &state, std::optional<svd::config> svd_cfg, NormPolicy norm_policy);
-
 template<typename Scalar>
 void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices) {
     auto [mpos, L, R] = qm::mpo::sum_of_pauli_mpo<Scalar>(paulimatrices, state.get_length(), RandomizerMode::SELECT1);
@@ -285,6 +231,7 @@ template void tools::finite::mps::apply_random_paulis(StateFinite<cx128> &state,
 template<typename Scalar>
 void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const std::vector<std::string> &paulistrings) {
     std::vector<Eigen::MatrixXcd> paulimatrices;
+    paulimatrices.reserve(paulistrings.size());
     for(const auto &str : paulistrings) paulimatrices.emplace_back(qm::spin::half::get_pauli(str));
     apply_random_paulis(state, paulimatrices);
 }

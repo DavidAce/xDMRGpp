@@ -10,11 +10,41 @@
 #include "tools/common/log.h"
 using tools::finite::measure::RealScalar;
 
+enum class EntropyScale { LN, LOG2 };
+template<EntropyScale es, typename Scalar>
+[[nodiscard]] inline RealScalar<Scalar> von_neumann_entropy_from_schmidt(const Eigen::Tensor<Scalar, 1> &L) {
+    using Real = RealScalar<Scalar>;
+
+    // Eigen::Tensor uses Index for size(), but long is fine as loop counter too
+    const Eigen::Index n = L.size();
+    if(n <= 0) return Real{0};
+
+    Real sum = Real{0};
+
+#pragma omp parallel for reduction(+ : sum)
+    for(Eigen::Index i = 0; i < n; ++i) {
+        const Real p = std::abs(L(i) * L(i));
+
+        // Skip exact zeros and any negative junk
+        if(p <= Real{0}) continue;
+
+        // Accumulate -p * log(p)
+        if constexpr(es == EntropyScale::LN) {
+            sum += -p * std::log(p);
+        } else {
+            sum += -p * std::log2(p);
+        }
+    }
+
+    // Entropy should be nonnegative; guard small negative due to roundoff
+    sum = std::max(Real{0}, sum);
+    return sum;
+}
+
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::entanglement_entropy(const Eigen::Tensor<Scalar, 1> &L) {
     auto t_ent = tid::tic_scope("neumann_entropy", tid::level::highest);
-    auto S     = Eigen::Tensor<Scalar, 0>(-L.square().contract(L.square().log().eval(), tenx::idx({0}, {0})));
-    return std::abs(S(0));
+    return von_neumann_entropy_from_schmidt<EntropyScale::LN>(L);
 }
 
 template<typename Scalar>
@@ -77,12 +107,10 @@ RealScalar<Scalar> tools::finite::measure::entanglement_entropy_log2(const State
     const auto &mps = state.get_mps_site(pos_tgt);
     if(mps.isCenter()) {
         auto &LC = mps.get_LC();
-        auto  SE = Eigen::Tensor<Scalar, 0>(-LC.square().contract(LC.square().log2().eval(), tenx::idx({0}, {0})));
-        return std::abs(SE(0));
+        return von_neumann_entropy_from_schmidt<EntropyScale::LOG2>(LC);
     } else {
-        auto &L  = mps.get_L();
-        auto  SE = Eigen::Tensor<Scalar, 0>(-L.square().contract(L.square().log2().eval(), tenx::idx({0}, {0})));
-        return std::abs(SE(0));
+        auto &L = mps.get_L();
+        return von_neumann_entropy_from_schmidt<EntropyScale::LOG2>(L);
     }
 }
 
@@ -93,13 +121,13 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::entanglement_entropies_l
     entanglement_entropies.reserve(state.get_length() + 1);
     if(not state.has_center_point()) entanglement_entropies.emplace_back(0);
     for(const auto &mps : state.mps_sites) {
-        auto                    &L  = mps->get_L();
-        Eigen::Tensor<Scalar, 0> SE = -L.square().contract(L.square().log2().eval(), tenx::idx({0}, {0}));
-        entanglement_entropies.emplace_back(std::abs(SE(0)));
+        auto              &L  = mps->get_L();
+        RealScalar<Scalar> SE = von_neumann_entropy_from_schmidt<EntropyScale::LOG2>(L);
+        entanglement_entropies.emplace_back(SE);
         if(mps->isCenter()) {
             auto &LC = mps->get_LC();
-            SE       = -LC.square().contract(LC.square().log2().eval(), tenx::idx({0}, {0}));
-            entanglement_entropies.emplace_back(std::abs(SE(0)));
+            SE       = von_neumann_entropy_from_schmidt<EntropyScale::LOG2>(LC);
+            entanglement_entropies.emplace_back(SE);
         }
     }
     if(entanglement_entropies.size() != state.get_length() + 1) throw except::logic_error("entanglement_entropies.size() should be length+1");
@@ -116,24 +144,31 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::renyi_entropies(const St
     if(q == 3.0 and state.measurements.renyi_3) return state.measurements.renyi_3.value();
     if(q == 4.0 and state.measurements.renyi_4) return state.measurements.renyi_4.value();
     if(q == inf and state.measurements.renyi_inf) return state.measurements.renyi_inf.value();
-    auto                            t_ren = tid::tic_scope("renyi_entropy", tid::level::highest);
+    auto t_ren = tid::tic_scope("renyi_entropy", tid::level::highest);
+    using Real = RealScalar<Scalar>;
     std::vector<RealScalar<Scalar>> renyi_q;
     renyi_q.reserve(state.get_length() + 1);
     if(not state.has_center_point()) renyi_q.emplace_back(0);
     for(const auto &mps : state.mps_sites) {
-        const auto              &L = mps->get_L();
+        const auto &L = mps->get_L();
+        if(L.size() == 0) throw except::logic_error("renyi_entropies: empty bond L");
         Eigen::Tensor<Scalar, 0> RE;
-        if(q == inf)
-            RE(0) = RealScalar<Scalar>(-2.0) * std::log(L(0));
-        else
-            RE = RealScalar<Scalar>(1.0 / (1.0 - q)) * L.pow(RealScalar<Scalar>(2.0 * q)).sum().log();
+        if(q == inf) {
+            const auto Lmax = Eigen::Tensor<Real, 0>(L.abs().maximum());
+            const auto l0   = std::max<Real>(Lmax(0), std::numeric_limits<Real>::min());
+            RE(0)           = RealScalar<Scalar>(-2.0) * std::log(l0);
+        } else
+            RE = RealScalar<Scalar>(1.0 / (1.0 - q)) * L.pow(Real(2.0 * q)).sum().log();
         renyi_q.emplace_back(std::abs(RE(0)));
         if(mps->isCenter()) {
             const auto &LC = mps->get_LC();
-            if(q == inf)
-                RE(0) = RealScalar<Scalar>(-2.0) * std::log(LC(0));
-            else
-                RE = RealScalar<Scalar>(1.0 / (1.0 - q)) * LC.pow(RealScalar<Scalar>(2.0 * q)).sum().log();
+            if(LC.size() == 0) throw except::logic_error("renyi_entropies: empty bond LC");
+            if(q == inf) {
+                const auto LCmax = Eigen::Tensor<Real, 0>(LC.abs().maximum());
+                const auto lc0   = std::max<Real>(LCmax(0), std::numeric_limits<Real>::min());
+                RE(0)            = Real(-2.0) * std::log(lc0);
+            } else
+                RE = RealScalar<Scalar>(1.0 / (1.0 - q)) * LC.pow(Real(2.0 * q)).sum().log();
             renyi_q.emplace_back(std::abs(RE(0)));
         }
     }

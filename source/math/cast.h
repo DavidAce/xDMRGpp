@@ -10,9 +10,7 @@
 #include <utility>
 
 [[noreturn]] inline void cast_fail(const char *msg) noexcept {
-#ifndef NDEBUG
     std::fprintf(stderr, "cast failed: %s\n", msg);
-#endif
     std::abort();
 }
 

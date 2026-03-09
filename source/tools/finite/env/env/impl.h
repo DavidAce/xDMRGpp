@@ -236,7 +236,8 @@ void tools::finite::env::rebuild_edges_ene(const StateFinite<Scalar> &state, con
         if(id_here != env_here.get_unique_id()) env_pos_log.emplace_back(env_here.get_position());
         if(id_rght != env_rght.get_unique_id()) env_pos_log.emplace_back(env_rght.get_position());
     }
-    if(not env_pos_log.empty()) tools::log->trace("rebuild_edges_ene: rebuilt eneL edges: {}", env_pos_log);
+    if constexpr(settings::debug_edges)
+        if(not env_pos_log.empty()) tools::log->trace("rebuild_edges_ene: rebuilt eneL edges: {}", env_pos_log);
 
     env_pos_log.clear();
     if constexpr(settings::debug_edges)
@@ -257,8 +258,10 @@ void tools::finite::env::rebuild_edges_ene(const StateFinite<Scalar> &state, con
         if(id_here != env_here.get_unique_id()) env_pos_log.emplace_back(env_here.get_position());
         if(id_left != env_left.get_unique_id()) env_pos_log.emplace_back(env_left.get_position());
     }
-    std::reverse(env_pos_log.begin(), env_pos_log.end());
-    if(not env_pos_log.empty()) tools::log->trace("rebuild_edges_ene: rebuilt eneR edges: {}", env_pos_log);
+    if constexpr(settings::debug_edges) {
+        std::reverse(env_pos_log.begin(), env_pos_log.end());
+        if(not env_pos_log.empty()) tools::log->trace("rebuild_edges_ene: rebuilt eneR edges: {}", env_pos_log);
+    }
     if(not edges.get_env_eneL(posL_active).has_block()) throw except::logic_error("rebuild_edges_ene: active env eneL has undefined block");
     if(not edges.get_env_eneR(posR_active).has_block()) throw except::logic_error("rebuild_edges_ene: active env eneR has undefined block");
 }
@@ -322,7 +325,8 @@ void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, con
         if(id_rght != env_rght.get_unique_id()) env_pos_log.emplace_back(env_rght.get_position());
     }
 
-    if(not env_pos_log.empty()) tools::log->trace("rebuild_edges_var: rebuilt varL edges: {}", env_pos_log);
+    if constexpr(settings::debug_edges)
+        if(not env_pos_log.empty()) tools::log->trace("rebuild_edges_var: rebuilt varL edges: {}", env_pos_log);
     env_pos_log.clear();
     if constexpr(settings::debug_edges) {
         tools::log->trace("rebuild_edges_var: pos {} | dir {} | "
@@ -343,8 +347,10 @@ void tools::finite::env::rebuild_edges_var(const StateFinite<Scalar> &state, con
         if(id_here != env_here.get_unique_id()) env_pos_log.emplace_back(env_here.get_position());
         if(id_left != env_left.get_unique_id()) env_pos_log.emplace_back(env_left.get_position());
     }
-    std::reverse(env_pos_log.begin(), env_pos_log.end());
-    if(not env_pos_log.empty()) tools::log->trace("rebuild_edges_var: rebuilt varR edges: {}", env_pos_log);
+    if constexpr(settings::debug_edges) {
+        std::reverse(env_pos_log.begin(), env_pos_log.end());
+        if(not env_pos_log.empty()) tools::log->trace("rebuild_edges_var: rebuilt varR edges: {}", env_pos_log);
+    }
     if(not edges.get_env_varL(posL_active).has_block()) throw except::logic_error("rebuild_edges_var: active env varL has undefined block");
     if(not edges.get_env_varR(posR_active).has_block()) throw except::logic_error("rebuild_edges_var: active env varR has undefined block");
 }

@@ -33,7 +33,7 @@ StateInfinite<Scalar> &StateInfinite<Scalar>::operator=(StateInfinite &&other) n
 
 /* clang-format off */
 template<typename Scalar>
-StateInfinite<Scalar>::StateInfinite(const StateInfinite &other) noexcept :
+StateInfinite<Scalar>::StateInfinite(const StateInfinite &other) :
     MPS_A(std::make_unique<MpsSite<Scalar>>(*other.MPS_A)),
     MPS_B(std::make_unique<MpsSite<Scalar>>(*other.MPS_B)),
     swapped(other.swapped),
@@ -44,7 +44,7 @@ StateInfinite<Scalar>::StateInfinite(const StateInfinite &other) noexcept :
     lowest_recorded_variance(other.lowest_recorded_variance){
 }
 template<typename Scalar>
-StateInfinite<Scalar> & StateInfinite<Scalar>::operator=(const StateInfinite &other) noexcept{
+StateInfinite<Scalar> & StateInfinite<Scalar>::operator=(const StateInfinite &other){
     if(this == &other) return *this;
     MPS_A                    = std::make_unique<MpsSite<Scalar>>(*other.MPS_A);
     MPS_B                    = std::make_unique<MpsSite<Scalar>>(*other.MPS_B);
@@ -98,15 +98,15 @@ AlgorithmType StateInfinite<Scalar>::get_algorithm() const {
 }
 
 template<typename Scalar>
-std::pair<size_t, size_t> StateInfinite<Scalar>::get_positions() {
+std::pair<size_t, size_t> StateInfinite<Scalar>::get_positions() const {
     return std::make_pair(MPS_A->get_position(), MPS_B->get_position());
 }
 template<typename Scalar>
-size_t StateInfinite<Scalar>::get_positionA() {
+size_t StateInfinite<Scalar>::get_positionA() const {
     return MPS_A->get_position();
 }
 template<typename Scalar>
-size_t StateInfinite<Scalar>::get_positionB() {
+size_t StateInfinite<Scalar>::get_positionB() const {
     return MPS_B->get_position();
 }
 
@@ -199,18 +199,35 @@ template<typename Scalar> const Eigen::Tensor<Scalar, 1> &StateInfinite<Scalar>:
 
 template<typename Scalar> const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::GA() const {
     if(cache.GA) return cache.GA.value();
-    else {
-        Eigen::Tensor<Scalar,1> L_inv = MPS_A->get_L().inverse();
-        cache.GA = tools::common::contraction::contract_bnd_mps(L_inv, MPS_A->get_M_bare());
-    }
+    auto safe_inv = [](const Eigen::Tensor<Scalar,1> &L) {
+        using RealScalar = decltype(std::real(std::declval<Scalar>()));
+        constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
+        Eigen::Tensor<Scalar,1> Linv(L.dimensions());
+        for(Eigen::Index i = 0; i < L.size(); ++i) {
+            const auto a = std::abs(L(i));
+            Linv(i) = (a > eps) ? Scalar{1} / L(i) : Scalar{0};
+        }
+        return Linv;
+    };
+
+    Eigen::Tensor<Scalar,1> L_inv = safe_inv(MPS_A->get_L());
+    cache.GA = tools::common::contraction::contract_bnd_mps(L_inv, MPS_A->get_M_bare());
     return cache.GA.value();
 }
 template<typename Scalar> const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::GB() const {
     if(cache.GB) return cache.GB.value();
-    else{
-        Eigen::Tensor<Scalar,1> L_inv = MPS_B->get_L().inverse();
-        cache.GB = tools::common::contraction::contract_mps_bnd(MPS_B->get_M_bare(), L_inv);
-    }
+    auto safe_inv = [](const Eigen::Tensor<Scalar,1> &L) {
+        using RealScalar = decltype(std::real(std::declval<Scalar>()));
+        constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
+        Eigen::Tensor<Scalar,1> Linv(L.dimensions());
+        for(Eigen::Index i = 0; i < L.size(); ++i) {
+            const auto a = std::abs(L(i));
+            Linv(i) = (a > eps) ? Scalar{1} / L(i) : Scalar{0};
+        }
+        return Linv;
+    };
+    Eigen::Tensor<Scalar,1> L_inv = safe_inv(MPS_B->get_L());
+    cache.GB = tools::common::contraction::contract_mps_bnd(MPS_B->get_M_bare(), L_inv);
     return cache.GB.value();
 }
 
@@ -233,9 +250,16 @@ const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::get_2site_mps(Scalar norm
 
      @endverbatim
  */
+    if(cache.twosite_mps) {
+        // If norm is ever used, enforce that it stays consistent.
+        if(cache.twosite_norm && cache.twosite_norm.value() != norm) {
+            tools::log->warn("get_2site_mps: called with different norm (old {}, new {}) while cached", fp(cache.twosite_norm.value()), fp(norm));
+        }
+        return cache.twosite_mps.value();
+    }
 
-    if(cache.twosite_mps) return cache.twosite_mps.value();
-    cache.twosite_mps = tools::common::contraction::contract_mps_mps(A(), B()) / norm;
+    cache.twosite_norm = norm;
+    cache.twosite_mps  = tools::common::contraction::contract_mps_mps(A(), B()) / norm;
     return cache.twosite_mps.value();
 }
 
@@ -397,7 +421,7 @@ void StateInfinite<Scalar>::set_mps(const Eigen::Tensor<Scalar, 1> &LA, const Ei
                                     const Eigen::Tensor<Scalar, 3> &MB, const Eigen::Tensor<Scalar, 1> &LB) {
     MPS_A->set_mps(MA, LA, 0, "A");
     MPS_A->set_LC(LC);
-    MPS_B->set_mps(MB, LB, 0, "B");
+    MPS_B->set_mps(MB, LB, 1, "B");
     clear_cache();
 }
 

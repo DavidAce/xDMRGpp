@@ -22,16 +22,17 @@ class StateInfinite {
 
     private:
     struct Cache {
-        std::optional<Eigen::Tensor<Scalar, 3>> twosite_mps = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 4>> theta       = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 3>> GA          = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 3>> GB          = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 2>> LC_diag     = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 2>> LA_diag     = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 2>> LB_diag     = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 2>> LC_diag_inv = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 2>> LA_diag_inv = std::nullopt;
-        std::optional<Eigen::Tensor<Scalar, 2>> LB_diag_inv = std::nullopt;
+        std::optional<Scalar>                   twosite_norm = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 3>> twosite_mps  = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 4>> theta        = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 3>> GA           = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 3>> GB           = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 2>> LC_diag      = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 2>> LA_diag      = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 2>> LB_diag      = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 2>> LC_diag_inv  = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 2>> LA_diag_inv  = std::nullopt;
+        std::optional<Eigen::Tensor<Scalar, 2>> LB_diag_inv  = std::nullopt;
     };
 
     std::unique_ptr<MpsSite<Scalar>> MPS_A;
@@ -47,17 +48,17 @@ class StateInfinite {
 
     public:
     StateInfinite();
-    ~StateInfinite();                                              // Read comment on implementation
-    StateInfinite(StateInfinite &&other) noexcept;                 // default move ctor
-    StateInfinite &operator=(StateInfinite &&other) noexcept;      // default move assign
-    StateInfinite(const StateInfinite &other) noexcept;            // copy ctor
-    StateInfinite &operator=(const StateInfinite &other) noexcept; // copy assign
+    ~StateInfinite();                                         // Read comment on implementation
+    StateInfinite(StateInfinite &&other) noexcept;            // default move ctor
+    StateInfinite &operator=(StateInfinite &&other) noexcept; // default move assign
+    StateInfinite(const StateInfinite &other);                // copy ctor
+    StateInfinite &operator=(const StateInfinite &other);     // copy assign
 
     template<typename T>
-    StateInfinite(const StateInfinite<T> &other) noexcept;
+    StateInfinite(const StateInfinite<T> &other);
 
     template<typename T>
-    StateInfinite &operator=(const StateInfinite<T> &other) noexcept;
+    StateInfinite &operator=(const StateInfinite<T> &other);
     // {
     //     if constexpr(std::is_same_v<Scalar, T>) {
     //         if(this == &other) return *this; // check for self-assignment
@@ -88,9 +89,9 @@ class StateInfinite {
     [[nodiscard]] bool                      has_nan() const;
     [[nodiscard]] bool                      is_swapped() const;
     [[nodiscard]] double                    get_truncation_error() const;
-    [[nodiscard]] std::pair<size_t, size_t> get_positions();
-    [[nodiscard]] size_t                    get_positionA();
-    [[nodiscard]] size_t                    get_positionB();
+    [[nodiscard]] std::pair<size_t, size_t> get_positions() const;
+    [[nodiscard]] size_t                    get_positionA() const;
+    [[nodiscard]] size_t                    get_positionB() const;
     [[nodiscard]] long                      chiC() const;
     [[nodiscard]] long                      chiA() const;
     [[nodiscard]] long                      chiB() const;

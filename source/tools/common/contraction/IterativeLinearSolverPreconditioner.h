@@ -55,7 +55,7 @@ class IterativeLinearSolverPreconditioner {
     Eigen::Index    iterations() const { return m_iterations; }
     double          elapsed_time() const { return m_time_elapsed; }
     double          time_jacobi() const { return m_time_jcb; }
-    double          time_chebyshev() const { return m_time_jcb; }
+    double          time_chebyshev() const { return m_time_chebyshev; }
     EIGEN_CONSTEXPR Eigen::Index rows() const noexcept { return matrix->rows(); }
     EIGEN_CONSTEXPR Eigen::Index cols() const noexcept { return matrix->cols(); }
 
@@ -151,13 +151,13 @@ class IterativeLinearSolverPreconditioner {
         };
 
         // Apply the jacobi preconditioner up to jcbNumPasses
-        VectorType tmp = b;
+        temp = b;
         for(Eigen::Index jcbPass = 0; jcbPass < config->jacobi.jcbNumPasses; ++jcbPass) {
             // Handle overlapping blocks with "coloring": strided passes to make sure we
             // don't add up overlapping blocks in parallel (which would cause a data race)
             x.setZero(b.size());
-            for(Eigen::Index color = 0; color < config->jacobi.jcbMaxMultiplicity; ++color) { pass(color, tmp, x); }
-            if(jcbPass + 1 < config->jacobi.jcbNumPasses) tmp.swap(x);
+            for(Eigen::Index color = 0; color < config->jacobi.jcbMaxMultiplicity; ++color) { pass(color, temp, x); }
+            if(jcbPass + 1 < config->jacobi.jcbNumPasses) temp.swap(x);
         }
 
         m_iterations++;
@@ -175,7 +175,7 @@ class IterativeLinearSolverPreconditioner {
         assert(y.allFinite());
         if constexpr(MatrixLikeType::has_projector_op) {
             // Project out an operator if present here
-            y = matrix->ProjectOpL(b);
+            matrix->ProjectOpL(b, y); // y = P_L b
         }
 
         x.setZero(y.size()); // Clear
@@ -209,7 +209,8 @@ class IterativeLinearSolverPreconditioner {
 
         if constexpr(MatrixLikeType::has_projector_op) {
             // Project out an operator if present here
-            x = matrix->ProjectOpR(x);
+            matrix->ProjectOpR(x, temp); //  temp = P_R x
+            x.swap(temp);
         }
         assert(x.allFinite());
 
@@ -271,7 +272,8 @@ class IterativeLinearSolverPreconditioner {
         // if constexpr(std::is_same_v<RealScalar, double>) std::printf("[coarse] quadratic form rᵀ(Z C Zᵀ) r = %.3e\n", quad);
 
         if constexpr(MatrixLikeType::has_projector_op) {
-            x.noalias() += matrix->ProjectOpR(Zalpha);
+            matrix->ProjectOpR(Zalpha, temp);
+            x.noalias() += temp;
         } else {
             x.noalias() += Zalpha;
         }

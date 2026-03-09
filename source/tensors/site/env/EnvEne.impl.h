@@ -28,28 +28,59 @@ EnvEne<Scalar> EnvEne<Scalar>::enlarge(const MpsSite<Scalar> &mps, const MpoSite
             throw except::logic_error("EnvEne<Scalar>::enlarge: {}{}[{}]: All positions are not equal: env {} | mps {} | mpo {}", tag, side, get_position(),
                                       get_position(), mps.get_position(), mpo.get_position());
 
-    EnvEne<Scalar> env = *this;
-    if(env.sites == 0 and (not blkx2 or blkx2->size() == 0)) {
+    EnvEne<Scalar> env;
+    env.side     = this->side;
+    env.tag      = "ene";
+    env.position = this->position;
+    env.sites    = this->sites;
+    env.blkx2    = std::make_unique<x2::Tensor<Scalar, 3>>();
+
+    if(env.sites == 0 and (!this->blkx2 or this->blkx2->size() == 0)) {
         env.set_edge_dims(mps, mpo);
         env.position = mps.get_position();
         return env;
     }
-    env.enlarge(mps.template get_M_bare_as<Scalar>(), mpo.template MPO_as<Scalar>()); // calls base
 
-    // Update positions assuming this is a finite chain.
-    // This needs to be corrected (on the right side) on infinite chains
+    // Build env.blkx2 directly from *this
+    env.build_blkx2(this->get_blkx2(), mps.template get_M_bare_as<Scalar>(), mpo.template MPO_as<Scalar>());
+    env.sites = this->sites + 1;
+
+    // Update position
     if(env.side == "L")
         env.position = mps.get_position() + 1;
     else if(env.side == "R")
         env.position = mps.get_position() - 1;
     else
-        throw except::logic_error("Expected environment side L or R, got: " + side);
+        throw except::logic_error("Expected environment side L or R, got: {}", env.side);
 
-    env.tag = "ene";
-    // Save the hash id's used to create the new block in env
-    env.unique_id_env = get_unique_id();
+    // Save ids
+    env.unique_id_env = this->get_unique_id();
     env.unique_id_mps = mps.get_unique_id();
     env.unique_id_mpo = mpo.get_unique_id();
+    env.unique_id     = std::nullopt;
+
+    // EnvEne<Scalar> env = *this;
+    // if(env.sites == 0 and (not blkx2 or blkx2->size() == 0)) {
+    //     env.set_edge_dims(mps, mpo);
+    //     env.position = mps.get_position();
+    //     return env;
+    // }
+    // env.enlarge(mps.template get_M_bare_as<Scalar>(), mpo.template MPO_as<Scalar>()); // calls base
+    //
+    // // Update positions assuming this is a finite chain.
+    // // This needs to be corrected (on the right side) on infinite chains
+    // if(env.side == "L")
+    //     env.position = mps.get_position() + 1;
+    // else if(env.side == "R")
+    //     env.position = mps.get_position() - 1;
+    // else
+    //     throw except::logic_error("Expected environment side L or R, got: " + side);
+    //
+    // env.tag = "ene";
+    // // Save the hash id's used to create the new block in env
+    // env.unique_id_env = get_unique_id();
+    // env.unique_id_mps = mps.get_unique_id();
+    // env.unique_id_mpo = mpo.get_unique_id();
     if constexpr(settings::debug_edges_ene) {
         tools::log->trace("EnvEne::enlarge(mps,mpo): side({}), pos({}): unique_id_env: {}", side, get_position(), env.unique_id_env.value());
         tools::log->trace("EnvEne::enlarge(mps,mpo): side({}), pos({}): unique_id_mps: {}", side, get_position(), env.unique_id_mps.value());
@@ -184,7 +215,8 @@ void EnvEne<Scalar>::set_blkx2(const x2::Tensor<Scalar, 3> &blk, const EnvEne &e
 
     auto envinfo = tools::common::contraction::internal::get_info_env();
     if(envinfo.backend == ContractionBackend::X2) {
-        blkx2->renorm();unique_id = std::nullopt;
+        blkx2->renorm();
+        unique_id = std::nullopt;
     }
 
     // Store id's to objects used to create this env.

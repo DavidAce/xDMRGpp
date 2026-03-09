@@ -61,12 +61,6 @@ void EdgesInfinite<Scalar>::eject_edges() {
     varR->clear();
 }
 
-template<typename T, typename = std::void_t<>>
-struct has_validity : public std::false_type {};
-template<typename T>
-struct has_validity<T, std::void_t<decltype(std::declval<T>().assertValidity())>> : public std::true_type {};
-template<typename T>
-inline constexpr bool has_validity_v = has_validity<T>::value;
 
 template<typename Scalar>
 size_t EdgesInfinite<Scalar>::get_length() const {

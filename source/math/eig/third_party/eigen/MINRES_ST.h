@@ -8,22 +8,28 @@
 // Modifications:
 //   Copyright (C) 2025 David Aceituno Chavez <aceituno@kth.se>
 //   - Renamed the class MINRES -> MINRES_ST to avoid collision with the original.
-//   - Added Stall Termination (ST) logic in the MINRES loop.
+//   - Added optional stall termination logic based on history statistics.
+//   - Added diagnostics (rrnorm/deltax) and configurable correction checks.
+//   - Adjusted the stopping metric to use a consistent preconditioned residual norm (when enabled).
 //
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-
 #ifndef EIGEN_MINRES_ST_H
 #define EIGEN_MINRES_ST_H
 
-#include <unsupported/Eigen/IterativeSolvers>
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <deque>
+#include <limits>
+#include <type_traits>
+#include <unsupported/Eigen/IterativeSolvers>
+
 namespace Eigen {
 
     namespace internal {
-
         /** \internal Low-level MINRES algorithm
          * \param mat The matrix A
          * \param rhs The right hand side vector b
@@ -34,91 +40,148 @@ namespace Eigen {
          * \param tol_error On input the tolerance error, on output an estimation of the relative error.
          */
         template<typename MatrixType, typename Rhs, typename Dest, typename Preconditioner>
-        EIGEN_DONT_INLINE
-        void minres_st(const MatrixType& mat, const Rhs& rhs, Dest& x,
-                    const Preconditioner& precond, Index& iters,
-                    typename Dest::RealScalar& tol_error)
-        {
+        EIGEN_DONT_INLINE void minres_st(const MatrixType &mat, const Rhs &rhs, Dest &x, const Preconditioner &precond, Index &iters,
+                                         typename Dest::RealScalar &tol_error) {
             using std::sqrt;
-            typedef typename Dest::RealScalar RealScalar;
-            typedef typename Dest::Scalar Scalar;
-            typedef Matrix<Scalar,Dynamic,1> VectorType;
+            typedef typename Dest::RealScalar  RealScalar;
+            typedef typename Dest::Scalar      Scalar;
+            typedef Matrix<Scalar, Dynamic, 1> VectorType;
 
             // Check for zero rhs
-            const RealScalar rhsNorm2(rhs.squaredNorm());
-            if(rhsNorm2 == 0)
-            {
+            const RealScalar rhsNorm2_euclidean(rhs.squaredNorm());
+            if(rhsNorm2_euclidean == 0) {
                 x.setZero();
-                iters = 0;
+                iters     = 0;
                 tol_error = 0;
                 return;
             }
 
             // initialize
-            const Index maxIters(iters);  // initialize maxIters to iters
-            const Index N(mat.cols());    // the size of the matrix
+            const Index maxIters(iters); // initialize maxIters to iters
+            const Index N(mat.cols());   // the size of the matrix
 
+            struct Stats {
+                RealScalar  avg       = RealScalar{1};
+                RealScalar  sdv       = RealScalar{1};
+                RealScalar  rel_sdv   = RealScalar{1}; // sdv / |avg|, keep if you still want it
+                RealScalar  slope_avg = RealScalar{0}; // mean (y_i - y_{i-1})/dt
+                RealScalar  slope_sdv = RealScalar{0}; // stddev of those slopes
+                std::size_t n         = 0;
+            };
 
-            // BEGIN MINRES -> MINRES_ST
-            auto get_stats = [&](const std::deque<RealScalar>& a, bool sample = true) -> std::tuple<RealScalar, RealScalar, RealScalar> {
-                const std::size_t n = a.size();
-                static constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
-                if(n == 0) return {1,1,1};
-                if(sample && n < 2) return {1,1,1};
+            auto get_stats = [&](const std::deque<RealScalar> &y, RealScalar dt = RealScalar{1}, bool sample = true) -> Stats {
+                Stats s;
+                s.n = y.size();
+
+                static constexpr RealScalar eps = std::numeric_limits<RealScalar>::epsilon();
+
+                if(s.n == 0) return s;
+                if(sample && s.n < 2) return s;
 
                 // Pass 1: average
                 RealScalar sum = 0;
-                for(const auto& elem : a) sum += elem;
-                const RealScalar avg = sum / n;
+                for(const auto &yi : y) { sum += yi; }
+                s.avg = sum / static_cast<RealScalar>(s.n);
 
-                // Pass 2: sum of squared deviations
+                // Pass 2: standard deviation
                 RealScalar ss = 0;
-                for(const auto& elem : a) {
-                    const RealScalar d = elem - avg;
+                for(const auto &yi : y) {
+                    const RealScalar d = yi - s.avg;
                     ss += d * d;
                 }
+                RealScalar var = sample ? (ss / static_cast<RealScalar>(s.n - 1)) : (ss / static_cast<RealScalar>(s.n));
 
-                RealScalar var = sample ? (ss / static_cast<RealScalar>(n - 1))
-                                         : (ss / static_cast<RealScalar>(n));
-                if(var < 0) var = 0; // tiny negative from roundoff, just in case
-                auto sdv = std::sqrt(var);
-                return {avg, sdv, sdv/std::max(RealScalar{eps}, std::abs(avg)) };
+                if(var < 0) var = 0;
+                s.sdv     = std::sqrt(var);
+                s.rel_sdv = s.sdv / std::max(eps, std::abs(s.avg));
+
+                // Averaged slope over the window: mean of finite differences.
+                // d_i = (y_i - y_{i-1}) / dt, for i=1..n-1
+                dt = std::max(dt, RealScalar{1}); // avoid divide-by-zero or silly dt
+
+                const std::size_t m    = s.n - 1;
+                RealScalar        dsum = 0;
+                for(std::size_t i = 1; i < s.n; ++i) { dsum += (y[i] - y[i - 1]) / dt; }
+                s.slope_avg = dsum / static_cast<RealScalar>(m);
+
+                // Stddev of slopes (optional but helpful to see “spiky vs smooth”)
+                if(m >= 2) {
+                    RealScalar dss = 0;
+                    for(std::size_t i = 1; i < s.n; ++i) {
+                        RealScalar di = (y[i] - y[i - 1]) / dt;
+                        RealScalar dd = di - s.slope_avg;
+                        dss += dd * dd;
+                    }
+                    RealScalar dvar = sample ? (dss / static_cast<RealScalar>(m - 1)) : (dss / static_cast<RealScalar>(m));
+                    if(dvar < 0) dvar = 0;
+                    s.slope_sdv = std::sqrt(dvar);
+                } else {
+                    s.slope_sdv = RealScalar{0};
+                }
+
+                return s;
             };
 
-
-            std::deque<RealScalar> error_history;
-            // END MINRES -> MINRES_ST
             // Initialize preconditioned Lanczos
-            VectorType v_old(N); // will be initialized inside loop
-            VectorType v( VectorType::Zero(N) ); //initialize v
-            VectorType v_new(rhs-mat*x); //initialize v_new
-            RealScalar residualNorm2 = v_new.squaredNorm();
-            // RealScalar r0Norm2 = residualNorm2;
+            VectorType v_old(N);               // will be initialized inside loop
+            VectorType v(VectorType::Zero(N)); // initialize v
+            VectorType v_new(rhs - mat * x);   // initialize v_new
 
-            const RealScalar threshold2 = (tol_error * tol_error) * rhsNorm2; // convergence threshold (compared to residualNorm2)
+            // If the initial guess already solves the system, exit
+            if(v_new.squaredNorm() == RealScalar{0}) {
+                iters     = 0;
+                tol_error = 0;
+                return;
+            }
 
+            VectorType w(N);                         // will be initialized inside loop
+            VectorType w_new = precond.solve(v_new); // initialize w_new
 
-            VectorType w(N); // will be initialized inside loop
-            VectorType w_new(precond.solve(v_new)); // initialize w_new
-//            RealScalar beta; // will be initialized inside loop
             RealScalar beta_new2 = numext::real(v_new.dot(w_new));
             eigen_assert(beta_new2 > RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
-            RealScalar beta_new(sqrt(beta_new2));
-            eigen_assert(beta_new > RealScalar{0});
-            const RealScalar beta_one(beta_new);
-            // Initialize other variables
-            RealScalar c(1.0); // the cosine of the Givens rotation
-            RealScalar c_old(1.0);
-            RealScalar s(0.0); // the sine of the Givens rotation
-            RealScalar s_old(0.0); // the sine of the Givens rotation
-            VectorType p_oold(N); // will be initialized in loop
-            VectorType p_old(VectorType::Zero(N)); // initialize p_old=0
-            VectorType p(p_old); // initialize p=0
-            RealScalar eta(1.0);
+            if(beta_new2 == RealScalar{0}) {
+                iters     = 0;
+                tol_error = 0;
+                return;
+            }
 
-            iters = 0; // reset iters
-            while ( iters < maxIters )
-            {
+            RealScalar beta_new = std::sqrt(beta_new2);
+            eigen_assert(beta_new > RealScalar{0});
+            const RealScalar beta_one = beta_new;
+
+            // Interpretation:
+            // rhsNorm2 := ||r0||_{M^{-1}}^2 = r0^T M^{-1} r0
+            // residualNorm2 := estimated ||rk||_{M^{-1}}^2 tracked by MINRES scalar recursion
+            RealScalar rhsNorm2      = beta_new2;
+            RealScalar residualNorm2 = beta_new2;
+
+            // Relative residual in the preonditioned norm
+            RealScalar       rrnorm0    = std::sqrt(residualNorm2 / rhsNorm2);
+            const RealScalar threshold2 = (tol_error * tol_error) * rhsNorm2; // convergence threshold (compared to residualNorm2)
+
+            // Initialize other variables
+            RealScalar c     = 1.0; // the cosine of the Givens rotation
+            RealScalar c_old = 1.0;
+            RealScalar s     = 0.0;                 // the sine of the Givens rotation
+            RealScalar s_old = 0.0;                 // the sine of the Givens rotation
+            VectorType p_oold(N);                   // will be initialized in loop
+            VectorType p_old = VectorType::Zero(N); // initialize p_old=0
+            VectorType p     = p_old;               // initialize p=0
+            RealScalar eta   = 1.0;
+
+            iters                    = 0; // reset iters
+            int minres_has_converged = 0;
+
+            constexpr int          rate_rrnorm      = 1;   // How often to save into history
+            constexpr int          rate_deltax      = 10;  // How often to save into history
+            // constexpr int          rate_resid2      = 100; // How often to correct the residual norm
+            constexpr int          rate_checks      = 10;  // How often to check convergence/saturation
+            constexpr int          rate_printf      = 10;  // How often to print results
+            constexpr size_t       max_history_size = 50;
+            std::deque<RealScalar> rrnorm_history;
+            std::deque<RealScalar> deltax_history;
+
+            while(iters < maxIters) {
                 // Preconditioned Lanczos
                 /* Note that there are 4 variants on the Lanczos algorithm. These are
                  * described in Paige, C. C. (1972). Computational variants of
@@ -129,86 +192,133 @@ namespace Eigen {
                  * Systems, 2003 p.173. For the preconditioned version see
                  * A. Greenbaum, Iterative Methods for Solving Linear Systems, SIAM (1987).
                  */
-                const RealScalar beta(beta_new);
-                v_old = v; // update: at first time step, this makes v_old = 0 so value of beta doesn't matter
-                v_new /= beta_new; // overwrite v_new for next iteration
-                w_new /= beta_new; // overwrite w_new for next iteration
-                v = v_new; // update
-                w = w_new; // update
-                v_new.noalias() = mat*w - beta*v_old; // compute v_new
+                if(beta_new == RealScalar{0}) {
+                    // happy breakdown: Krylov process terminated
+                    break;
+                }
+                const RealScalar beta = beta_new;
+                v_old                 = v;                       // update: at first time step, this makes v_old = 0 so value of beta doesn't matter
+                v_new /= beta_new;                               // overwrite v_new for next iteration
+                w_new /= beta_new;                               // overwrite w_new for next iteration
+                v                      = v_new;                  // update
+                w                      = w_new;                  // update
+                v_new.noalias()        = mat * w - beta * v_old; // compute v_new
                 const RealScalar alpha = numext::real(v_new.dot(w));
-                v_new -= alpha*v; // overwrite v_new
-                w_new = precond.solve(v_new); // overwrite w_new
-                beta_new2 = v_new.dot(w_new); // compute beta_new
+                v_new -= alpha * v;                         // overwrite v_new
+                w_new     = precond.solve(v_new);           // overwrite w_new
+                beta_new2 = numext::real(v_new.dot(w_new)); // compute beta_new
                 eigen_assert(beta_new2 >= RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
-                beta_new = sqrt(beta_new2); // compute beta_new
-
+                beta_new = std::sqrt(beta_new2); // compute beta_new
 
                 // Givens rotation
-                const RealScalar r2 =s*alpha+c*c_old*beta; // s, s_old, c and c_old are still from previous iteration
-                const RealScalar r3 =s_old*beta; // s, s_old, c and c_old are still from previous iteration
-                const RealScalar r1_hat=c*alpha-c_old*s*beta;
-                const RealScalar r1 = std::hypot(r1_hat, beta_new) ;// sqrt( std::pow(r1_hat,2) + std::pow(beta_new,2) );
-                c_old = c; // store for next iteration
-                s_old = s; // store for next iteration
-                c=r1_hat/r1; // new cosine
-                s=beta_new/r1; // new sine
+                const RealScalar r2     = s * alpha + c * c_old * beta; // s, s_old, c and c_old are still from previous iteration
+                const RealScalar r3     = s_old * beta;                 // s, s_old, c and c_old are still from previous iteration
+                const RealScalar r1_hat = c * alpha - c_old * s * beta;
+                const RealScalar r1     = std::hypot(r1_hat, beta_new); // sqrt( std::pow(r1_hat,2) + std::pow(beta_new,2) );
+                if(r1 == RealScalar{0}) {
+                    std::printf(" -- minres: r1 == 0 ... quitting");
+                    break;
+                }
+                c_old = c;             // store for next iteration
+                s_old = s;             // store for next iteration
+                c     = r1_hat / r1;   // new cosine
+                s     = beta_new / r1; // new sine
 
                 // Update solution
-                p_oold = p_old;
-                p_old = p;
-                p.noalias()=(w-r2*p_old-r3*p_oold) /r1; // IS NOALIAS REQUIRED?
-                x += beta_one*c*eta*p;
-                /* Update the squared residual with s*s. Note that this is the estimated residual.
-                The real residual |Ax-b|^2 may be slightly larger */
-                // if(iters % 100 == 0) {
-                //     residualNorm2 *= s*s;
-                //     RealScalar residualNorm2_true =  (rhs - mat * x).squaredNorm();// Use the true residual to avoid drift
-                //     std::printf("corrected residualnorm2 %.5e -> %.5e\n",residualNorm2, residualNorm2_true );
-                //     residualNorm2 = residualNorm2_true;
-                // }else {
-                //     residualNorm2 *= s*s;
+                p_oold                = p_old;
+                p_old                 = p;
+                p.noalias()           = (w - r2 * p_old - r3 * p_oold) / r1;
+                const RealScalar step = beta_one * c * eta;
+                x += step * p;
+
+                // Estimated update of the (preconditioned) residual norm squared.
+                residualNorm2 *= s * s;
+                bool rrnorm_has_converged = residualNorm2 < threshold2;
+
+                static constexpr RealScalar rrnorm_floor = std::numeric_limits<RealScalar>::denorm_min();
+                RealScalar                  rrnorm       = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
+
+                rrnorm            = std::max(rrnorm, rrnorm_floor);
+                RealScalar deltax = RealScalar{1};
+
+                if(!std::isfinite(rrnorm)) {
+                    std::printf(" -- minres: rrnorm is not finite ... quitting\n");
+                    break;
+                }
+
+                // if(((iters > 0) && (iters % rate_resid2 == 0)) || rrnorm_has_converged) {
+                //     VectorType r_true             = rhs - mat * x;
+                //     VectorType z_true             = precond.solve(r_true);
+                //     RealScalar residualNorm2_true = numext::real(r_true.dot(z_true));
+                //     eigen_assert(residualNorm2_true >= RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
+                //
+                //     if constexpr(std::is_same_v<RealScalar, double>) {
+                //         RealScalar drift = residualNorm2_true / std::max(residualNorm2, RealScalar{0});
+                //         std::printf("corrected residualnorm2 %.5e -> %.5e, drift=%.3e\n", residualNorm2, residualNorm2_true, drift);
+                //     }
                 // }
-                residualNorm2 *= s*s;
 
-                // BEGIN MINRES -> MINRES_ST
-                // Store the error |Ax-b|/|x|
-                // RealScalar xNorm2 = x.squaredNorm();
-                // RealScalar error = std::sqrt(residualNorm2 / xNorm2); // Stewart's backward error
-                RealScalar rrnorm = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm
-                error_history.push_back(-std::log10(rrnorm));
-                bool rrnorm_has_converged  = residualNorm2 < threshold2;
-                bool rrnorm_has_made_progress = rrnorm < std::max(tol_error, RealScalar{0.63f});
-                bool minres_has_converged = rrnorm_has_converged;
+                static constexpr RealScalar tiny = std::numeric_limits<RealScalar>::denorm_min();
+                if(iters >= rate_rrnorm and iters % rate_rrnorm == 0) {
+                    rrnorm_history.push_back(-std::log10(std::max(rrnorm, tiny)));
+                    while(rrnorm_history.size() > max_history_size) rrnorm_history.pop_front();
+                }
+                auto refresh_deltax = [&x, &deltax, &step, &p]() {
+                    constexpr RealScalar eps    = std::numeric_limits<RealScalar>::epsilon();
+                    const RealScalar     xNorm  = x.norm();
+                    const RealScalar     dxNorm = std::abs(step) * p.norm();
+                    deltax                      = dxNorm / std::max(xNorm, eps); // ||dx|| / ||x|| where dx = step * p
+                };
 
-                if((iters >=10 and iters % 10 == 0) or minres_has_converged) {
-                    // Check for stall every 10 iterations
-                    while(error_history.size() > 50) error_history.pop_front();
-                    auto [avg, sdv, rel] = get_stats(error_history);
-                    bool rrnorm_has_saturated = rel < RealScalar{1e-5f};
+                if((iters >= rate_deltax) and (iters % rate_deltax == 0)) {
+                    refresh_deltax();
+                    deltax_history.push_back(-std::log10(std::max(deltax, tiny)));
+                    while(deltax_history.size() > max_history_size) deltax_history.pop_front();
+                }
+
+                if((iters >= rate_checks and iters % rate_checks == 0) or rrnorm_has_converged) {
+                    // Check for stall
+                    if(iters % rate_deltax != 0) refresh_deltax();
+                    auto rr_stats = get_stats(rrnorm_history, RealScalar{rate_rrnorm});
+                    auto dx_stats = get_stats(deltax_history, RealScalar{rate_deltax});
+
+                    bool rrnorm_has_made_progress = rrnorm < rrnorm0 * std::max(tol_error, RealScalar{0.63f});
+                    bool rrnorm_large_history     = rrnorm_history.size() >= max_history_size / 2;
+                    bool rrnorm_slope_issmall     = rrnorm_large_history and std::abs(rr_stats.slope_avg) < RealScalar{1e-4f};
+                    bool rrnorm_slope_isclean     = rrnorm_large_history and std::abs(rr_stats.slope_sdv) < RealScalar{1e-3f};
+                    bool rrnorm_has_saturated     = rrnorm_slope_issmall and rrnorm_slope_isclean;
+
+                    bool deltax_large_history = deltax_history.size() >= max_history_size / 2;
+                    bool deltax_slope_issmall = deltax_large_history and std::abs(dx_stats.slope_avg) < RealScalar{1e-4f};
+                    bool deltax_slope_isclean = deltax_large_history and std::abs(dx_stats.slope_sdv) < RealScalar{1e-3f};
+                    bool deltax_has_saturated = deltax_slope_issmall and deltax_slope_isclean;
+
                     bool minres_has_saturated = rrnorm_has_saturated and rrnorm_has_made_progress;
+                    minres_has_converged      = rrnorm_has_converged ? (minres_has_converged + 1) : 0;
+
                     if constexpr(std::is_same_v<RealScalar, double>) {
-                        if((iters % 100 == 0) or minres_has_converged or minres_has_saturated) {
-                            std::printf("k: %4ld |rk|=%.5e |r0|=%.5e |rk|/|r0|=%.5e (log10 avg: %.5e  std: %.5e  rel: %.5e)",
-                                     iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, avg, sdv, rel);
-
-                            if (minres_has_converged) {
-                                std::printf(" -- minres converged\n");
-                                break;
-                            }
-                            if (minres_has_saturated) {
-                                std::printf(" -- minres saturated\n");
-                                break;
-                            }
-                            std::printf("\n");
+                        if((iters % rate_printf == 0) or minres_has_converged or minres_has_saturated) {
+                            std::printf("k: %4ld |rk|=%.3e |r0|=%.3e |rk|/|r0|=%.3e δ=%.3e log10 "
+                                        "| rr avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e "
+                                        "| dx avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e\n",
+                                        iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, deltax,                 //
+                                        rr_stats.avg, rr_stats.sdv, rr_stats.rel_sdv, rr_stats.slope_avg, rr_stats.slope_sdv, //
+                                        dx_stats.avg, dx_stats.sdv, dx_stats.rel_sdv, dx_stats.slope_avg, dx_stats.slope_sdv  //
+                            );
                         }
-
+                    }
+                    if(minres_has_saturated) {
+                        std::printf(" -- minres saturated (rrnorm %d, deltax %d)\n", rrnorm_has_saturated, deltax_has_saturated);
+                        // break;
+                    }
+                    if(minres_has_converged >= 1) {
+                        std::printf(" -- minres converged for %d iters\n", minres_has_converged);
+                        break;
                     }
                 }
-                // END MINRES -> MINRES_ST
 
-                eta=-s*eta; // update eta
-                iters++; // increment iteration number (for output purposes)
+                eta = -s * eta; // update eta
+                iters++;        // increment iteration number (for output purposes)
             }
 
             /* Compute error. Note that this is the estimated error. The real
@@ -218,16 +328,14 @@ namespace Eigen {
 
     }
 
-    template< typename _MatrixType, int _UpLo=Lower,
-    typename _Preconditioner = IdentityPreconditioner>
+    template<typename _MatrixType, int _UpLo = Lower, typename _Preconditioner = IdentityPreconditioner>
     class MINRES_ST;
 
     namespace internal {
 
-        template< typename _MatrixType, int _UpLo, typename _Preconditioner>
-        struct traits<MINRES_ST<_MatrixType,_UpLo,_Preconditioner> >
-        {
-            typedef _MatrixType MatrixType;
+        template<typename _MatrixType, int _UpLo, typename _Preconditioner>
+        struct traits<MINRES_ST<_MatrixType, _UpLo, _Preconditioner> > {
+            typedef _MatrixType     MatrixType;
             typedef _Preconditioner Preconditioner;
         };
 
@@ -271,27 +379,25 @@ namespace Eigen {
      *
      * \sa class ConjugateGradient, BiCGSTAB, SimplicialCholesky, DiagonalPreconditioner, IdentityPreconditioner
      */
-    template< typename _MatrixType, int _UpLo, typename _Preconditioner>
-    class MINRES_ST : public IterativeSolverBase<MINRES_ST<_MatrixType,_UpLo,_Preconditioner> >
-    {
-
+    template<typename _MatrixType, int _UpLo, typename _Preconditioner>
+    class MINRES_ST : public IterativeSolverBase<MINRES_ST<_MatrixType, _UpLo, _Preconditioner> > {
         typedef IterativeSolverBase<MINRES_ST> Base;
-        using Base::matrix;
         using Base::m_error;
-        using Base::m_iterations;
         using Base::m_info;
         using Base::m_isInitialized;
-    public:
+        using Base::m_iterations;
+        using Base::matrix;
+
+        public:
         using Base::_solve_impl;
-        typedef _MatrixType MatrixType;
-        typedef typename MatrixType::Scalar Scalar;
+        typedef _MatrixType                     MatrixType;
+        typedef typename MatrixType::Scalar     Scalar;
         typedef typename MatrixType::RealScalar RealScalar;
-        typedef _Preconditioner Preconditioner;
+        typedef _Preconditioner                 Preconditioner;
 
-        enum {UpLo = _UpLo};
+        enum { UpLo = _UpLo };
 
-    public:
-
+        public:
         /** Default constructor. */
         MINRES_ST() : Base() {}
 
@@ -306,41 +412,31 @@ namespace Eigen {
          * matrix A, or modify a copy of A.
          */
         template<typename MatrixDerived>
-        explicit MINRES_ST(const EigenBase<MatrixDerived>& A) : Base(A.derived()) {}
+        explicit MINRES_ST(const EigenBase<MatrixDerived> &A) : Base(A.derived()) {}
 
         /** Destructor. */
-        ~MINRES_ST(){}
+        ~MINRES_ST() {}
 
         /** \internal */
-        template<typename Rhs,typename Dest>
-        void _solve_vector_with_guess_impl(const Rhs& b, Dest& x) const
-        {
-            typedef typename Base::MatrixWrapper MatrixWrapper;
+        template<typename Rhs, typename Dest>
+        void _solve_vector_with_guess_impl(const Rhs &b, Dest &x) const {
+            typedef typename Base::MatrixWrapper    MatrixWrapper;
             typedef typename Base::ActualMatrixType ActualMatrixType;
-            enum {
-              TransposeInput  =   (!MatrixWrapper::MatrixFree)
-                              &&  (UpLo==(Lower|Upper))
-                              &&  (!MatrixType::IsRowMajor)
-                              &&  (!NumTraits<Scalar>::IsComplex)
-            };
-            typedef typename internal::conditional<TransposeInput,Transpose<const ActualMatrixType>, ActualMatrixType const&>::type RowMajorWrapper;
+            enum { TransposeInput = (!MatrixWrapper::MatrixFree) && (UpLo == (Lower | Upper)) && (!MatrixType::IsRowMajor) && (!NumTraits<Scalar>::IsComplex) };
+            typedef typename internal::conditional<TransposeInput, Transpose<const ActualMatrixType>, ActualMatrixType const &>::type RowMajorWrapper;
             EIGEN_STATIC_ASSERT(internal::check_implication(MatrixWrapper::MatrixFree, UpLo == (Lower | Upper)),
                                 MATRIX_FREE_CONJUGATE_GRADIENT_IS_COMPATIBLE_WITH_UPPER_UNION_LOWER_MODE_ONLY);
-            typedef typename internal::conditional<UpLo==(Lower|Upper),
-                                                  RowMajorWrapper,
-                                                  typename MatrixWrapper::template ConstSelfAdjointViewReturnType<UpLo>::Type
-                                            >::type SelfAdjointWrapper;
+            typedef typename internal::conditional<UpLo == (Lower | Upper), RowMajorWrapper,
+                                                   typename MatrixWrapper::template ConstSelfAdjointViewReturnType<UpLo>::Type>::type SelfAdjointWrapper;
 
             m_iterations = Base::maxIterations();
-            m_error = Base::m_tolerance;
+            m_error      = Base::m_tolerance;
             RowMajorWrapper row_mat(matrix());
-            internal::minres_st(SelfAdjointWrapper(row_mat), b, x,
-                             Base::m_preconditioner, m_iterations, m_error);
+            internal::minres_st(SelfAdjointWrapper(row_mat), b, x, Base::m_preconditioner, m_iterations, m_error);
             m_info = m_error <= Base::m_tolerance ? Success : NoConvergence;
         }
 
-    protected:
-
+        protected:
     };
 
 } // end namespace Eigen

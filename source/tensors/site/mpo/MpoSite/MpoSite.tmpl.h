@@ -200,10 +200,9 @@ Eigen::Tensor<T, 4> MpoSite<Scalar>::apply_edge_left(const Eigen::Tensor<T, 4> &
     if(mpo.dimension(0) == 1 or get_position() != 0) return mpo;
     if(mpo.dimension(0) != edgeL.dimension(0))
         throw except::logic_error("apply_edge_left: dimension mismatch: mpo {} | edgeL {}", mpo.dimensions(), edgeL.dimensions());
-    auto  tmp     = mpo;
-    auto  dim     = tmp.dimensions();
-    auto &threads = tenx::threads::get();
-    tmp.resize(tenx::array4{1, dim[1], dim[2], dim[3]});
+    auto  dim                 = mpo.dimensions();
+    auto &threads             = tenx::threads::get();
+    auto  tmp                 = Eigen::Tensor<T, 4>(tenx::array4{1, dim[1], dim[2], dim[3]});
     tmp.device(*threads->dev) = edgeL.reshape(tenx::array2{1, edgeL.size()}).contract(mpo, tenx::idx({1}, {0}));
     return tmp;
 }
@@ -214,10 +213,9 @@ Eigen::Tensor<T, 4> MpoSite<Scalar>::apply_edge_right(const Eigen::Tensor<T, 4> 
     if(mpo.dimension(1) == 1 or get_position() + 1 != settings::model::model_size) return mpo;
     if(mpo.dimension(1) != edgeR.dimension(0))
         throw except::logic_error("apply_edge_right: dimension mismatch: mpo {} | edgeR {}", mpo.dimensions(), edgeR.dimensions());
-    auto  tmp     = mpo;
-    auto  dim     = tmp.dimensions();
-    auto &threads = tenx::threads::get();
-    tmp.resize(tenx::array4{dim[0], 1, dim[2], dim[3]});
+    auto  dim                 = mpo.dimensions();
+    auto &threads             = tenx::threads::get();
+    auto  tmp                 = Eigen::Tensor<T, 4>(tenx::array4{dim[0], 1, dim[2], dim[3]});
     tmp.device(*threads->dev) = mpo.contract(edgeR.reshape(tenx::array2{edgeR.size(), 1}), tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2});
     return tmp;
 }

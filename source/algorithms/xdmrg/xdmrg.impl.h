@@ -257,8 +257,8 @@ void xdmrg<Scalar>::run_preprocessing() {
         VecReal diffs2     = VecReal::Zero(evals1.size());
         auto    N1         = evals1.size() - 1;
         auto    N2         = evals2.size() - 1;
-        diffs1.topRows(N1) = (evals1.bottomRows(N1) - evals1.topRows(N1));
-        diffs2.topRows(N2) = (evals2.bottomRows(N2) - evals2.topRows(N2));
+        diffs1.topRows(N1) = (evals1.tail(N1) - evals1.head(N1));
+        diffs2.topRows(N2) = (evals2.tail(N2) - evals2.head(N2));
 
         // auto evals1i = eig::view::get_eigvals<fp64>(solver1i.result);
         fmt::print("{:^8} {:<20}\n", " ", "H¹");
@@ -327,10 +327,10 @@ void xdmrg<Scalar>::run_algorithm() {
             quot = vh2v / h2norm; // Assume the state is normalized (vv = 1)
         }
         if(quot < eps * 1000 or !std::isfinite(vh2v)) {
-            tools::log->warn("Switched to X2 backend: <H²>/|H²| = {:.4e} < 1000 * eps", fp(quot));
+            tools::log->warn("Switched to X2 backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", fp(vh2v), fp(h2norm), fp(quot));
             return ContractionBackend::X2;
         } else {
-            tools::log->info("Selected TBLIS backend: <H²>/|H²| = {:.4e} > 1000 * eps", fp(quot));
+            tools::log->info("Selected TBLIS backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} > 1000 * eps", fp(vh2v), fp(h2norm), fp(quot));
             return ContractionBackend::TBLIS;
         }
     };

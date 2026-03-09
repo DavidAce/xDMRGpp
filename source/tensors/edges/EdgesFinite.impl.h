@@ -69,7 +69,16 @@ EdgesFinite<Scalar> &EdgesFinite<Scalar>::operator=(const EdgesFinite &other) {
 
 template<typename Scalar>
 void EdgesFinite<Scalar>::initialize(size_t model_size) {
-    for(size_t pos = 0; pos < model_size; pos++) {
+    eneL.clear();
+    eneR.clear();
+    varL.clear();
+    varR.clear();
+    eneL.reserve(model_size);
+    eneR.reserve(model_size);
+    varL.reserve(model_size);
+    varR.reserve(model_size);
+
+    for(size_t pos = 0; pos < model_size; ++pos) {
         eneL.emplace_back(std::make_unique<EnvEne<Scalar>>(pos, "L", "ene"));
         varL.emplace_back(std::make_unique<EnvVar<Scalar>>(pos, "L", "var"));
         eneR.emplace_back(std::make_unique<EnvEne<Scalar>>(pos, "R", "ene"));
@@ -125,8 +134,8 @@ void EdgesFinite<Scalar>::eject_edges_inactive_ene(std::optional<std::vector<siz
         // If there are no active sites we may just as well
         // eject everything and let the next rebuild take
         // care of it.
-        eject_edges_all();
-        return;
+        // eject_edges_all();
+        // return;
     }
     for(auto &env : eneL)
         if(env->get_position() > sites->front()) env->clear();
@@ -142,8 +151,8 @@ void EdgesFinite<Scalar>::eject_edges_inactive_var(std::optional<std::vector<siz
         // If there are no active sites we may just as well
         // eject everything and let the next rebuild take
         // care of it.
-        eject_edges_all();
-        return;
+        // eject_edges_all();
+        // return;
     }
     for(auto &env : varL)
         if(env->get_position() > sites->front()) env->clear();
@@ -177,7 +186,8 @@ template<typename Scalar>
 const EnvEne<Scalar> &EdgesFinite<Scalar>::get_env_eneL(size_t pos) const {
     if(pos >= get_length()) throw except::range_error("get_env_eneL(pos:{}): pos is out of range | system size {}", pos, get_length());
     if(pos >= eneL.size()) throw except::range_error("get_env_eneL(pos:{}): pos is out of range | eneL.size() == {}", pos, eneL.size());
-    const auto &env = **std::next(eneL.begin(), safe_cast<long>(pos));
+    // const auto &env = **std::next(eneL.begin(), safe_cast<long>(pos));
+    const auto &env = *eneL.at(pos);
     if(env.get_position() != pos) throw except::logic_error("get_env_eneL(pos:{}): position mismatch {}", pos, env.get_position());
     return env;
 }
@@ -185,7 +195,8 @@ template<typename Scalar>
 const EnvEne<Scalar> &EdgesFinite<Scalar>::get_env_eneR(size_t pos) const {
     if(pos >= get_length()) throw except::range_error("get_env_eneR(pos:{}): pos is out of range | system size {}", pos, get_length());
     if(pos >= eneR.size()) throw except::range_error("get_env_eneR(pos:{}): pos is out of range | eneR.size() == {}", pos, eneR.size());
-    const auto &env = **std::next(eneR.begin(), safe_cast<long>(pos));
+    // const auto &env = **std::next(eneR.begin(), safe_cast<long>(pos));
+    const auto &env = *eneR.at(pos);
     if(env.get_position() != pos) throw except::logic_error("get_env_eneR(pos:{}): position mismatch {}", pos, env.get_position());
     return env;
 }
@@ -193,7 +204,8 @@ template<typename Scalar>
 const EnvVar<Scalar> &EdgesFinite<Scalar>::get_env_varL(size_t pos) const {
     if(pos >= get_length()) throw except::range_error("get_env_varL(pos:{}): pos is out of range | system size {}", pos, get_length());
     if(pos >= varL.size()) throw except::range_error("get_env_varL(pos:{}): pos is out of range | varL.size() == {}", pos, varL.size());
-    const auto &env = **std::next(varL.begin(), safe_cast<long>(pos));
+    // const auto &env = **std::next(varL.begin(), safe_cast<long>(pos));
+    const auto &env = *varL.at(pos);
     if(env.get_position() != pos) throw except::logic_error("get_env_varL(pos:{}): position mismatch {}", pos, env.get_position());
     return env;
 }
@@ -201,7 +213,8 @@ template<typename Scalar>
 const EnvVar<Scalar> &EdgesFinite<Scalar>::get_env_varR(size_t pos) const {
     if(pos >= get_length()) throw except::range_error("get_env_varR(pos:{}): pos is out of range | system size {}", pos, get_length());
     if(pos >= varR.size()) throw except::range_error("get_env_varR(pos:{}): pos is out of range | varR.size() == {}", pos, varR.size());
-    const auto &env = **std::next(varR.begin(), safe_cast<long>(pos));
+    // const auto &env = **std::next(varR.begin(), safe_cast<long>(pos));
+    const auto &env = *varR.at(pos);
     if(env.get_position() != pos) throw except::logic_error("get_env_varR(pos:{}): position mismatch {}", pos, env.get_position());
     return env;
 }
@@ -300,15 +313,15 @@ env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_var_bloc
     return {get_env_var(posL).L.get_block(), get_env_var(posR).R.get_block()};
 }
 
-template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_env_ene_block(size_t posL, size_t posR) {
-    return {get_env_ene(posL).L.get_block(), get_env_ene(posR).R.get_block()};
-}
-
-template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_env_var_block(size_t posL, size_t posR) {
-    return {get_env_var(posL).L.get_block(), get_env_var(posR).R.get_block()};
-}
+// template<typename Scalar>
+// env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_env_ene_block(size_t posL, size_t posR) {
+//     return {get_env_ene(posL).L.get_block(), get_env_ene(posR).R.get_block()};
+// }
+//
+// template<typename Scalar>
+// env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_env_var_block(size_t posL, size_t posR) {
+//     return {get_env_var(posL).L.get_block(), get_env_var(posR).R.get_block()};
+// }
 
 template<typename Scalar>
 env_pair<const EnvEne<Scalar> &> EdgesFinite<Scalar>::get_multisite_env_ene(std::optional<std::vector<size_t>> sites) const {
@@ -350,20 +363,69 @@ env_pair<const Eigen::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_en
     return {envs.L.get_block(), envs.R.get_block()};
 }
 
+// template<typename Scalar>
+// env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_multisite_env_ene_block(std::optional<std::vector<size_t>> sites) {
+//     auto envs = get_multisite_env_ene(std::move(sites));
+//     return {envs.L.get_block(), envs.R.get_block()};
+// }
+//
+// template<typename Scalar>
+// env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_multisite_env_var_block(std::optional<std::vector<size_t>> sites) {
+//     auto envs = get_multisite_env_var(std::move(sites));
+//     return {envs.L.get_block(), envs.R.get_block()};
+// }
+
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_multisite_env_ene_block(std::optional<std::vector<size_t>> sites) {
-    auto envs = get_multisite_env_ene(std::move(sites));
-    return {envs.L.get_block(), envs.R.get_block()};
+env_pair<const x2::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_ene_blkx2(size_t posL, size_t posR) const {
+    auto envs = get_env_ene(posL, posR);
+    return {envs.L.get_blkx2(), envs.R.get_blkx2()};
 }
 
 template<typename Scalar>
-env_pair<Eigen::Tensor<Scalar, 3>> EdgesFinite<Scalar>::get_multisite_env_var_block(std::optional<std::vector<size_t>> sites) {
-    auto envs = get_multisite_env_var(std::move(sites));
-    return {envs.L.get_block(), envs.R.get_block()};
+env_pair<const x2::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_var_blkx2(size_t posL, size_t posR) const {
+    auto envs = get_env_var(posL, posR);
+    return {envs.L.get_blkx2(), envs.R.get_blkx2()};
 }
+
+// template<typename Scalar>
+// env_pair<x2::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_ene_blkx2(size_t posL, size_t posR) {
+//     auto envs = get_env_ene(posL, posR);
+//     return {envs.L.get_blkx2(), envs.R.get_blkx2()};
+// }
+//
+// template<typename Scalar>
+// env_pair<x2::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_env_var_blkx2(size_t posL, size_t posR) {
+//     auto envs = get_env_var(posL, posR);
+//     return {envs.L.get_blkx2(), envs.R.get_blkx2()};
+// }
+
+template<typename Scalar>
+env_pair<const x2::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_env_ene_blkx2(std::optional<std::vector<size_t>> sites) const {
+    auto envs = get_multisite_env_ene(std::move(sites));
+    return {envs.L.get_blkx2(), envs.R.get_blkx2()};
+}
+
+template<typename Scalar>
+env_pair<const x2::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_env_var_blkx2(std::optional<std::vector<size_t>> sites) const {
+    auto envs = get_multisite_env_var(std::move(sites));
+    return {envs.L.get_blkx2(), envs.R.get_blkx2()};
+}
+
+// template<typename Scalar>
+// env_pair<x2::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_env_ene_blkx2(std::optional<std::vector<size_t>> sites) {
+//     auto envs = get_multisite_env_ene(std::move(sites));
+//     return {envs.L.get_blkx2(), envs.R.get_blkx2()};
+// }
+//
+// template<typename Scalar>
+// env_pair<x2::Tensor<Scalar, 3> &> EdgesFinite<Scalar>::get_multisite_env_var_blkx2(std::optional<std::vector<size_t>> sites) {
+//     auto envs = get_multisite_env_var(std::move(sites));
+//     return {envs.L.get_blkx2(), envs.R.get_blkx2()};
+// }
 
 template<typename Scalar>
 std::pair<std::vector<size_t>, std::vector<size_t>> EdgesFinite<Scalar>::get_active_ids() const {
+    if(active_sites.empty()) throw std::logic_error("get_active_ids: active_sites is empty");
     std::pair<std::vector<size_t>, std::vector<size_t>> ids;
     auto                                               &ene_ids = ids.first;
     auto                                               &var_ids = ids.second;

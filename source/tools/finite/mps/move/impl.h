@@ -78,8 +78,11 @@ size_t tools::finite::mps::move_center_point(StateFinite<Scalar> &state, std::op
         long pos = state.template get_position<long>();
         if(pos < -1 or pos >= state.template get_length<long>()) throw except::range_error("pos out of bounds: {}", pos);
 
-        long  posL    = state.get_direction() == 1 ? pos + 1 : pos - 1;
-        long  posR    = state.get_direction() == 1 ? pos + 2 : pos;
+        long posL = state.get_direction() == 1 ? pos + 1 : pos - 1;
+        long posR = state.get_direction() == 1 ? pos + 2 : pos;
+        if(posL < 0 or posR < 0)
+            throw except::range_error("move_center_point: negative site index: posL {} posR {} (pos {} dir {})", posL, posR, pos, state.get_direction());
+
         auto  posL_ul = safe_cast<size_t>(posL);
         auto  posR_ul = safe_cast<size_t>(posR);
         auto &mps     = state.get_mps_site();
@@ -109,8 +112,9 @@ size_t tools::finite::mps::move_center_point(StateFinite<Scalar> &state, std::op
 template<typename Scalar>
 size_t tools::finite::mps::move_center_point_to_pos(StateFinite<Scalar> &state, long pos, std::optional<svd::config> svd_cfg) {
     auto position = state.template get_position<long>();
-    if(pos != std::clamp<long>(pos, -1l, position - 1))
-        throw except::logic_error("move_center_point_to_pos: Given pos [{}]. Expected range [-1,{}]", pos, position - 1);
+    auto L        = state.template get_length<long>();
+    if(pos != std::clamp<long>(pos, -1l, L - 1))
+        throw except::logic_error("move_center_point_to_pos: Given pos [{}]. Expected range [-1,{}]", pos, L - 1);
     if((state.get_direction() < 0 and pos > position) or //
        (state.get_direction() > 0 and pos < position))   //
         state.flip_direction();                          // Turn direction towards new position

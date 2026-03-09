@@ -228,7 +228,7 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
             auto &V_stash = mps.get_V_stash();
             if(V_stash) {
                 auto vdim = V_stash->data.dimensions();
-                if(vdim[0] * vdim[1] > vdim[2]) tools::log->error("V_stash with dimensions {} for pos {} is not a diagonal matrix!", vdim, V_stash->pos_dst);
+                if(vdim[0] * vdim[1] > vdim[2]) tools::log->error("V_stash with dimensions {} for pos {} is not a square matrix!", vdim, V_stash->pos_dst);
             }
         }
 
@@ -254,7 +254,7 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
             S_stash.reset();
         } else if(U_stash) {
             auto udim = U_stash->data.dimensions();
-            if(udim[1] < udim[0] * udim[2]) tools::log->error("U_stash with dimensions {} for pos {} is not a diagonal matrix!", udim, U_stash->pos_dst);
+            if(udim[1] < udim[0] * udim[2]) tools::log->error("U_stash with dimensions {} for pos {} is not a square matrix!", udim, U_stash->pos_dst);
         }
     } else if(positions.size() == 2 and positions_left.size() == 1 and positions_right.size() == 1) {
         if constexpr(settings::debug_split) tools::log->trace("split: option 3");
@@ -274,11 +274,7 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
         auto &V_stash = mps_sites_As.back().get_V_stash();
         auto &S_stash = mps_sites_As.back().get_S_stash();
         if(V_stash and S_stash) {
-            auto V = Eigen::Tensor<Scalar, 3>();
-            if constexpr(std::is_same_v<Scalar, fp64>)
-                V = tools::common::contraction::contract_bnd_mps(S_stash->data, V_stash->data).real();
-            else
-                V = tools::common::contraction::contract_bnd_mps(S_stash->data, V_stash->data);
+            auto V = tools::common::contraction::contract_bnd_mps(S_stash->data, V_stash->data);
             V_stash.reset();
             S_stash.reset();
             mps_sites_Bs = internal::split_mps_into_Bs<Scalar>(V, spin_dims_right, positions_right, center_position, svd_cfg.value());
@@ -298,12 +294,7 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
         auto &U_stash = mps_sites_Bs.front().get_U_stash();
         auto &S_stash = mps_sites_Bs.front().get_S_stash();
         if(U_stash and S_stash) {
-            auto U = Eigen::Tensor<Scalar, 3>();
-            if constexpr(std::is_same_v<Scalar, fp64>)
-                U = tools::common::contraction::contract_mps_bnd(U_stash->data, S_stash->data).real();
-            else
-                U = tools::common::contraction::contract_mps_bnd(U_stash->data, S_stash->data);
-
+            auto U = tools::common::contraction::contract_mps_bnd(U_stash->data, S_stash->data);
             U_stash.reset();
             S_stash.reset();
             mps_sites_As = internal::split_mps_into_As<Scalar>(U, spin_dims_left, positions_left, center_position, svd_cfg.value());
@@ -419,14 +410,13 @@ std::vector<MpsSite<Scalar>> tools::common::split::internal::split_mps_into_As(c
          * See the notes on svd.schmidt at its definition
          *
          */
-
+        const bool is_last_spin = (idx + 1 == spin_dims.size()); // Reached last site in spin_dims
         if(S_prev) {
             auto t_sv = tid::tic_token("contract_sv", tid::level::highest);
             // Let V absorb S from the previous SVD (see note below)
             V = tools::common::contraction::contract_bnd_mps(S_prev.value(), V);
         }
-        if(&spin_dim == &spin_dims.back()                          // Reached last site in spin_dims
-           and spin_dim == V.dimension(0)                          // V has one site left
+        if(is_last_spin and spin_dim == V.dimension(0)             // V has one site left
            and safe_cast<size_t>(center_position) > positions[idx] // Only needed when the site to the right is another A
         ) {
             // We reached the last site, and now V == L*GL, i.e. a theta with dim(0) == spin_dims.back().
@@ -538,8 +528,8 @@ std::deque<MpsSite<Scalar>> tools::common::split::internal::split_mps_into_Bs(co
             // Let U absorb S from the previous SVD (see note below)
             U = tools::common::contraction::contract_mps_bnd(U, S_prev.value());
         }
-        if(&spin_dim == &spin_dims.front()                             // Reached the first site in spin_dims
-           and spin_dim == U.dimension(0)                              // U has one site left
+        const bool is_first_spin = (idx == 0);                         // Reached the first site in spin_dims
+        if(is_first_spin and spin_dim == U.dimension(0)                // U has one site left
            and safe_cast<size_t>(center_position + 1) < positions[idx] // Only needed if the site to the left would be another B.
         ) {
             // We reached the first site, and now U == LG*L, i.e. a theta with dim(0) == spin_dims.front().

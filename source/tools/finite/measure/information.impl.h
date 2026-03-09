@@ -32,7 +32,7 @@ using tools::finite::measure::RealArrayXX;
 using tools::finite::measure::RealScalar;
 
 namespace settings {
-    inline constexpr bool debug_subsystem_entropy = true;
+    inline constexpr bool debug_subsystem_entropy = false;
 }
 
 template<typename ContainerType>
@@ -75,7 +75,7 @@ typename ContainerType::Scalar nanmean(const ContainerType &arr) {
         sum += a;
         count += 1;
     }
-    if(count == 0) return std::numeric_limits<RealScalar<real_t>>::quiet_NaN();
+    if(count == 0) return std::numeric_limits<real_t>::quiet_NaN();
     return sum / count;
 }
 
@@ -93,43 +93,119 @@ inline std::vector<size_t> get_subsystem_complement(size_t length, const std::ve
     return complement;
 }
 
+// template<typename CalcType, typename Scalar>
+// auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchsize_svd, Eigen::Index svd_rank_max = 100) {
+//     auto t_ev         = tid::tic_scope("eigenvalues");
+//     svd_rank_max      = std::min({svd_rank_max, size});
+//     using RealScalar  = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>::RealScalar;
+//     using VectorCalcT = Eigen::Matrix<CalcType, Eigen::Dynamic, 1>;
+//     VectorCalcT eigenvalues;
+//     auto        fraclist = std::array{0.0001, 0.001, 0.01, 0.1, 0.2, 1.0};
+//     if(size <= switchsize_svd) {
+//         auto eig_solver = eig::solver();
+//         eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
+//         eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result)); // Eigenvalues
+//     } else {
+//         for(auto frac : fraclist) {
+//             Eigen::Index rank_max = std::min(svd_rank_max, static_cast<Eigen::Index>(size * frac));
+//             if(rank_max <= 1) continue;
+//             if(rank_max < size) {
+//                 auto eps                = std::numeric_limits<CalcType>::epsilon();
+//                 auto tol                = eps * 10000;
+//                 auto config             = svd::config();
+//                 config.svd_rtn          = svd::rtn::gersvd; // Randomized svd
+//                 config.svd_lib          = svd::lib::eigen;
+//                 config.rank_max         = rank_max;
+//                 config.truncation_limit = 0.0; //;static_cast<double>(eps);
+//                 auto svd_solver         = svd::solver(config);
+//                 auto [U, S, V]          = svd_solver.do_svd_ptr(matrix_ptr, size, size, config);
+//                 S                       = S.reverse().eval();
+//                 eigenvalues             = tenx::asScalarType<CalcType>(S);
+//                 if(eigenvalues.minCoeff() < tol) break; // Good enough
+//             } else if(rank_max == size and size <= settings::precision::eig_max_size) {
+//                 auto eig_solver = eig::solver();
+//                 eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
+//                 eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result)); // Eigenvalues
+//             } else {
+//                 tools::log->warn("get_eigenvalues: matrix size {} is too big for diagonalization. "
+//                                  "Kept the top 20% of singular values (smallest value is {:.3e}), but this may give incorrect entropies",
+//                                  size, fp(eigenvalues.minCoeff()));
+//             }
+//         }
+//     }
+//
+//     return eigenvalues;
+// }
+
 template<typename CalcType, typename Scalar>
 auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchsize_svd, Eigen::Index svd_rank_max = 100) {
-    auto t_ev         = tid::tic_scope("eigenvalues");
-    svd_rank_max      = std::min({svd_rank_max, size});
+    auto t_ev = tid::tic_scope("eigenvalues");
+
+    svd_rank_max = std::min<Eigen::Index>(svd_rank_max, size);
+
     using RealScalar  = typename Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>::RealScalar;
     using VectorCalcT = Eigen::Matrix<CalcType, Eigen::Dynamic, 1>;
-    VectorCalcT eigenvalues;
-    auto        fraclist = std::array{0.0001, 0.001, 0.01, 0.1, 0.2, 1.0};
+
+    VectorCalcT eigenvalues; // will be set on success
+
     if(size <= switchsize_svd) {
+        // Exact eig small case
+
         auto eig_solver = eig::solver();
         eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
-        eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result)); // Eigenvalues
+        eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result));
     } else {
-        for(auto frac : fraclist) {
-            Eigen::Index rank_max = static_cast<Eigen::Index>(size * frac);
-            if(rank_max <= 1) continue;
-            if(rank_max < size) {
-                auto eps                = std::numeric_limits<CalcType>::epsilon();
-                auto tol                = eps * 10000;
-                auto config             = svd::config();
-                config.svd_rtn          = svd::rtn::gersvd; // Randomized svd
-                config.svd_lib          = svd::lib::eigen;
-                config.rank_max         = svd_rank_max;
-                config.truncation_limit = static_cast<double>(eps);
-                auto svd_solver         = svd::solver(config);
-                auto [U, S, V]          = svd_solver.do_svd_ptr(matrix_ptr, size, size, config);
-                S                       = S.reverse().eval();
-                eigenvalues             = tenx::asScalarType<CalcType>(S);
-                if(eigenvalues.minCoeff() < tol) break; // Good enough
-            } else if(rank_max == size and size <= settings::precision::eig_max_size) {
+        const auto fraclist = std::array{0.0001, 0.001, 0.01, 0.1, 0.2, 1.0};
+        // Large case: approximate from truncated SVD (PSD => singular values = eigenvalues)
+        const auto eps = std::numeric_limits<CalcType>::epsilon();
+        const auto tol = eps * 10000; // your criterion
+
+        bool         got_any       = false;
+        Eigen::Index last_rank_max = 0;
+
+        for(double frac : fraclist) {
+            Eigen::Index rank_max = static_cast<Eigen::Index>(std::floor(size * frac));
+            rank_max              = std::min(rank_max, svd_rank_max);
+            if(rank_max < 2) continue;
+
+            last_rank_max = rank_max;
+
+            if(rank_max == size and size <= settings::precision::eig_max_size) {
                 auto eig_solver = eig::solver();
                 eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
-                eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result)); // Eigenvalues
-            } else {
-                tools::log->warn("get_eigenvalues: matrix size {} is too big for diagonalization. "
-                                 "Kept the top 20% of singular values (smallest value is {:.3e}), but this may give incorrect entropies",
-                                 size, fp(eigenvalues.minCoeff()));
+                eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result));
+                got_any     = true;
+                break;
+            }
+
+            // randomized SVD up to rank_max
+            auto config             = svd::config();
+            config.svd_rtn          = svd::rtn::gersvd; // randomized SVD
+            config.svd_lib          = svd::lib::eigen;
+            config.rank_max         = rank_max;
+            config.truncation_limit = 0.0; // do not drop below rank_max due to error criterion
+
+            auto svd_solver = svd::solver(config);
+            auto [U, S, V]  = svd_solver.do_svd_ptr(matrix_ptr, size, size, config);
+
+            eigenvalues = tenx::asScalarType<CalcType>(S);
+            got_any     = true;
+
+            const CalcType smallest_kept = eigenvalues.size() > 0 ? eigenvalues(eigenvalues.size() - 1) : CalcType{0};
+            if(smallest_kept < tol) break;
+        }
+
+        if(!got_any) {
+            throw except::runtime_error("get_eigenvalues: failed to compute any eigenvalue approximation (size {}, svd_rank_max {})", size, svd_rank_max);
+        }
+
+        // If we ended without reaching a good-enough tol and couldn’t diagonalize, warn.
+        if(last_rank_max < size or size > settings::precision::eig_max_size) {
+            const auto smallest_kept = eigenvalues.size() > 0 ? eigenvalues(eigenvalues.size() - 1) : CalcType{0};
+            if(smallest_kept >= tol and size > settings::precision::eig_max_size) {
+                tools::log->warn("get_eigenvalues: size {} exceeds eig_max_size. Approx eigenvalues from truncated SVD (rank_max {}), "
+                                 "smallest kept value {:.3e}. Entropies may be inaccurate.",
+                                 size, last_rank_max, fp(smallest_kept));
             }
         }
     }
@@ -152,20 +228,21 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     bool is_real = state.is_real();
     auto cites   = get_subsystem_complement(L, sites); // Complement of sites
 
-    // Determine whether to use the density matrix, its complement or the transfer matrix approach
-    // Since the eigenvalue decomposition is the most limiting factor, we use an upper limit by setting its cost to infinity when above the threshold
     auto chiL         = state.get_mps_site(sites.front()).get_chiL();
     auto chiR         = state.get_mps_site(sites.back()).get_chiR();
     auto eig_size_rho = static_cast<double>(std::pow(2.0, sites.size()));
     auto eig_size_cmp = static_cast<double>(std::pow(2.0, cites.size())); // The complement of rho
     auto eig_size_trf = static_cast<double>(chiL * chiR);
-    // auto eig_cost_rho = eig_size_rho <= static_cast<double>(eig_max_size) ? std::pow(eig_size_rho, 3.0) : std::numeric_limits<double>::infinity();
-    // auto eig_cost_cmp = eig_size_cmp <= static_cast<double>(eig_max_size) ? std::pow(eig_size_cmp, 3.0) : std::numeric_limits<double>::infinity();
-    // auto eig_cost_trf = eig_size_trf <= static_cast<double>(eig_max_size) ? std::pow(eig_size_trf, 3.0) : std::numeric_limits<double>::infinity();
 
-    auto eig_cost_rho = std::pow<double>(std::min(eig_size_rho, static_cast<double>(eig_max_size)), 3.0);
-    auto eig_cost_cmp = std::pow<double>(std::min(eig_size_cmp, static_cast<double>(eig_max_size)), 3.0);
-    auto eig_cost_trf = std::pow<double>(std::min(eig_size_trf, static_cast<double>(eig_max_size)), 3.0);
+    // Determine whether to use the density matrix, its complement or the transfer matrix approach
+    // Since the eigenvalue decomposition is the most limiting factor, we use an upper limit by setting its cost to infinity when above the threshold
+    auto eig_cost = [&](double n) {
+        // return (n <= static_cast<double>(eig_max_size)) ? std::pow(n, 3.0) : std::numeric_limits<double>::infinity();
+        return std::pow(n, 3.0);
+    };
+    auto eig_cost_rho = eig_cost(eig_size_rho);
+    auto eig_cost_cmp = eig_cost(eig_size_cmp);
+    auto eig_cost_trf = eig_cost(eig_size_trf);
 
     auto eig_sizes = std::array{eig_size_rho, eig_size_cmp, eig_size_trf};
     // auto eig_costs = std::array{eig_cost_rho, eig_cost_cmp, eig_cost_trf};
@@ -307,15 +384,15 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
                 }
                 evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
             } else {
-                Eigen::Tensor<fp128, 2> mat;
+                Eigen::Tensor<cx128, 2> mat;
                 if(min_cost_idx == 0) {
-                    mat      = state.template get_reduced_density_matrix<fp128>(sites);
+                    mat      = state.template get_reduced_density_matrix<cx128>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<fp128>(sites);
+                    mat      = state.template get_reduced_density_matrix<cx128>(sites);
                     mat_time = tid::get("rho").get_last_interval();
                 } else if(min_cost_idx == 2) {
-                    mat      = state.template get_transfer_matrix<fp128>(sites, side);
+                    mat      = state.template get_transfer_matrix<cx128>(sites, side);
                     mat_time = tid::get("trf").get_last_interval();
                 }
                 evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
@@ -725,9 +802,11 @@ RealScalar<Scalar> tools::finite::measure::information_bit_scale(const RealArray
  */
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const RealArrayXX<Scalar> &information_lattice) {
-    RealArrayX<Scalar> il = information_lattice.isNaN().select(0.0, information_lattice).rowwise().sum();
-    auto               l  = RealArrayX<Scalar>::LinSpaced(il.size(), 0.0, static_cast<RealScalar<Scalar>>(il.size() - 1l));
-    auto               ic = il.cwiseProduct(l).sum() / il.sum();
+    RealArrayX<Scalar> il    = information_lattice.isNaN().select(0.0, information_lattice).rowwise().sum();
+    auto               l     = RealArrayX<Scalar>::LinSpaced(il.size(), 0.0, static_cast<RealScalar<Scalar>>(il.size() - 1l));
+    const auto         ilsum = il.sum();
+    if(ilsum == RealScalar<Scalar>{0}) return std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
+    auto ic = il.cwiseProduct(l).sum() / ilsum;
     return ic;
 }
 
@@ -738,9 +817,11 @@ RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const Real
  */
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const RealArrayX<Scalar> &information_per_scale) {
-    auto il = information_per_scale.isNaN().select(0.0, information_per_scale).eval();
-    auto l  = RealArrayX<Scalar>::LinSpaced(il.size(), 0.0, static_cast<RealScalar<Scalar>>(il.size() - 1l));
-    auto ic = il.cwiseProduct(l).sum() / il.sum();
+    auto       il    = information_per_scale.isNaN().select(0.0, information_per_scale).eval();
+    auto       l     = RealArrayX<Scalar>::LinSpaced(il.size(), 0.0, static_cast<RealScalar<Scalar>>(il.size() - 1l));
+    const auto ilsum = il.sum();
+    if(ilsum == RealScalar<Scalar>{0}) return std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
+    auto ic = il.cwiseProduct(l).sum() / ilsum;
     return ic;
 }
 
@@ -786,16 +867,16 @@ template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::information_xi_from_geometric_dist(const StateFinite<Scalar> &state, InfoPolicy ip) {
     RealArrayX<Scalar> il = information_per_scale(state, ip);
     auto               L  = il.size();
-    if(il.size() <= 2) return std::numeric_limits<double>::quiet_NaN();
+    if(il.size() <= 2) return std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
     RealArrayX<Scalar> l    = RealArrayX<Scalar>::LinSpaced(L, 0, L - 1l);
     RealArrayX<Scalar> mask = RealArrayX<Scalar>::Ones(L); // Mask to select the interesting interval
 
-    bool has_extended_info = num::geq(il.bottomRows(L / 2).sum(), 0.9); // Both topological and thermal states have >= 1 bits beyond L/2.
+    bool has_extended_info = num::geq(il.tail(L / 2).sum(), 0.9); // Both topological and thermal states have >= 1 bits beyond L/2.
     bool decay_starts_at_0 = il[0] > il[1];
     bool decay_starts_at_1 = il[1] >= il[0] and il[1] > il[2];
 
-    if(has_extended_info) mask.bottomRows(L / 2) = 0; // If there is a topological bit at l ~ L? we should only consider l in [0,L/2]
-    if(decay_starts_at_1) mask[0] = 0;                // If the decay starts at l==1, take the geometric distribution starting at l==1
+    if(has_extended_info) mask.tail(L / 2) = 0; // If there is a topological bit at l ~ L? we should only consider l in [0,L/2]
+    if(decay_starts_at_1) mask[0] = 0;          // If the decay starts at l==1, take the geometric distribution starting at l==1
 
     RealScalar<Scalar> ic = (il * mask).cwiseProduct(l).sum() / (il * mask).sum(); // information center of mass (or <l>)
     RealScalar<Scalar> p  = RealScalar<Scalar>(1);                                 // Probability p for the geometric distribution
@@ -830,15 +911,15 @@ RealScalar<Scalar> tools::finite::measure::information_xi_from_avg_log_slope(con
     RealArrayX<Scalar> l    = RealArrayX<Scalar>::LinSpaced(L, 0, L - 1l);
     RealArrayX<Scalar> mask = RealArrayX<Scalar>::Ones(L); // Mask to select the interesting interval
 
-    bool has_extended_info = num::geq(il.bottomRows(L / 2).sum(), 0.9); // Both topological and thermal states have >= 1 bits beyond L/2.
+    bool has_extended_info = num::geq(il.tail(L / 2).sum(), 0.9); // Both topological and thermal states have >= 1 bits beyond L/2.
     bool decay_starts_at_1 = il[1] >= il[0] and il[1] > il[2];
 
-    if(has_extended_info) mask.bottomRows(L / 2 - 1) = nan; // If there is a topological bit at l ~ L? we should only consider l in [0,L/2]
-    if(decay_starts_at_1) mask[0] = nan;                    // If the decay starts at l==1, take the geometric distribution starting at l==1
-    mask = (il < Real{1e-15f}).select(nan, mask);           // Filter tiny noisy values
+    if(has_extended_info) mask.tail(L / 2 - 1) = nan; // If there is a topological bit at l ~ L? we should only consider l in [0,L/2]
+    if(decay_starts_at_1) mask[0] = nan;              // If the decay starts at l==1, take the geometric distribution starting at l==1
+    mask = (il < Real{1e-15f}).select(nan, mask);     // Filter tiny noisy values
 
     auto il_log      = RealArrayX<Scalar>(Eigen::log(il * mask));
-    auto il_log_diff = RealArrayX<Scalar>(il_log.bottomRows(L - 1) - il_log.topRows(L - 1));
+    auto il_log_diff = RealArrayX<Scalar>(il_log.tail(L - 1) - il_log.head(L - 1));
     auto xi          = RealScalar<Scalar>{-1} / nanmean(il_log_diff);
 
     // auto lstart = decay_starts_at_1 ? 1.0 : 0.0;
@@ -863,13 +944,13 @@ RealScalar<Scalar> tools::finite::measure::information_xi_from_exp_fit(const Sta
     RealArrayX<Scalar> l    = RealArrayX<Scalar>::LinSpaced(L, 0, L - 1l);
     RealArrayX<Scalar> mask = RealArrayX<Scalar>::Ones(L); // Mask to select the interesting interval
 
-    bool has_extended_info = num::geq(il.bottomRows(L / 2).sum(), 0.9); // Both topological and thermal states have >= 1 bits beyond L/2.
+    bool has_extended_info = num::geq(il.tail(L / 2).sum(), 0.9); // Both topological and thermal states have >= 1 bits beyond L/2.
 
     bool decay_starts_at_1 = il[1] >= il[0] and il[1] > il[2];
 
-    if(has_extended_info) mask.bottomRows(L / 2 - 1) = 0; // If there is a topological bit at l ~ L? we should only consider l in [0,L/2]
-    if(decay_starts_at_1) mask[0] = 0;                    // If the decay starts at l==1, take the geometric distribution starting at l==1
-    mask = (il < Real{1e-15f}).select(0, mask);           // Filter tiny noisy values
+    if(has_extended_info) mask.tail(L / 2 - 1) = 0; // If there is a topological bit at l ~ L? we should only consider l in [0,L/2]
+    if(decay_starts_at_1) mask[0] = 0;              // If the decay starts at l==1, take the geometric distribution starting at l==1
+    mask = (il < Real{1e-15f}).select(0, mask);     // Filter tiny noisy values
 
     // Collect the well-defined points in the domain
     auto Y = std::vector<RealScalar<Scalar>>();

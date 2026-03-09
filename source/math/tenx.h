@@ -243,7 +243,7 @@ namespace tenx {
     }
 
     template<typename T>
-    Eigen::Tensor<T, 1> broadcast(Eigen::Tensor<T, 1> &tensor, const std::array<long, 1> &bcast) {
+    Eigen::Tensor<T, 1> broadcast(const Eigen::Tensor<T, 1> &tensor, const std::array<long, 1> &bcast) {
         // Use this function to avoid a bug in Eigen when broadcasting complex tensors of rank 1, with compiler option -mfma
         // See more here https://gitlab.com/libeigen/eigen/-/issues/2351
         std::array<long, 2> bcast2 = {bcast[0], 1};

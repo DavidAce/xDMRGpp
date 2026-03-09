@@ -50,6 +50,7 @@ void ModelInfinite<Scalar>::initialize(ModelType model_type_) {
     model_type = model_type_;
     HA         = MpoFactory<Scalar>::create_mpo(0, model_type);
     HB         = MpoFactory<Scalar>::create_mpo(1, model_type);
+    clear_cache();
 }
 
 template<typename Scalar>
@@ -62,6 +63,7 @@ void ModelInfinite<Scalar>::randomize() {
     all_params.push_back(HB->get_parameters());
     HA->set_averages(all_params, true);
     HB->set_averages(all_params, true);
+    clear_cache();
 }
 
 template<typename Scalar>
@@ -69,19 +71,19 @@ void ModelInfinite<Scalar>::reset_mpo_squared() {
     tools::log->debug("Resetting squared MPO");
     HA->build_mpo_squared();
     HB->build_mpo_squared();
+    clear_cache();
 }
 
 template<typename Scalar>
 void ModelInfinite<Scalar>::rebuild_mpo_squared() {
     if(settings::precision::use_compressed_mpo_squared != MpoCompress::NONE) {
-        tools::log->trace("Compressing MPO²");
-        throw std::runtime_error("Compressing the squared MPO² is currently unsupported on infinite systems.\n"
-                                 "Set settings::precision::use_compressed_mpo_squared_all = false");
-        auto mpo_compressed = get_compressed_mpo_squared();
-        HA->set_mpo_squared(mpo_compressed[0]);
-        HA->set_mpo_squared(mpo_compressed[1]);
-    } else
-        reset_mpo_squared();
+        throw std::runtime_error("Compressed MPO² is unsupported for infinite systems. Set settings::precision::use_compressed_mpo_squared = NONE");
+    }
+    reset_mpo_squared();
+    clear_cache();
+    // auto mpo_compressed = get_compressed_mpo_squared();
+    // HA->set_mpo_squared(mpo_compressed[0]);
+    // HA->set_mpo_squared(mpo_compressed[1]);
 }
 
 template<typename Scalar>
@@ -111,7 +113,8 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelInfinite<Scalar>::get_compressed_mpo_
         // Next compress from left to right
         Eigen::Tensor<Scalar, 2> T_l2r; // Transfer matrix
         Eigen::Tensor<Scalar, 4> T_mpo_sq;
-        for(const auto &[idx, mpo_sq] : iter::enumerate(mpos_sq)) {
+        for(size_t idx = 0; idx < mpos_sq.size(); ++idx) {
+            auto &mpo_sq = mpos_sq[idx];
             if(T_l2r.size() == 0)
                 T_mpo_sq = mpo_sq;
             else
@@ -121,7 +124,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelInfinite<Scalar>::get_compressed_mpo_
                 mpo_sq = T_mpo_sq;
             } else {
                 std::tie(mpo_sq, T_l2r) = svd.split_mpo_l2r(T_mpo_sq);
-                if(idx + 1 == mpos_sq.size())
+                if(idx == mpos_sq.size())
                     // The remaining transfer matrix T can be multiplied back into the last MPO from the right
                     mpo_sq = Eigen::Tensor<Scalar, 4>(mpo_sq.contract(T_l2r, tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2}));
             }
@@ -209,6 +212,7 @@ template<typename Scalar>
 void ModelInfinite<Scalar>::set_energy_shift_per_site(Scalar energy_shift_per_site) {
     HA->set_energy_shift_mpo(energy_shift_per_site);
     HB->set_energy_shift_mpo(energy_shift_per_site);
+    clear_cache();
 }
 
 template<typename Scalar>

@@ -15,9 +15,9 @@
 
 namespace settings {
 #if defined(NDEBUG)
-    constexpr bool debug_lanczos = false;
+    inline constexpr bool debug_lanczos = false;
 #else
-    constexpr bool debug_lanczos = true;
+    inline constexpr bool debug_lanczos = true;
 #endif
 }
 template<typename Scalar>

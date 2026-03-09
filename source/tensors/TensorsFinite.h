@@ -204,14 +204,22 @@ T TensorsFinite<Scalar>::get_length() const {
 template<typename Scalar>
 template<typename T>
 const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian() const {
-    auto  t_ham = tid::tic_scope("ham");
+    auto t_ham = tid::tic_scope("ham");
+    tools::log->trace("Contracting effective multisite Hamiltonian");
+
     auto &cache = get_cache<T>();
     if(cache.effective_hamiltonian and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian.value();
     const auto &mpo = get_multisite_mpo<T>();
-    const auto &env = get_multisite_env_ene_block_as<T>();
-    tools::log->trace("Contracting effective multisite Hamiltonian");
+
     cache.cached_sites_hamiltonian = active_sites;
-    cache.effective_hamiltonian    = contract_mpo_env<T>(mpo, env.L, env.R);
+
+    if constexpr(std::is_same_v<T, Scalar>) {
+        const auto env              = get_multisite_env_ene_block(); // env_pair<const Tensor<Scalar,3>&>
+        cache.effective_hamiltonian = contract_mpo_env<T>(mpo, env.L, env.R);
+    } else {
+        const auto env              = get_multisite_env_ene_block_as<T>(); // copies, but only for T != Scalar
+        cache.effective_hamiltonian = contract_mpo_env<T>(mpo, env.L, env.R);
+    }
     return cache.effective_hamiltonian.value();
 }
 
@@ -220,13 +228,19 @@ template<typename T>
 const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian_squared() const {
     auto  t_ham = tid::tic_scope("ham²");
     auto &cache = get_cache<T>();
-    if(cache.effective_hamiltonian_squared and active_sites == cache.cached_sites_hamiltonian) return cache.effective_hamiltonian_squared.value();
+    if(cache.effective_hamiltonian_squared and active_sites == cache.cached_sites_hamiltonian_squared) return cache.effective_hamiltonian_squared.value();
 
     tools::log->trace("TensorsFinite<Scalar>::get_effective_hamiltonian_squared(): contracting active sites {}", active_sites);
     const auto &mpo                        = get_multisite_mpo_squared<T>();
-    const auto &env                        = get_multisite_env_var_block_as<T>();
     cache.cached_sites_hamiltonian_squared = active_sites;
-    cache.effective_hamiltonian_squared    = contract_mpo_env<T>(mpo, env.L, env.R);
+
+    if constexpr(std::is_same_v<T, Scalar>) {
+        const auto env = get_multisite_env_var_block();
+        cache.effective_hamiltonian_squared = contract_mpo_env<T>(mpo, env.L, env.R);
+    } else {
+        const auto env = get_multisite_env_var_block_as<T>();
+        cache.effective_hamiltonian_squared = contract_mpo_env<T>(mpo, env.L, env.R);
+    }
     return cache.effective_hamiltonian_squared.value();
 }
 

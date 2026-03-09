@@ -14,7 +14,7 @@ std::array<long, 3> tools::finite::multisite::get_dimensions(const StateFinite<S
     sites = sites.value_or(state.active_sites);
     if(sites.value().empty()) return std::array<long, 3>{0, 0, 0};
     std::array<long, 3> dimensions{};
-    std::sort(sites.value().begin(), sites.value().end());
+    // std::sort(sites.value().begin(), sites.value().end());
     if(sites.value().front() > sites.value().back()) throw except::logic_error("Given site list is not increasing: {}", sites.value());
 
     dimensions[1] = state.get_mps_site(sites.value().front()).get_M().dimension(1);
@@ -86,8 +86,8 @@ std::vector<size_t> tools::finite::multisite::generate_site_list(StateFinite<Sca
     long min_pos = max_pos;
     long max_off = safe_cast<long>(max_sites) - 1;
 
-    bool at_edge = max_pos >= length or min_pos < 0;
-
+    // bool at_edge = max_pos >= length or min_pos < 0;
+    bool at_edge = (min_pos == 0 && direction < 0) || (max_pos == length - 1 && direction > 0);
     if(direction > 0) {
         min_pos = std::clamp<long>(min_pos, 0l, length - 1l);
         max_pos = std::clamp<long>(min_pos + max_off, min_pos, length - 1l);
@@ -119,7 +119,7 @@ std::vector<size_t> tools::finite::multisite::generate_site_list(StateFinite<Sca
             reason = "Can't select sites beyond the edge";
             break;
         }
-        bool allequal = std::all_of(sizes.begin(), sizes.end(), [sizes](long c) { return c == sizes.front(); });
+        bool allequal = std::all_of(sizes.begin(), sizes.end(), [&sizes](long c) { return c == sizes.front(); });
         auto size     = sizes.back();
         if(size < threshold and sites.size() == max_sites) {
             reason = "reached max sites";

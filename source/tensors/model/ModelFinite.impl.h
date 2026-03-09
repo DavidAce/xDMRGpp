@@ -49,32 +49,33 @@ ModelFinite<Scalar>::ModelFinite(ModelFinite &&other) = default; // default move
 template<typename Scalar>
 ModelFinite<Scalar> &ModelFinite<Scalar>::operator=(ModelFinite &&other) = default; // default move assign
 
-/* clang-format off */
-template<typename Scalar> ModelFinite<Scalar>::ModelFinite(const ModelFinite &other) :
-    cache_fp32(other.cache_fp32),
-    cache_fp64(other.cache_fp64),
-    cache_cx32(other.cache_cx32),
-    cache_cx64(other.cache_cx64),
-    active_sites(other.active_sites),
-    model_type(other.model_type)
-{
+template<typename Scalar> ModelFinite<Scalar>::ModelFinite(const ModelFinite &other)
+    : cache_fp32(other.cache_fp32),     //
+      cache_fp64(other.cache_fp64),     //
+      cache_fp128(other.cache_fp128),   //
+      cache_cx32(other.cache_cx32),     //
+      cache_cx64(other.cache_cx64),     //
+      cache_cx128(other.cache_cx128),   //
+      active_sites(other.active_sites), //
+      model_type(other.model_type) {
     MPO.clear();
     MPO.reserve(other.MPO.size());
     for(const auto &other_mpo : other.MPO) MPO.emplace_back(other_mpo->clone());
-    if constexpr (settings::debug)
-        for(const auto &[idx,other_mpo] : iter::enumerate(other.MPO))
+    if constexpr(settings::debug)
+        for(const auto &[idx, other_mpo] : iter::enumerate(other.MPO))
             if(MPO[idx]->get_unique_id() != other_mpo->get_unique_id()) throw std::runtime_error("ID mismatch after copying mpo");
 }
-/* clang-format on */
 
 template<typename Scalar>
 ModelFinite<Scalar> &ModelFinite<Scalar>::operator=(const ModelFinite &other) {
     // check for self-assignment
     if(this != &other) {
-        cache_fp32 = other.cache_fp32;
-        cache_fp64 = other.cache_fp64;
-        cache_cx32 = other.cache_cx32;
-        cache_cx64 = other.cache_cx64;
+        cache_fp32  = other.cache_fp32;
+        cache_fp64  = other.cache_fp64;
+        cache_cx32  = other.cache_cx32;
+        cache_cx64  = other.cache_cx64;
+        cache_fp128 = other.cache_fp128;
+        cache_cx128 = other.cache_cx128;
         MPO.clear();
         MPO.reserve(other.MPO.size());
         for(const auto &other_mpo : other.MPO) MPO.emplace_back(other_mpo->clone());
@@ -102,7 +103,7 @@ void ModelFinite<Scalar>::initialize(ModelType model_type_, size_t model_size) {
 template<typename Scalar>
 const MpoSite<Scalar> &ModelFinite<Scalar>::get_mpo(size_t pos) const {
     if(pos >= MPO.size()) throw except::range_error("get_mpo(pos) pos out of range: {}", pos);
-    return **std::next(MPO.begin(), safe_cast<long>(pos));
+    return *MPO.at(pos);
 }
 
 template<typename Scalar>
@@ -272,7 +273,6 @@ std::vector<std::reference_wrapper<MpoSite<Scalar>>> ModelFinite<Scalar>::get_mp
     return mpos;
 }
 
-
 template<typename Scalar>
 std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpo_tensors(Scalar energy_shift_per_site, MposWithEdges withEdges, MpoCompress compress) const {
     tools::log->trace("Collecting all MPO: {} sites | with edges {}", MPO.size(), static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
@@ -284,12 +284,13 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpo_tensors(Scala
         auto redge = MPO.back()->template get_MPO_edge_right<Scalar>();
         mpos       = tools::finite::mpo::get_mpos_with_edges(mpos, ledge, redge);
     }
-    if(compress == MpoCompress::AUTO){ compress = settings::precision::use_compressed_mpo;}
+    if(compress == MpoCompress::AUTO) { compress = settings::precision::use_compressed_mpo; }
     return tools::finite::mpo::get_compressed_mpos(mpos, compress);
 }
 
 template<typename Scalar>
-std::vector<Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4>> ModelFinite<Scalar>::get_mpo_tensors_q(Scalar energy_shift_per_site, MposWithEdges withEdges, MpoCompress compress) const {
+std::vector<Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4>>
+    ModelFinite<Scalar>::get_mpo_tensors_q(Scalar energy_shift_per_site, MposWithEdges withEdges, MpoCompress compress) const {
     tools::log->trace("Collecting all MPO_q: {} sites | with edges {}", MPO.size(), static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
     // Collect all the mpo (doesn't matter if they are already compressed)
     std::vector<Eigen::Tensor<QuadScalar, 4>> mpos_q;
@@ -299,11 +300,10 @@ std::vector<Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4>> ModelFin
     if(withEdges == MposWithEdges::ON) {
         Eigen::Tensor<QuadScalar, 1> ledge = MPO.front()->template get_MPO_edge_left<QuadScalar>();
         Eigen::Tensor<QuadScalar, 1> redge = MPO.back()->template get_MPO_edge_right<QuadScalar>();
-        mpos_q  = tools::finite::mpo::get_mpos_with_edges<QuadScalar>(mpos_q, ledge, redge);
+        mpos_q                             = tools::finite::mpo::get_mpos_with_edges<QuadScalar>(mpos_q, ledge, redge);
     }
-     if(compress == MpoCompress::AUTO) compress = settings::precision::use_compressed_mpo;
+    if(compress == MpoCompress::AUTO) compress = settings::precision::use_compressed_mpo;
     return tools::finite::mpo::get_compressed_mpos(mpos_q, compress);
-
 }
 
 template<typename Scalar>
@@ -321,10 +321,13 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpo2_tensors(Scal
     return tools::finite::mpo::get_compressed_mpos(mpos2, compress);
 }
 
-
 template<typename Scalar>
 void ModelFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
-    if(std::abs(get_energy_shift_mpo() - energy_shift) <= std::numeric_limits<RealScalar>::epsilon()) { return; }
+    const auto oldval = get_energy_shift_mpo();
+    const auto newval = energy_shift;
+    const RealScalar tol = RealScalar{100} * std::numeric_limits<RealScalar>::epsilon();
+    const RealScalar scale = std::max<RealScalar>(RealScalar{1}, std::max(std::abs(std::real(oldval)), std::abs(std::real(newval))));
+    if(std::abs(std::real(oldval - newval)) <= tol * scale) return;
     tools::log->trace("Shifting MPO energy: {:.16f}", fp(energy_shift));
     Scalar energy_shift_per_site = energy_shift / static_cast<RealScalar>(get_length());
     for(const auto &mpo : MPO) mpo->set_energy_shift_mpo(energy_shift_per_site);
@@ -391,7 +394,7 @@ void ModelFinite<Scalar>::set_parity_shift_mpo_squared(int sign, std::string_vie
     if(get_parity_shift_mpo_squared() == std::make_pair(sign, axis)) return;
     tools::log->info("Setting MPO² parity shift for target axis {}{}", sign == 0 ? "" : (sign < 0 ? "-" : "+"), qm::spin::half::get_axis_unsigned(axis));
     for(const auto &mpo : MPO) mpo->set_parity_shift_mpo_squared(sign, axis);
-    clear_cache();
+    clear_cache_squared();
 }
 
 template<typename Scalar>
@@ -422,15 +425,15 @@ ModelLocal<Scalar> ModelFinite<Scalar>::get_local(const std::vector<size_t> &sit
     if(sites.empty()) throw std::runtime_error("No active sites on which to build a multisite hamiltonian tensor");
     auto mlocal    = ModelLocal<Scalar>();
     auto positions = num::range<size_t>(sites.front(), sites.back() + 1);
-    auto skip      = std::optional<std::vector<size_t>>();
+    auto skip      = std::vector<size_t>{};
     if(sites != positions) {
-        skip = std::vector<size_t>{};
-        for(const auto &pos : positions) {
-            if(std::find(sites.begin(), sites.end(), pos) == sites.end()) skip->emplace_back(pos);
-        }
+        skip.reserve(positions.size());
+        for(const auto &pos : positions)
+            if(std::find(sites.begin(), sites.end(), pos) == sites.end()) skip.emplace_back(pos);
     }
+
     for(const auto &pos : positions) {
-        bool do_skip = std::find(skip->begin(), skip->end(), pos) != skip->end();
+        const bool do_skip = !skip.empty() && (std::find(skip.begin(), skip.end(), pos) != skip.end());
         if(do_skip) continue;
         mlocal.mpos.emplace_back(get_mpo(pos).clone());
     }
@@ -817,6 +820,14 @@ void ModelFinite<Scalar>::clear_cache_squared(LogPolicy logPolicy) const {
     cache_cx128.multisite_mpo_squared     = std::nullopt;
     cache_cx128.multisite_ham_squared     = std::nullopt;
     cache_cx128.multisite_mpo_squared_ids = std::nullopt;
+
+    cache_fp32.multisite_mpo_temps.clear();
+    cache_fp64.multisite_mpo_temps.clear();
+    cache_fp128.multisite_mpo_temps.clear();
+    cache_cx32.multisite_mpo_temps.clear();
+    cache_cx64.multisite_mpo_temps.clear();
+    cache_cx128.multisite_mpo_temps.clear();
+
 }
 
 template<typename Scalar>

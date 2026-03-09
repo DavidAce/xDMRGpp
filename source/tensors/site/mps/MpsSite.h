@@ -73,7 +73,7 @@ class MpsSite {
         truncation_error_LC   = other.truncation_error_LC;
         truncation_error_last = other.truncation_error_last;
         label                 = other.label;
-        norm_error_cached     = static_cast<RealScalar>(other.norm_error_cached.value());
+        norm_error_cached     = std::nullopt;
         is_real_cached        = other.is_real_cached;
         has_nan_cached        = other.has_nan_cached;
         unique_id             = std::nullopt;
@@ -97,7 +97,7 @@ class MpsSite {
         truncation_error_LC   = other.truncation_error_LC;
         truncation_error_last = other.truncation_error_last;
         label                 = other.label;
-        norm_error_cached     = static_cast<RealScalar>(other.norm_error_cached.value());
+        norm_error_cached     = std::nullopt;
         is_real_cached        = other.is_real_cached;
         has_nan_cached        = other.has_nan_cached;
         unique_id             = std::nullopt;
@@ -129,10 +129,10 @@ class MpsSite {
     [[nodiscard]] const Eigen::Tensor<Scalar, 3> &get_M() const;      /*!< Gets A or B matrix. If this is a center (A matrix) it attaches LC */
     [[nodiscard]] const Eigen::Tensor<Scalar, 1> &get_L() const;
     [[nodiscard]] const Eigen::Tensor<Scalar, 1> &get_LC() const;
-    [[nodiscard]] Eigen::Tensor<Scalar, 3>       &get_M_bare();
-    [[nodiscard]] Eigen::Tensor<Scalar, 3>       &get_M();
-    [[nodiscard]] Eigen::Tensor<Scalar, 1>       &get_L();
-    [[nodiscard]] Eigen::Tensor<Scalar, 1>       &get_LC();
+    // [[nodiscard]] Eigen::Tensor<Scalar, 3>       &get_M_bare();
+    // [[nodiscard]] Eigen::Tensor<Scalar, 3>       &get_M();
+    // [[nodiscard]] Eigen::Tensor<Scalar, 1>       &get_L();
+    // [[nodiscard]] Eigen::Tensor<Scalar, 1>       &get_LC();
 
     /* clang-format off */
     // template<typename T> [[nodiscard]] Eigen::Tensor<T, 3> get_M_bare_as() const;
@@ -234,10 +234,10 @@ class MpsSite {
         set_truncation_error(error);
     }
 
-    void unset_LC();
-    void unset_L();
-    void unset_truncation_error();
-    void unset_truncation_error_LC();
+    void unset_LC() noexcept;
+    void unset_L() noexcept;
+    void unset_truncation_error() noexcept;
+    void unset_truncation_error_LC() noexcept;
     void fuse_mps(const MpsSite &other);
     void apply_mpo(const Eigen::Tensor<Scalar, 4> &mpo, bool adjoint = false);
     void apply_mpo(const Eigen::Tensor<Scalar, 2> &mpo, bool adjoint = false);

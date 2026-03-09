@@ -1,13 +1,12 @@
 #include "math/tenx.h"
-#include "tools/common/contraction.h"
-#include "tools/common/contraction/matrix_vector_product.h"
-#include "tools/common/contraction/contraction_policy.h"
-#include "tools/common/contraction/expectation_value.h"
 #include "math/x2/gemm.h"
 #include "math/x2/view.h"
 #include "tid/tid.h"
+#include "tools/common/contraction.h"
+#include "tools/common/contraction/contraction_policy.h"
+#include "tools/common/contraction/expectation_value.h"
+#include "tools/common/contraction/matrix_vector_product.h"
 #include "tools/common/log.h"
-
 
 template<typename Scalar>
 Scalar tools::common::contraction::expectation_value(const Scalar *const ket_ptr, std::array<long, 3> ket_dims,   //
@@ -26,7 +25,10 @@ Scalar tools::common::contraction::expectation_value(const Scalar *const ket_ptr
 
     Eigen::Tensor<Scalar, 3> Hket(ket_dims);
     tools::common::contraction::matrix_vector_product(Hket.data(), ket_ptr, ket_dims, mpo_ptr, mpo_dims, envL_ptr, envL_dims, envR_ptr, envR_dims);
-    return tools::common::contraction::contract_mps_mps_overlap(ket_ptr, ket_dims, Hket.data(), Hket.dimensions()); // ket gets adjointed
+    Scalar expv = tools::common::contraction::contract_mps_mps_overlap(ket_ptr, ket_dims, Hket.data(), Hket.dimensions()); // ket gets adjointed
+    assert(std::isfinite(std::real(expv)));
+    assert(std::isfinite(std::imag(expv)));
+    return expv;
 }
 
 template<typename Scalar>
@@ -50,7 +52,10 @@ Scalar tools::common::contraction::expectation_value(const Scalar *const bra_ptr
 
     Eigen::Tensor<Scalar, 3> Hket(ket_dims);
     tools::common::contraction::matrix_vector_product(Hket.data(), ket_ptr, ket_dims, mpo_ptr, mpo_dims, envL_ptr, envL_dims, envR_ptr, envR_dims);
-    return tools::common::contraction::contract_mps_mps_overlap(bra_ptr, bra_dims, Hket.data(), Hket.dimensions()); // bra gets adjointed
+    Scalar expv = tools::common::contraction::contract_mps_mps_overlap(bra_ptr, bra_dims, Hket.data(), Hket.dimensions()); // bra gets adjointed
+    assert(std::isfinite(std::real(expv)));
+    assert(std::isfinite(std::imag(expv)));
+    return expv;
 }
 
 template<typename Scalar>
@@ -60,7 +65,10 @@ Scalar tools::common::contraction::expectation_value(const Eigen::Tensor<Scalar,
                                                      const EnvEne<Scalar>           &envR) {
     Eigen::Tensor<Scalar, 3> res(mps.dimensions());
     matrix_vector_product(res, mps, mpo, envL, envR);
-    return contract_mps_overlap(mps, res);
+    Scalar expv = contract_mps_overlap(mps, res);
+    assert(std::isfinite(std::real(expv)));
+    assert(std::isfinite(std::imag(expv)));
+    return expv;
 }
 
 template<typename Scalar>
@@ -70,5 +78,8 @@ Scalar tools::common::contraction::expectation_value(const Eigen::Tensor<Scalar,
                                                      const EnvVar<Scalar>           &envR) {
     Eigen::Tensor<Scalar, 3> res(mps.dimensions());
     tools::common::contraction::matrix_vector_product(res, mps, mpo, envL, envR);
-    return tools::common::contraction::contract_mps_overlap(mps, res);
+    Scalar expv = contract_mps_overlap(mps, res);
+    assert(std::isfinite(std::real(expv)));
+    assert(std::isfinite(std::imag(expv)));
+    return expv;
 }

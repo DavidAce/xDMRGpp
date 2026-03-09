@@ -13,10 +13,10 @@
 #include "tid/tid.h"
 #include "tools/common/log.h"
 #include "tools/finite/mps.h"
+#include <bit>
 #include <bitset>
 #include <fmt/ranges.h>
 #include <utility>
-
 using tools::finite::measure::RealScalar;
 
 namespace settings {
@@ -65,7 +65,7 @@ template<auto N>
     //     r = (( a << (8 - num_bits) ) ^ (o << (8 - num_bits))) = 00000000
     //     return r.none()
     if constexpr(settings::debug or settings::debug_numen)
-        if(num_bits < 0) throw except::runtime_error("num_bits must be in range [0,{}] | Got: {}", N, num_bits);
+        if(num_bits < 0 or std::cmp_greater(num_bits, long(N))) throw except::runtime_error("num_bits must be in range [0,{}] | Got: {}", N, num_bits);
     const auto num = safe_cast<size_t>(num_bits);
     return ((b1 << (N - num)) ^ (b2 << (N - num))).none();
 }
@@ -315,17 +315,26 @@ inline size_t nextGreaterWithSameSetBit(size_t n) {
 }
 
 // function to find the position of rightmost set bit. Returns -1 if there are no set bits
-inline size_t getFirstSetBitPos(size_t n) { return safe_cast<size_t>((std::log2(n & -n) + 1) - 1); }
+inline size_t getFirstSetBitPos(size_t n) {
+    if(n == 0) return -1ul;
+    return std::countr_zero(n);
+}
+// inline size_t getFirstSetBitPos(size_t n) { return safe_cast<size_t>((std::log2(n & -n) + 1) - 1); }
 
 // function to find the next greater integer
 inline size_t nextGreaterWithOneMoreSetBit(size_t n) {
-    // position of rightmost unset bit of n by passing ~n as argument
-    size_t pos = getFirstSetBitPos(~n);
-    // if n consists of unset bits, then set the rightmost unset bit
-    if(pos > -1ul) return (1 << pos) | n;
-    // n does not consists of unset bits
-    return ((n << 1) + 1);
+    const size_t pos = getFirstSetBitPos(~n);
+    if(pos == -1ul) return (n << 1) + 1; // no unset bits
+    return (1ul << pos) | n;
 }
+// inline size_t nextGreaterWithOneMoreSetBit(size_t n) {
+//     // position of rightmost unset bit of n by passing ~n as argument
+//     size_t pos = getFirstSetBitPos(~n);
+//     // if n consists of unset bits, then set the rightmost unset bit
+//     if(pos > -1ul) return (1 << pos) | n;
+//     // n does not consists of unset bits
+//     return ((n << 1) + 1);
+// }
 
 inline std::vector<size_t> get_numbers_with_hamming_weight_n(size_t n, long num_bits) {
     std::vector<size_t> numbers;

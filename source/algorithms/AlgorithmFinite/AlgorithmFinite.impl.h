@@ -358,7 +358,6 @@ BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionO
     bcfg.optRitz       = status.opt_ritz;
 
     if(status.algo_type == AlgorithmType::xDMRG) {
-        // auto h2 = tools::finite::measure::expval_hamiltonian_squared(tensors);
         if(status.algorithm_has_stuck_for > 1) {
             bcfg.optAlgo = settings::xdmrg::algo_stuck;
             bcfg.optRitz = settings::xdmrg::ritz_stuck;
@@ -651,7 +650,10 @@ void AlgorithmFinite<Scalar>::reduce_bond_dimension_limit(double rate, UpdatePol
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::try_mps_compression() {
     if(not tensors.position_is_inward_edge()) return;
+    if(status.iter == 0) return;
+    if(settings::strategy::trnc_increase_iter == 0) return;
     if(settings::strategy::trnc_increase_vtol <= 0) return;
+    if(status.iter % settings::strategy::trnc_increase_iter != 0) return;
     tools::log->trace("try_mps_compression: vtol {:.5e} | trnc lim {:.5e} max {:.5e} min {:.5e} | bond dims: {}", settings::strategy::trnc_increase_vtol,
                       status.trnc_lim, settings::precision::svd_truncation_max, settings::precision::svd_truncation_min,
                       tools::finite::measure::bond_dimensions(tensors.get_state()));
@@ -669,6 +671,7 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
     auto trials   = 0;
     auto trnc_prv = status.trnc_lim;
     auto trnc_try = status.trnc_lim;
+    auto trnc_acc = status.trnc_lim;
     while(trials++ < 200 and trnc_try < settings::precision::svd_truncation_max and tensors.get_state().get_largest_bond() > 16) {
         TensorsFinite tensors_tmp = tensors;
         trnc_prv                  = trnc_try;
@@ -679,11 +682,28 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
         auto ene_new = tools::finite::measure::energy(tensors);
         auto var_new = tools::finite::measure::energy_variance(tensors);
 
-        auto ene_err = std::abs(ene_old - ene_new) / std::max(eps, std::abs(ene_old));
-        auto var_err = std::abs(var_old - var_new) / std::max(eps, std::abs(var_old));
+        auto vtol = static_cast<RealScalar>(settings::strategy::trnc_increase_vtol);
 
-        bool reject_bond_too_small  = tensors.get_state().get_largest_bond() < 16;
-        bool reject_error_too_large = std::max(var_err, ene_err) > static_cast<RealScalar>(settings::strategy::trnc_increase_vtol);
+        // Energy: relative change
+        auto ene_scale = std::max(eps, std::abs(ene_old));
+        auto ene_diff  = std::abs(ene_new - ene_old);
+        auto ene_err   = ene_diff / ene_scale;
+
+        // Variance: (a) use a floor in the denominator, (b) only reject if variance increased "too much".
+        RealScalar var_floor = narrow_cast<RealScalar>(settings::precision::variance_convergence_threshold);
+
+        auto var_scale = std::max(std::abs(var_old), var_floor);
+        auto var_diff  = var_new - var_old;
+        auto var_err   = std::abs(var_diff) / var_scale;
+
+        bool reject_bond_too_small = tensors.get_state().get_largest_bond() < 16;
+        bool reject_ene_change     = ene_err > vtol;
+
+        // One-sided variance check: variance decreases are always OK.
+        bool reject_var_increase = var_diff > vtol * var_scale;
+
+        bool reject_error_too_large = reject_ene_change || reject_var_increase;
+
         if(reject_bond_too_small or reject_error_too_large) {
             tools::log->debug("try_mps_compression: Rejected trial {} trnc try {:.3e} prv {:.3e}  | var {:.5e} -> {:.5e} (err {:.5e}) | ene {:.5e} -> {:.5e} "
                               "(err {:.5e}) | bond dims: {}",
@@ -692,6 +712,7 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
             tensors = tensors_tmp;
             break;
         }
+        trnc_acc = trnc_try;
         tools::log->debug("try_mps_compression: Accepted trial {} trnc try {:.3e} prv {:.3e} | var {:.5e} -> {:.5e} (err {:.5e}) | ene {:.5e} -> {:.5e} (err "
                           "{:.5e}) | bond dims: {}",
                           trials, trnc_try, trnc_prv, fp(var_old), fp(var_new), fp(var_err), fp(ene_old), fp(ene_new), fp(ene_err),
@@ -701,7 +722,7 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
     auto trnc_max = tensors.get_state().get_truncation_error_largest();
     auto bond_max = tensors.get_state().get_largest_bond();
 
-    status.trnc_lim = std::clamp(trnc_try * 0.1, status.trnc_lim, settings::precision::svd_truncation_max);
+    status.trnc_lim = std::clamp(trnc_acc * 0.1, status.trnc_lim, settings::precision::svd_truncation_max);
     if(status.trnc_lim != trnc_old)
         tools::log->info("try_mps_compression: updated truncation error limit: {:.5e} -> {:.5e} "
                          "| largest truncation error {:.5e} -> {:.5e} "
@@ -1458,7 +1479,8 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
     //     auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
     //     tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
     //     E2_global1 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
-    //     tools::log->info("H²              <ψ H_global | H_global ψ>                       = {:.16e} | t = {:.4e}", fp(E2_global1), t_res->get_last_interval());
+    //     tools::log->info("H²              <ψ H_global | H_global ψ>                       = {:.16e} | t = {:.4e}", fp(E2_global1),
+    //     t_res->get_last_interval());
     // }
     // {
     //     auto                t_res     = tid::tic_token("<ψ H_global | H_global ψ>");
@@ -1467,7 +1489,8 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
     //     auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
     //     tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
     //     E2_global1 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
-    //     tools::log->info("H²              <ψ H_global | H_global ψ>    DPL                = {:.16e} | t = {:.4e}", fp(E2_global1), t_res->get_last_interval());
+    //     tools::log->info("H²              <ψ H_global | H_global ψ>    DPL                = {:.16e} | t = {:.4e}", fp(E2_global1),
+    //     t_res->get_last_interval());
     // }
     // {
     //     auto                t_res     = tid::tic_token("<ψ|H²_global|ψ>");
@@ -1475,7 +1498,8 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
     //     auto                mpos      = t.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::DPL);
     //     E2_global2                    = std::real(tools::finite::measure::expectation_value<Scalar>(t.get_state(), t.get_state(), mpos));
     //     // auto E2_global2L = static_cast<RealScalar>(std::real(tools::finite::measure::expectation_value<LongScalar>(t.get_state(), t.get_state(), mpos)));
-    //     tools::log->info("H²              <ψ| H²_global | ψ>                              = {:.16e} | t = {:.4e}", fp(E2_global2), t_res->get_last_interval());
+    //     tools::log->info("H²              <ψ| H²_global | ψ>                              = {:.16e} | t = {:.4e}", fp(E2_global2),
+    //     t_res->get_last_interval());
     //     // tools::log->info("H²              <ψ| H²_global | ψ>            (long double)     = {:.16e} | t = {:.4e}", fp(E2_global2L),
     //     // t_res->get_last_interval());
     //     RealScalar VarH = E2_global2 - E1_global1 * E1_global1;
@@ -1490,9 +1514,9 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
     //     svdcfg.svd_rtn                = svd::rtn::gesdd;
     //     tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
     //     E2_global2 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, t.get_state()));
-    //     tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", fp(E2_global2), t_res->get_last_interval());
-    //     RealScalar VarH = E2_global2 - E1_global1 * E1_global1;
-    //     tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
+    //     tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", fp(E2_global2),
+    //     t_res->get_last_interval()); RealScalar VarH = E2_global2 - E1_global1 * E1_global1; tools::log->info("energy variance <H²_global> - <H_global>² =
+    //     {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
     // }
 
     {

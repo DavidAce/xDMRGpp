@@ -40,8 +40,8 @@ std::vector<fp64> tools::finite::measure::truncation_errors_active(const StateFi
     }
     if(state.active_sites.size() == 2) return {state.get_mps_site(state.active_sites[0]).get_truncation_error_LC()};
     std::vector<fp64> truncation_errors;
-    for(const auto &pos : state.active_sites) {
-        if(&pos == &state.active_sites.front()) continue;
+    for(size_t i = 1; i < state.active_sites.size(); ++i) {
+        const auto  pos = state.active_sites[i];
         const auto &mps = state.get_mps_site(pos);
         truncation_errors.push_back(mps.get_truncation_error_last());
     }

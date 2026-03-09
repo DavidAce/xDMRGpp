@@ -213,9 +213,11 @@ class StateFinite {
     [[nodiscard]] const MpsSite<Scalar> &get_mps_site(T pos) const {
         if constexpr(std::is_signed_v<T>) { assert(pos >= 0); }
         assert(pos < get_length<T>());
-        const auto &mps_ptr = *std::next(mps_sites.begin(), static_cast<long>(pos));
-        assert(mps_ptr->template get_position<T>() == pos);
-        return *mps_ptr;
+        // const auto &mps_ptr = *std::next(mps_sites.begin(), static_cast<long>(pos));
+        const auto &mps_at_pos = mps_sites.at(static_cast<size_t>(pos));
+        if(!mps_at_pos) throw except::runtime_error("mps at pos = {} is null", pos);
+        assert(mps_at_pos->template get_position<T>() == pos);
+        return *mps_at_pos;
     }
 
     template<typename T>

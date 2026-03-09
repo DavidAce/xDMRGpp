@@ -378,22 +378,19 @@ class solver_base {
         return B_norm >= bNormTol(B_norm);
     }
     [[nodiscard]] bool bNormIsOK(const RealScalar &B_norm) const noexcept { return B_norm >= bNormTol(B_norm); }
-    [[nodiscard]] bool bQuotIsOK(const MatrixType &B, const MatrixType &A) const noexcept {
-        auto quotBA = B.norm() / A.norm();
-        return quotBA < quotTolB;
-    }
     [[nodiscard]] bool bQuotIsOK(RealScalar B_norm, RealScalar A_norm) const noexcept {
-        auto quotBA = B_norm / A_norm;
-        return quotBA >= quotTolB;
+        if(!(A_norm > RealScalar{0})) return false;
+        return (B_norm / A_norm) >= quotTolB;
     }
+    [[nodiscard]] bool bQuotIsOK(const MatrixType &B, const MatrixType &A) const noexcept { return bQuotIsOK(B.norm(), A.norm()); }
     [[nodiscard]] bool bIsOK(const MatrixType &B, const MatrixType &A) const noexcept {
         auto B_norm = B.norm();
         auto A_norm = A.norm();
         return bNormIsOK(B_norm) and bQuotIsOK(B_norm, A_norm);
     }
 
-    Eigen::Index max_iters   = 100;
-    Eigen::Index max_matvecs = -1ul;
+    Eigen::Index max_iters   = 100l;
+    Eigen::Index max_matvecs = -1l;
 
     RealScalar rnormRelDiffTol = std::numeric_limits<RealScalar>::epsilon();
     RealScalar absDiffTol      = std::numeric_limits<RealScalar>::epsilon() * 10000;

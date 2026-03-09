@@ -30,11 +30,11 @@ class TensorsInfinite {
     //  - Manage measurements cache
 
     TensorsInfinite() noexcept;
-    ~TensorsInfinite();                                                // Read comment on implementation
-    TensorsInfinite(TensorsInfinite &&other) noexcept;                 // default move ctor
-    TensorsInfinite &operator=(TensorsInfinite &&other) noexcept;      // default move assign
-    TensorsInfinite(const TensorsInfinite &other) noexcept;            // copy ctor
-    TensorsInfinite &operator=(const TensorsInfinite &other) noexcept; // copy assign
+    ~TensorsInfinite();                                           // Read comment on implementation
+    TensorsInfinite(TensorsInfinite &&other) noexcept;            // default move ctor
+    TensorsInfinite &operator=(TensorsInfinite &&other) noexcept; // default move assign
+    TensorsInfinite(const TensorsInfinite &other);                // copy ctor
+    TensorsInfinite &operator=(const TensorsInfinite &other);     // copy assign
 
     StateInfinite<Scalar>       &get_state();
     ModelInfinite<Scalar>       &get_model();

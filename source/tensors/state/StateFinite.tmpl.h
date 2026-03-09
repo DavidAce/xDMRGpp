@@ -108,7 +108,7 @@ Eigen::Tensor<T, 3> StateFinite<Scalar>::get_multisite_mps(const std::vector<siz
                 M = tools::common::contraction::contract_mps_bnd(M, L);
             }
 
-            if(&site == &sites.front()) { // First site
+            if(site == sites.front()) { // First site
                 multisite_mps = std::move(M);
             } else { // Next sites
                 multisite_mps = tools::common::contraction::contract_mps_mps(multisite_mps, M);
@@ -698,6 +698,7 @@ std::optional<typename StateFinite<Scalar>::template TrfCacheEntry<T>> StateFini
             }
         }
     }
+    if(!cacheEntry.has_value()) return std::nullopt;
     cacheEntry->cost = get_transfer_matrix_cost<T>(sites, side, cacheEntry);
     return cacheEntry;
 }

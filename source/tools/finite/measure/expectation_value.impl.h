@@ -22,7 +22,7 @@
 #include <general/sfinae.h>
 #include <h5pp/details/h5ppType.h>
 namespace settings {
-    constexpr bool debug_expval = false;
+    inline constexpr bool debug_expval = false;
 }
 
 template<typename CalcType, typename Scalar, typename OpType>
@@ -50,26 +50,40 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
 
     if(state.mps_sites.empty()) throw std::runtime_error("expectation_value: state.mps_sites is empty");
     if(ops.empty()) throw std::runtime_error("expectation_value: ops is empty");
-    auto d0    = state.mps_sites.front()->get_chiL();
-    auto chain = tenx::TensorIdentity<CalcType>(d0);
-    if(d0 != 1) tools::log->warn("expectation_value: chiL is not 1");
 
-    // auto               &threads = tenx::threads::get();
-    StateFinite<Scalar> stateOp = state;
-    for(const auto &op : iter::reverse(ops)) {
-        auto                     pos    = op.pos;
-        auto                    &mps    = stateOp.get_mps_site(pos);
-        Eigen::Tensor<Scalar, 2> op_ct  = tenx::asScalarType<Scalar>(op.op);
-        Eigen::Tensor<Scalar, 4> mpo_op = op_ct.reshape(Eigen::DSizes<Eigen::Index, 4>{1, 1, op_ct.dimension(0), op_ct.dimension(1)});
-        mps.apply_mpo(mpo_op);
+    // Convert to LocalObservableMpo to reuse code
+    std::vector<LocalObservableMpo<OpType>> mpos;
+    mpos.reserve(ops.size());
+
+    for(const auto &op : ops) {
+        Eigen::Tensor<OpType, 4> mpo_op = op.op.reshape(Eigen::DSizes<Eigen::Index, 4>{1, 1, op.op.dimension(0), op.op.dimension(1)});
+        mpos.push_back(LocalObservableMpo<OpType>{mpo_op, op.pos, false});
     }
-    Scalar expval = ops::overlap<Scalar>(stateOp, state);
-    if constexpr(sfinae::is_std_complex_v<CalcType>) {
-        using CalcReal = decltype(std::real(std::declval<CalcType>()));
-        return std::complex<CalcReal>(static_cast<CalcReal>(std::real(expval)), static_cast<CalcReal>(std::imag(expval)));
-    } else {
-        return static_cast<CalcType>(std::real(expval));
-    }
+
+    // Now use the existing efficient MPO expectation value routine
+    return expectation_value<CalcType>(state, mpos);
+
+    //
+    // auto d0    = state.mps_sites.front()->get_chiL();
+    // auto chain = tenx::TensorIdentity<CalcType>(d0);
+    // if(d0 != 1) tools::log->warn("expectation_value: chiL is not 1");
+    //
+    // // auto               &threads = tenx::threads::get();
+    // StateFinite<Scalar> stateOp = state;
+    // for(const auto &op : iter::reverse(ops)) {
+    //     auto                     pos    = op.pos;
+    //     auto                    &mps    = stateOp.get_mps_site(pos);
+    //     Eigen::Tensor<Scalar, 2> op_ct  = tenx::asScalarType<Scalar>(op.op);
+    //     Eigen::Tensor<Scalar, 4> mpo_op = op_ct.reshape(Eigen::DSizes<Eigen::Index, 4>{1, 1, op_ct.dimension(0), op_ct.dimension(1)});
+    //     mps.apply_mpo(mpo_op);
+    // }
+    // Scalar expval = ops::overlap<Scalar>(stateOp, state);
+    // if constexpr(sfinae::is_std_complex_v<CalcType>) {
+    //     using CalcReal = decltype(std::real(std::declval<CalcType>()));
+    //     return std::complex<CalcReal>(static_cast<CalcReal>(std::real(expval)), static_cast<CalcReal>(std::imag(expval)));
+    // } else {
+    //     return static_cast<CalcType>(std::real(expval));
+    // }
 }
 
 template<typename CalcType, typename Scalar, typename MpoType>
@@ -96,6 +110,8 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
     // Create compatible edges
     Eigen::Tensor<CalcType, 1> Ledge(mpodims[0]); // The left  edge
     Eigen::Tensor<CalcType, 1> Redge(mpodims[1]); // The right edge
+    Ledge.setZero();
+    Redge.setZero();
     Ledge(mpodims[0] - 1) = 1;
     Redge(0)              = 1;
     Eigen::Tensor<CalcType, 3> Ledge3, Redge3;
@@ -105,11 +121,9 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         long mpoDim  = mpodims[0];
         Ledge3.resize(tenx::array3{mpsDim, mpsDim, mpoDim});
         Ledge3.setZero();
-        for(long i = 0; i < mpsDim; i++) {
-            std::array<long, 1> extent1                     = {mpoDim};
-            std::array<long, 3> offset3                     = {i, i, 0};
-            std::array<long, 3> extent3                     = {1, 1, mpoDim};
-            Ledge3.slice(offset3, extent3).reshape(extent1) = Ledge;
+        for(Eigen::Index i = 0; i < mpsDim; ++i) {
+            // Writes Ledge3(i,i,:) = Ledge(:)
+            Ledge3.chip(i, 0).chip(i, 0) = Ledge;
         }
     }
     {
@@ -118,16 +132,14 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         long mpoDim  = mpodims[1];
         Redge3.resize(tenx::array3{mpsDim, mpsDim, mpoDim});
         Redge3.setZero();
-        for(long i = 0; i < mpsDim; i++) {
-            std::array<long, 1> extent1                     = {mpoDim};
-            std::array<long, 3> offset3                     = {i, i, 0};
-            std::array<long, 3> extent3                     = {1, 1, mpoDim};
-            Redge3.slice(offset3, extent3).reshape(extent1) = Redge;
+        for(Eigen::Index i = 0; i < mpsDim; ++i) {
+            // Writes Redge3(i,i,:) = Redge(:)
+            Redge3.chip(i, 0).chip(i, 0) = Redge;
         }
     }
 
     // Generate an identity mpo with the same dimensions as the ones in obs
-    Eigen::Tensor<Scalar, 4> mpoI = tenx::TensorIdentity<Scalar>(mpodims[0] * mpodims[2]).reshape(mpodims);
+    Eigen::Tensor<MpoType, 4> mpoI = tenx::TensorIdentity<MpoType>(mpodims[0] * mpodims[2]).reshape(mpodims);
 
     // Start applying the mpo or identity on each site starting from Ledge3
     Eigen::Tensor<CalcType, 3> temp;
@@ -138,7 +150,7 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         const auto     ob_it = std::find_if(mpos.begin(), mpos.end(), [&pos](const auto &ob) { return ob.pos == pos and not ob.used; });
         const auto    &mpo   = ob_it != mpos.end() ? ob_it->mpo : mpoI; // Choose the operator or an identity
         if(ob_it != mpos.end()) ob_it->used = true;
-        contract_M_Ledge3_mpo_Mconj_0_1_0_1_013_023(temp, M, Ledge3, tenx::asScalarType<CalcType>(mpo), threads);
+        contract_M_Ledge3_mpo_Mconj_1_1_12_03_01_30(temp, M, Ledge3, tenx::asScalarType<CalcType>(mpo), threads);
         Ledge3 = std::move(temp);
     }
 
@@ -146,7 +158,7 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
         throw except::runtime_error("expectation_value: Ledge3 and Redge3 dimension mismatch: {} != {}", Ledge3.dimensions(), Redge3.dimensions());
 
     // Finish by contracting Redge3
-    Eigen::Tensor<CalcType, 0> expval = contract_T3_T3_012_012(Ledge3, Redge3, threads);
+    Eigen::Tensor<CalcType, 0> expval = contract_envL_envR_012_012(Ledge3, Redge3, threads);
     if(std::imag(expval.coeff(0)) > std::numeric_limits<Real>::epsilon() * 100)
         tools::log->warn("expectation_value: result has imaginary part: {:8.2e}", fp(expval(0)));
     return expval.coeff(0);
@@ -332,7 +344,7 @@ CalcType tools::finite::measure::expectation_value(const std::vector<std::refere
 
         decltype(auto) bra = mpsBra[pos].get().template get_M_as<CalcType>();
         decltype(auto) ket = mpsKet[pos].get().template get_M_as<CalcType>();
-        tools::log->info("resL: {} | bra {}", resL.dimensions(), bra.dimensions());
+        if constexpr(settings::debug_expval) { tools::log->info("resL: {} | bra {}", resL.dimensions(), bra.dimensions()); }
         assert(resL.dimension(0) == bra.dimension(1));
         assert(resL.dimension(1) == mpo.dimension(0));
         assert(resL.dimension(2) == ket.dimension(1));

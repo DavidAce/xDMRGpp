@@ -70,7 +70,7 @@ template<typename Scalar>
 void GeneralizedBasisChange<Scalar>::symmetrize(Eigen::Tensor<Scalar, 2> &E) {
     auto Em = MapMatType(E.data(), E.dimension(0), E.dimension(1));
     auto er = (Em - Em.adjoint()).norm() / Em.norm();
-    if(er >= 1e-12) { tools::log->warn("hermiticty error: {:.5e}", fp(er)); }
+    if(er >= RealScalar{1e-12f}) { tools::log->warn("hermiticty error: {:.5e}", fp(er)); }
     Em = (RealScalar{0.5} * (Em + Em.adjoint())).eval();
 }
 
@@ -500,17 +500,11 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
         envL_zip.contract(mpo, tenx::idx({2}, {0})).contract(envR_zip, tenx::idx({2}, {2})).shuffle(std::array<Eigen::Index, 6>{2, 0, 4, 3, 1, 5});
     auto rows = H.dimension(0) * H.dimension(1) * H.dimension(2);
     auto cols = H.dimension(3) * H.dimension(4) * H.dimension(5);
-    auto Hmap = MapMatType(H.data(), rows, cols);
 
     auto es = eig::solver();
     es.eig<eig::Form::SYMM>(H.data(), rows, eig::Vecs::ON);
     if(!es.result.meta.eigvecsR_found) throw except::runtime_error("matrix_sqrt: es(Hmap) failed}");
 
-    // auto es = Eigen::SelfAdjointEigenSolver<MatrixType>(Hmap, Eigen::ComputeEigenvectors);
-
-    // if(es.info() != Eigen::Success)
-    // throw except::runtime_error("matrix_sqrt: Eigen::SelfAdjointEigenSolver<MatrixType> es(Hmap) failed: info {}", static_cast<int>(es.info()));
-    // if(es.info() == Eigen::Success) {
     if(es.result.meta.eigvecsR_found) {
         auto Hinv = Eigen::Tensor<Scalar, 6>(H.dimensions());
         Hinv.setZero();

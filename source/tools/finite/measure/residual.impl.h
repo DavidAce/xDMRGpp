@@ -41,6 +41,7 @@ RealScalar<Scalar> tools::finite::measure::residual_norm(const Eigen::Tensor<Sca
                                                          const env_pair<const EnvEne<Scalar> &>                           &envs) {
     // Calculate the residual_norm r = |Hv - Ev|
     auto mpo_vec = std::vector<Eigen::Tensor<Scalar, 4>>();
+    mpo_vec.reserve(mpo_refs.size());
     for(const auto &mpo : mpo_refs) mpo_vec.emplace_back(mpo.get().template MPO_as<Scalar>());
     return residual_norm(mps, mpo_vec, envs.L.template get_blkx2_as<Scalar>(), envs.R.template get_blkx2_as<Scalar>());
 }
@@ -51,6 +52,7 @@ RealScalar<Scalar> tools::finite::measure::residual_norm(const Eigen::Tensor<Sca
                                                          const env_pair<const EnvVar<Scalar> &>                           &envs) {
     // Calculate the residual_norm r = |H²v - E²v|
     auto mpo_vec = std::vector<Eigen::Tensor<Scalar, 4>>();
+    mpo_vec.reserve(mpo_refs.size());
     for(const auto &mpo : mpo_refs) mpo_vec.emplace_back(mpo.get().template MPO2_as<Scalar>());
     return residual_norm(mps, mpo_vec, envs.L.template get_blkx2_as<Scalar>(), envs.R.template get_blkx2_as<Scalar>());
 }

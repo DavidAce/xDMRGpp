@@ -50,23 +50,23 @@ class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Sc
     static constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
     mutable VectorType    x_tmp; // Scratch memory
     mutable VectorType    y_tmp; // Scratch memory
+    mutable VectorType    z_tmp; // Scratch memory
     const Eigen::Index    size;
     static constexpr bool has_projector_op = true;
     // Timers
     public:
-    std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ResidualOp;
-    std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ProjectOpL;
-    std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ProjectOpR;
-    std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MatrixOp;
+    std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ResidualOp;
+    std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpL;
+    std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpR;
+    std::function<MatrixType(const Eigen::Ref<const MatrixType> &)>                      MatrixOp;
 
     void _check_template_params() {};
     // Custom API:
     JacobiDavidsonOperator() = default;
-    JacobiDavidsonOperator(Eigen::Index                                                    size_,
-                           std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ResidualOp_, //
-                           std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ProjectOpL_, //
-                           std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> ProjectOpR_, //
-                           std::function<MatrixType(const Eigen::Ref<const MatrixType> &)> MatrixOp_)
+    JacobiDavidsonOperator(Eigen::Index size_, std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ResidualOp_, //
+                           std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpL_,                     //
+                           std::function<void(const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y)> ProjectOpR_,                     //
+                           std::function<MatrixType(const Eigen::Ref<const MatrixType> &)>                      MatrixOp_)
         : size(size_), ResidualOp(ResidualOp_), ProjectOpL(ProjectOpL_), ProjectOpR(ProjectOpR_), MatrixOp(MatrixOp_) {}
 
     template<typename Rhs>
@@ -109,18 +109,29 @@ namespace Eigen::internal {
             assert(rhs.size() == mat.rows());
             assert(dst.size() == mat.rows());
             EIGEN_ONLY_USED_FOR_DEBUG(alpha);
-
             {
                 const auto &ResidualOp = mat.ResidualOp; // (A - θB)
                 const auto &ProjectOpL = mat.ProjectOpL; // (I - Bv * v.adjoint() / vHBv)
                 const auto &ProjectOpR = mat.ProjectOpR; // (I - v * Bv.adjoint() / vHBv)
                 auto       &x_tmp      = mat.x_tmp;      // Scratch memory
                 auto       &y_tmp      = mat.y_tmp;      // Scratch memory
+                auto       &z_tmp      = mat.z_tmp;      // Scratch memory
 
-                // standard JD-op
-                x_tmp.noalias() = ProjectOpR(rhs);
-                y_tmp.noalias() = ResidualOp(x_tmp);
-                dst.noalias()   = ProjectOpL(y_tmp);
+                // Resize scratch if needed
+                x_tmp.resize(rhs.rows(), rhs.cols());
+                y_tmp.resize(rhs.rows(), rhs.cols());
+                z_tmp.resize(rhs.rows(), rhs.cols());
+
+                // Standard JD-op: Apply operator z_tmp = P_L( R( P_R(rhs) ) )
+                ProjectOpR(rhs, x_tmp);
+                ResidualOp(x_tmp, y_tmp);
+                ProjectOpL(y_tmp, z_tmp);
+
+                // Accumulate
+                if(alpha == Scalar{1})
+                    dst.noalias() += z_tmp;
+                else
+                    dst.noalias() += alpha * z_tmp;
             }
         }
     };

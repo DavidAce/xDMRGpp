@@ -94,6 +94,7 @@ TensorsFinite<Scalar> &TensorsFinite<Scalar>::operator=(const TensorsFinite &oth
     if(this != &other) {
         cache_fp32   = other.cache_fp32;
         cache_fp64   = other.cache_fp64;
+        cache_fp128  = other.cache_fp128;
         cache_cx32   = other.cache_cx32;
         cache_cx64   = other.cache_cx64;
         cache_cx128  = other.cache_cx128;
@@ -119,7 +120,6 @@ TensorsFinite<Scalar>::TensorsFinite(const StateFinite<Scalar> &state_, const Mo
     active_sites = get_state().active_sites;
     sync_active_sites();
 }
-
 
 /* clang-format off */
 template<typename Scalar> StateFinite<Scalar>       &TensorsFinite<Scalar>::get_state() { return *state; }
@@ -276,19 +276,23 @@ template<typename Scalar>
 void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
     if(std::isnan(std::real(energy_shift))) throw std::logic_error("TensorsFinite<Scalar>::set_energy_shift_mpo: got std::real(energy_shift) == NAN");
     if(std::isnan(std::imag(energy_shift))) throw std::logic_error("TensorsFinite<Scalar>::set_energy_shift_mpo: got std::imag(energy_shift) == NAN");
-    if(std::abs(model->get_energy_shift_mpo() - energy_shift) <= std::numeric_limits<RealScalar>::epsilon()) {
-        tools::log->debug("MPO energy is already shifted by {:.16f} : No shift needed.", fp(energy_shift));
+
+    const RealScalar tol   = RealScalar{100} * std::numeric_limits<RealScalar>::epsilon();
+    const RealScalar scale = std::max<RealScalar>(RealScalar{1}, std::abs(std::real(energy_shift)));
+    if(std::abs(std::real(model->get_energy_shift_mpo() - energy_shift)) <= tol * scale) {
+        tools::log->debug("MPO energy is already shifted: {:.16f}", fp(energy_shift));
         return;
     }
+
     std::vector<std::optional<DebugStatus<Scalar>>> debs;
     debs.emplace_back(get_status(*this, "Before shift"));
 
     measurements = MeasurementsTensorsFinite<Scalar>(); // Resets model-related measurements but not state measurements, which can remain
-    model->clear_cache();
 
     tools::log->info("Shifting MPO energy: {:.16f}", fp(energy_shift));
     model->set_energy_shift_mpo(energy_shift);
     model->assert_validity();
+    clear_cache();
 
     debs.emplace_back(get_status(*this, "After shift"));
 
@@ -305,7 +309,6 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
             }
         }
     }
-
     for(const auto &deb : debs)
         if(deb) deb->print();
 
@@ -462,19 +465,25 @@ long TensorsFinite<Scalar>::active_problem_size() const {
 }
 template<typename Scalar>
 bool TensorsFinite<Scalar>::is_real() const {
+    const bool s_real = state->is_real();
+    const bool m_real = model->is_real();
+    const bool e_real = edges->is_real();
     if(settings::model::model_type == ModelType::ising_sdual) {
-        if(not state->is_real()) tools::log->critical("state has imaginary part");
-        if(not model->is_real()) tools::log->critical("model has imaginary part");
-        if(not edges->is_real()) tools::log->critical("edges has imaginary part");
+        if(not s_real) tools::log->critical("state has imaginary part");
+        if(not m_real) tools::log->critical("model has imaginary part");
+        if(not e_real) tools::log->critical("edges has imaginary part");
     }
-    return state->is_real() and model->is_real() and edges->is_real();
+    return s_real and m_real and e_real;
 }
 template<typename Scalar>
 bool TensorsFinite<Scalar>::has_nan() const {
-    if(state->has_nan()) tools::log->critical("state has nan");
-    if(model->has_nan()) tools::log->critical("model has nan");
-    if(edges->has_nan()) tools::log->critical("edges has nan");
-    return state->has_nan() or model->has_nan() or edges->has_nan();
+    const bool s_nan = state->has_nan();
+    const bool m_nan = model->has_nan();
+    const bool e_nan = edges->has_nan();
+    if(s_nan) tools::log->critical("state has nan");
+    if(m_nan) tools::log->critical("model has nan");
+    if(e_nan) tools::log->critical("edges has nan");
+    return s_nan or m_nan or e_nan;
 }
 template<typename Scalar>
 void TensorsFinite<Scalar>::assert_validity() const {
@@ -606,8 +615,9 @@ BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(BondExpansionCon
     }
 
     if(res.ok) {
-        tools::log->debug("Expanded environment {} block [{}-{}] | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f} | hsq {:.16f} -> {:.16f}", flag2str(bcfg.policy), res.posL, res.posR,
-                          fp(res.var_old), fp(res.var_new), fp(res.ene_old), fp(res.ene_new), fp(res.hsq_old), fp(res.hsq_new));
+        tools::log->debug("Expanded environment {} block [{}-{}] | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f} | hsq {:.16f} -> {:.16f}",
+                          flag2str(bcfg.policy), res.posL, res.posR, fp(res.var_old), fp(res.var_new), fp(res.ene_old), fp(res.ene_new), fp(res.hsq_old),
+                          fp(res.hsq_new));
         clear_measurements();
     } else {
         tools::log->debug("Expansion canceled: {}", res.msg);

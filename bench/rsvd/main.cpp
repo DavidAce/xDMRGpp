@@ -76,7 +76,7 @@ void bench() {
                 auto [U, S, VT] = svd2.do_svd(A_file);
                 t_rsvd.toc();
 
-                //                Eigen::VectorXd S_diff = S_log10.bottomRows(S_log10.size()-1) - S_log10.topRows(S_log10.size()-1);
+                //                Eigen::VectorXd S_diff = S_log10.tail(S_log10.size()-1) - S_log10.head(S_log10.size()-1);
                 //                double mean_log10_diff = S_diff.array().mean();
                 //                auto   linfit        = stat::linearFit(), S_log10, static_cast<long>(S_log10.size() / 2));
                 //                double rank_predict  = 3 * epsilon_log10 / linfit.slope;

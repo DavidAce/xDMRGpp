@@ -20,10 +20,16 @@ Eigen::Tensor<Scalar, 1> tools::finite::mps::mps2tensor(const std::vector<std::u
     using R       = RealScalar<CalcType>;
     auto spindims = std::vector<long>();
     auto bonddims = std::vector<long>();
-    for(auto &mps : mps_sites) {
-        spindims.emplace_back(mps->spin_dim());
-        bonddims.emplace_back(num::prod(spindims) * mps->get_chiR());
+    spindims.reserve(mps_sites.size());
+    bonddims.reserve(mps_sites.size());
+    long spin_prod = 1;
+    for(const auto &mps : mps_sites) {
+        const long sd = mps->spin_dim();
+        spindims.emplace_back(sd);
+        spin_prod *= sd;
+        bonddims.emplace_back(spin_prod * mps->get_chiR());
     }
+
     long  memsize = bonddims.empty() ? 0 : *std::max_element(bonddims.begin(), bonddims.end());
     auto  statev  = Eigen::Tensor<CalcType, 1>(memsize);
     auto  off1    = std::array<long, 1>{0};
@@ -35,11 +41,12 @@ Eigen::Tensor<Scalar, 1> tools::finite::mps::mps2tensor(const std::vector<std::u
     // If 4 spin1/2 have been contracted, the state vector could have size 16x7 if the last chi was 7.
     // Then contracting the next site, with dimensions 2x7x9 will get you a 16x2x9 tensor.
     // Lastly, one should reshape it back into a 32 x 9 state vector
-
+    Eigen::Tensor<CalcType, 2> temp;
     for(auto &mps : mps_sites) {
-        auto temp = Eigen::Tensor<CalcType, 2>(statev.slice(off1, ext1).reshape(ext2)); // Make a temporary copy of the state vector
-        ext1      = {mps->spin_dim() * temp.dimension(0) * mps->get_chiR()};
-        ext2      = {mps->spin_dim() * temp.dimension(0), mps->get_chiR()};
+        temp.resize(ext2);
+        temp.device(*threads->dev) = statev.slice(off1, ext1).reshape(ext2); // Make a temporary copy of the state vector
+        ext1                       = {mps->spin_dim() * temp.dimension(0) * mps->get_chiR()};
+        ext2                       = {mps->spin_dim() * temp.dimension(0), mps->get_chiR()};
         if(ext1[0] > memsize) throw except::logic_error("mps2tensor [{}]: size of ext1[0] > memsize", name);
         statev.slice(off1, ext1).device(*threads->dev) = temp.contract(mps->template get_M_as<CalcType>(), tenx::idx({1}, {1})).reshape(ext1);
     }

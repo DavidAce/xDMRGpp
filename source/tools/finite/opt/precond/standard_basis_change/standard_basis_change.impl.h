@@ -13,7 +13,7 @@
 #include "tensors/TensorsFinite.h"
 
 namespace settings {
-#if defined(DEBUG)
+#if defined(NDEBUG)
     inline constexpr bool debug_standard_basis_change = false;
 #else
     inline constexpr bool debug_standard_basis_change = false;
@@ -100,7 +100,7 @@ tools::finite::opt::precond::standard::BasisChange<Scalar>::BasisChange(const op
         const RealScalar   factor          = RealScalar{1e-3f};
         const Eigen::Index n               = Y.size();
         const RealScalar   ymax            = Y.maxCoeff();
-        const RealScalar   min_gap         = n >= 2 ? (Y.bottomRows(n - 1) - Y.topRows(n - 1)).minCoeff() : ymax;
+        const RealScalar   min_gap         = n >= 2 ? (Y.tail(n - 1) - Y.head(n - 1)).minCoeff() : ymax;
         const RealScalar   min_gap_guarded = std::max(min_gap, eps * ymax);
         const RealScalar   tau             = std::max(eps * ymax, factor * min_gap_guarded);
 

@@ -83,27 +83,76 @@ namespace svd {
 
         void copy_config(const svd::config &svd_cfg);
 
-        template<typename T>
-        [[nodiscard]] std::pair<long, fp64> get_rank_from_truncation_error(const T &S) const {
-            VectorType<fp64> truncation_errors(S.size() + 1);
-            for(long s = 0; s <= S.size(); s++) {
-                truncation_errors[s] = static_cast<fp64>(S.bottomRows(S.size() - s).norm());
-            } // Last one should be zero, i.e. no truncation
-            auto rank_    = (truncation_errors.array() >= truncation_lim).count();
-            auto rank_lim = S.size();
-            if(rank_max > 0) rank_lim = std::min(S.size(), rank_max);
-            rank_ = std::min(rank_, rank_lim);
-            if(rank_min > 0) rank_ = std::max(rank_, std::min(S.size(),
-                                                              rank_min)); // Make sure we don't overtruncate in some cases (e.g. when stashing)
-            if(rank_ <= 0) {
-                if(log)
-                    log->error("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.2e} | error {:8.2e}", S.size(), rank_, rank_lim, truncation_lim,
-                               truncation_errors[rank_]);
-                throw std::logic_error("rank <= 0");
+        // template<typename T>
+        // [[nodiscard]] std::pair<long, fp64> get_rank_from_truncation_error(const T &S) const {
+        //     VectorType<fp64> truncation_errors(S.size() + 1);
+        //     for(long s = 0; s <= S.size(); s++) {
+        //         truncation_errors[s] = static_cast<fp64>(S.tail(S.size() - s).norm());
+        //     } // Last one should be zero, i.e. no truncation
+        //     auto rank_    = (truncation_errors.array() >= truncation_lim).count();
+        //     auto rank_lim = S.size();
+        //     if(rank_max > 0) rank_lim = std::min(S.size(), rank_max);
+        //     rank_ = std::min(rank_, rank_lim);
+        //     if(rank_min > 0) rank_ = std::max(rank_, std::min(S.size(),
+        //                                                       rank_min)); // Make sure we don't overtruncate in some cases (e.g. when stashing)
+        //     if(rank_ <= 0) {
+        //         if(log)
+        //             log->error("Size {} | Rank {} | Rank limit {} | truncation error limit {:8.2e} | error {:8.2e}", S.size(), rank_, rank_lim,
+        //             truncation_lim,
+        //                        truncation_errors[rank_]);
+        //         throw std::logic_error("rank <= 0");
+        //     }
+        //     // log->info("Truncation error: {:.5e} limit {:.5e} | Smallest kept singular value: {:.5e} ({} in total)",
+        //     // fp(truncation_errors[rank_]),fp(truncation_lim), fp(S[rank_-1]), S.size());
+        //     return {rank_, truncation_errors[rank_]};
+        // }
+
+        template<typename Vec>
+        [[nodiscard]] std::pair<long, fp64> get_rank_from_truncation_error(const Vec &S) const {
+            const long n = safe_cast<long>(S.size());
+            if(n <= 0) throw std::logic_error("get_rank_from_truncation_error: S.size() <= 0");
+
+            if(!(truncation_lim >= 0.0 && truncation_lim < 1.0))
+                throw std::logic_error("get_rank_from_truncation_error: truncation_lim must satisfy 0 <= truncation_lim < 1");
+
+            const fp64 SnormSq = static_cast<fp64>(S.squaredNorm());
+            if(!(SnormSq > 0.0)) throw std::logic_error("get_rank_from_truncation_error: ||S|| == 0");
+
+            // Strictly-positive prefix length (S is sorted descending)
+            long pos_lim = 0;
+            while(pos_lim < n && std::real(S(pos_lim)) > 0) ++pos_lim;
+            if(pos_lim == 0) throw std::logic_error("get_rank_from_truncation_error: no positive singular values");
+
+            long rank_lim = pos_lim;
+            if(rank_max > 0) rank_lim = std::min(rank_lim, safe_cast<long>(rank_max));
+            if(rank_lim <= 0) throw std::logic_error("get_rank_from_truncation_error: rank_lim <= 0");
+
+            const fp64 thrSq = static_cast<fp64>(truncation_lim) * static_cast<fp64>(truncation_lim) * SnormSq;
+
+            // Choose smallest rank_ in [1, rank_lim] with ||S.tail(n-rank_)||^2 < thrSq
+            fp64 tail_norm_sq = 0.0;
+            long rank_        = rank_lim;
+
+            for(long i = n - 1; i >= 1; --i) {
+                const fp64 si = static_cast<fp64>(std::real(S(i)));
+                tail_norm_sq += si * si;
+
+                if(i <= rank_lim && tail_norm_sq < thrSq) rank_ = i;
             }
-            // log->info("Truncation error: {:.5e} limit {:.5e} | Smallest kept singular value: {:.5e} ({} in total)",
-            // fp(truncation_errors[rank_]),fp(truncation_lim), fp(S[rank_-1]), S.size());
-            return {rank_, truncation_errors[rank_]};
+
+            if(rank_min > 0) rank_ = std::max(rank_, std::min(rank_lim, safe_cast<long>(rank_min)));
+
+            if(std::real(S(rank_ - 1)) <= 0.0) throw std::logic_error("get_rank_from_truncation_error: rank selection would keep a zero singular value");
+
+            // Return relative truncation error (dimensionless)
+            fp64 tail_norm_sq_final = 0.0;
+            for(long i = rank_; i < n; ++i) {
+                const fp64 si = static_cast<fp64>(std::real(S(i)));
+                tail_norm_sq_final += si * si;
+            }
+            const fp64 trunc_err_rel = std::sqrt(tail_norm_sq_final / SnormSq);
+
+            return {rank_, trunc_err_rel};
         }
 
         template<typename Scalar>
@@ -166,8 +215,8 @@ namespace svd {
         }
 
         template<typename Scalar>
-        std::tuple<Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 1>, Eigen::Tensor<Scalar, 3>>
-            decompose(const Eigen::Tensor<Scalar, 4> &tensor, const svd::config &svd_cfg = svd::config()) {
+        std::tuple<Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 1>, Eigen::Tensor<Scalar, 3>> decompose(const Eigen::Tensor<Scalar, 4> &tensor,
+                                                                                                           const svd::config &svd_cfg = svd::config()) {
             long dL   = tensor.dimension(0);
             long chiL = tensor.dimension(1);
             long dR   = tensor.dimension(2);

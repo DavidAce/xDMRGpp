@@ -93,6 +93,8 @@ template<typename Scalar>
 void StateFinite<Scalar>::initialize(AlgorithmType algo_type, size_t model_size, long position, long spin_dim) {
     set_algorithm(algo_type);
     tools::log->debug("Initializing state: sites {} | position {} | spin_dim {}", model_size, position, spin_dim);
+    if(spin_dim < 2) throw except::logic_error("spin_dim must be >= 2, got {}", spin_dim);
+    if(position < -1) throw except::logic_error("position must be >= -1, got {}", position);
     if(model_size < 2) throw except::logic_error("Tried to initialize state with less than 2 sites");
     if(model_size > 2048) throw except::logic_error("Tried to initialize state with more than 2048 sites");
     if(position >= safe_cast<long>(model_size)) throw except::logic_error("Tried to initialize state at a position larger than the number of sites");
@@ -393,6 +395,7 @@ void StateFinite<Scalar>::set_mps(const std::vector<MpsSite<Scalar>> &mps_list) 
             if(mps_new.has_LC()) mps_old.set_LC(mps_new.get_LC());
         }
     }
+    clear_cache();
 }
 
 template<typename Scalar>
@@ -452,8 +455,8 @@ std::vector<long> StateFinite<Scalar>::get_bond_dims(const std::vector<size_t> &
     }
     if(sites.size() == 2) return {get_mps_site(sites.front()).get_chiR()};
     std::vector<long> bond_dimensions;
-    for(const auto &pos : sites) {
-        if(&pos == &sites.front()) continue;
+    for(size_t i = 1; i < sites.size(); ++i) {
+        const auto  pos = sites[i];
         const auto &mps = get_mps_site(pos);
         bond_dimensions.push_back(mps.get_chiL());
     }
@@ -742,11 +745,25 @@ void StateFinite<Scalar>::shrink_cache() const {
     auto shrink_once = [&](auto &cache) {
         using namespace settings;
         using namespace settings::precision;
-        /* clang-format off */
-        cache.mps.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del mps: {}", max_cache_gbts, cache.mps.front().first);
-        cache.trf.pop_front(); if constexpr(debug_cache) tools::log->trace("shrink_cache (max {}): del trf: {}", max_cache_gbts, cache.trf.front().first);
-        /* clang-format on */
+
+        if(!cache.mps.empty()) {
+            if constexpr(debug_cache) { tools::log->trace("shrink_cache (max {}): del mps: {}", max_cache_gbts, cache.mps.front().first); }
+            cache.mps.pop_front();
+        }
+        if(!cache.trf.empty()) {
+            if constexpr(debug_cache) { tools::log->trace("shrink_cache (max {}): del trf: {}", max_cache_gbts, cache.trf.front().first); }
+            cache.trf.pop_front();
+        }
     };
+    const auto all_empty = [&] {
+        return cache_fp32.mps.empty() and cache_fp32.trf.empty() and   //
+               cache_fp64.mps.empty() and cache_fp64.trf.empty() and   //
+               cache_fp128.mps.empty() and cache_fp128.trf.empty() and //
+               cache_cx32.mps.empty() and cache_cx32.trf.empty() and   //
+               cache_cx64.mps.empty() and cache_cx64.trf.empty() and   //
+               cache_cx128.mps.empty() and cache_cx128.trf.empty();
+    };
+
     shrink_while(cache_fp32);
     shrink_while(cache_fp64);
     shrink_while(cache_fp128);
@@ -755,6 +772,7 @@ void StateFinite<Scalar>::shrink_cache() const {
     shrink_while(cache_cx128);
 
     while(get_mps_cache_gbts() + get_trf_cache_gbts() > std::max(0.0, settings::precision::max_cache_gbts)) {
+        if(all_empty()) break;
         shrink_once(cache_fp32);
         shrink_once(cache_fp64);
         shrink_once(cache_fp128);
@@ -766,9 +784,9 @@ void StateFinite<Scalar>::shrink_cache() const {
 
 template<typename Scalar>
 bool StateFinite<Scalar>::is_normalized(RealScalar tol) const {
-    auto is_normalized_state = std::abs(RealScalar{1} - tools::finite::measure::norm_state(*this)) < tol; // Measures |1-<psi|psi>| < tol
-    auto is_normalized_sites = is_normalized_on_all_sites(tol);                                           // Measures the norm error on each site
-    return is_normalized_state < tol and is_normalized_sites;
+    const bool is_normalized_state = std::abs(RealScalar{1} - tools::finite::measure::norm_state(*this)) < tol; // Measures |1-<psi|psi>| < tol
+    const bool is_normalized_sites = is_normalized_on_all_sites(tol);                                           // Measures the norm error on each site
+    return is_normalized_state and is_normalized_sites;
 }
 
 template<typename Scalar>

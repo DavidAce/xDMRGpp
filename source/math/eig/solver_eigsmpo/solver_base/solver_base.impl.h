@@ -18,9 +18,9 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 namespace settings {
 #if defined(NDEBUG)
-    constexpr bool debug_solver = true;
+    inline constexpr bool debug_solver = false;
 #else
-    constexpr bool debug_solver = true;
+    inline constexpr bool debug_solver = true;
 #endif
 }
 
@@ -297,7 +297,7 @@ typename solver_base<Scalar>::RealScalar solver_base<Scalar>::Status::max_eval_e
 
 template<typename Scalar>
 typename solver_base<Scalar>::RealScalar solver_base<Scalar>::Status::min_eval_estimate() const {
-    auto it = std::max_element(min_eval_history.begin(), min_eval_history.end());
+    auto it = std::min_element(min_eval_history.begin(), min_eval_history.end());
     if(it != min_eval_history.end()) { return *it; }
     throw except::runtime_error("min_eval_history is empty");
 }
@@ -395,8 +395,9 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::qr_and_chebyshevFi
     auto bias = chebyshev_filter_lambda_cut_bias;
     if(ritz == OptRitz::LM or ritz == OptRitz::LR) { bias = RealScalar{1} - bias; }
 
-    RealScalar lambda_min = status.min_eval_estimate() * RealScalar{1.01f};
-    RealScalar lambda_max = status.min_eval_estimate() * RealScalar{0.99f};
+    RealScalar lambda_min = status.min_eval_estimate() * RealScalar{0.99};
+    RealScalar lambda_max = status.max_eval_estimate() * RealScalar{1.01};
+    if(lambda_min > lambda_max) std::swap(lambda_min, lambda_max);
     RealScalar lambda_cut = lambda_min + bias * (lambda_max - lambda_min);
     lambda_cut            = std::clamp(lambda_cut, lambda_min, lambda_max);
 
@@ -569,7 +570,7 @@ void solver_base<Scalar>::adjust_preconditioner_tolerance([[maybe_unused]] const
         cfg.maxiters = 2000l; // std::clamp(safe_cast<long>(maxiters), 50l, 200l);
 
         // RealScalar tol_rnorm = std::pow(Snorm, RealScalar{0.382f});
-        RealScalar tol_rnorm = RealScalar{1e-2f}; // std::pow(Snorm, RealScalar{0.5f});
+        RealScalar tol_rnorm = RealScalar{1e-4f}; // std::pow(Snorm, RealScalar{0.5f});
         // RealScalar tol_old   = cfg.tolerance;
         // RealScalar tol_min = RealScalar{0.1f}; // std::sqrt(eps);
         // RealScalar tol_max = RealScalar{0.1f};
@@ -774,7 +775,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP1(const Eigen
     status.num_precond_inner += H1ir.precond;
     status.time_matvecs_inner += H1ir.time_matvecs;
     status.time_precond_inner += H1ir.time_precond;
-    H1ir.reset();
+    // H1ir.reset();
     return HPX;
 }
 
@@ -796,7 +797,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP2(const Eigen
     status.num_precond_inner += H2ir.precond;
     status.time_matvecs_inner += H2ir.time_matvecs;
     status.time_precond_inner += H2ir.time_precond;
-    H2ir.reset();
+    // H2ir.reset();
     return HPX;
 }
 
@@ -817,7 +818,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP1P2(const Eig
     status.num_precond_inner += H1H2ir.precond;
     status.time_matvecs_inner += H1H2ir.time_matvecs;
     status.time_precond_inner += H1H2ir.time_precond;
-    H1H2ir.reset();
+    // H1H2ir.reset();
     return H1H2PX;
 }
 
@@ -937,19 +938,48 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
         else
             return H2.MultAX(X);
     };
-    auto ProjectOpL = [this, &V](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-        auto t_pl = tid::tic_token("ProjectOpL", tid::level::higher);
-        return X - V * (V.adjoint() * X).eval();
+    // auto ProjectOpL = [&V](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+    //     auto t_pl = tid::tic_token("ProjectOpL", tid::level::higher);
+    //     return X - V * (V.adjoint() * X).eval();
+    // };
+    // auto ProjectOpR = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+    //     auto t_pr = tid::tic_token("ProjectOpR", tid::level::higher);
+    //     Y.noalias() += X - V * (V.adjoint() * X).eval();
+    // };
+    auto ProjectOpL = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+        auto                    t_pl = tid::tic_token("ProjectOpL", tid::level::higher);
+        thread_local MatrixType T;
+        T.resize(V.cols(), X.cols());
+        Y.resize(X.rows(), X.cols());
+        T.noalias() = V.adjoint() * X;
+        Y.noalias() = X;
+        Y.noalias() -= V * T;
     };
-    auto ProjectOpR = [this, &V](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-        auto t_pr = tid::tic_token("ProjectOpR", tid::level::higher);
-        return X - V * (V.adjoint() * X).eval();
+    auto ProjectOpL_tmp = [ProjectOpL](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+        MatrixType Y(X.rows(), X.cols());
+        ProjectOpL(X, Y);
+        return Y;
+    };
+
+    auto ProjectOpR = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+        auto                    t_pr = tid::tic_token("ProjectOpR", tid::level::higher);
+        thread_local MatrixType T;
+        T.resize(V.cols(), X.cols());
+        Y.resize(X.rows(), X.cols());
+        T.noalias() = V.adjoint() * X;
+        Y.noalias() = X;
+        Y.noalias() -= V * T;
+    };
+    auto ProjectOpR_tmp = [ProjectOpR](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+        MatrixType Y(X.rows(), X.cols());
+        ProjectOpR(X, Y);
+        return Y;
     };
 
     auto t_jdl2 = tid::tic_scope("jdl2");
 
     // Right-hand side (projected)
-    MatrixType RHS = -ProjectOpL(S);
+    MatrixType RHS = -ProjectOpL_tmp(S);
 
     if(D.size() != RHS.size()) D.setZero(RHS.rows(), RHS.cols());
 
@@ -1049,10 +1079,10 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
             cfg.jacobi.skipjcb                      = dev_skipjcb;
 
             // Define the residual matrix-vector operator depending on the different DMRG algorithms
-            auto ResidualOp = [this, th, &H](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-                auto       t_rop = tid::tic_scope("ResidualOp", tid::level::higher);
-                auto       t_mvi = status.time_matvecs_inner.tic_token();
-                MatrixType HX(X.rows(), X.cols());
+            auto ResidualOp = [this, th, &H](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
+                auto t_rop = tid::tic_scope("ResidualOp", tid::level::higher);
+                auto t_mvi = status.time_matvecs_inner.tic_token();
+                HX.resize(X.rows(), X.cols());
                 switch(algo) {
                     case OptAlgo::DMRG: [[fallthrough]];
                     case OptAlgo::DMRGX: [[fallthrough]];
@@ -1079,14 +1109,13 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
                     }
                     default: throw except::runtime_error("unknown algorithm {}", enum2sv(algo));
                 }
-                return HX;
             };
             if(use_jd_initial_guess) cfg.initialGuess = d;
 
             auto JDop = JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
 
             d.noalias() = JacobiDavidsonSolver(JDop, rhs, cfg);
-            d.noalias() = ProjectOpR(d);
+            d.noalias() = ProjectOpR_tmp(d);
 
             status.num_iters_inner += cfg.result.iters;
             status.num_precond_inner += cfg.result.precond;
@@ -1124,18 +1153,39 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType
     // To avoid leakage  we project those blocks too, as ProjectOpR * Minv * ProjectOpL * X.
     // Notice that the projectors are reversed!
 
-    auto ProjectOpL = [this, &V, &H2V](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-        auto t_pl = tid::tic_token("ProjectOpL", tid::level::higher);
-        return X - H2V * (V.adjoint() * X).eval();
+    auto ProjectOpL = [&V, &H2V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+        auto                    t_pl = tid::tic_token("ProjectOpL", tid::level::higher);
+        thread_local MatrixType T;
+        T.resize(V.cols(), X.cols());
+        Y.resize(X.rows(), X.cols());
+        T.noalias() = V.adjoint() * X;
+        Y.noalias() = X;
+        Y.noalias() -= H2V * T;
     };
-    auto ProjectOpR = [this, &V, &H2V](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-        auto t_pr = tid::tic_token("ProjectOpR", tid::level::higher);
-        return X - V * (H2V.adjoint() * X).eval();
+    auto ProjectOpL_tmp = [ProjectOpL](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+        MatrixType Y(X.rows(), X.cols());
+        ProjectOpL(X, Y);
+        return Y;
+    };
+
+    auto ProjectOpR = [&V, &H2V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
+        auto                    t_pr = tid::tic_token("ProjectOpR", tid::level::higher);
+        thread_local MatrixType T;
+        T.resize(H2V.cols(), X.cols());
+        Y.resize(X.rows(), X.cols());
+        T.noalias() = H2V.adjoint() * X;
+        Y.noalias() = X;
+        Y.noalias() -= V * T;
+    };
+    auto ProjectOpR_tmp = [ProjectOpR](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+        MatrixType Y(X.rows(), X.cols());
+        ProjectOpR(X, Y);
+        return Y;
     };
     auto t_jdh2 = tid::tic_scope("jdh2");
 
     // Right-hand side (projected)
-    MatrixType RHS = -ProjectOpL(S);
+    MatrixType RHS = -ProjectOpL_tmp(S);
 
     MatrixType D(S.rows(), S.cols()); // accumulate the result from the JD correction equation
 
@@ -1171,12 +1221,11 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType
             };
 
             // Define the residual matrix-vector operator depending on the different DMRG algorithms
-            auto ResidualOp = [this, th](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
+            auto ResidualOp_noalloc = [this, th](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> HX) -> void {
                 auto t_rop = tid::tic_token("ResidualOp", tid::level::higher);
                 auto t_mvi = status.time_matvecs_inner.tic_token();
                 // Generalized problem
-                MatrixType HX;
-                // Generalized problem
+                HX.resize(X.rows(), X.cols());
                 if(use_jd_h2_only) {
                     HX.noalias() = H2.MultAX(X);
                     status.num_matvecs_inner += 1 * X.cols();
@@ -1187,25 +1236,20 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType
                     auto t_h1 = tid::tic_token("H1X", tid::higher, H1.t_multAx->get_last_interval());
                     auto t_h2 = tid::tic_token("H2X", tid::higher, H2.t_multAx->get_last_interval());
                 }
-                return HX;
             };
 
             // auto Kop = [&](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return ProjectOpL(ResidualOp(ProjectOpR(X))); };
 
-            auto JDop = JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp, ProjectOpL, ProjectOpR, MatrixOp);
+            auto JDop = JacobiDavidsonOperator<Scalar>(rhs.rows(), ResidualOp_noalloc, ProjectOpL, ProjectOpR, MatrixOp);
 
             d.noalias() = JacobiDavidsonSolver(JDop, rhs, cfg);
-            d.noalias() = ProjectOpR(d);
+            d.noalias() = ProjectOpR_tmp(d);
 
             status.num_iters_inner += cfg.result.iters;
             status.num_precond_inner += cfg.result.precond;
-            // status.time_matvecs_inner += cfg.result.time_matvecs;
+            status.time_matvecs_inner += cfg.result.time_matvecs;
             status.time_precond_inner += cfg.result.time_precond;
-
             H.get_iterativeLinearSolverConfig().result += cfg.result;
-            // RealScalar error = (Kop(d) - rhs).norm() / rhs.norm();
-            // eiglog->info("JD solve {}: |rhs|={:.5e}  |d|={:.5e} |Kd-rhs|/|rhs|={:.5e} error={:.5e} iters={} mvs {}", i, fp(rhs.norm()), fp(d.norm()),
-            // fp(error), fp(cfg.result.error), cfg.result.iters, 2 * cfg.result.matvecs);
         }
     }
     status.num_precond += b; // This routine is a preconditioner
@@ -2280,8 +2324,8 @@ void do_eig_orthonormalization_step(
         MatrixLType H2_YW = applyH2(Y.template cast<Scalar>()).template cast<LScalar>(); // Refresh
         MatrixLType Delta = H2_YW - H2Y;
         for(Eigen::Index i = 0; i < H2Y.cols(); i++) {
-            auto        yw         = Y.col(i);
-            auto        h2y_w      = H2Y.col(i);
+            auto yw = Y.col(i);
+            // auto        h2y_w      = H2Y.col(i);
             auto        h2_yw      = H2_YW.col(i);
             RealLScalar delta      = Delta.col(i).norm();
             RealLScalar eta_lin    = delta / h2_yw.norm();
@@ -2674,7 +2718,7 @@ void solver_base<Scalar>::init() {
             status.T2_min_eval = es2.eigenvalues().minCoeff();
             status.T2_max_eval = es2.eigenvalues().maxCoeff();
             RealScalar min_sep =
-                T_evals.size() <= 1 ? RealScalar{1} : (T_evals.bottomRows(T_evals.size() - 1) - T_evals.topRows(T_evals.size() - 1)).cwiseAbs().minCoeff();
+                T_evals.size() <= 1 ? RealScalar{1} : (T_evals.tail(T_evals.size() - 1) - T_evals.head(T_evals.size() - 1)).cwiseAbs().minCoeff();
             auto select1       = get_ritz_indices(ritz, 0, 1, T_evals);
             auto H1_max_abs    = std::max({std::abs(status.T1_min_eval), std::abs(status.T1_max_eval), H1.get_op_norm()});
             auto H2_max_abs    = std::max({std::abs(status.T2_min_eval), std::abs(status.T2_max_eval), H2.get_op_norm()});
@@ -2757,7 +2801,7 @@ void solver_base<Scalar>::diagonalizeT() {
 
     auto diff = [](const VectorReal &x) -> VectorReal {
         if(x.size() <= 1) return VectorReal::Ones(1);
-        return x.bottomRows(x.size() - 1) - x.topRows(x.size() - 1);
+        return x.tail(x.size() - 1) - x.head(x.size() - 1);
     };
     if(T_evals.size() >= std::max(b, nev + 1)) {
         auto select2 = get_ritz_indices(ritz, 0, nev + 1, T_evals);
@@ -2799,6 +2843,16 @@ void solver_base<Scalar>::diagonalizeT1T2() {
     assert(T1.rows() == T2.rows());
     assert(T1.cols() == T2.cols());
     Eigen::GeneralizedSelfAdjointEigenSolver<MatrixType> es(T1, T2, Eigen::Ax_lBx);
+    // {
+    //     auto             es1     = Eigen::SelfAdjointEigenSolver<MatrixType>(T1, Eigen::EigenvaluesOnly);
+    //     auto             es2     = Eigen::SelfAdjointEigenSolver<MatrixType>(T2, Eigen::EigenvaluesOnly);
+    //     auto             idx_es1 = get_ritz_indices(OptRitz::SM, 0, 1, es1.eigenvalues());
+    //     auto             idx_es2 = get_ritz_indices(OptRitz::SM, 0, 1, es2.eigenvalues());
+    //     const RealScalar eval1   = es1.eigenvalues()(idx_es1[0]);
+    //     const RealScalar eval2   = es2.eigenvalues()(idx_es2[0]);
+    //     eiglog->info("es1: {:.16e} | es2: {:.16e}", fp(eval1), fp(eval2));
+    // }
+
     if(es.info() == Eigen::Success) {
         T_evals = es.eigenvalues();
         T_evecs = es.eigenvectors();
@@ -2819,7 +2873,7 @@ void solver_base<Scalar>::diagonalizeT1T2() {
     // Calculate the gap
     auto diff = [](const VectorReal &x) -> VectorReal {
         if(x.size() <= 1) return VectorReal::Ones(1);
-        return x.bottomRows(x.size() - 1) - x.topRows(x.size() - 1);
+        return x.tail(x.size() - 1) - x.head(x.size() - 1);
     };
     if(T_evals.size() >= std::max(b, nev + 1)) {
         auto select = get_ritz_indices(ritz, 0, std::max(b, nev + 1), T_evals);

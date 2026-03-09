@@ -223,7 +223,6 @@ namespace tools::common::contraction::internal::env_x2 {
         assert(res_x2.dimension(0) == mps.dimension(2));
         assert(res_x2.dimension(1) == mps.dimension(2));
         assert(res_x2.dimension(2) == mpo.dimension(1));
-        tools::log->trace("contract_envL_with_gemm_x2");
 
         // Eigen::Tensor<Scalar, 4> mpo_shf = mpo.shuffle(std::array{0, 2, 1, 3});
         // Eigen::Tensor<Scalar, 3> mps_shf = mps.shuffle(std::array{2, 0, 1});
@@ -286,7 +285,6 @@ namespace tools::common::contraction::internal::env_x2 {
         assert(res_x2.dimension(0) == mps.dimension(1));
         assert(res_x2.dimension(1) == mps.dimension(1));
         assert(res_x2.dimension(2) == mpo.dimension(0));
-        tools::log->trace("contract_envR_with_gemm_x2");
 
         Eigen::Index md = mps.dimension(0);
         Eigen::Index mL = mps.dimension(1);

@@ -76,12 +76,18 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::opdm_general(const StateFinite<
         return s;
     };
 
+    std::vector<opstring_t> cd(L), c_(L);
+    for(long i = 0; i < L; ++i) {
+        cd[i] = make_cd(i);
+        c_[i] = make_c_(i);
+    }
+
     for(long pos_i = 0; pos_i < L; ++pos_i) {
-        auto cd_i = make_cd(pos_i);
-        auto c__i = make_c_(pos_i);
+        const auto &cd_i = cd[pos_i]; // make_cd(pos_i);
+        const auto &c__i = c_[pos_i]; // make_c_(pos_i);
         for(long pos_j = pos_i; pos_j < L; ++pos_j) {
-            auto cd_j = make_cd(pos_j);
-            auto c__j = make_c_(pos_j);
+            const auto &cd_j = cd[pos_j]; // make_cd(pos_j);
+            const auto &c__j = c_[pos_j]; // make_c_(pos_j);
 
             auto opp = cd_i;
             auto opm = cd_i;

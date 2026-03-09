@@ -17,9 +17,8 @@
 
 // complex must be included before lapacke!
 #if defined(_LAPACKE_H_)
-#pragma message "LAPACKE header was already included elsewhere"
+    #pragma message "LAPACKE header was already included elsewhere"
 #endif
-
 
 #if defined(MKL_AVAILABLE)
     #include <mkl_lapacke.h>
@@ -96,13 +95,19 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     int rowsA = safe_cast<int>(rows);
     int colsA = safe_cast<int>(cols);
     int sizeS = std::min(rowsA, colsA);
+    // Sanity checks
+    assert(rows > 0);
+    assert(cols > 0);
+    assert(sizeS > 0);
 
     if(rows < cols and (svd_rtn == rtn::gejsv or svd_rtn == rtn::gesvj)) {
         // The jacobi routines needs a tall matrix
         //        auto t_adj = tid::tic_token("adjoint", tid::highest);
         log->trace("Transposing {}x{} into a tall matrix {}x{}", rows, cols, cols, rows);
-        MatrixType<Scalar> A = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols);
-        A.adjointInPlace(); // Adjoint directly on a map seems to give a bug?
+        // MatrixType<Scalar> A = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols);
+        // A.adjointInPlace(); // Adjoint directly on a map seems to give a bug?
+        auto Amap = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols);
+        MatrixType<Scalar> A = MatrixType<Scalar>(Amap).adjoint().eval();
         // Sanity checks
         assert(A.rows() > 0);
         assert(A.cols() > 0);
@@ -114,10 +119,6 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         return std::make_tuple(VT.adjoint(), S, U.adjoint());
     }
     //    auto t_lpk = tid::tic_scope("lapacke", tid::highest);
-
-    // Sanity checks
-    assert(rows > 0);
-    assert(cols > 0);
 
     MatrixType<Scalar> A    = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols); // gets destroyed in some routines
     auto               dump = internal::DumpSVD<Scalar>();
@@ -230,7 +231,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                     S.resize(sizeS);
                     VT.resize(rowsVT, colsVT);
 
-                    int lrwork = std::max(1, mn * (6 + 4 * mn) + mx);
+                    int lrwork = 1;
                     int liwork = std::max(1, 8 * mn);
                     rwork.resize(safe_cast<size_t>(lrwork));
                     iwork.resize(safe_cast<size_t>(liwork));
@@ -367,7 +368,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                     S.resize(sizeS);
                     VT.resize(rowsVT, colsVT);
 
-                    int lrwork = std::max(1, mn * (6 + 4 * mn) + mx);
+                    int lrwork = 1;
                     int liwork = std::max(1, 8 * mn);
                     rwork.resize(safe_cast<size_t>(lrwork));
                     iwork.resize(safe_cast<size_t>(liwork));
@@ -425,7 +426,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                     lrwork = safe_cast<int>(std::real(rwork[0]));
                     rwork.resize(safe_cast<size_t>(std::max(1, lrwork)));
 
-                    info = LAPACKE_dgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', 'V', rowsA, colsA, A.data(), lda, vl, vu, il, iu, &ns, S.data(), U.data(), ldu,
+                    info = LAPACKE_dgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', range, rowsA, colsA, A.data(), lda, vl, vu, il, iu, &ns, S.data(), U.data(), ldu,
                                                 VT.data(), ldvt, rwork.data(), lrwork, iwork.data());
 
                     // Select the computed region
@@ -548,8 +549,8 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                     S.resize(sizeS);
                     VT.resize(rowsVT, colsVT);
 
-                    fp32 vl    = std::min<fp32>(1e10f, static_cast<fp32>(truncation_lim) / 5.0f);
-                    fp32 vu    = std::max<fp32>(1e10f, static_cast<fp32>(truncation_lim) / 5.0f);
+                    fp32 vl    = std::min<fp32>(1e-10f, static_cast<fp32>(truncation_lim) / 5.0f);
+                    fp32 vu    = std::max<fp32>(1e+10f, static_cast<fp32>(truncation_lim) / 5.0f);
                     int  il    = 1;
                     int  iu    = std::min<int>(sizeS, safe_cast<int>(rank_max));
                     char range = rank_max < sizeS ? 'I' : 'V';
@@ -587,9 +588,9 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                                                 VT.data(), ldvt, cwork.data(), lcwork, rwork.data(), iwork.data());
 
                     // Select the computed region
-                    U  = U.leftCols(ns).eval();
-                    S  = S.head(ns).eval(); // Not all calls to do_svd need normalized S, so we do not normalize here!
-                    VT = VT.topRows(ns).eval();
+                    U.conservativeResize(Eigen::NoChange, ns);
+                    S.conservativeResize(ns); // Not all calls to do_svd need normalized S, so we do not normalize here!
+                    VT.conservativeResize(ns, Eigen::NoChange);
                     break;
                 }
                 default: throw std::logic_error("invalid case for enum svd::rtn");
@@ -761,9 +762,9 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
         // Do the truncation
 
-        U  = U.leftCols(rank).eval();
-        S  = S.head(rank).eval(); // Not all calls to do_svd need normalized S, so we do not normalize here!
-        VT = VT.topRows(rank).eval();
+        U.conservativeResize(Eigen::NoChange, rank);
+        S.conservativeResize(rank);
+        VT.conservativeResize(rank, Eigen::NoChange);
 
         // We may need to prune further if there are nan row/cols. This is an easy way to recover from silent non-convergence that would
         // inject nans otherwise.

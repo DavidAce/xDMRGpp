@@ -2,8 +2,8 @@
 #include "../common.h"
 
 namespace settings {
-#if defined(DEBUG)
-    inline constexpr bool debug_common = true;
+#if defined(NDEBUG)
+    inline constexpr bool debug_common = false;
 #else
     inline constexpr bool debug_common = true;
 #endif

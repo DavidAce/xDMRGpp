@@ -19,7 +19,7 @@
 #include <Eigen/Eigenvalues>
 
 namespace settings {
-    constexpr bool debug_hamiltonian = true;
+    inline constexpr bool debug_hamiltonian = false;
 }
 
 using tools::finite::measure::RealScalar;

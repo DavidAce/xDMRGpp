@@ -12,11 +12,11 @@
 #include <spdlog/spdlog.h>
 namespace settings {
 #if defined(NDEBUG)
-    constexpr bool debug_lobpcg = false;
+    inline constexpr bool debug_lobpcg = false;
 #else
-    constexpr bool debug_lobpcg = true;
+    inline constexpr bool debug_lobpcg = true;
 #endif
-    constexpr bool print_q = false;
+    inline constexpr bool print_q = false;
 }
 
 template<typename Scalar>

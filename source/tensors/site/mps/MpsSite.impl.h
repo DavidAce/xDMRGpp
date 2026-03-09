@@ -70,12 +70,16 @@ Eigen::DSizes<long, 3> MpsSite<Scalar>::dimensions() const {
 
 template<typename Scalar>
 bool MpsSite<Scalar>::is_real() const {
-    if(std::is_floating_point_v<Scalar>) return true;
-    if constexpr(settings::debug) {
-        return tenx::isReal(get_M_bare()) and tenx::isReal(get_L());
-    } else {
-        is_real_cached = is_real_cached.value_or(tenx::isReal(get_M_bare()) and tenx::isReal(get_L()));
-        return is_real_cached.value();
+    if constexpr(std::is_floating_point_v<Scalar>)
+        return true;
+    else {
+        if constexpr(settings::debug) {
+            return tenx::isReal(get_M_bare()) and tenx::isReal(get_L());
+        } else {
+            if(is_real_cached.has_value()) return is_real_cached.value();
+            is_real_cached = tenx::isReal(get_M_bare()) and tenx::isReal(get_L());
+            return is_real_cached.value();
+        }
     }
 }
 template<typename Scalar>
@@ -83,7 +87,8 @@ bool MpsSite<Scalar>::has_nan() const {
     if constexpr(settings::debug) {
         return tenx::hasNaN(get_M_bare()) or tenx::hasNaN(get_L());
     } else {
-        has_nan_cached = has_nan_cached.value_or(tenx::hasNaN(get_M_bare()) or tenx::hasNaN(get_L()));
+        if(has_nan_cached.has_value()) return has_nan_cached.value();
+        has_nan_cached = tenx::hasNaN(get_M_bare()) or tenx::hasNaN(get_L());
         return has_nan_cached.value();
     }
 }
@@ -156,7 +161,7 @@ void MpsSite<Scalar>::assert_dimensions() const {
                                         get_M_bare().dimensions(), get_L().dimensions());
         if(get_chiR() != get_LC().dimension(0))
             throw except::runtime_error("MpsSite: Assert failed: Dimensions for AC and L are incompatible at site {}: AC {} | LC{}", get_position(),
-                                        get_M_bare().dimensions(), get_L().dimensions());
+                                        get_M_bare().dimensions(), get_LC().dimensions());
     }
 }
 
@@ -224,22 +229,22 @@ const Eigen::Tensor<Scalar, 1> &MpsSite<Scalar>::get_LC() const {
         throw except::runtime_error("MpsSite<Scalar>::get_LC(): Site at position {} is not a center", get_position());
 }
 
-template<typename Scalar>
-Eigen::Tensor<Scalar, 3> &MpsSite<Scalar>::get_M_bare() {
-    return const_cast<Eigen::Tensor<Scalar, 3> &>(std::as_const(*this).get_M_bare());
-}
-template<typename Scalar>
-Eigen::Tensor<Scalar, 3> &MpsSite<Scalar>::get_M() {
-    return const_cast<Eigen::Tensor<Scalar, 3> &>(std::as_const(*this).get_M());
-}
-template<typename Scalar>
-Eigen::Tensor<Scalar, 1> &MpsSite<Scalar>::get_L() {
-    return const_cast<Eigen::Tensor<Scalar, 1> &>(std::as_const(*this).get_L());
-}
-template<typename Scalar>
-Eigen::Tensor<Scalar, 1> &MpsSite<Scalar>::get_LC() {
-    return const_cast<Eigen::Tensor<Scalar, 1> &>(std::as_const(*this).get_LC());
-}
+// template<typename Scalar>
+// Eigen::Tensor<Scalar, 3> &MpsSite<Scalar>::get_M_bare() {
+//     return const_cast<Eigen::Tensor<Scalar, 3> &>(std::as_const(*this).get_M_bare());
+// }
+// template<typename Scalar>
+// Eigen::Tensor<Scalar, 3> &MpsSite<Scalar>::get_M() {
+//     return const_cast<Eigen::Tensor<Scalar, 3> &>(std::as_const(*this).get_M());
+// }
+// template<typename Scalar>
+// Eigen::Tensor<Scalar, 1> &MpsSite<Scalar>::get_L() {
+//     return const_cast<Eigen::Tensor<Scalar, 1> &>(std::as_const(*this).get_L());
+// }
+// template<typename Scalar>
+// Eigen::Tensor<Scalar, 1> &MpsSite<Scalar>::get_LC() {
+//     return const_cast<Eigen::Tensor<Scalar, 1> &>(std::as_const(*this).get_LC());
+// }
 
 template<typename Scalar>
 double MpsSite<Scalar>::get_truncation_error() const {
@@ -312,7 +317,7 @@ void MpsSite<Scalar>::set_label(std::string_view label_) {
     label = label_;
 }
 template<typename Scalar>
-void MpsSite<Scalar>::unset_LC() {
+void MpsSite<Scalar>::unset_LC() noexcept {
     LC                = std::nullopt;
     MC                = std::nullopt;
     unique_id         = std::nullopt;
@@ -323,7 +328,7 @@ void MpsSite<Scalar>::unset_LC() {
 }
 
 template<typename Scalar>
-void MpsSite<Scalar>::unset_L() {
+void MpsSite<Scalar>::unset_L() noexcept {
     L                 = std::nullopt;
     unique_id         = std::nullopt;
     norm_error_cached = std::nullopt;
@@ -332,12 +337,12 @@ void MpsSite<Scalar>::unset_L() {
 }
 
 template<typename Scalar>
-void MpsSite<Scalar>::unset_truncation_error() {
+void MpsSite<Scalar>::unset_truncation_error() noexcept {
     truncation_error = -1.0;
 }
 
 template<typename Scalar>
-void MpsSite<Scalar>::unset_truncation_error_LC() {
+void MpsSite<Scalar>::unset_truncation_error_LC() noexcept {
     truncation_error_LC = -1.0;
 }
 
@@ -357,15 +362,15 @@ void MpsSite<Scalar>::fuse_mps(const MpsSite &other) {
         else
             tools::log->trace("MpsSite({})::fuse_mps: Merging {} | M {} | L nullopt", tag, otag, other.dimensions());
     }
+    // If we are flipping the kind of site from B to non B (or vice versa), then the L matrix
+    // should be removed since it changes side.
+    if(get_label().front() != other.get_label().front()) unset_L();
+
     // Copy the A/AC/B label
     set_label(other.get_label());
 
     // We have to copy the bare "M", i.e. not MC, which would include LC.
     set_M(other.get_M_bare());
-
-    // If we are flipping the kind of site from B to non B (or vice versa), then the L matrix
-    // should be removed since it changes side.
-    if(get_label().front() != other.get_label().front()) unset_L();
 
     // We should only copy the L matrix if it exists.
     // If it does not exist it may just not have been set.
@@ -601,9 +606,11 @@ void MpsSite<Scalar>::take_stash(const MpsSite &other) {
          *      - We are doing subspace expansion to left or right. Then we get U or V, together with an S to insert into this site.
          */
         //        auto t_stash = tid::tic_token("take_stash_S", tid::level::highest);
-        if constexpr(settings::verbose_merge)
-            tools::log->trace("MpsSite({})::take_stash: Taking S stash from {} | L dim {} -> {} | err {:.3e} -> {:.3e}", get_tag(), other.get_tag(), L->size(),
+        if constexpr(settings::verbose_merge) {
+            auto Lsize = has_L() ? get_L().size() : -1;
+            tools::log->trace("MpsSite({})::take_stash: Taking S stash from {} | L dim {} -> {} | err {:.3e} -> {:.3e}", get_tag(), other.get_tag(), Lsize,
                               other.S_stash->data.size(), get_truncation_error(), other.S_stash->error);
+        }
         set_L(other.S_stash->data, other.S_stash->error);
         other.S_stash = std::nullopt;
     }
@@ -647,8 +654,8 @@ void MpsSite<Scalar>::convert_LB_to_B(const Eigen::Tensor<Scalar, 1> &LL) {
 template<typename Scalar>
 std::size_t MpsSite<Scalar>::get_unique_id() const {
     if(unique_id) return unique_id.value();
-    unique_id = hash::hash_buffer(get_M().data(), safe_cast<size_t>(get_M().size()));
+    unique_id = hash::hash_buffer(get_M_bare().data(), safe_cast<size_t>(get_M_bare().size()));
     unique_id = hash::hash_buffer(get_L().data(), safe_cast<size_t>(get_L().size()), unique_id.value());
-    //    if(isCenter()) unique_id = hash::hash_buffer(get_LC().data(), safe_cast<size_t>(get_LC().size()), unique_id.value());
+    if(isCenter()) unique_id = hash::hash_buffer(get_LC().data(), safe_cast<size_t>(get_LC().size()), unique_id.value());
     return unique_id.value();
 }

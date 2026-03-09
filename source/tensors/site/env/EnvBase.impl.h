@@ -85,7 +85,13 @@ template<typename Scalar>
 void EnvBase<Scalar>::assert_block() const {
     if(side != "L" and side != "R") throw except::runtime_error("Expected side [L|R]. Got: [{}]", side);
     if(tag != "ene" and tag != "var") throw except::runtime_error("Expected tag [var|ene]. Got: [{}]", tag);
-    if(not blkx2) throw except::runtime_error("env block {} {} at pos {} is nullptr", tag, side, get_position());
+    if(!blkx2) {
+        if(position) {
+            throw except::runtime_error("env block {} {} at pos {} is nullptr", tag, side, position.value());
+        } else {
+            throw except::runtime_error("env block {} {} at pos <unset> is nullptr", tag, side);
+        }
+    }
 }
 
 template<typename Scalar>
@@ -93,7 +99,11 @@ void EnvBase<Scalar>::build_blkx2(const x2::Tensor<Scalar, 3> &otherblock, const
     /*!< Contracts a site into the block */
     // Note that otherblock, mps and mpo should correspond to the same site! I.e. their "get_position()" are all equal.
     // This can't be checked here though, so do that before calling this function.
-    if constexpr(settings::debug) tools::log->trace("EnvBase<Scalar>::build_blkx2(): side({}), pos({})", side, get_position());
+
+    if constexpr(settings::debug) {
+        if(!position) { throw except::runtime_error("EnvBase::build_blkx2: position is unset (side {}, tag {})", side, tag); }
+        tools::log->trace("EnvBase<Scalar>::build_blkx2(): side({}), pos({})", side, get_position());
+    }
     unique_id      = std::nullopt;
     unique_id_env  = std::nullopt;
     unique_id_mps  = std::nullopt;
@@ -127,6 +137,7 @@ void EnvBase<Scalar>::build_blkx2(const x2::Tensor<Scalar, 3> &otherblock, const
         if(mpo.dimension(0) != otherblock.dimension(2))
             throw except::runtime_error("env{} {} pos {} dimension mismatch: mpo dim[{}]:{} != left-block dim[{}]:{}", side, tag, position.value(), 0,
                                         mpo.dimension(0), 2, otherblock.dimension(2));
+        if constexpr(settings::debug) blkx2->resize(Eigen::array<Eigen::Index, 3>{0, 0, 0});
         tools::common::contraction::contract_envL_mps_mpo(*blkx2, otherblock, mps, mpo); // Renormalizes on the fly
     } else if(side == "R") {
         /*! # Right environment contraction
@@ -154,6 +165,7 @@ void EnvBase<Scalar>::build_blkx2(const x2::Tensor<Scalar, 3> &otherblock, const
         if(mpo.dimension(1) != otherblock.dimension(2))
             throw except::runtime_error("env{} {} pos {} dimension mismatch: mpo dim[{}]:{} != right-block dim[{}]:{}", side, tag, position.value(), 1,
                                         mpo.dimension(1), 2, otherblock.dimension(2));
+        if constexpr(settings::debug) blkx2->resize(Eigen::array<Eigen::Index, 3>{0, 0, 0});
         tools::common::contraction::contract_envR_mps_mpo(*blkx2, otherblock, mps, mpo); // Renormalizes on the fly
     }
 }
@@ -168,7 +180,7 @@ void EnvBase<Scalar>::enlarge(const Eigen::Tensor<Scalar, 3> &mps, const Eigen::
     // There is no way to check the positions here, so checks should be done before calling this function
 
     assert_block();
-    x2::Tensor<Scalar, 3> thisblock = get_blkx2();
+    x2::Tensor<Scalar, 3> thisblock = std::move(*blkx2);
     build_blkx2(thisblock, mps, mpo);
 
     sites++;
@@ -276,7 +288,8 @@ bool EnvBase<Scalar>::is_real() const {
     if constexpr(settings::debug) {
         return tenx::isReal(std::as_const(blkx2)->hi()) and tenx::isReal(std::as_const(blkx2)->lo());
     } else {
-        is_real_cached = is_real_cached.value_or(tenx::isReal(std::as_const(blkx2)->hi()) and tenx::isReal(std::as_const(blkx2)->lo()));
+        if(is_real_cached.has_value()) return is_real_cached.value();
+        is_real_cached = tenx::isReal(std::as_const(blkx2)->hi()) and tenx::isReal(std::as_const(blkx2)->lo());
         return is_real_cached.value();
     }
 }
@@ -287,7 +300,8 @@ bool EnvBase<Scalar>::has_nan() const {
     if constexpr(settings::debug) {
         return !blkx2->allFinite();
     } else {
-        has_nan_cached = has_nan_cached.value_or(!blkx2->allFinite());
+        if(has_nan_cached.has_value()) return has_nan_cached.value();
+        has_nan_cached = !blkx2->allFinite();
         return has_nan_cached.value();
     }
 }
@@ -314,24 +328,26 @@ void EnvBase<Scalar>::set_edge_dims(const Eigen::Tensor<Scalar, 3> &MPS, const E
         long mpoDim = MPO.dimension(0);
         newblock.resize(tenx::array3{mpsDim, mpsDim, mpoDim});
         newblock.setZero();
-        for(long i = 0; i < mpsDim; i++) {
-            std::array<long, 1> extent1                       = {mpoDim};
-            std::array<long, 3> offset3                       = {i, i, 0};
-            std::array<long, 3> extent3                       = {1, 1, mpoDim};
-            newblock.slice(offset3, extent3).reshape(extent1) = edge;
-        }
+        for(long i = 0; i < mpsDim; ++i) { newblock.chip(i, 0).chip(i, 0) = edge; }
+        // for(long i = 0; i < mpsDim; i++) {
+        //     std::array<long, 1> extent1                       = {mpoDim};
+        //     std::array<long, 3> offset3                       = {i, i, 0};
+        //     std::array<long, 3> extent3                       = {1, 1, mpoDim};
+        //     newblock.slice(offset3, extent3).reshape(extent1) = edge;
+        // }
     }
     if(side == "R") {
         long mpsDim = MPS.dimension(2);
         long mpoDim = MPO.dimension(1);
         newblock.resize(tenx::array3{mpsDim, mpsDim, mpoDim});
         newblock.setZero();
-        for(long i = 0; i < mpsDim; i++) {
-            std::array<long, 1> extent1                       = {mpoDim};
-            std::array<long, 3> offset3                       = {i, i, 0};
-            std::array<long, 3> extent3                       = {1, 1, mpoDim};
-            newblock.slice(offset3, extent3).reshape(extent1) = edge;
-        }
+        for(long i = 0; i < mpsDim; ++i) { newblock.chip(i, 0).chip(i, 0) = edge; }
+        // for(long i = 0; i < mpsDim; i++) {
+        //     std::array<long, 1> extent1                       = {mpoDim};
+        //     std::array<long, 3> offset3                       = {i, i, 0};
+        //     std::array<long, 3> extent3                       = {1, 1, mpoDim};
+        //     newblock.slice(offset3, extent3).reshape(extent1) = edge;
+        // }
     }
     sites          = 0;
     unique_id      = std::nullopt;

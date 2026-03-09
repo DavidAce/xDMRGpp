@@ -50,7 +50,6 @@ void tools::finite::h5::load::simulation(const h5pp::File &h5file, std::string_v
 
 template<typename Scalar>
 void tools::finite::h5::load::state(const h5pp::File &h5file, std::string_view state_prefix, StateFinite<Scalar> &state, MpsInfo &info) {
-    using cx64 = std::complex<double>;
     try {
         // To successfully load a state there has to be an MPS with StorageLevel::FULL
         auto mps_info = tools::common::h5::resume::find_fully_stored_mps(h5file, state_prefix);
@@ -64,7 +63,7 @@ void tools::finite::h5::load::state(const h5pp::File &h5file, std::string_view s
         for(long pos = 0; pos < safe_cast<long>(model_size); ++pos) {
             auto dset_M_name = fmt::format("{}/M_{}", info.pfx, pos);
             auto position    = h5file.readAttribute<long>(dset_M_name, "position");
-            assert(position == pos);
+            if(position != pos) { throw except::load_error("MPS position mismatch: dataset {} has position {} but expected {}", dset_M_name, position, pos); }
             auto typeInfo = h5file.getTypeInfoDataset(dset_M_name);
 
             if(typeInfo.cppTypeIndex.has_value() and typeInfo.cppTypeIndex.value() == typeid(double)) {

@@ -217,7 +217,7 @@ bool MpoSite<Scalar>::is_real() const {
 template<typename Scalar>
 bool MpoSite<Scalar>::has_nan() const {
     if constexpr(!settings::debug) {
-        if(has_nan_cached.value()) return has_nan_cached.value();
+        if(has_nan_cached.has_value()) return has_nan_cached.value();
     }
     for(auto &param : get_parameters()) {
         if(param.second.type() == typeid(double))
@@ -242,7 +242,7 @@ bool MpoSite<Scalar>::has_nan() const {
     }
     bool has_nan_mpo  = tenx::hasNaN(mpo_internal);
     bool has_nan_mpo2 = mpo_squared.has_value() ? tenx::hasNaN(mpo_squared.value()) : has_nan_mpo;
-    has_nan_cached    = has_nan_mpo && has_nan_mpo2;
+    has_nan_cached    = has_nan_mpo || has_nan_mpo2;
     return has_nan_cached.value();
 }
 
@@ -311,7 +311,7 @@ size_t MpoSite<Scalar>::get_position() const {
 
 template<typename Scalar>
 bool MpoSite<Scalar>::has_energy_shifted_mpo() const {
-    return energy_shift_mpo != RealScalar(0.0);
+    return energy_shift_mpo != Scalar{};
 }
 template<typename Scalar>
 bool MpoSite<Scalar>::has_parity_shifted_mpo() const {

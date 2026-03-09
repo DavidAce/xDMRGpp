@@ -23,6 +23,7 @@
 #include "tools/finite/ops.h"
 #include <config/settings.h>
 #include <fmt/ranges.h>
+#include <utility> // for std::swap
 
 namespace settings {
     inline constexpr bool debug_projection   = false;
@@ -41,12 +42,7 @@ void tools::finite::ops::apply_mpos(StateFinite<Scalar> &state, const std::vecto
         long mpoDim = mpo_dims[0];
         Ledge3.resize(tenx::array3{mpsDim, mpsDim, mpoDim});
         Ledge3.setZero();
-        for(long i = 0; i < mpsDim; i++) {
-            std::array<long, 1> extent1                     = {mpoDim};
-            std::array<long, 3> offset3                     = {i, i, 0};
-            std::array<long, 3> extent3                     = {1, 1, mpoDim};
-            Ledge3.slice(offset3, extent3).reshape(extent1) = Ledge;
-        }
+        for(Eigen::Index i = 0; i < mpsDim; ++i) { Ledge3.chip(i, 0).chip(i, 0) = Ledge; }
     }
     {
         auto mps_dims = state.mps_sites.back()->dimensions();
@@ -56,12 +52,7 @@ void tools::finite::ops::apply_mpos(StateFinite<Scalar> &state, const std::vecto
         long mpoDim = mpo_dims[1];
         Redge3.resize(tenx::array3{mpsDim, mpsDim, mpoDim});
         Redge3.setZero();
-        for(long i = 0; i < mpsDim; i++) {
-            std::array<long, 1> extent1                     = {mpoDim};
-            std::array<long, 3> offset3                     = {i, i, 0};
-            std::array<long, 3> extent3                     = {1, 1, mpoDim};
-            Redge3.slice(offset3, extent3).reshape(extent1) = Redge;
-        }
+        for(Eigen::Index i = 0; i < mpsDim; ++i) { Redge3.chip(i, 0).chip(i, 0) = Redge; }
     }
     apply_mpos(state, mpos, Ledge3, Redge3, adjoint);
 }
@@ -274,7 +265,7 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
         long d1 = mps.dimension(1) * mpo.dimension(0);
         long d2 = mps.dimension(2) * mpo.dimension(1);
         mpo_mps.resize(std::array{d0, d1, d2});
-        mpo_mps = mpo.contract(mps, tenx::idx({2}, {0})).shuffle(tenx::array5{2, 0, 3, 1, 4}).reshape(tenx::array3{d0, d1, d2});
+        mpo_mps.device(*threads->dev) = mpo.contract(mps, tenx::idx({2}, {0})).shuffle(tenx::array5{2, 0, 3, 1, 4}).reshape(tenx::array3{d0, d1, d2});
 
         if(pos + 1 < length) {
             const auto &mps_right    = state.get_mps_site(pos + 1);
@@ -480,7 +471,7 @@ Scalar tools::finite::ops::overlap(const StateFinite<Scalar> &state1, const Stat
         decltype(auto) M2 = state2.get_mps_site(pos).template get_M_as<T>();
         temp.resize(M1.dimension(2), M2.dimension(2));
         temp.device(*threads->dev) = overlap.contract(M1.conjugate(), tenx::idx({0}, {1})).contract(M2, tenx::idx({0, 1}, {1, 0}));
-        overlap                    = std::move(temp);
+        std::swap(overlap, temp); // buffer swap, no allocation, temp keeps old buffer
     }
 
     Eigen::Tensor<T, 0> norm_chain = overlap.trace();

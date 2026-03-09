@@ -20,7 +20,7 @@
 #endif
 #include <Eigen/Core>
 #include <h5pp/h5pp.h>
-#include <math/linalg/matrix.h>
+#include <math/linalg/matrix/to_string.h>
 #include <math/svd.h>
 #include <thread>
 
@@ -50,7 +50,7 @@ void test() {
                 auto [U, S, V]      = svd.do_svd(A);
                 t_eigen.toc();
                 //            fmt::print("S\n{}\n", linalg::matrix::to_string(S, 16));
-                S_mat.col(0).topRows(S.size()) = S;
+                S_mat.col(0).head(S.size()) = S;
             }
             {
                 svd_settings.svd_lib = svd::lib::lapacke;
@@ -59,7 +59,7 @@ void test() {
                 auto [U, S, V]       = svd.do_svd(A);
                 t_lapack.toc();
                 //            fmt::print("S\n{}\n", linalg::matrix::to_string(S, 16));
-                S_mat.col(1).topRows(S.size()) = S;
+                S_mat.col(1).head(S.size()) = S;
             }
             {
                 svd_settings.svd_lib  = svd::lib::lapacke;
@@ -71,7 +71,7 @@ void test() {
                 auto [U, S, V] = svd.do_svd(A);
                 t_rsvd.toc();
                 //            fmt::print("S\n{}\n", linalg::matrix::to_string(S, 16));
-                S_mat.col(2).topRows(S.size()) = S;
+                S_mat.col(2).head(S.size()) = S;
             }
 
             S_mat.col(3)  = (S_mat.col(2) - S_mat.col(0)).cwiseAbs().eval();

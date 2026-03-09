@@ -12,9 +12,9 @@
 
 namespace settings {
 #if defined(NDEBUG)
-    constexpr bool debug_gdplusk = true;
+    inline constexpr bool debug_gdplusk = true;
 #else
-    constexpr bool debug_gdplusk = true;
+    inline constexpr bool debug_gdplusk = true;
 #endif
     constexpr bool print_q = false;
 }
@@ -469,7 +469,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
     OrthMeta m;
     std::tie(Q, H1Q, H2Q, m) = orthonormalize_dgks_x2(Q, H1Q, H2Q);
 
-     eiglog->trace("After orthonormalization x2     : orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError), fp(m.skewError));
+    eiglog->trace("After orthonormalization x2     : orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError), fp(m.skewError));
 
     //
     // OrthMeta m;
