@@ -90,15 +90,17 @@ template<typename Scalar>
 void GeneralizedBasisChange<Scalar>::regularize(Eigen::Tensor<Scalar, 1> &w, const EnvWeightRegularizer ewr, [[maybe_unused]] std::string_view tag) {
     // print_stats(w, tag);
     Eigen::Map<VectorType> wmap = tenx::VectorMap(w);
+
+    auto safe_divide = [&](RealScalar d) {
+        if(d > RealScalar{0}) wmap.array() /= d;
+    };
     switch(ewr) {
-            /* clang-format off */
-        case EnvWeightRegularizer::NONE: {break;}
-        case EnvWeightRegularizer::NORM: {wmap = wmap.array() / wmap.norm(); break;}
-        case EnvWeightRegularizer::MAX:  {wmap = wmap.array() / wmap.cwiseAbs().maxCoeff(); break;}
-        case EnvWeightRegularizer::MEAN: {wmap = wmap.array() / std::abs(wmap.mean()); break;}
-        case EnvWeightRegularizer::SUM:  {wmap = wmap.array() / std::abs(wmap.sum()); break;}
+        case EnvWeightRegularizer::NONE: break;
+        case EnvWeightRegularizer::NORM: safe_divide(wmap.norm()); break;
+        case EnvWeightRegularizer::MAX: safe_divide(wmap.cwiseAbs().maxCoeff()); break;
+        case EnvWeightRegularizer::MEAN: safe_divide(std::abs(wmap.mean())); break;
+        case EnvWeightRegularizer::SUM: safe_divide(std::abs(wmap.sum())); break;
         default: throw except::runtime_error("EnvWeightRegularizer not implemented");
-            /* clang-format on */
     }
     // print_stats(w, tag);
 };
@@ -221,13 +223,13 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
             auto gen_M1 = [&](const Eigen::Tensor<Scalar, 3> &env, const Eigen::Tensor<Scalar, 1> &w) -> Eigen::Tensor<Scalar, 2> {
                 Eigen::Tensor<Scalar, 2> M1(env.dimension(0), env.dimension(1));
                 M1.setZero();
-                auto M1_map = MapMatType(M1.data(), env.dimension(0), env.dimension(1));
-
+                auto               M1_map = MapMatType(M1.data(), env.dimension(0), env.dimension(1));
+                const Eigen::Index n      = env.dimension(0);
+                const Eigen::Index stride = n * n;
                 for(Eigen::Index b = 0; b < env.dimension(2); ++b) {
-                    Eigen::Tensor<Scalar, 2> tensor_chip_b = env.chip(b, 2);
-                    auto                     A_b           = MapMatType(tensor_chip_b.data(), env.dimension(0), env.dimension(1));
-                    // MatrixType               A             = RealScalar(0.5f) * (matrix_chip_b + matrix_chip_b.adjoint()); // Hermitian
-                    RealScalar tr = std::abs(A_b.trace()); // pre-scale with trace
+                    const Scalar   *ptr = env.data() + b * stride;
+                    MapConstMatType A_b(ptr, n, n);
+                    RealScalar      tr = std::abs(A_b.trace()); // pre-scale with trace
                     if(tr < RealScalar{1e-10f}) continue;
                     if(std::abs(w(b)) <= RealScalar(1e-10f)) continue;
                     if(!is_hermitian_matrix(A_b)) continue;
@@ -244,13 +246,13 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
             auto gen_M2 = [&](const Eigen::Tensor<Scalar, 3> &env, const Eigen::Tensor<Scalar, 1> &w) -> Eigen::Tensor<Scalar, 2> {
                 Eigen::Tensor<Scalar, 2> M2(env.dimension(0), env.dimension(1));
                 M2.setZero();
-                auto M2_map = MapMatType(M2.data(), env.dimension(0), env.dimension(1));
-
+                auto               M2_map = MapMatType(M2.data(), env.dimension(0), env.dimension(1));
+                const Eigen::Index n      = env.dimension(0);
+                const Eigen::Index stride = n * n;
                 for(Eigen::Index b = 0; b < env.dimension(2); ++b) {
-                    Eigen::Tensor<Scalar, 2> tensor_chip_b = env.chip(b, 2);
-                    auto                     A_b           = MapMatType(tensor_chip_b.data(), env.dimension(0), env.dimension(1));
-                    // MatrixType               A             = RealScalar(0.5f) * (matrix_chip_b + matrix_chip_b.adjoint()); // Hermitian
-                    RealScalar tr = std::abs(A_b.trace()); // pre-scale with trace
+                    const Scalar   *ptr = env.data() + b * stride;
+                    MapConstMatType A_b(ptr, n, n);
+                    RealScalar      tr = std::abs(A_b.trace()); // pre-scale with trace
                     if(tr < RealScalar{1e-10f}) continue;
                     if(std::abs(w(b)) <= RealScalar(1e-10f)) continue;
                     if(!is_hermitian_matrix(A_b)) continue;
@@ -298,20 +300,23 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
             throw except::runtime_error("For H2_zip you must use the custom function");
         }
         case EnvAggregateType::M2_inv: {
-            auto inv = [](const Eigen::Ref<MatrixType> &mat) -> MatrixType {
+            auto inv = [this](const Eigen::Ref<const MatrixType> &mat) -> MatrixType {
                 auto es = Eigen::SelfAdjointEigenSolver<MatrixType>(mat, Eigen::ComputeEigenvectors);
-                auto U  = es.eigenvectors();
-                auto Y  = es.eigenvalues();
-                return U.adjoint() * Y.cwiseInverse().asDiagonal() * U;
+                if(es.info() != Eigen::Success) throw except::runtime_error("M2_inv: eigensolver failed: info={}", int(es.info()));
+
+                const auto U = es.eigenvectors();
+                const auto Y = es.eigenvalues().cwiseAbs().cwiseMax(eps);
+                return U * Y.cwiseInverse().asDiagonal() * U.adjoint();
             };
             auto gen_M2 = [&](const Eigen::Tensor<Scalar, 3> &env, const Eigen::Tensor<Scalar, 1> &w) -> Eigen::Tensor<Scalar, 2> {
                 Eigen::Tensor<Scalar, 2> M2(env.dimension(0), env.dimension(1));
                 M2.setZero();
-                auto M2_map = MapMatType(M2.data(), env.dimension(0), env.dimension(1));
-
+                auto               M2_map = MapMatType(M2.data(), env.dimension(0), env.dimension(1));
+                const Eigen::Index n      = env.dimension(0);
+                const Eigen::Index stride = n * n;
                 for(Eigen::Index b = 0; b < env.dimension(2); ++b) {
-                    Eigen::Tensor<Scalar, 2> tensor_chip_b = env.chip(b, 2);
-                    auto                     A_b           = MapMatType(tensor_chip_b.data(), env.dimension(0), env.dimension(1));
+                    const Scalar   *ptr = env.data() + b * stride;
+                    MapConstMatType A_b(ptr, n, n);
                     // MatrixType               A             = RealScalar(0.5f) * (matrix_chip_b + matrix_chip_b.adjoint()); // Hermitian
                     RealScalar tr = std::abs(A_b.trace()); // pre-scale with trace
                     if(tr < RealScalar{1e-10f}) continue;
@@ -598,7 +603,7 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
                                                                 [[maybe_unused]] const Eigen::Tensor<Scalar, 1> &w1,       //
                                                                 [[maybe_unused]] const Eigen::Tensor<Scalar, 1> &w2,       //
                                                                 [[maybe_unused]] const Eigen::Tensor<Scalar, 2> &P1,       //
-                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 2>  P2)
+                                                                [[maybe_unused]] const Eigen::Tensor<Scalar, 2> &P2)
     -> std::tuple<MatrixType, MatrixType, MatrixType, RealScalar> {
     if(env1_agg.dimension(0) != env2_agg.dimension(0))
         throw except::runtime_error("env1_agg/env2_agg dimension mismatch: {} vs {}", env1_agg.dimension(0), env2_agg.dimension(0));
@@ -713,7 +718,15 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
             RealScalar inv_rt = (SS * (TT * SS) - SS).norm() / std::max<RealScalar>(RealScalar{1}, SS.norm());
             tools::log->info("round-trip inverse: {:.2e}", fp(inv_rt));
         };
+        auto check_inverse = [&](const MatrixType &TT, const MatrixType &SS) {
+            const auto Id = MatrixType::Identity(TT.rows(), TT.cols());
 
+            RealScalar err_ST = (SS * TT - Id).norm() / std::max<RealScalar>(RealScalar{1}, Id.norm());
+            RealScalar err_TS = (TT * SS - Id).norm() / std::max<RealScalar>(RealScalar{1}, Id.norm());
+
+            tools::log->info("S*T inverse error {:.2e}", fp(err_ST));
+            tools::log->info("T*S inverse error {:.2e}", fp(err_TS));
+        };
         auto check_congruence = [&](const MatrixType &X, const MatrixType &TT, const MatrixType &G, std::string_view lbl) {
             MatrixType W   = TT.adjoint() * X * TT;
             RealScalar rel = rel_err(W, G, X.norm());
@@ -736,12 +749,13 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
             // Logs
             // check_congruence(agg1, T, target1, "[agg1]");
             check_congruence(agg2, T, target2, "[agg2]");
-            check_projector(T, S);
+            check_inverse(T, S);
         }
     }
 
     return {U, T, S, std::sqrt(mY)};
 };
+
 
 template<typename Scalar>
 tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(
@@ -759,7 +773,24 @@ tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::Genera
         bc_enveR = env1.R;
         bc_envvL = env2.L;
         bc_envvR = env2.R;
+
         initial_guess.set_tensor(initial.get_tensor());
+
+        const auto dims = initial.get_tensor().dimensions();
+        shape_orig  = {dims[0], dims[1], dims[2]};
+        shape_tilde = shape_orig;
+
+        TL = MatrixType::Identity(dims[1], dims[1]);
+        TR = MatrixType::Identity(dims[2], dims[2]);
+        SL = MatrixType::Identity(dims[1], dims[1]);
+        SR = MatrixType::Identity(dims[2], dims[2]);
+
+        UL = MatrixType::Identity(dims[1], dims[1]);
+        UR = MatrixType::Identity(dims[2], dims[2]);
+
+        kappaL = RealScalar{1};
+        kappaR = RealScalar{1};
+        pass   = 0;
         return;
     }
 
@@ -871,7 +902,7 @@ GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(const GeneralizedBasisCha
 template<typename Scalar>
 GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(const GeneralizedBasisChange<Scalar> &bc, BasisChangeConfig bcfg_)
     : GeneralizedBasisChange(bc.initial_guess, bc.mpo1, bc.mpo2, bc.get_enve_pair(), bc.get_envv_pair(), bcfg_) {
-    if(bc.bcfg.ewt == EnvWeightType::OFF) return;
+    if(this->bcfg.ewt == EnvWeightType::OFF) return;
     // bc now has the old basis, and "this" object now has the new transformed basis.
     pass = bc.pass + 1;
     // We need to update the transforms so that we can undo the transformation.

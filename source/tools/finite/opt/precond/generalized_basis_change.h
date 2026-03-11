@@ -74,9 +74,9 @@ namespace tools::finite::opt::precond::generalized {
                                                            const Eigen::Tensor<Scalar, 4> &mpo2);
 
         std::tuple<MatrixType, MatrixType, MatrixType, RealScalar>
-            get_generalized_transforms(const Eigen::Tensor<Scalar, 3> &env1, const Eigen::Tensor<Scalar, 3> &env2, const Eigen::Tensor<Scalar, 2> &env1_agg,
-                                       const Eigen::Tensor<Scalar, 2> &env2_agg, const Eigen::Tensor<Scalar, 1> &w1, const Eigen::Tensor<Scalar, 1> &w2,
-                                       const Eigen::Tensor<Scalar, 2> &P1, const Eigen::Tensor<Scalar, 2> P2);
+             get_generalized_transforms(const Eigen::Tensor<Scalar, 3> &env1, const Eigen::Tensor<Scalar, 3> &env2, const Eigen::Tensor<Scalar, 2> &env1_agg,
+                                        const Eigen::Tensor<Scalar, 2> &env2_agg, const Eigen::Tensor<Scalar, 1> &w1, const Eigen::Tensor<Scalar, 1> &w2,
+                                        const Eigen::Tensor<Scalar, 2> &P1, const Eigen::Tensor<Scalar, 2> &P2);
 
         GeneralizedBasisChange() = default;
         GeneralizedBasisChange(const opt_mps<Scalar>                  &initial, /*!< Initial guess */

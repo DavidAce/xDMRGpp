@@ -63,6 +63,10 @@ struct IterativeLinearSolverConfig {
             this->matvecs += other.matvecs;
             this->precond += other.precond;
             this->time += other.time;
+            this->time_matvecs += other.time_matvecs;
+            this->time_precond += other.time_precond;
+            this->time_jacobi += other.time_jacobi;
+            this->time_chebyshev += other.time_chebyshev;
             this->error = other.error;
             this->info  = other.info;
             return *this;
@@ -90,12 +94,16 @@ struct IterativeLinearSolverConfig {
             // this->total_time_precond += other.time_precond;
         }
         void reset() {
-            this->iters   = {};
-            this->matvecs = {};
-            this->precond = {};
-            this->time    = {};
-            this->error   = {};
-            this->info    = {};
+            this->iters          = {};
+            this->matvecs        = {};
+            this->precond        = {};
+            this->time           = {};
+            this->time_matvecs   = {};
+            this->time_precond   = {};
+            this->time_jacobi    = {};
+            this->time_chebyshev = {};
+            this->error          = {};
+            this->info           = {};
         }
     };
 

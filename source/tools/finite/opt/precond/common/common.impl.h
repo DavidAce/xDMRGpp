@@ -1,5 +1,6 @@
 #pragma once
 #include "../common.h"
+#include <config/debug.h>
 
 namespace settings {
 #if defined(NDEBUG)
@@ -10,26 +11,68 @@ namespace settings {
 }
 
 using namespace tools::finite::opt::precond::common;
-
+//
+// template<typename Scalar>
+// Ten<Scalar, 3> tools::finite::opt::precond::common::transform_env(const Ten<Scalar, 3> &blk, const Mat<Scalar> &M_transf, Real<Scalar> kappa) {
+//     // Sandwich each virtual-bond (beta) slice of env between the transformation operators M
+//     // auto &threads  = tenx::threads::get();
+//     auto M        = tenx::TensorCast(M_transf);
+//     auto Mh       = tenx::TensorCast(M_transf.adjoint());
+//     auto bc_dim   = std::array<Eigen::Index, 3>{M.dimension(0), M.dimension(0), blk.dimension(2)};
+//     auto bc_env   = Ten<Scalar, 3>(bc_dim);
+//     auto dim_beta = bc_dim[2];
+//     for(Eigen::Index b = 0; b < dim_beta; ++b) {
+//         auto env_slice    = blk.chip(b, 2);
+//         bc_env.chip(b, 2) = Mh.contract(env_slice, tenx::idx({1}, {0})).contract(M, tenx::idx({1}, {0}));
+//         // bc_env.chip(b, 2) = M.contract(env_slice, tenx::idx({1}, {0})).contract(Mh, tenx::idx({1}, {0}));
+//     }
+//     return bc_env * bc_env.constant(kappa);
+// }
 template<typename Scalar>
-Ten<Scalar, 3> tools::finite::opt::precond::common::transform_env(const Ten<Scalar, 3> &blk, const Mat<Scalar> &M_transf, Real<Scalar> kappa) {
-    // Sandwich each virtual-bond (beta) slice of env between the transformation operators M
-    // auto &threads  = tenx::threads::get();
-    auto M        = tenx::TensorCast(M_transf);
-    auto Mh       = tenx::TensorCast(M_transf.adjoint());
-    auto bc_dim   = std::array<Eigen::Index, 3>{M.dimension(0), M.dimension(0), blk.dimension(2)};
-    auto bc_env   = Ten<Scalar, 3>(bc_dim);
-    auto dim_beta = bc_dim[2];
-    for(Eigen::Index b = 0; b < dim_beta; ++b) {
-        auto env_slice = blk.chip(b, 2);
-        // bc_env.chip(b, 2) = Mh.contract(env_slice, tenx::idx({1}, {0})).contract(M, tenx::idx({1}, {0}));
-        bc_env.chip(b, 2) = M.contract(env_slice, tenx::idx({1}, {0})).contract(Mh, tenx::idx({1}, {0}));
+Ten<Scalar, 3> tools::finite::opt::precond::common::transform_env(const Ten<Scalar, 3> &blk,      //
+                                                                  const Mat<Scalar>    &M_transf, //
+                                                                  Real<Scalar>          kappa) {
+    using Matrix      = Mat<Scalar>;
+    using RealScalar  = Real<Scalar>;
+    using MapMat      = Eigen::Map<Matrix>;
+    using MapConstMat = Eigen::Map<const Matrix>;
+
+    assert(blk.dimension(0) == blk.dimension(1));
+    assert(M_transf.rows() == M_transf.cols());
+    assert(M_transf.rows() == blk.dimension(0));
+
+    if constexpr(settings::debug_common) {
+        // Current code constructs Hermitian transforms. Make that contract explicit.
+        const RealScalar herm_err = (M_transf.adjoint() - M_transf).norm() / std::max<RealScalar>(RealScalar{1}, M_transf.norm());
+        assert(herm_err < RealScalar{1e-12f});
     }
-    return bc_env * bc_env.constant(kappa);
+
+    const Eigen::Index n    = blk.dimension(0);
+    const Eigen::Index nb   = blk.dimension(2);
+    const Eigen::Index size = n * n;
+
+    Ten<Scalar, 3> out(n, n, nb);
+
+    // Basis-change convention: E' = M^H E M.
+    // With Hermitian M this equals M E M^H, so current behavior is unchanged.
+    const Matrix Mh = M_transf.adjoint();
+
+    for(Eigen::Index b = 0; b < nb; ++b) {
+        const Eigen::Index off = b * size;
+        MapConstMat        E(blk.data() + off, n, n);
+        MapMat             O(out.data() + off, n, n);
+
+        O.noalias() = Mh * E * M_transf;
+        if(kappa != RealScalar{1}) O *= Scalar(kappa);
+    }
+
+    return out;
 }
 
 template<typename Scalar>
 Ten<Scalar, 3> tools::finite::opt::precond::common::transform_tensor(const Ten<Scalar, 3> &psi, const Mat<Scalar> &ML, const Mat<Scalar> &MR) {
+    assert(psi.dimension(1) == ML.cols());
+    assert(psi.dimension(2) == MR.rows());
     auto  MLm       = tenx::TensorMap(ML);
     auto  MRm       = tenx::TensorMap(MR);
     auto &threads   = tenx::threads::get();
@@ -43,6 +86,8 @@ Ten<Scalar, 3> tools::finite::opt::precond::common::transform_tensor(const Ten<S
 template<typename Scalar>
 Vec<Scalar> tools::finite::opt::precond::common::transform_vector(const Vec<Scalar> &psi, std::array<Eigen::Index, 3> psi_dims, const Mat<Scalar> &ML,
                                                                   const Mat<Scalar> &MR) {
+    assert(psi.dimension(1) == ML.cols());
+    assert(psi.dimension(2) == MR.rows());
     Ten<Scalar, 3> psi_tensor             = tenx::TensorCast(psi, psi_dims);
     Ten<Scalar, 3> transformed_psi_tensor = transform_tensor(psi_tensor, ML, MR);
     return tenx::VectorCast(transformed_psi_tensor);
@@ -52,6 +97,9 @@ template<typename Scalar>
 Mat<Scalar> tools::finite::opt::precond::common::transform_matrix(const Mat<Scalar> &V, const std::array<Eigen::Index, 3> psi_shape, const Mat<Scalar> &ML,
                                                                   const Mat<Scalar> &MR) {
     // V has many psi (one per column) with dimensions of psi_shape
+    assert(V.rows() == psi_shape[0] * psi_shape[1] * psi_shape[2]);
+    assert(ML.cols() == psi_shape[1]);
+    assert(MR.rows() == psi_shape[2]);
     if(ML.size() == 0 or MR.size() == 0) return V;
     auto  MLm     = tenx::TensorMap(ML);
     auto  MRm     = tenx::TensorMap(MR);

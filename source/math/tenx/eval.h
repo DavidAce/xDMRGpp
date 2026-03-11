@@ -31,15 +31,15 @@ namespace tenx {
         }
 
         //        constexpr auto rank() { return DimType{}.size(); }
-        consteval auto rank() { return NumDimensions; }
-        constexpr auto dimensions() { return m_eval.dimensions(); }
-        constexpr auto size() { return Eigen::internal::array_prod(m_eval.dimensions()); } // Some ops don't have .size()?
-        constexpr auto data() { return m_eval.data(); }
-        constexpr auto dimension(unsigned long n) { return m_eval.dimensions()[n]; }
+        [[nodiscard]] consteval auto rank() const { return NumDimensions; }
+        [[nodiscard]] constexpr auto dimensions() const { return m_eval.dimensions(); }
+        [[nodiscard]] constexpr auto size() const { return Eigen::internal::array_prod(m_eval.dimensions()); } // Some ops don't have .size()?
+        [[nodiscard]] constexpr auto data() const { return m_eval.data(); }
+        [[nodiscard]] constexpr auto dimension(unsigned long n) const { return m_eval.dimensions()[n]; }
 
         const Evaluator *operator->() const { return &m_eval; }
         Evaluator       *operator->() { return &m_eval; }
-        constexpr auto   map() { return Eigen::TensorMap<Eigen::Tensor<Scalar, NumDimensions>>(m_eval.data(), m_eval.dimensions()); }
+        [[nodiscard]] constexpr auto   map() const { return Eigen::TensorMap<const Eigen::Tensor<Scalar, NumDimensions>>(m_eval.data(), m_eval.dimensions()); }
     };
 
     // Evaluates expressions if needed

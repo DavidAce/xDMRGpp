@@ -109,6 +109,8 @@ namespace svd {
 
         template<typename Vec>
         [[nodiscard]] std::pair<long, fp64> get_rank_from_truncation_error(const Vec &S) const {
+            using Scalar = typename Vec::Scalar;
+            using Real = Eigen::NumTraits<Scalar>::Real;
             const long n = safe_cast<long>(S.size());
             if(n <= 0) throw std::logic_error("get_rank_from_truncation_error: S.size() <= 0");
 
@@ -142,7 +144,7 @@ namespace svd {
 
             if(rank_min > 0) rank_ = std::max(rank_, std::min(rank_lim, safe_cast<long>(rank_min)));
 
-            if(std::real(S(rank_ - 1)) <= 0.0) throw std::logic_error("get_rank_from_truncation_error: rank selection would keep a zero singular value");
+            if(std::real(S(rank_ - 1)) <= Real{0}) throw std::logic_error("get_rank_from_truncation_error: rank selection would keep a zero singular value");
 
             // Return relative truncation error (dimensionless)
             fp64 tail_norm_sq_final = 0.0;

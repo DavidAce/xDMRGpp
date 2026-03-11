@@ -31,12 +31,14 @@ class IterativeLinearSolverPreconditioner {
     const IterativeLinearSolverConfig<Scalar> *config = nullptr;
 
     // Vectors used in the chebyshev preconditioner
-    mutable VectorType y_old;
-    mutable VectorType y_new;
-    mutable VectorType y_next;
-    mutable VectorType z_res;
-    mutable VectorType temp;
-    mutable MatrixType C;
+    mutable VectorType   y_old;
+    mutable VectorType   y_new;
+    mutable VectorType   y_next;
+    mutable VectorType   z_res;
+    mutable VectorType   temp;
+    mutable MatrixType   C;
+    mutable Eigen::Index C_cols_cached  = -1;
+    mutable RealScalar   C_trace_cached = std::numeric_limits<RealScalar>::quiet_NaN();
 
     public:
     using StorageIndex = typename VectorType::StorageIndex;
@@ -91,8 +93,11 @@ class IterativeLinearSolverPreconditioner {
         RealScalar   lmin_eff = std::max<RealScalar>(lambda_min, lambda_max * RealScalar{1e-3f});
         RealScalar   rho      = (lambda_max - lmin_eff) / (lambda_max + lmin_eff);
         RealScalar   gamma    = RealScalar{0.1f}; // we want a ~10× reduction per precond application
-        Eigen::Index m_auto   = static_cast<Eigen::Index>(std::ceil(std::log(RealScalar{2} / gamma) / (RealScalar{2} * std::acosh(RealScalar{1} / rho))));
-        Eigen::Index m        = std::clamp<Eigen::Index>(m_auto, 1, 20);
+        Eigen::Index m        = degree;
+        if(m <= 0) {
+            Eigen::Index m_auto = static_cast<Eigen::Index>(std::ceil(std::log(RealScalar{2} / gamma) / (RealScalar{2} * std::acosh(RealScalar{1} / rho))));
+            m                   = std::clamp<Eigen::Index>(m_auto, 1, 20);
+        }
         if(m != degree and m_iterations == 0) { std::printf("m %ld -> %ld\n", degree, m); }
 
         // Chebyshev parameters
@@ -245,32 +250,25 @@ class IterativeLinearSolverPreconditioner {
 
     template<typename Rhs, typename Dest>
     void solve_coarse_jacobi(const Rhs &b, Dest &x) const {
-        // Step 1: Apply the jacobi preconditioner
-        solve_jacobi(b, x); // x = P_R M⁻¹ P_L * b
+        solve_jacobi(b, x);
         const MatrixType &Z  = config->jacobi.coarseZ;
         const MatrixType &BZ = config->jacobi.coarseBZ;
-        if(Z.cols() == 0 || BZ.cols() == 0) return; // no coarse space
+        if(Z.cols() == 0 || BZ.cols() == 0) return;
 
-        // Step 2: Apply the coarse solve
-        // if(m_iterations == 1) std::printf("coarse solve\n");
-        if(C.size() == 0 || C.cols() != Z.cols()) {
+        RealScalar trace_now    = std::real((Z.adjoint() * BZ).trace());
+        bool       must_rebuild = C.size() == 0 || C.cols() != Z.cols() || C_cols_cached != Z.cols() ||
+                            std::abs(trace_now - C_trace_cached) > RealScalar{1e-12} * std::max<RealScalar>(RealScalar{1}, std::abs(trace_now));
+
+        if(must_rebuild) {
             MatrixType             G = Z.adjoint() * BZ;
             Eigen::LLT<MatrixType> llt(G);
-            if(llt.info() == Eigen::Success) {
-                C = llt.solve(MatrixType::Identity(Z.cols(), Z.cols()));
-            } else {
-                // std::printf("coarse solve failed at iteration %ld\n", m_iterations);
-                return;
-            }
+            if(llt.info() != Eigen::Success) return;
+            C              = llt.solve(MatrixType::Identity(Z.cols(), Z.cols()));
+            C_cols_cached  = Z.cols();
+            C_trace_cached = trace_now;
         }
 
         VectorType Zalpha = Z * C * (Z.adjoint() * b);
-
-        // VectorType r    = VectorType::Random(Z.rows());
-        // VectorType y    = Z * (C * (Z.adjoint() * r));
-        // RealScalar quad = std::real(r.dot(y));
-        // if constexpr(std::is_same_v<RealScalar, double>) std::printf("[coarse] quadratic form rᵀ(Z C Zᵀ) r = %.3e\n", quad);
-
         if constexpr(MatrixLikeType::has_projector_op) {
             matrix->ProjectOpR(Zalpha, temp);
             x.noalias() += temp;

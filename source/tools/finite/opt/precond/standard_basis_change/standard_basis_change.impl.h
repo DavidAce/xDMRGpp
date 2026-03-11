@@ -163,7 +163,15 @@ tools::finite::opt::precond::standard::BasisChange<Scalar>::BasisChange(const op
                     tools::log->warn("  eig({}): decomposition failed", lbl);
                 }
             };
+            auto check_inverse = [&](const MatrixType &TT, const MatrixType &SS) {
+                const auto Id = MatrixType::Identity(TT.rows(), TT.cols());
 
+                RealScalar err_ST = (SS * TT - Id).norm() / std::max<RealScalar>(RealScalar{1}, Id.norm());
+                RealScalar err_TS = (TT * SS - Id).norm() / std::max<RealScalar>(RealScalar{1}, Id.norm());
+
+                tools::log->info("S*T inverse error {:.2e}", fp(err_ST));
+                tools::log->info("T*S inverse error {:.2e}", fp(err_TS));
+            };
             auto check_projector = [&](const MatrixType &TT, const MatrixType &SS) {
                 MatrixType P    = SS * TT; // should be ~projector
                 RealScalar symm = herm_resid(P);
@@ -191,7 +199,7 @@ tools::finite::opt::precond::standard::BasisChange<Scalar>::BasisChange(const op
             MatrixType target2 = U * tauY.array().pow(RealScalar{1} - alpha).matrix().asDiagonal() * U.adjoint();
             // Logs
             check_congruence(agg2, T, target2, "[agg2]");
-            check_projector(T, S);
+            check_inverse(T, S);
         }
 
         return {T, S, std::sqrt(mY)};

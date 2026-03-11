@@ -139,6 +139,10 @@ auto solver_base<Scalar>::get_residuals(const Eigen::Ref<VectorReal> &Y, const E
     MatrixType S = H1V - H2V * Y.asDiagonal();
     VectorReal N = S.colwise().norm();
     VectorReal D = H1V.colwise().norm().array() + H2V.colwise().norm().array() * Y.cwiseAbs().array();
+
+    constexpr auto dmin = std::numeric_limits<RealScalar>::min();
+    D                   = D.cwiseMax(VectorReal::Constant(D.size(), dmin));
+
     VectorReal R = N.cwiseQuotient(D);
     return {S, R};
 };
@@ -395,8 +399,8 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::qr_and_chebyshevFi
     auto bias = chebyshev_filter_lambda_cut_bias;
     if(ritz == OptRitz::LM or ritz == OptRitz::LR) { bias = RealScalar{1} - bias; }
 
-    RealScalar lambda_min = status.min_eval_estimate() * RealScalar{0.99};
-    RealScalar lambda_max = status.max_eval_estimate() * RealScalar{1.01};
+    RealScalar lambda_min = status.min_eval_estimate() * RealScalar{0.99f};
+    RealScalar lambda_max = status.max_eval_estimate() * RealScalar{1.01f};
     if(lambda_min > lambda_max) std::swap(lambda_min, lambda_max);
     RealScalar lambda_cut = lambda_min + bias * (lambda_max - lambda_min);
     lambda_cut            = std::clamp(lambda_cut, lambda_min, lambda_max);
@@ -775,7 +779,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP1(const Eigen
     status.num_precond_inner += H1ir.precond;
     status.time_matvecs_inner += H1ir.time_matvecs;
     status.time_precond_inner += H1ir.time_precond;
-    // H1ir.reset();
+    H1ir.reset();
     return HPX;
 }
 
@@ -797,7 +801,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP2(const Eigen
     status.num_precond_inner += H2ir.precond;
     status.time_matvecs_inner += H2ir.time_matvecs;
     status.time_precond_inner += H2ir.time_precond;
-    // H2ir.reset();
+    H2ir.reset();
     return HPX;
 }
 
@@ -818,7 +822,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP1P2(const Eig
     status.num_precond_inner += H1H2ir.precond;
     status.time_matvecs_inner += H1H2ir.time_matvecs;
     status.time_precond_inner += H1H2ir.time_precond;
-    // H1H2ir.reset();
+    H1H2ir.reset();
     return H1H2PX;
 }
 
@@ -938,14 +942,7 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
         else
             return H2.MultAX(X);
     };
-    // auto ProjectOpL = [&V](const Eigen::Ref<const MatrixType> &X) -> MatrixType {
-    //     auto t_pl = tid::tic_token("ProjectOpL", tid::level::higher);
-    //     return X - V * (V.adjoint() * X).eval();
-    // };
-    // auto ProjectOpR = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
-    //     auto t_pr = tid::tic_token("ProjectOpR", tid::level::higher);
-    //     Y.noalias() += X - V * (V.adjoint() * X).eval();
-    // };
+
     auto ProjectOpL = [&V](const Eigen::Ref<const MatrixType> &X, Eigen::Ref<MatrixType> Y) -> void {
         auto                    t_pl = tid::tic_token("ProjectOpL", tid::level::higher);
         thread_local MatrixType T;
@@ -3168,19 +3165,28 @@ solver_base<Scalar>::MatrixType solver_base<Scalar>::get_refined_ritz_eigenvecto
     }
     return Z_ref;
 }
+//
 
 template<typename Scalar>
 std::pair<typename solver_base<Scalar>::MatrixType, typename solver_base<Scalar>::MatrixType>
     solver_base<Scalar>::get_h2_normalizer_for_the_projected_pencil(const MatrixType &T2) {
-    static constexpr auto half = RealScalar{1} / RealScalar{2};
-    MatrixType            T2h  = (T2 + T2.adjoint()) * half;
-    auto                  es   = Eigen::SelfAdjointEigenSolver<MatrixType>(T2h, Eigen::ComputeEigenvectors);
-    if(es.info() != Eigen::Success) { throw except::runtime_error("get_h2_normalizer_for_the_projected_pencil: eigensolver failed"); }
-    auto U    = es.eigenvectors();
-    auto D    = es.eigenvalues();
-    auto Dmax = std::max<RealScalar>(1, D.maxCoeff());
-    for(Eigen::Index k = 0; k < D.size(); ++k) { D(k) = std::max(D(k), eps * Dmax); }
-    return {U * D.cwiseInverse().cwiseSqrt().asDiagonal() * U.adjoint(), U * D.cwiseSqrt().asDiagonal() * U.adjoint()};
+    MatrixType T2h = (T2 + T2.adjoint()) / RealScalar{2};
+
+    auto es = Eigen::SelfAdjointEigenSolver<MatrixType>(T2h, Eigen::ComputeEigenvectors);
+    if(es.info() != Eigen::Success) throw except::runtime_error("get_h2_normalizer_for_the_projected_pencil: eigensolver failed");
+
+    auto U = es.eigenvectors();
+    auto D = es.eigenvalues();
+
+    const RealScalar Dmax = std::max<RealScalar>(RealScalar{1}, D.cwiseAbs().maxCoeff());
+    const RealScalar tau  = RealScalar{10} * eps * Dmax;
+
+    if(D.minCoeff() <= RealScalar{0}) { eiglog->warn("Projected T2 is numerically indefinite: min eval {:.3e}", fp(D.minCoeff())); }
+
+    for(Eigen::Index k = 0; k < D.size(); ++k) D(k) = std::max(D(k), tau);
+
+    return {U * D.cwiseInverse().cwiseSqrt().asDiagonal() * U.adjoint(), //
+            U * D.cwiseSqrt().asDiagonal() * U.adjoint()};
 }
 
 template<typename Scalar>
@@ -3375,7 +3381,10 @@ void solver_base<Scalar>::updateStatus() {
     status.oldVal  = status.eigVal.topRows(nev);
     status.eigVal  = T_evals(status.optIdx).topRows(nev); // Make sure we only take nev values here. In general, nev <= b
     status.absDiff = (status.eigVal - status.oldVal).cwiseAbs();
-    status.relDiff = status.absDiff.array() / (RealScalar{0.5} * (status.eigVal + status.oldVal).array());
+
+    VectorReal denom = (RealScalar{0.5} * (status.eigVal + status.oldVal).array().abs()).matrix();
+    denom            = denom.cwiseMax(VectorReal::Constant(denom.size(), std::numeric_limits<RealScalar>::min()));
+    status.relDiff   = status.absDiff.cwiseQuotient(denom);
 
     status.rNorms_history.push_back(status.rNorms.topRows(nev));
     status.eigVals_history.push_back(status.eigVal.topRows(nev));
