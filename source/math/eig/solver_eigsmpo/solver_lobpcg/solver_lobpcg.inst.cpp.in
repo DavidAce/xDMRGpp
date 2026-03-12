@@ -1,0 +1,9 @@
+#include "solver_lobpcg.impl.h"
+
+using Scalar = @SCALAR@;
+
+/* clang-format off */
+
+template class solver_lobpcg<Scalar>;
+
+/* clang-format on */

@@ -242,20 +242,29 @@ template<typename Scalar>
 void AlgorithmLauncher::run_flbit() {
     if(settings::flbit::on) {
         if constexpr(std::is_same_v<Scalar, cx64>) {
-            flbit<Scalar> flbit(h5file);
             try {
-                flbit.run();
+                flbit<Scalar> algo(h5file);
+                algo.run();
             } catch(const except::resume_error &ex) {
                 tools::log->error("Failed to resume simulation: {}", ex.what());
-                if(settings::storage::file_collision_policy == FileCollisionPolicy::REVIVE) {
-                    tools::log->warn("Truncating file [{}]", settings::storage::output_filepath);
+
+                if(settings::storage::file_collision_policy != FileCollisionPolicy::REVIVE) throw;
+
+                auto stale_path = h5file ? h5file->getFilePath() : settings::storage::output_filepath;
+                tools::log->warn("Truncating file [{}]", stale_path);
+
+                if(h5pp::fs::exists(stale_path)) h5pp::fs::remove(stale_path);
+                if(stale_path != settings::storage::output_filepath and h5pp::fs::exists(settings::storage::output_filepath))
                     h5pp::fs::remove(settings::storage::output_filepath);
-                    rnd::seed(settings::input::seed); // Restart the rng from the same seed
-                    start_h5file();
-                    setup_temp_path();
-                    flbit.run();
-                }
+
+                rnd::seed(settings::input::seed);
+                start_h5file();
+                setup_temp_path();
+
+                flbit<Scalar> revived(h5file);
+                revived.run();
             }
+
         } else {
             throw except::runtime_error("flbit is only supported for cx64. Got [{}]", sfinae::type_name<Scalar>());
         }
@@ -264,21 +273,27 @@ void AlgorithmLauncher::run_flbit() {
 
 template<typename Scalar>
 void AlgorithmLauncher::run_xdmrg() {
-    if(settings::xdmrg::on) {
-        xdmrg<Scalar> xdmrg(h5file);
-        try {
-            xdmrg.run();
-        } catch(const except::resume_error &ex) {
-            tools::log->error("Failed to resume simulation: {}", ex.what());
-            if(settings::storage::file_collision_policy == FileCollisionPolicy::REVIVE) {
-                tools::log->warn("Truncating file [{}]", settings::storage::output_filepath);
-                h5pp::fs::remove(settings::storage::output_filepath);
-                rnd::seed(settings::input::seed); // Restart the rng from the same seed
-                start_h5file();
-                setup_temp_path();
-                xdmrg.run();
-            }
-        }
+    try {
+        xdmrg<Scalar> algo(h5file);
+        algo.run();
+    } catch(const except::resume_error &ex) {
+        tools::log->error("Failed to resume simulation: {}", ex.what());
+
+        if(settings::storage::file_collision_policy != FileCollisionPolicy::REVIVE) throw;
+
+        auto stale_path = h5file ? h5file->getFilePath() : settings::storage::output_filepath;
+        tools::log->warn("Truncating file [{}]", stale_path);
+
+        if(h5pp::fs::exists(stale_path)) h5pp::fs::remove(stale_path);
+        if(stale_path != settings::storage::output_filepath and h5pp::fs::exists(settings::storage::output_filepath))
+            h5pp::fs::remove(settings::storage::output_filepath);
+
+        rnd::seed(settings::input::seed);
+        start_h5file();
+        setup_temp_path();
+
+        xdmrg<Scalar> revived(h5file);
+        revived.run();
     }
 }
 

@@ -81,13 +81,32 @@ template<typename Scalar>
 void idmrg<Scalar>::check_convergence() {
     tools::log->trace("Checking convergence");
     auto t_con = tid::tic_scope("conv");
+
     check_convergence_entanglement();
     check_convergence_variance_mpo();
     check_convergence_variance_ham();
     check_convergence_variance_mom();
-    if(status.energy_mpo_saturated_for > 0 and status.variance_mpo_converged_for > 0 and status.variance_ham_converged_for > 0 and
-       status.variance_mom_converged_for > 0 and status.bond_limit_has_reached_max) {
-        status.algorithm_converged_for++;
-    } else
-        status.algorithm_converged_for = 0;
+
+    bool ent_enabled = settings::precision::entanglement_saturation_sensitivity > 0;
+    bool var_enabled = settings::precision::variance_saturation_sensitivity > 0;
+
+    bool ent_sat = ent_enabled ? status.entanglement_saturated_for > 1 : true;
+    bool mpo_sat = var_enabled ? status.variance_mpo_saturated_for > 1 : true;
+    bool ham_sat = var_enabled ? status.variance_ham_saturated_for > 1 : true;
+    bool mom_sat = var_enabled ? status.variance_mom_saturated_for > 1 : true;
+
+    bool all_saturated             = ent_sat and mpo_sat and ham_sat and mom_sat;
+    status.algorithm_saturated_for = all_saturated ? status.algorithm_saturated_for + 1 : 0;
+
+    bool bond_has_saturated =
+        status.bond_limit_has_reached_max or (!tensors.state->is_limited_by_bond(status.bond_lim) and !tensors.state->is_truncated(status.trnc_lim));
+    bool trnc_has_saturated = status.trnc_limit_has_reached_min or !tensors.state->is_truncated(status.trnc_lim);
+
+    bool converged_now = (ent_enabled ? status.entanglement_saturated_for > 0 : true) and status.variance_mpo_converged_for > 0 and
+                         status.variance_ham_converged_for > 0 and status.variance_mom_converged_for > 0 and bond_has_saturated;
+
+    status.algorithm_converged_for = converged_now ? status.algorithm_converged_for + 1 : 0;
+    status.algorithm_has_stuck_for = all_saturated and !converged_now ? status.algorithm_has_stuck_for + 1 : 0;
+    status.algorithm_has_succeeded = status.algorithm_converged_for > settings::strategy::iter_min_converged;
+    status.algorithm_has_to_stop   = trnc_has_saturated and bond_has_saturated and status.algorithm_has_stuck_for >= settings::strategy::iter_max_stuck;
 }

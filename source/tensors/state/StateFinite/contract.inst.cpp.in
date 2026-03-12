@@ -1,0 +1,5 @@
+#include "contract.impl.h"
+
+using Scalar = @SCALAR@;
+
+template struct statefinite_internal<Scalar>;

@@ -1,0 +1,5 @@
+#include "matvec_dense.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class MatVecDense<Scalar>;

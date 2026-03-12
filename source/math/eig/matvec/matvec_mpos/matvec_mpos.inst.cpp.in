@@ -1,0 +1,5 @@
+#include "matvec_mpos.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class MatVecMPOS<Scalar>;

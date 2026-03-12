@@ -1,0 +1,5 @@
+#include "contract.impl.h"
+
+using Scalar = @SCALAR@;
+
+template struct tools::finite::measure::contract_internal<Scalar>;

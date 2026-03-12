@@ -62,19 +62,22 @@ class MatVecMPOS {
     void init_mpos_A();
     void init_mpos_B();
 
-    std::array<long, 3>       shape_mps;
-    long                      size_mps;
-    std::vector<long>         spindims;
-    eig::Form                 form            = eig::Form::SYMM;
-    eig::Side                 side            = eig::Side::R;
-    std::optional<RealScalar> jcbShift        = std::nullopt;
-    long                      jcbBlockSize    = 0l; // Jacobi block size.
-    long                      jcbMaxBlockSize = 1l; // Maximum Jacobi block size. The default is 1, which defaults to the diagonal preconditioner
-    long                      jcbOverlapSize  = 0l; // By how many indices each block
-    long                      jcbNumPasses    = 1l; // Number of times to apply block jacobi
-    VectorType                jcbDiagA, jcbDiagB;   // The diagonals of matrices A and B for block jacobi preconditioning (for jcbMaxBlockSize == 1)
-    VectorType                invJcbDiagonal;       // The inverted diagonals used when jcBMaxBlockSize == 1
-    mutable VectorType        invJcbDiagB;          // Used with spectra
+    std::array<long, 3> shape_mps;
+    long                size_mps;
+    std::vector<long>   spindims;
+    eig::Form           form = eig::Form::SYMM;
+    eig::Side           side = eig::Side::R;
+
+    std::optional<RealScalar> jcbShift           = std::nullopt;
+    long                      jcbBlockSize       = 0l; /*!< Current/requested Jacobi block size used when building the preconditioner. */
+    long                      jcbMaxBlockSize    = 1l; /*!< Maximum Jacobi block size. If 1, this reduces to diagonal Jacobi. */
+    long                      jcbOverlapSize     = 0l; /*!< Number of overlapping indices between neighboring Jacobi blocks. */
+    long                      jcbNumPasses       = 1l; /*!< Number of additive Schwarz / block-Jacobi passes to apply. */
+    long                      jcbMaxMultiplicity = 1l; /*!< Maximum number of Jacobi blocks covering any single input index. */
+    VectorReal                jcbInvSqrtMultiplicity;  /*!< Scaling factors 1/sqrt(m_i), where m_i is the number of blocks covering index i. */
+    VectorType                jcbDiagA, jcbDiagB;      /*!< Diagonals of matrices A and B, used for diagonal Jacobi (jcbMaxBlockSize == 1). */
+    VectorType                invJcbDiagonal;          /*!< Inverted diagonal used when jcbMaxBlockSize == 1. */
+    mutable VectorType        invJcbDiagB;             /*!< Inverse diagonal of B, used in B-only inverse applications / tests. */
 
     using LLTType  = Eigen::LLT<MatrixType, Eigen::Lower>;
     using LUType   = Eigen::PartialPivLU<MatrixType>;
@@ -84,7 +87,6 @@ class MatVecMPOS {
     std::vector<std::tuple<long, int, std::unique_ptr<LDLTType>>> ldltJcbBlocks; // Solvers for the block Jacobi preconditioner
     std::vector<std::tuple<long, int, std::unique_ptr<LUType>>>   luJcbBlocks;   // Solvers for the block Jacobi preconditioner
     std::vector<std::tuple<long, int, std::unique_ptr<QRType>>>   qrJcbBlocks;   // Solvers for the block Jacobi preconditioner
-    VectorReal jcbInvSqrtMultiplicity;                                           // Counts how many times each diagonal index is covered by a jacobi block
 
     // using BICGType = Eigen::BiCGSTAB<SparseRowM, Eigen::IncompleteLUT<Scalar>>;
     // std::vector<std::tuple<long, std::unique_ptr<SparseRowM>, std::unique_ptr<BICGType>>> bicgstabJcbBlocks; // Solvers for the block Jacobi preconditioner

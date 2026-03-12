@@ -50,7 +50,7 @@ RealScalar<Scalar> tools::finite::measure::norm_state(const StateFinite<Scalar> 
             first = false;
             continue;
         }
-        chain = contract_chain_M_Mconj_0_1_01_10(chain, M, threads);
+        chain = contract_internal<Scalar>::contract_chain_M_Mconj_0_1_01_10(chain, M, threads);
     }
     Scalar norm = tenx::MatrixMap(chain).trace();
 
@@ -92,7 +92,7 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::isometry_left(const StateFinite
         assert(chain.dimension(0) == chain.dimension(1));
         assert(chain.dimension(0) == M.dimension(1));
 
-        chain = contract_chain_M_Mconj_0_1_01_10(chain, M, threads);
+        chain = contract_internal<Scalar>::contract_chain_M_Mconj_0_1_01_10(chain, M, threads);
 
         // Stop after including site `pos`
         if(mps_pos >= pos) break;
@@ -132,7 +132,7 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::isometry_right(const StateFinit
         // Sanity checks
         assert(chain.dimension(0) == chain.dimension(1));
         assert(chain.dimension(0) == M.dimension(2));
-        chain = contract_chain_M_Mconj_0_2_01_20(chain, M, threads);
+        chain = contract_internal<Scalar>::contract_chain_M_Mconj_0_2_01_20(chain, M, threads);
 
         // Stop after including site `pos`
         if(mps_pos <= pos) break;

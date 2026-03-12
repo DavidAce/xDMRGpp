@@ -1,0 +1,5 @@
+#include "matvec_zero.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class MatVecZero<Scalar>;

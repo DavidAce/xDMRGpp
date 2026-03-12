@@ -1642,8 +1642,17 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
                    [](const log_entry &h) -> RealScalar { return h.energy_variance_global; });
     for(size_t i = 0; i < evar_local.size(); ++i) { evar_diff.emplace_back(evar_global[i] - evar_local[i]); }
 
+
+    // Create a floored version of the local variance history: it can become negative if <H²> introduces cancellation
+    std::vector<RealScalar> evar_local_logsafe;
+    evar_local_logsafe.reserve(evar_local.size());
+    for(auto v : evar_local) {
+        evar_local_logsafe.emplace_back(std::max(std::numeric_limits<RealScalar>::epsilon(), std::abs(v)));
+    }
+
+
     //    var_mpo_iter.emplace_back(tools::finite::measure::energy_variance(tensors));
-    auto report = check_saturation(evar_local, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::log);
+    auto report = check_saturation(evar_local_logsafe, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::log);
     if(report.has_computed) {
         status.variance_mpo_converged_for                          = count_convergence(evar_local, threshold.value(), report.saturated_point);
         status.variance_mpo_saturated_for                          = report.saturated_count;

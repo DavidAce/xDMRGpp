@@ -180,7 +180,7 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_reduced_density_matrix(const std::v
                     // If it is the only site, we also need it to include the right schmidt values.
                     bool use_multisite = mps.get_label() == "B" or sites.size() == 1;
                     M                  = use_multisite ? get_multisite_mps<T>({i}, true) : mps.template get_M_as<T>();
-                    contract_Mconj_M_1_1(rho_temp, M, threads);
+                    statefinite_internal<T>::contract_Mconj_M_1_1(rho_temp, M, threads);
                     // auto dim           = M.dimensions();
                     // rho_temp.resize(std::array{dim[0], dim[0], dim[2], dim[2]});
                     // rho_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({1}, {1})).shuffle(std::array{0, 2, 1, 3});
@@ -193,13 +193,13 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_reduced_density_matrix(const std::v
                     // auto rho_dim       = rho_temp.dimensions();
                     bool do_trace = std::find(sites.begin(), sites.end(), i) == sites.end();
                     if(do_trace) {
-                        contract_rho_M_Mconj_2_1_23_10(rho_temp2, rho_temp, M, threads);
+                        statefinite_internal<T>::contract_rho_M_Mconj_2_1_23_10(rho_temp2, rho_temp, M, threads);
                         // auto new_dim = std::array{rho_dim[0], rho_dim[1], mps_dim[2], mps_dim[2]};
                         // rho_temp2.resize(new_dim);
                         // rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {1})).contract(M, tenx::idx({2, 3}, {1, 0}));
 
                     } else {
-                        contract_rho_Mconj_M_2_1_2_1(rho_temp2, rho_temp, M, threads);
+                        statefinite_internal<T>::contract_rho_Mconj_M_2_1_2_1(rho_temp2, rho_temp, M, threads);
                         // auto new_dim = std::array{rho_dim[0] * mps_dim[0], rho_dim[1] * mps_dim[0], mps_dim[2], mps_dim[2]};
                         // rho_temp2.resize(new_dim);
                         // rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {1}))
@@ -226,7 +226,7 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_reduced_density_matrix(const std::v
                     // If it is the only site, we also need it to include the left schmidt values.
                     bool use_multisite = mps.get_label() == "A" or sites.size() == 1;
                     M                  = use_multisite ? get_multisite_mps<T>({i}, true) : mps.template get_M_as<T>();
-                    contract_Mconj_M_2_2(rho_temp, M, threads);
+                    statefinite_internal<T>::contract_Mconj_M_2_2(rho_temp, M, threads);
                     // auto dim           = M.dimensions();
                     // rho_temp.resize(std::array{dim[0], dim[0], dim[1], dim[1]});
                     // rho_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({2}, {2})).shuffle(std::array{0, 2, 1, 3});
@@ -238,12 +238,12 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_reduced_density_matrix(const std::v
                     // auto rho_dim       = rho_temp.dimensions();
                     bool do_trace = std::find(sites.begin(), sites.end(), i) == sites.end();
                     if(do_trace) {
-                        contract_rho_Mconj_M_2_2_23_20(rho_temp2, rho_temp, M, threads);
+                        statefinite_internal<T>::contract_rho_Mconj_M_2_2_23_20(rho_temp2, rho_temp, M, threads);
                         // auto new_dim = std::array{rho_dim[0], rho_dim[1], mps_dim[1], mps_dim[1]};
                         // rho_temp2.resize(new_dim);
                         // rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {2})).contract(M, tenx::idx({2, 3}, {2, 0}));
                     } else {
-                        contract_rho_Mconj_M_2_2_2_2(rho_temp2, rho_temp, M, threads);
+                        statefinite_internal<T>::contract_rho_Mconj_M_2_2_2_2(rho_temp2, rho_temp, M, threads);
                         // auto new_dim = std::array{rho_dim[0] * mps_dim[0], rho_dim[1] * mps_dim[0], mps_dim[1], mps_dim[1]};
                         // rho_temp2.resize(new_dim);
                         // rho_temp2.device(*threads->dev) = rho_temp.contract(M.conjugate(), tenx::idx({2}, {2}))
@@ -396,7 +396,7 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
         auto M   = get_multisite_mps<T>(sites, true);
         auto dim = std::array{M.dimension(1) * M.dimension(2), M.dimension(1) * M.dimension(2)};
         auto res = Eigen::Tensor<T, 2>(dim);
-        contract_Mconj_M_0_0(res, M, threads);
+        statefinite_internal<T>::contract_Mconj_M_0_0(res, M, threads);
         return res;
         // res.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).reshape(dim);
         // return res;
@@ -432,7 +432,7 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     bool use_multisite = mps.get_label() == "B" or sites.size() == 1;
                     M                  = use_multisite ? get_multisite_mps<T>({i}) : mps.template get_M_as<T>();
                     // auto dim           = M.dimensions();
-                    contract_Mconj_M_0_0(trf_temp, M, threads);
+                    statefinite_internal<T>::contract_Mconj_M_0_0(trf_temp, M, threads);
                     // trf_temp.resize(std::array{dim[1], dim[1], dim[2], dim[2]});
                     // trf_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).shuffle(std::array{0, 2, 1, 3});
                 } else {
@@ -442,7 +442,7 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     // auto mps_dim       = M.dimensions();
                     // auto trf_dim       = trf_temp.dimensions();
                     // auto new_dim       = std::array{trf_dim[0], trf_dim[1], mps_dim[2], mps_dim[2]};
-                    contract_trf_Mconj_M_2_1_23_10(trf_tmp4, trf_temp, M, threads);
+                    statefinite_internal<T>::contract_trf_Mconj_M_2_1_23_10(trf_tmp4, trf_temp, M, threads);
                     // trf_tmp4.resize(new_dim);
                     // trf_tmp4.device(*threads->dev) = trf_temp.contract(M.conjugate(), tenx::idx({2}, {1})).contract(M, tenx::idx({2, 3}, {1, 0}));
                     trf_temp = std::move(trf_tmp4);
@@ -463,7 +463,7 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     bool use_multisite = mps.get_label() == "A" or sites.size() == 1;
                     M                  = use_multisite ? get_multisite_mps<T>({i}) : mps.template get_M_as<T>();
                     // auto dim           = M.dimensions();
-                    contract_Mconj_M_0_0(trf_temp, M, threads);
+                    statefinite_internal<T>::contract_Mconj_M_0_0(trf_temp, M, threads);
                     // trf_temp.resize(std::array{dim[1], dim[1], dim[2], dim[2]});
                     // trf_temp.device(*threads->dev) = M.conjugate().contract(M, tenx::idx({0}, {0})).shuffle(std::array{0, 2, 1, 3});
 
@@ -479,10 +479,10 @@ Eigen::Tensor<T, 2> StateFinite<Scalar>::get_transfer_matrix(const std::vector<s
                     // auto trf_dim       = trf_temp.dimensions();
                     // auto tm5_dim       = std::array{mps_dim[0], mps_dim[1], trf_dim[0], trf_dim[2], trf_dim[3]};
                     // auto new_dim       = std::array{mps_dim[1], mps_dim[1], trf_dim[2], trf_dim[3]};
-                    contract_M_trf_2_1(trf_tmp5, M, trf_temp, threads);
+                    statefinite_internal<T>::contract_M_trf_2_1(trf_tmp5, M, trf_temp, threads);
                     // trf_tmp5.resize(tm5_dim);
                     // trf_tmp5.device(*threads->dev) = M.contract(trf_temp, tenx::idx({2}, {1}));
-                    contract_Mconj_trf5_02_02(trf_temp, M, trf_tmp5, threads);
+                    statefinite_internal<T>::contract_Mconj_trf5_02_02(trf_temp, M, trf_tmp5, threads);
                     // trf_temp.resize(new_dim);
                     // trf_temp.device(*threads->dev) = M.conjugate().contract(trf_tmp5, tenx::idx({0, 2}, {0, 2}));
                 }

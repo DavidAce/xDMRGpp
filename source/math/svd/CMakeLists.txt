@@ -1,39 +1,14 @@
 add_source_target(xdmrg++-math-svd
         TARGET_SOURCES
         svd.cpp
-        inst/svd.fp32.cpp
-        inst/svd.fp64.cpp
-        inst/svd.fp128.cpp
-        inst/svd.cx32.cpp
-        inst/svd.cx64.cpp
-        inst/svd.cx128.cpp
-        inst/svd_dump.fp32.cpp
-        inst/svd_dump.fp64.cpp
-        inst/svd_dump.fp128.cpp
-        inst/svd_dump.cx32.cpp
-        inst/svd_dump.cx64.cpp
-        inst/svd_dump.cx128.cpp
-        inst/svd_eigen.fp32.cpp
-        inst/svd_eigen.fp64.cpp
-        inst/svd_eigen.fp128.cpp
-        inst/svd_eigen.cx32.cpp
-        inst/svd_eigen.cx64.cpp
-        inst/svd_eigen.cx128.cpp
-        inst/svd_lapacke.fp32.cpp
-        inst/svd_lapacke.fp64.cpp
-        inst/svd_lapacke.fp128.cpp
-        inst/svd_lapacke.cx32.cpp
-        inst/svd_lapacke.cx64.cpp
-        inst/svd_lapacke.cx128.cpp
-        inst/svd_rsvd.fp32.cpp
-        inst/svd_rsvd.fp64.cpp
-        inst/svd_rsvd.fp128.cpp
-        inst/svd_rsvd.cx32.cpp
-        inst/svd_rsvd.cx64.cpp
-        inst/svd_rsvd.cx128.cpp
+        INST_TEMPLATE_FILES
+        inst/svd.inst.cpp.in
+        inst/svd_dump.inst.cpp.in
+        inst/svd_eigen.inst.cpp.in
+        inst/svd_lapacke.inst.cpp.in
+        inst/svd_rsvd.inst.cpp.in
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
         xdmrg++-tid
         )
-

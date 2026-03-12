@@ -9,6 +9,7 @@
  */
 
 template<typename Scalar> class StateFinite;
+template<typename Scalar> struct flbit_tmpl;
 template<typename Scalar>
 class flbit : public AlgorithmFinite<Scalar> {
     using RealScalar = typename AlgorithmFinite<Scalar>::RealScalar;
@@ -19,6 +20,7 @@ class flbit : public AlgorithmFinite<Scalar> {
     using MatType    = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using MatReal    = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
     using MatCplx    = Eigen::Matrix<std::complex<RealScalar>, Eigen::Dynamic, Eigen::Dynamic>;
+    using flbit_tmpl = ::flbit_tmpl<Scalar>;
 
     using AlgorithmFinite<Scalar>::AlgorithmFinite;
     using AlgorithmFinite<Scalar>::status;

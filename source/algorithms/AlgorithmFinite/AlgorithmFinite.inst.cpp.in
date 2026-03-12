@@ -1,0 +1,5 @@
+#include "AlgorithmFinite.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class AlgorithmFinite<Scalar>;

@@ -148,7 +148,7 @@ std::vector<opt_mps<Scalar>> subspace::find_subspace(const TensorsFinite<Scalar>
     /* clang-format on */
     slog.print_subs_report();
     if constexpr(sfinae::is_std_complex_v<T>) {
-        tenx::subtract_phase(eigvecs);
+        [[maybe_unused]] auto angles = tenx::subtract_phase(eigvecs);
         R trunc = eigvecs.imag().cwiseAbs().sum();
         if(num::gt(trunc, 1e-12)) tools::log->warn("truncating imag of eigvecs, sum: {:.3e}", fp(trunc));
         eigvecs = eigvecs.real();

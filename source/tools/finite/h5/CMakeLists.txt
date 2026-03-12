@@ -1,17 +1,7 @@
 add_source_target(xdmrg++-tools-finite-h5
-                  TARGET_SOURCES
-                  load/cx32.cpp
-                  load/cx64.cpp
-                  load/cx128.cpp
-                  load/fp32.cpp
-                  load/fp64.cpp
-                  load/fp128.cpp
-                  save/cx32.cpp
-                  save/cx64.cpp
-                  save/cx128.cpp
-                  save/fp32.cpp
-                  save/fp64.cpp
-                  save/fp128.cpp
+                  INST_TEMPLATE_FILES
+                  load/load.inst.cpp.in
+                  save/save.inst.cpp.in
                   OBJECT_LINK_LIBRARIES
                   xdmrg++-deps xdmrg++-flags
                   INTERFACE_LINK_LIBRARIES
@@ -28,4 +18,3 @@ add_source_target(xdmrg++-tools-finite-h5
                   xdmrg++-tools-common-h5
                   xdmrg++-tools-common-log
                   )
-

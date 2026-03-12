@@ -1,0 +1,16 @@
+#include "matvec_mpos.impl.h"
+
+using Scalar      = @STORAGE_SCALAR@;
+using InputScalar = @CALC_SCALAR@;
+
+template MatVecMPOS<Scalar>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<InputScalar>>> &mpos_,
+                                        const env_pair<const EnvEne<InputScalar> &>                          &envs_);
+template MatVecMPOS<Scalar>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<InputScalar>>> &mpos_,
+                                        const env_pair<const EnvVar<InputScalar> &>                          &envs_);
+
+template MatVecMPOS<Scalar>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<InputScalar>>> &mpos_,
+                                        const env_pair<const EnvVar<InputScalar> &>                          &enva_,
+                                        const env_pair<const EnvEne<InputScalar> &>                          &envb);
+template MatVecMPOS<Scalar>::MatVecMPOS(const std::vector<std::reference_wrapper<const MpoSite<InputScalar>>> &mpos_,
+                                        const env_pair<const EnvEne<InputScalar> &>                          &enva_,
+                                        const env_pair<const EnvVar<InputScalar> &>                          &envb);

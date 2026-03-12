@@ -1,0 +1,5 @@
+#include "standard_basis_change.impl.h"
+
+using Scalar = @SCALAR@;
+
+template struct tools::finite::opt::precond::standard::BasisChange<Scalar>;

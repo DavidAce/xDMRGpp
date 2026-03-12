@@ -1,0 +1,5 @@
+#include "../LBit.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class LBit<Scalar>;

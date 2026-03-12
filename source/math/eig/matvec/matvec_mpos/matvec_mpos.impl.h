@@ -919,19 +919,28 @@ void MatVecMPOS<Scalar>::MultAx_hp(const Scalar *mps_in_, Scalar *mps_out_) cons
 
     Eigen::Tensor<ScalarL, 3> mps_in_hp = mps_in.template cast<ScalarL>();
     Eigen::Tensor<ScalarL, 3> mps_out_hp(shape_mps);
+
     if(mpos_A_hp.empty()) {
-        for(const auto &mpo_A : mpos_A) { mpos_A_hp.emplace_back(mpo_A.template cast<ScalarL>()); }
+        mpos_A_hp.reserve(mpos_A.size());
+        for(const auto &mpo_A : mpos_A) mpos_A_hp.emplace_back(mpo_A.template cast<ScalarL>());
+
+        mpos_A_shf_hp.clear();
+        if(mpos_A_hp.size() > 1) {
+            mpos_A_shf_hp.reserve(mpos_A_hp.size());
+            for(const auto &mpo_A_hp : mpos_A_hp) mpos_A_shf_hp.emplace_back(mpo_A_hp.shuffle(tenx::array4{2, 3, 0, 1}));
+        }
     }
+
     if(envL_A_hp.size() != envL_A.size()) envL_A_hp = envL_A.template cast<ScalarL>();
     if(envR_A_hp.size() != envR_A.size()) envR_A_hp = envR_A.template cast<ScalarL>();
 
     if(mpos_A_hp.size() == 1) {
-        if(mps_in.size()) tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_hp.front(), envL_A_hp, envR_A_hp);
+        tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_hp.front(), envL_A_hp, envR_A_hp);
     } else {
         tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_shf_hp, envL_A_hp, envR_A_hp);
     }
+
     mps_out = mps_out_hp.template cast<Scalar>();
-    assert(Eigen::Map<VectorType>(mps_out_, size_mps).allFinite());
     num_mv++;
 }
 
@@ -957,13 +966,21 @@ void MatVecMPOS<Scalar>::perform_op(const Scalar *mps_in_, Scalar *mps_out_) con
 
 template<typename Scalar>
 void MatVecMPOS<Scalar>::MultBx(const Scalar *mps_in_, Scalar *mps_out_) const {
-    if(mpos_B.empty() and mpos_B_shf.empty()) return;
+    auto x = Eigen::Map<const VectorType>(mps_in_, size_mps);
+    auto y = Eigen::Map<VectorType>(mps_out_, size_mps);
+
+    if(mpos_B.empty() && mpos_B_shf.empty()) {
+        y = x; // empty B means identity
+        return;
+    }
+
     auto token   = t_multAx->tic_token();
     auto mps_in  = Eigen::TensorMap<Eigen::Tensor<const Scalar, 3>>(mps_in_, shape_mps);
     auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
+
     if(mpos_B.size() == 1) {
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_B.front(), envL_B, envR_B);
-    } else if(!mpos_B_shf.empty()) {
+    } else {
         tools::common::contraction::matrix_vector_product(mps_out, mps_in, mpos_B_shf, envL_B, envR_B);
     }
     num_mv++;
@@ -973,12 +990,19 @@ template<typename Scalar>
 void MatVecMPOS<Scalar>::MultBx(Scalar *mps_in_, Scalar *mps_out_) const {
     MultBx(static_cast<const Scalar *>(mps_in_), mps_out_);
 }
-
 template<typename Scalar>
 void MatVecMPOS<Scalar>::MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long maxiters, RealScalar tolerance) const {
-    if(mpos_B.empty() and mpos_B_shf.empty()) return;
+    auto x = Eigen::Map<const VectorType>(mps_in_, size_mps);
+    auto y = Eigen::Map<VectorType>(mps_out_, size_mps);
+
+    if(mpos_B.empty() && mpos_B_shf.empty()) {
+        y = x; // inverse of identity
+        return;
+    }
+
     auto token = t_multAx->tic_token();
     if(invJcbDiagB.size() == 0) invJcbDiagB = get_diagonal_new(0, mpos_B, envL_B, envR_B).array().cwiseInverse();
+
     auto invCfg           = IterativeLinearSolverConfig<Scalar>();
     invCfg.maxiters       = maxiters;
     invCfg.tolerance      = tolerance;
@@ -987,13 +1011,11 @@ void MatVecMPOS<Scalar>::MultInvBx(const Scalar *mps_in_, Scalar *mps_out_, long
     if(mpos_B.size() == 1) {
         auto MultOp   = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return MultBX(X); };
         auto MatrixOp = MatrixLikeOperator<Scalar>(size_mps, MultOp);
-        auto mps_out  = Eigen::Map<VectorType>(mps_out_, size_mps);
-        mps_out       = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, mps_in_, iLinSolvCfg);
-
-        // tools::common::contraction::matrix_inverse_vector_product(mps_out, mps_in, mpos_B.front(), envL_B, envR_B, invCfg);
-    } else if(!mpos_B_shf.empty()) {
+        y             = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, mps_in_, invCfg);
+    } else {
         throw except::runtime_error("MatVecMPOS<{}>::MultInvBx(...) not implemented for multiple mpos", sfinae::type_name<Scalar>());
     }
+
     num_mv++;
 }
 
@@ -1395,10 +1417,17 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
     }
 
     if(jcbMaxBlockSize == 1) {
+        auto invert_with_floor = [](const VectorType &d) -> VectorType {
+            const RealScalar dmax   = d.cwiseAbs().maxCoeff();
+            const RealScalar tau    = std::max<RealScalar>(RealScalar{1}, dmax) * std::numeric_limits<RealScalar>::epsilon();
+            const auto       dfloor = (d.array().abs() < tau).select(VectorType::Constant(d.size(), Scalar(tau)).array(), d.array());
+            return dfloor.inverse().matrix();
+        };
+
         if(mpos_B.empty())
-            invJcbDiagonal = jcbDiagA.array().cwiseInverse().matrix();
+            invJcbDiagonal = invert_with_floor(jcbDiagA);
         else
-            invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+            invJcbDiagonal = invert_with_floor(jcbDiagA.array() - shift * jcbDiagB.array());
         // for(Eigen::Index i = 0; i < jcbDiagA.size(); ++i) {
         //     eig::log->info("{:4}: {:20.16f} {:20.16f} {:20.16f}", i, fp(jcbDiagA(i)), fp(jcbDiagB(i)), fp(invJcbDiagonal(i)));
         // }
@@ -1426,7 +1455,7 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
             jcbInvSqrtMultiplicity[idx] += countMultiplicity(idx, luJcbBlocks);
             jcbInvSqrtMultiplicity[idx] += countMultiplicity(idx, qrJcbBlocks);
         }
-        auto jcbMaxMultiplicity = static_cast<Eigen::Index>(jcbInvSqrtMultiplicity.maxCoeff());
+        jcbMaxMultiplicity = static_cast<Eigen::Index>(jcbInvSqrtMultiplicity.maxCoeff());
         if(jcbInvSqrtMultiplicity.isApproxToConstant(RealScalar{1}))
             jcbInvSqrtMultiplicity = {}; // Clear: No need to scale (probably no overlap/multiplicity)
         else
@@ -1486,7 +1515,13 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
     if(preconditioner == eig::Preconditioner::SOLVE) {
         const auto &mpos = mpos_B.empty() ? mpos_A : mpos_B;
         if(jcbMaxBlockSize == 1) {
-            invJcbDiagonal             = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+            auto invert_with_floor = [](const VectorType &d) -> VectorType {
+                const RealScalar dmax   = d.cwiseAbs().maxCoeff();
+                const RealScalar tau    = std::max<RealScalar>(RealScalar{1}, dmax) * std::numeric_limits<RealScalar>::epsilon();
+                const auto       dfloor = (d.array().abs() < tau).select(VectorType::Constant(d.size(), Scalar(tau)).array(), d.array());
+                return dfloor.inverse().matrix();
+            };
+            invJcbDiagonal             = invert_with_floor(jcbDiagA.array() - shift * jcbDiagB.array());
             iLinSolvCfg.jacobi.invdiag = invJcbDiagonal.data();
         }
         if(mpos.size() == 1) {
@@ -1500,50 +1535,84 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
     }
 
     if(preconditioner == eig::Preconditioner::JACOBI) {
+        auto token = t_multPc->tic_token();
+
         auto mps_in  = Eigen::Map<const VectorType>(mps_in_, size_mps);
         auto mps_out = Eigen::Map<VectorType>(mps_out_, size_mps);
 
         if(jcbMaxBlockSize == 1) {
-            auto token = t_multPc->tic_token();
-            // Diagonal jacobi preconditioner
-            invJcbDiagonal = (jcbDiagA.array() - shift * jcbDiagB.array()).cwiseInverse().matrix();
+            // Diagonal Jacobi preconditioner
+            auto invert_with_floor = [](const VectorType &d) -> VectorType {
+                const RealScalar dmax   = d.cwiseAbs().maxCoeff();
+                const RealScalar tau    = std::max<RealScalar>(RealScalar{1}, dmax) * std::numeric_limits<RealScalar>::epsilon();
+                const auto       dfloor = (d.array().abs() < tau).select(VectorType::Constant(d.size(), Scalar(tau)).array(), d.array());
+                return dfloor.inverse().matrix();
+            };
+            invJcbDiagonal = invert_with_floor(jcbDiagA.array() - shift * jcbDiagB.array());
             mps_out        = invJcbDiagonal.array().cwiseProduct(mps_in.array());
         } else if(jcbMaxBlockSize > 1) {
-            auto token = t_multPc->tic_token();
-#pragma omp parallel for
-            for(size_t idx = 0; idx < lltJcbBlocks.size(); ++idx) {
-                const auto &[offset, sign, solver] = lltJcbBlocks[idx];
-                long extent                        = solver->rows();
-                auto mps_out_segment               = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment                = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()          = solver->solve(mps_in_segment * static_cast<RealScalar>(sign));
+            const bool have_llt  = !lltJcbBlocks.empty();
+            const bool have_ldlt = !ldltJcbBlocks.empty();
+            const bool have_lu   = !luJcbBlocks.empty();
+            const bool have_qr   = !qrJcbBlocks.empty();
+
+            const Eigen::Index num_families = static_cast<Eigen::Index>(have_llt) +  //
+                                              static_cast<Eigen::Index>(have_ldlt) + //
+                                              static_cast<Eigen::Index>(have_lu) +   //
+                                              static_cast<Eigen::Index>(have_qr);
+
+            if(num_families == 0) { throw except::runtime_error("MatVecMPOS::MultPc: jcbMaxBlockSize > 1 but no Jacobi blocks were built"); }
+
+            // This is not required for correctness here, because families are applied sequentially.
+            // But it can be a useful debug assertion if mixing block families is unintended.
+            // assert(num_families <= 1);
+
+            VectorType rhs = mps_in;
+            VectorType out(size_mps);
+
+            // Optional multiplicity scaling on the input, same pattern as the newer additive Schwarz code
+            if(jcbInvSqrtMultiplicity.size() == rhs.size()) { rhs.array() *= jcbInvSqrtMultiplicity.array(); }
+
+            auto apply_blocks = [&](const auto &blocks, const VectorType &in, VectorType &accum) -> void {
+                if(blocks.empty()) return;
+
+                for(Eigen::Index color = 0; color < jcbMaxMultiplicity; ++color) {
+#pragma omp parallel for schedule(static)
+                    for(std::ptrdiff_t idx = color; idx < static_cast<std::ptrdiff_t>(blocks.size()); idx += jcbMaxMultiplicity) {
+                        const auto &[offset, sign, solver] = blocks[static_cast<size_t>(idx)];
+                        if(!solver) continue;
+
+                        const long extent = solver->rows();
+
+                        auto accum_segment = Eigen::Map<VectorType>(accum.data() + offset, extent);
+                        auto in_segment    = Eigen::Map<const VectorType>(in.data() + offset, extent);
+
+                        // Additive Schwarz accumulation
+                        accum_segment.noalias() += solver->solve(in_segment * static_cast<RealScalar>(sign));
+                    }
+                }
+            };
+
+            const Eigen::Index num_passes = std::max<Eigen::Index>(1, jcbNumPasses);
+
+            for(Eigen::Index pass = 0; pass < num_passes; ++pass) {
+                out.setZero();
+
+                apply_blocks(lltJcbBlocks, rhs, out);
+                apply_blocks(ldltJcbBlocks, rhs, out);
+                apply_blocks(luJcbBlocks, rhs, out);
+                apply_blocks(qrJcbBlocks, rhs, out);
+
+                if(pass + 1 < num_passes) rhs.swap(out);
             }
-#pragma omp parallel for
-            for(size_t idx = 0; idx < ldltJcbBlocks.size(); ++idx) {
-                const auto &[offset, sign, solver] = ldltJcbBlocks[idx];
-                long extent                        = solver->rows();
-                auto mps_out_segment               = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment                = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()          = solver->solve(mps_in_segment * static_cast<RealScalar>(sign));
-            }
-#pragma omp parallel for
-            for(size_t idx = 0; idx < luJcbBlocks.size(); ++idx) {
-                const auto &[offset, sign, solver] = luJcbBlocks[idx];
-                long extent                        = solver->rows();
-                auto mps_out_segment               = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment                = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()          = solver->solve(mps_in_segment * static_cast<RealScalar>(sign));
-            }
-#pragma omp parallel for
-            for(size_t idx = 0; idx < qrJcbBlocks.size(); ++idx) {
-                const auto &[offset, sign, solver] = qrJcbBlocks[idx];
-                long extent                        = solver->rows();
-                auto mps_out_segment               = Eigen::Map<VectorType>(mps_out_ + offset, extent);
-                auto mps_in_segment                = Eigen::Map<const VectorType>(mps_in_ + offset, extent);
-                mps_out_segment.noalias()          = solver->solve(mps_in_segment * static_cast<RealScalar>(sign));
-            }
+
+            // Optional multiplicity scaling on the output
+            if(jcbInvSqrtMultiplicity.size() == out.size()) { out.array() *= jcbInvSqrtMultiplicity.array(); }
+
+            mps_out = out;
         }
     }
+
     num_pc++;
 }
 
@@ -1566,7 +1635,6 @@ template<typename Scalar>
 void MatVecMPOS<Scalar>::set_shift(CplxScalar shift) {
     // Here we set an energy shift directly on the MPO.
     // This only works if the MPO is not compressed already.
-    if(readyShift) return;
     if(sigma == shift) return;
     CplxScalar shift_per_mpo = shift / static_cast<RealScalar>(mpos_A.size());
     CplxScalar sigma_per_mpo = sigma / static_cast<RealScalar>(mpos_A.size());
@@ -1594,11 +1662,22 @@ void MatVecMPOS<Scalar>::set_shift(CplxScalar shift) {
             mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma_per_mpo - shift_per_mpo);
         eig::log->debug("Shifted MPO {} energy by {:.16f}", idx, static_cast<fp64>(std::real(shift_per_mpo)));
     }
-    sigma = shift;
-    if(not mpos_A_shf.empty()) {
-        mpos_A_shf.clear();
+    // Rebuild shuffled caches
+    mpos_A_shf.clear();
+    if(mpos_A.size() > 1) {
+        mpos_A_shf.reserve(mpos_A.size());
         for(const auto &mpo : mpos_A) mpos_A_shf.emplace_back(mpo.shuffle(tenx::array4{2, 3, 0, 1}));
     }
+
+    // Invalidate hp caches, factorization, and preconditioner caches
+    mpos_A_hp.clear();
+    mpos_A_shf_hp.clear();
+
+    readyShift    = true;
+    readyFactorOp = false;
+    readyCalcPc   = false;
+    doneCalcPc    = false;
+    jcbShift      = std::nullopt;
 
     readyShift = true;
 }

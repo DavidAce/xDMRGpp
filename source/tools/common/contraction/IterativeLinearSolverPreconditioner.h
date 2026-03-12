@@ -257,7 +257,7 @@ class IterativeLinearSolverPreconditioner {
 
         RealScalar trace_now    = std::real((Z.adjoint() * BZ).trace());
         bool       must_rebuild = C.size() == 0 || C.cols() != Z.cols() || C_cols_cached != Z.cols() ||
-                            std::abs(trace_now - C_trace_cached) > RealScalar{1e-12} * std::max<RealScalar>(RealScalar{1}, std::abs(trace_now));
+                            std::abs(trace_now - C_trace_cached) > RealScalar{1e-12f} * std::max<RealScalar>(RealScalar{1}, std::abs(trace_now));
 
         if(must_rebuild) {
             MatrixType             G = Z.adjoint() * BZ;

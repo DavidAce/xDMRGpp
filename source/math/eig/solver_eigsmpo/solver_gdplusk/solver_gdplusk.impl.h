@@ -281,10 +281,6 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
 
     if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after appen: orthError: {:.5e}", fp(m.orthError));
 
-    m.Gram      = Q.adjoint() * Q;
-    m.Gram      = (m.Gram + m.Gram.adjoint()).eval() * half;
-    m.orthError = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
-
     bool basis_was_restarted = status.iter_last_restart == status.iter;
     if(basis_was_restarted or m.orthError > normTol * std::sqrt(status.op_norm_estimate)) { block_l2_orthonormalize(Q, HQ, m); }
 

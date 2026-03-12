@@ -1,0 +1,5 @@
+#include "../ModelInfinite.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class ModelInfinite<Scalar>;

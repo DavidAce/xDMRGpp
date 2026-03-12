@@ -129,11 +129,17 @@ class solver_base {
         Eigen::Index              num_precond_inner                             = 0;
         Eigen::Index              num_precond_total                             = 0;
         Eigen::Index              numMGS                                        = 0;
+        Eigen::Index              num_jdops_inner                               = 0;
+        RealScalar                inner_error_last                              = RealScalar{0};
+        RealScalar                inner_tol_last                                = RealScalar{0};
         tid::ur                   time_elapsed;
         tid::ur                   time_matvecs;
         tid::ur                   time_precond;
         tid::ur                   time_matvecs_inner;
         tid::ur                   time_precond_inner;
+        tid::ur                   time_jdops_inner;
+        tid::ur                   time_jacobi_inner;
+        tid::ur                   time_chebyshev_inner;
         tid::ur                   time_matvecs_total;
         tid::ur                   time_precond_total;
 
@@ -173,6 +179,9 @@ class solver_base {
     void              adjust_preconditioner_H1_limits();
     void              adjust_preconditioner_H2_limits();
     void              adjust_residual_correction_type();
+
+    void save_preconditioner_stats(IterativeLinearSolverConfig<Scalar> &cfg);
+    void save_jd_stats(const IterativeLinearSolverConfig<Scalar> &cfg);
 
     protected:
     spdlog::level::level_enum       logLevel = spdlog::level::warn;

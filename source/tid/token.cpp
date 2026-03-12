@@ -21,7 +21,7 @@ namespace tid {
         if(t.lvl == level::disabled) return;
         try {
             if(t.is_measuring) t.toc();
-            tid::internal::ur_prefix_pop_back(temp_prefix);
+            if(!temp_prefix.empty()) tid::internal::ur_prefix_pop_back(temp_prefix);
         } catch(const std::exception &ex) { fprintf(stderr, "tid: error in token destructor for tid::ur [%s]: %s", t.get_label().c_str(), ex.what()); }
     }
 
@@ -33,6 +33,7 @@ namespace tid {
         if(t.lvl == level::disabled) return;
         t.toc();
         tid::internal::ur_prefix_pop_back(temp_prefix);
+        temp_prefix.clear();
     }
     ur &token::ref() noexcept { return t; }
     ur *token::operator->() noexcept { return &t; }

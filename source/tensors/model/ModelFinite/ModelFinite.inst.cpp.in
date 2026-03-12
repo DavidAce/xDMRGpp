@@ -1,0 +1,5 @@
+#include "../ModelFinite.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class ModelFinite<Scalar>;

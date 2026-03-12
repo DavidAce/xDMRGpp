@@ -1,0 +1,5 @@
+#include "../MpoFactory.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class MpoFactory<Scalar>;

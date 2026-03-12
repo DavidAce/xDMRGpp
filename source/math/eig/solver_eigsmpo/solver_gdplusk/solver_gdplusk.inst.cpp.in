@@ -1,0 +1,9 @@
+#include "solver_gdplusk.impl.h"
+
+using Scalar = @SCALAR@;
+
+/* clang-format off */
+
+template class solver_gdplusk<Scalar>;
+
+/* clang-format on */

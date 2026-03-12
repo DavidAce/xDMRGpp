@@ -46,6 +46,8 @@ struct IterativeLinearSolverConfig {
         Real         lambda_max = std::numeric_limits<Real>::quiet_NaN();
         Eigen::Index degree     = 0;
     };
+
+    public:
     struct Result {
         Eigen::Index           iters          = 0; /*! For the last run */
         Eigen::Index           matvecs        = 0; /*! For the last run */
@@ -57,42 +59,34 @@ struct IterativeLinearSolverConfig {
         double                 time_chebyshev = 0;
         Real                   error          = 0;
         Eigen::ComputationInfo info           = Eigen::ComputationInfo::NoConvergence;
-
-        Result &operator+=(const Result &other) {
-            this->iters += other.iters;
-            this->matvecs += other.matvecs;
-            this->precond += other.precond;
-            this->time += other.time;
-            this->time_matvecs += other.time_matvecs;
-            this->time_precond += other.time_precond;
-            this->time_jacobi += other.time_jacobi;
+        void                   add_latest(const Result &other) { *this += other; }
+        Result                &operator+=(const Result &other) {
+            this->iters          += other.iters;
+            this->matvecs        += other.matvecs;
+            this->precond        += other.precond;
+            this->time           += other.time;
+            this->time_matvecs   += other.time_matvecs;
+            this->time_precond   += other.time_precond;
+            this->time_jacobi    += other.time_jacobi;
             this->time_chebyshev += other.time_chebyshev;
-            this->error = other.error;
-            this->info  = other.info;
+            this->error           = other.error;
+            this->info            = other.info;
             return *this;
         }
-        void add_latest(const Result &other) {
-            this->iters += other.iters;
-            this->matvecs += other.matvecs;
-            this->precond += other.precond;
-            this->time += other.time;
-            this->error = other.error;
-            this->info  = other.info;
-        }
+
         void copy_latest(const Result &other) {
-            this->iters   = other.iters;
-            this->matvecs = other.matvecs;
-            this->precond = other.precond;
-            this->time    = other.time;
-            this->error   = other.error;
-            this->info    = other.info;
-            // this->total_iters += other.iters;
-            // this->total_matvecs += other.matvecs;
-            // this->total_precond += other.precond;
-            // this->total_time += other.time;
-            // this->total_time_matvecs += other.time_matvecs;
-            // this->total_time_precond += other.time_precond;
+            this->iters          = other.iters;
+            this->matvecs        = other.matvecs;
+            this->precond        = other.precond;
+            this->time           = other.time;
+            this->time_matvecs   = other.time_matvecs;
+            this->time_precond   = other.time_precond;
+            this->time_jacobi    = other.time_jacobi;
+            this->time_chebyshev = other.time_chebyshev;
+            this->error          = other.error;
+            this->info           = other.info;
         }
+
         void reset() {
             this->iters          = {};
             this->matvecs        = {};
@@ -107,7 +101,6 @@ struct IterativeLinearSolverConfig {
         }
     };
 
-    public:
     long                          maxiters     = 1000;
     Real                          tolerance    = Real{0.1f};
     MatDef                        matdef       = MatDef::IND; /*! Whether the matrix is indefinite or (semi) definite*/

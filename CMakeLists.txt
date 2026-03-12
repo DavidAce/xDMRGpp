@@ -12,6 +12,12 @@ list(INSERT CMAKE_MODULE_PATH 0 ${PROJECT_SOURCE_DIR}/cmake/modules)
 # Set options for this build
 option(DMRG_USE_QUADMATH            "Use __float128 from quadmath.h for fLBIT time evolution"           FALSE)
 option(DMRG_USE_FLOAT128            "Use std::float128_t for fLBIT time evolution"                      FALSE)
+option(DMRG_ENABLE_FP32             "Build explicit instantiations for fp32"                            ON)
+option(DMRG_ENABLE_FP64             "Build explicit instantiations for fp64"                            ON)
+option(DMRG_ENABLE_FP128            "Build explicit instantiations for fp128 aliases"                   ON)
+option(DMRG_ENABLE_CX32             "Build explicit instantiations for cx32"                            ON)
+option(DMRG_ENABLE_CX64             "Build explicit instantiations for cx64"                            ON)
+option(DMRG_ENABLE_CX128            "Build explicit instantiations for cx128 aliases"                   ON)
 option(DMRG_ENABLE_TBLIS            "Use TBLIS for faster tensor contractions (FP64) instead of Eigen3" FALSE)
 option(DMRG_ENABLE_TESTS            "Enable unit testing with ctest"                                    FALSE)
 option(DMRG_BUILD_EXAMPLES          "Build examples"                                                    FALSE)
@@ -27,6 +33,20 @@ option(COMPILER_ENABLE_PCH          "Enable precompiled headers to speed up comp
 option(COMPILER_ENABLE_COVERAGE     "Enable test coverage"                                              FALSE)
 option(EIGEN_USE_THREADS            "Use STL threads to parallelize Eigen::Tensor"                      TRUE)
 option(THREADS_PREFER_PTHREAD_FLAG  "Prefer -pthread flag over -lpthread or similar"                    TRUE)
+
+set(DMRG_ENABLED_SCALARS)
+foreach(dmrg_scalar IN ITEMS fp32 fp64 fp128 cx32 cx64 cx128)
+    string(TOUPPER "${dmrg_scalar}" dmrg_scalar_upper)
+    if(DMRG_ENABLE_${dmrg_scalar_upper})
+        list(APPEND DMRG_ENABLED_SCALARS "${dmrg_scalar}")
+    endif()
+endforeach()
+
+if(NOT DMRG_ENABLED_SCALARS)
+    message(FATAL_ERROR "At least one explicit-instantiation scalar must be enabled")
+endif()
+
+set(DMRG_ENABLED_SCALARS "${DMRG_ENABLED_SCALARS}" CACHE INTERNAL "Enabled explicit-instantiation scalars")
 
 
 
@@ -122,5 +142,4 @@ if(CMAKE_GENERATOR MATCHES Ninja)
             COMMENT "Generating ninja build statistics"
     )
 endif()
-
 

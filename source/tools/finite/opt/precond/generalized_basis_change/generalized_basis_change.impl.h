@@ -233,8 +233,7 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
                     if(tr < RealScalar{1e-10f}) continue;
                     if(std::abs(w(b)) <= RealScalar(1e-10f)) continue;
                     if(!is_hermitian_matrix(A_b)) continue;
-                    A_b /= tr;
-                    M1_map.noalias() += w(b) * (A_b);
+                    M1_map.noalias() += w(b) * A_b / tr;
                 }
                 return M1;
             };
@@ -256,8 +255,7 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
                     if(tr < RealScalar{1e-10f}) continue;
                     if(std::abs(w(b)) <= RealScalar(1e-10f)) continue;
                     if(!is_hermitian_matrix(A_b)) continue;
-                    A_b /= tr;
-                    M2_map.noalias() += w(b) * (A_b.adjoint() * A_b);
+                    M2_map.noalias() += w(b) * (A_b.adjoint() * A_b)/(tr*tr);
                 }
                 return M2;
             };
@@ -322,7 +320,6 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
                     if(tr < RealScalar{1e-10f}) continue;
                     if(std::abs(w(b)) <= RealScalar(1e-10f)) continue;
                     if(!is_hermitian_matrix(A_b)) continue;
-                    // A_b /= tr;
                     MatrixType A_b_inv = inv(A_b);
                     M2_map.noalias() += w(b) * (A_b_inv.adjoint() * A_b_inv);
                 }
@@ -756,7 +753,6 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
     return {U, T, S, std::sqrt(mY)};
 };
 
-
 template<typename Scalar>
 tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::GeneralizedBasisChange(
     const opt_mps<Scalar>                  &initial, /*!< Initial guess */
@@ -777,8 +773,8 @@ tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::Genera
         initial_guess.set_tensor(initial.get_tensor());
 
         const auto dims = initial.get_tensor().dimensions();
-        shape_orig  = {dims[0], dims[1], dims[2]};
-        shape_tilde = shape_orig;
+        shape_orig      = {dims[0], dims[1], dims[2]};
+        shape_tilde     = shape_orig;
 
         TL = MatrixType::Identity(dims[1], dims[1]);
         TR = MatrixType::Identity(dims[2], dims[2]);

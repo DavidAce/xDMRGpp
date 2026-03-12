@@ -1,11 +1,7 @@
 add_source_target(xdmrg++-tools-finite-multisite
         TARGET_SOURCES
-        fp32.cpp
-        fp64.cpp
-        fp128.cpp
-        cx32.cpp
-        cx64.cpp
-        cx128.cpp
+        INST_TEMPLATE_FILES
+        multisite.inst.cpp.in
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -16,4 +12,3 @@ add_source_target(xdmrg++-tools-finite-multisite
         xdmrg++-tools-common-log
         xdmrg++-tools-common-contraction
         )
-

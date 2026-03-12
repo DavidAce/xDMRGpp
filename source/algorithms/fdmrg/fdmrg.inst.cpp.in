@@ -1,0 +1,5 @@
+#include "fdmrg.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class fdmrg<Scalar>;

@@ -67,21 +67,24 @@ void AlgorithmBase::init_truncation_error_limits() {
 
 template<typename T>
 size_t AlgorithmBase::count_convergence(const std::vector<T> &Y_vec, T threshold, size_t start_idx, bool count_negative_as_converged) {
-    size_t scount = 0; // Counts how many converged points there have been since saturation (start_idx)
+    auto is_converged = [threshold, count_negative_as_converged](T y) { //
+        return y <= threshold or (count_negative_as_converged and y < T{0});
+    };
+
+    size_t scount = 0;
     for(const auto &[i, y] : iter::enumerate(Y_vec)) {
         if(i < start_idx) continue;
-        if(y <= threshold) scount++;
-        if(count_negative_as_converged and y < T{0}) scount++;
+        if(is_converged(y)) scount++;
     }
-    size_t rcount = 0; // Counts in reverse how many converged points there have been in a row. Useful with noisy signals that can't saturate.
+
+    size_t rcount = 0;
     for(const auto &y : iter::reverse(Y_vec)) {
-        if(y <= threshold)
-            rcount++;
-        else if(count_negative_as_converged and y < T{0})
+        if(is_converged(y))
             rcount++;
         else
             break;
     }
+
     return std::max(scount, rcount);
 }
 template size_t AlgorithmBase::count_convergence(const std::vector<fp32> &Y_vec, fp32 threshold, size_t start_idx, bool count_negative_as_converged);

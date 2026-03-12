@@ -1,0 +1,5 @@
+#include "hash.impl.h"
+
+using Scalar = @SCALAR@;
+
+template std::size_t hash::hash_buffer(const Scalar *v, unsigned long size, std::size_t seed);

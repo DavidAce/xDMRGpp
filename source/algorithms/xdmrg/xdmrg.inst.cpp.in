@@ -1,0 +1,5 @@
+#include "xdmrg.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class xdmrg<Scalar>;

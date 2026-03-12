@@ -35,6 +35,7 @@ void AlgorithmInfinite<Scalar>::run_preprocessing() {
     status.clear();
     initialize_model(); // First use of random!
     init_bond_dimension_limits();
+    init_truncation_error_limits();
     write_to_file(StorageEvent::MODEL);
 }
 
@@ -104,9 +105,12 @@ void AlgorithmInfinite<Scalar>::update_bond_dimension_limit() {
     bool is_saturated      = status.algorithm_saturated_for > 1; // Allow one round while saturated so that extra efforts get a chance.
     bool is_has_stuck      = status.algorithm_has_stuck_for > 1;
     bool is_truncated      = tensors.state->is_limited_by_bond(status.bond_lim) or tensors.state->is_truncated(status.trnc_lim);
-    bool grow_if_truncated = settings::strategy::bond_increase_when == UpdatePolicy::TRUNCATED;
-    bool grow_if_saturated = settings::strategy::bond_increase_when == UpdatePolicy::SAT_ALGO;
-    bool grow_if_has_stuck = settings::strategy::bond_increase_when == UpdatePolicy::STK_ALGO;
+
+    bool grow_if_truncated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::TRUNCATED);
+    bool grow_if_saturated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::SAT_ALGO);
+    bool grow_if_has_stuck = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::STK_ALGO);
+
+
 
     if(grow_if_truncated and not is_truncated) {
         tools::log->info("State is not limited by its bond dimension. Kept current bond limit {}", status.bond_lim);
@@ -168,9 +172,9 @@ void AlgorithmInfinite<Scalar>::update_truncation_error_limit() {
     bool is_saturated      = status.algorithm_saturated_for > 1; // Allow one round while saturated so that extra efforts get a chance.
     bool is_has_stuck      = status.algorithm_has_stuck_for > 1; // Allow one round while saturated so that extra efforts get a chance.
     bool is_truncated      = tensors.state->is_limited_by_bond(status.bond_lim) or tensors.state->is_truncated(status.trnc_lim);
-    bool drop_if_truncated = settings::strategy::trnc_decrease_when == UpdatePolicy::TRUNCATED;
-    bool drop_if_saturated = settings::strategy::trnc_decrease_when == UpdatePolicy::SAT_ALGO;
-    bool drop_if_has_stuck = settings::strategy::trnc_decrease_when == UpdatePolicy::STK_ALGO;
+    bool drop_if_truncated = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::TRUNCATED);
+    bool drop_if_saturated = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::SAT_ALGO);
+    bool drop_if_has_stuck = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::STK_ALGO);
 
     if(drop_if_truncated and not is_truncated) {
         tools::log->info("State is not truncated. Kept current truncation error limit {:8.2e}", status.trnc_lim);

@@ -1,11 +1,6 @@
 add_source_target(xdmrg++-tools-finite-ed
-        TARGET_SOURCES
-        cx32.cpp
-        cx64.cpp
-        cx128.cpp
-        fp32.cpp
-        fp64.cpp
-        fp128.cpp
+        INST_TEMPLATE_FILES
+        ed.inst.cpp.in
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -18,4 +13,3 @@ add_source_target(xdmrg++-tools-finite-ed
         xdmrg++-tools-finite-opt
         xdmrg++-tools-common-split
         )
-

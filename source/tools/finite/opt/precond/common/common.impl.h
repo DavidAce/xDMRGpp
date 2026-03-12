@@ -86,8 +86,8 @@ Ten<Scalar, 3> tools::finite::opt::precond::common::transform_tensor(const Ten<S
 template<typename Scalar>
 Vec<Scalar> tools::finite::opt::precond::common::transform_vector(const Vec<Scalar> &psi, std::array<Eigen::Index, 3> psi_dims, const Mat<Scalar> &ML,
                                                                   const Mat<Scalar> &MR) {
-    assert(psi.dimension(1) == ML.cols());
-    assert(psi.dimension(2) == MR.rows());
+    assert(psi_dims[1] == ML.cols());
+    assert(psi_dims[2] == MR.rows());
     Ten<Scalar, 3> psi_tensor             = tenx::TensorCast(psi, psi_dims);
     Ten<Scalar, 3> transformed_psi_tensor = transform_tensor(psi_tensor, ML, MR);
     return tenx::VectorCast(transformed_psi_tensor);

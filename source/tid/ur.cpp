@@ -7,8 +7,10 @@ namespace tid {
     void ur::tic() noexcept {
         if constexpr(tid::enable) {
             if(lvl == level::disabled) return;
-            if(is_measuring) fprintf(stderr, "tid: error in tid::ur [%s]: called tic() twice: this timer is already active\n", label.c_str());
-            // if(is_measuring) throw std::runtime_error("Called tic() twice: this timer is already measuring: " + label);
+            if(is_measuring) {
+                fprintf(stderr, "tid: error in tid::ur [%s]: called tic() twice: this timer is already active\n", label.c_str());
+                return;
+            }
             tic_timepoint = hresclock::now();
             is_measuring  = true;
             count++;
@@ -18,13 +20,15 @@ namespace tid {
     void ur::toc() noexcept {
         if constexpr(tid::enable) {
             if(lvl == level::disabled) return;
-            //            if(not is_measuring) throw std::runtime_error("Called toc() twice or without prior tic()");
-            if(not is_measuring) fprintf(stderr, "tid: error in tid::ur [%s]: called toc() twice or without prior tic()\n", label.c_str());
-            toc_timepoint = hresclock::now();
-            delta_time    = toc_timepoint - tic_timepoint;
+            if(!is_measuring) {
+                fprintf(stderr, "tid: error in tid::ur [%s]: called toc() twice or without prior tic()\n", label.c_str());
+                return;
+            }
+            toc_timepoint  = hresclock::now();
+            delta_time     = toc_timepoint - tic_timepoint;
             measured_time += delta_time;
-            lap_time += delta_time;
-            is_measuring = false;
+            lap_time      += delta_time;
+            is_measuring   = false;
         }
     }
 
@@ -81,8 +85,7 @@ namespace tid {
             return 0.0;
     }
 
-    double ur::get_time_avg() const { return get_time() / static_cast<double>(count); }
-
+    double ur::get_time_avg() const { return count == 0 ? 0.0 : get_time() / static_cast<double>(count); }
     size_t ur::get_tic_count() const { return count; }
 
     double ur::get_last_interval() const {
@@ -144,7 +147,7 @@ namespace tid {
     ur &ur::operator+=(double other_time_in_seconds) noexcept {
         if constexpr(tid::enable) {
             this->measured_time += std::chrono::duration_cast<hresclock::duration>(std::chrono::duration<double>(other_time_in_seconds));
-            this->delta_time = std::chrono::duration_cast<hresclock::duration>(std::chrono::duration<double>(other_time_in_seconds));
+            this->delta_time     = std::chrono::duration_cast<hresclock::duration>(std::chrono::duration<double>(other_time_in_seconds));
         }
         return *this;
     }
@@ -152,7 +155,7 @@ namespace tid {
     ur &ur::operator-=(double other_time_in_seconds) noexcept {
         if constexpr(tid::enable) {
             this->measured_time -= std::chrono::duration_cast<hresclock::duration>(std::chrono::duration<double>(other_time_in_seconds));
-            this->delta_time = -std::chrono::duration_cast<hresclock::duration>(std::chrono::duration<double>(other_time_in_seconds));
+            this->delta_time     = -std::chrono::duration_cast<hresclock::duration>(std::chrono::duration<double>(other_time_in_seconds));
         }
         return *this;
     }
@@ -160,8 +163,8 @@ namespace tid {
     ur &ur::operator+=(const ur &rhs) noexcept {
         if constexpr(tid::enable) {
             this->measured_time += rhs.measured_time;
-            this->delta_time = rhs.delta_time;
-            this->count += rhs.count;
+            this->delta_time     = rhs.delta_time;
+            this->count         += rhs.count;
         }
         return *this;
     }
@@ -169,8 +172,8 @@ namespace tid {
     ur &ur::operator-=(const ur &rhs) noexcept {
         if constexpr(tid::enable) {
             measured_time -= rhs.measured_time;
-            delta_time = rhs.delta_time;
-            count -= std::min(rhs.count, count);
+            delta_time     = rhs.delta_time;
+            count         -= std::min(rhs.count, count);
         }
         return *this;
     }

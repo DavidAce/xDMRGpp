@@ -1,0 +1,5 @@
+#include "flbit.tmpl.impl.h"
+
+using Scalar = @SCALAR@;
+
+template struct flbit_tmpl<Scalar>;

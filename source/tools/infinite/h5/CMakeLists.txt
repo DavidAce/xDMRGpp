@@ -1,11 +1,7 @@
 add_source_target(xdmrg++-tools-infinite-h5
         TARGET_SOURCES
-        cx32.cpp
-        cx64.cpp
-        cx128.cpp
-        fp32.cpp
-        fp64.cpp
-        fp128.cpp
+        INST_TEMPLATE_FILES
+        h5.inst.cpp.in
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
@@ -15,4 +11,3 @@ add_source_target(xdmrg++-tools-infinite-h5
         xdmrg++-tensors-infinite
         xdmrg++-tools-infinite-measure
         )
-

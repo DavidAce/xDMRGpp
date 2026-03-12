@@ -41,7 +41,7 @@ namespace tid {
 #if defined(_OPENMP)
             size_t thread_number = static_cast<size_t>(omp_get_thread_num());
 #else
-            size_t thread_number = 1;
+            size_t thread_number = 0;
 #endif
             return ur_prefix[thread_number];
         }
@@ -49,7 +49,7 @@ namespace tid {
 #if defined(_OPENMP)
             size_t thread_number = static_cast<size_t>(omp_get_thread_num());
 #else
-            size_t thread_number = 1;
+            size_t thread_number = 0;
 #endif
             ur_prefix[thread_number] = key;
 #if defined(_OPENMP)
@@ -65,7 +65,7 @@ namespace tid {
 #if defined(_OPENMP)
             size_t thread_number = static_cast<size_t>(omp_get_thread_num());
 #else
-            size_t thread_number = 1;
+            size_t thread_number = 0;
 #endif
             auto &prefix    = ur_prefix[thread_number];
             auto  key_nodot = key.substr(key.find_first_not_of('.'));
@@ -86,7 +86,7 @@ namespace tid {
 #if defined(_OPENMP)
             size_t thread_number = static_cast<size_t>(omp_get_thread_num());
 #else
-            size_t thread_number = 1;
+            size_t thread_number = 0;
 #endif
             auto &prefix    = ur_prefix[thread_number];
             auto  key_nodot = key.substr(key.find_first_not_of('.'));
@@ -194,9 +194,7 @@ namespace tid {
 
     void reset(const std::vector<std::string> &excl) {
         for(auto &[key, ur] : tid::internal::tid_db) {
-            for(const auto &e : excl) {
-                if(key == e) continue;
-            }
+            if(std::find(excl.begin(), excl.end(), key) != excl.end()) continue;
             ur.reset();
         }
     }

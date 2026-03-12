@@ -1,73 +1,17 @@
 add_source_target(xdmrg++-tools-common-contraction
         TARGET_SOURCES
         contraction_policy.cpp
-
-        contract_bnd_mps.cx32.cpp
-        contract_bnd_mps.cx64.cpp
-        contract_bnd_mps.cx128.cpp
-        contract_bnd_mps.fp32.cpp
-        contract_bnd_mps.fp64.cpp
-        contract_bnd_mps.fp128.cpp
-
-        contract_mps_bnd.cx32.cpp
-        contract_mps_bnd.cx64.cpp
-        contract_mps_bnd.cx128.cpp
-        contract_mps_bnd.fp32.cpp
-        contract_mps_bnd.fp64.cpp
-        contract_mps_bnd.fp128.cpp
-
-        env/contract_env_mps_mpo.cx32.cpp
-        env/contract_env_mps_mpo.cx64.cpp
-        env/contract_env_mps_mpo.cx128.cpp
-        env/contract_env_mps_mpo.fp32.cpp
-        env/contract_env_mps_mpo.fp64.cpp
-        env/contract_env_mps_mpo.fp128.cpp
-
-        contract_mps_mps.cx32.cpp
-        contract_mps_mps.cx64.cpp
-        contract_mps_mps.cx128.cpp
-        contract_mps_mps.fp32.cpp
-        contract_mps_mps.fp64.cpp
-        contract_mps_mps.fp128.cpp
-
-        contract_mps_mps_overlap.cx32.cpp
-        contract_mps_mps_overlap.cx64.cpp
-        contract_mps_mps_overlap.cx128.cpp
-        contract_mps_mps_overlap.fp32.cpp
-        contract_mps_mps_overlap.fp64.cpp
-        contract_mps_mps_overlap.fp128.cpp
-
-        contract_mps_mps_partial.cx32.cpp
-        contract_mps_mps_partial.cx64.cpp
-        contract_mps_mps_partial.cx128.cpp
-        contract_mps_mps_partial.fp32.cpp
-        contract_mps_mps_partial.fp64.cpp
-        contract_mps_mps_partial.fp128.cpp
-
         contraction_tblis.cpp
-        expectation_value/expectation_value.cx32.cpp
-        expectation_value/expectation_value.cx64.cpp
-        expectation_value/expectation_value.cx128.cpp
-        expectation_value/expectation_value.fp32.cpp
-        expectation_value/expectation_value.fp64.cpp
-        expectation_value/expectation_value.fp128.cpp
-
-        matrix_inverse_vector_product.cx32.cpp
-        matrix_inverse_vector_product.cx64.cpp
-        matrix_inverse_vector_product.cx128.cpp
-        matrix_inverse_vector_product.fp32.cpp
-        matrix_inverse_vector_product.fp64.cpp
-        matrix_inverse_vector_product.fp128.cpp
-
-        matrix_vector_product/matrix_vector_product.cx32.cpp
-        matrix_vector_product/matrix_vector_product.cx64.cpp
-        matrix_vector_product/matrix_vector_product.cx80.cpp
-        matrix_vector_product/matrix_vector_product.cx128.cpp
-        matrix_vector_product/matrix_vector_product.fp32.cpp
-        matrix_vector_product/matrix_vector_product.fp64.cpp
-        matrix_vector_product/matrix_vector_product.fp80.cpp
-        matrix_vector_product/matrix_vector_product.fp128.cpp
-
+        INST_TEMPLATE_FILES
+        contract_bnd_mps.inst.cpp.in
+        contract_mps_bnd.inst.cpp.in
+        env/contract_env_mps_mpo.inst.cpp.in
+        contract_mps_mps.inst.cpp.in
+        contract_mps_mps_overlap.inst.cpp.in
+        contract_mps_mps_partial.inst.cpp.in
+        expectation_value/expectation_value.inst.cpp.in
+        matrix_inverse_vector_product.inst.cpp.in
+        matrix_vector_product/matrix_vector_product.inst.cpp.in
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
 
@@ -77,7 +21,15 @@ add_source_target(xdmrg++-tools-common-contraction
         xdmrg++-tools-common-log
         )
 
-target_sources(xdmrg++-tools-common-contraction-o PRIVATE contraction_tblis.cpp)
+# fp80/cx80 are only distinct from fp128/cx128 when true float128 support is
+# enabled, and these wrappers intentionally instantiate a smaller overload set
+# than the normal matrix_vector_product scalar template.
+if(DMRG_USE_FLOAT128 OR DMRG_USE_QUADMATH)
+    generate_scalar_instantiations(matrix_vector_product_ldbl_sources
+            TEMPLATE matrix_vector_product/matrix_vector_product.ext80.inst.cpp.in
+            SCALARS fp80 cx80)
+    target_sources(xdmrg++-tools-common-contraction-o PRIVATE ${matrix_vector_product_ldbl_sources})
+endif()
 
 if (DMRG_ENABLE_TBLIS)
     target_compile_definitions(xdmrg++-tools-common-contraction-o PRIVATE DMRG_ENABLE_TBLIS)

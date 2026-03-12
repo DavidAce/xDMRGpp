@@ -47,6 +47,8 @@ namespace tid {
         explicit token(ur &t_, double add_time = 0);
         token(ur &t_, std::string_view prefix_, double add_time = 0);
         ~token() noexcept;
+        token(const token &)            = delete;
+        token &operator=(const token &) = delete;
         void tic() noexcept;
         void toc() noexcept;
         ur  &ref() noexcept;

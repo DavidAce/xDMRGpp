@@ -1,0 +1,5 @@
+#include "../TensorsInfinite.impl.h"
+
+using Scalar = @SCALAR@;
+
+template class TensorsInfinite<Scalar>;

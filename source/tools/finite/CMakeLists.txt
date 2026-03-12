@@ -1,11 +1,7 @@
 add_source_target(xdmrg++-tools-finite-ops
         TARGET_SOURCES
-            ops/fp32.cpp
-            ops/fp64.cpp
-            ops/fp128.cpp
-            ops/cx32.cpp
-            ops/cx64.cpp
-            ops/cx128.cpp
+        INST_TEMPLATE_FILES
+            ops/ops.inst.cpp.in
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -24,12 +20,8 @@ add_source_target(xdmrg++-tools-finite-ops
 
 add_source_target(xdmrg++-tools-finite-print
         TARGET_SOURCES
-            print/fp32.cpp
-            print/fp64.cpp
-            print/fp128.cpp
-            print/cx32.cpp
-            print/cx64.cpp
-            print/cx128.cpp
+        INST_TEMPLATE_FILES
+            print/print.inst.cpp.in
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
