@@ -2,7 +2,12 @@ Language: Cpp
 # BasedOnStyle:  LLVM
 AccessModifierOffset: 0
 AlignAfterOpenBracket: Align
-AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: true
+  PadOperators: true
 AlignConsecutiveDeclarations: Consecutive
 AlignConsecutiveBitFields: Consecutive
 AlignConsecutiveMacros: Consecutive
