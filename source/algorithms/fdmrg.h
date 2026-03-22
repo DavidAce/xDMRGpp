@@ -1,6 +1,7 @@
 #pragma once
 #include "AlgorithmFinite.h"
 #include <deque>
+enum class fdmrg_task;
 class class_h5table_measurements_finite;
 namespace tools::finite::opt {
     template<typename Scalar> class opt_mps;

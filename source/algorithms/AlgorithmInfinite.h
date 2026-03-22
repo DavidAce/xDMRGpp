@@ -1,6 +1,11 @@
 #pragma once
 #include "algorithms/AlgorithmBase.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/StorageEvent.h"
 #include "tensors/TensorsInfinite.h"
+enum class AlgorithmType;
+enum class OptRitz;
+enum class ResetReason;
 template<typename Scalar> class StateInfinite;
 template<typename Scalar> class ModelInfinite;
 template<typename Scalar> class EdgesInfinite;

@@ -1,8 +1,11 @@
 #pragma once
 
 #include "algorithms/AlgorithmStatus.h"
-#include "config/enums.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/SaturationPolicy.h"
+#include "config/enums/StorageEvent.h"
 #include <complex>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -13,6 +16,8 @@ namespace h5pp {
 namespace spdlog {
     class logger;
 }
+enum class AlgorithmType;
+enum class OptRitz;
 
 class AlgorithmBase {
     public:

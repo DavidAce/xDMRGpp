@@ -1,4 +1,25 @@
 #include "../flbit.h"
+#include "config/enums/AlgorithmStop.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/CircuitOp.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/flbit_task.h"
+#include "config/enums/GateMove.h"
+#include "config/enums/LbitCircuitGateMatrixKind.h"
+#include "config/enums/LbitCircuitGateWeightKind.h"
+#include "config/enums/MergeEvent.h"
+#include "config/enums/ModelType.h"
+#include "config/enums/MpoCompress.h"
+#include "config/enums/MposWithEdges.h"
+#include "config/enums/NormPolicy.h"
+#include "config/enums/OptRitz.h"
+#include "config/enums/Precision.h"
+#include "config/enums/ResetReason.h"
+#include "config/enums/StateInit.h"
+#include "config/enums/StateInitType.h"
+#include "config/enums/StorageEvent.h"
+#include "config/enums/StoragePolicy.h"
+#include "config/enums/TimeScale.h"
 #include "flbit.tmpl.h"
 #include "math/float.h"
 //
@@ -8,21 +29,17 @@
 #include "general/iter.h"
 #include "math/eig/solver.h"
 #include "math/eig/view.h"
-#include "math/float.h"
 #include "math/num.h"
 #include "math/svd.h"
 #include "math/tenx.h"
 #include "qm/lbit.h"
 #include "qm/spin.h"
 #include "tensors/model/ModelFinite.h"
-#include "tensors/site/mpo/MpoSite.h"
-#include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
-#include "tools/common/split.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/dimensions.h"
 #include "tools/finite/measure/entanglement_entropy.h"
@@ -35,7 +52,6 @@
 #include <fmt/ranges.h>
 #include <h5pp/h5pp.h>
 #include <unsupported/Eigen/CXX11/Tensor>
-#include <unsupported/Eigen/MatrixFunctions>
 
 template<typename Scalar>
 flbit<Scalar>::flbit(std::shared_ptr<h5pp::File> h5file_) : AlgorithmFinite<Scalar>(std::move(h5file_), OptRitz::NONE, AlgorithmType::fLBIT) {
@@ -468,7 +484,7 @@ void flbit<Scalar>::update_state() {
      * \fn void update_state()
      */
     auto delta_t = status.delta_t.template to_floating_point<cx128>();
-    tools::log->debug("Starting fLBIT: iter {} | Δt = {:.2e}", status.iter, fp(delta_t));
+    tools::log->debug("Starting fLBIT: iter {} | Δt = {:.2e}", status.iter, delta_t);
     if(not state_lbit) throw except::logic_error("state_lbit == nullptr: Set the state in lbit basis before running an flbit step");
     if(not state_lbit_init) {
         state_lbit_init = std::make_unique<StateFinite<Scalar>>(*state_lbit);
@@ -485,10 +501,10 @@ void flbit<Scalar>::update_state() {
     tensors.clear_cache();
     status.phys_time = abs(time_points[std::min(status.iter, time_points.size() - 1)]);
 
-    status.iter += 1;
-    status.step += settings::model::model_size;
-    status.position  = tensors.template get_position<long>();
-    status.direction = tensors.state->get_direction();
+    status.iter      += 1;
+    status.step      += settings::model::model_size;
+    status.position   = tensors.template get_position<long>();
+    status.direction  = tensors.state->get_direction();
 }
 
 template<typename Scalar> void flbit<Scalar>::update_time_step() {
@@ -744,7 +760,7 @@ void flbit<Scalar>::update_time_evolution_gates() {
     auto delta_t = status.delta_t.template to_floating_point<cx128>();
     if(has_swap_gates) {
         auto t_upd = tid::tic_scope("upd_time_evo_swap_gates");
-        tools::log->debug("Updating time evolution swap gates to iter {} | Δt = {:.2e}", status.iter, fp(delta_t));
+        tools::log->debug("Updating time evolution swap gates to iter {} | Δt = {:.2e}", status.iter, delta_t);
         time_swap_gates_1body = qm::lbit::get_time_evolution_swap_gates(delta_t, ham_swap_gates_1body);
         time_swap_gates_2body = qm::lbit::get_time_evolution_swap_gates(delta_t, ham_swap_gates_2body);
         time_swap_gates_3body = qm::lbit::get_time_evolution_swap_gates(delta_t, ham_swap_gates_3body);
@@ -752,7 +768,7 @@ void flbit<Scalar>::update_time_evolution_gates() {
     }
     if(has_slow_gates) {
         auto t_upd = tid::tic_scope("upd_time_evo_gates");
-        tools::log->debug("Updating time evolution gates to iter {} | Δt = {:.2e}", status.iter, fp(delta_t));
+        tools::log->debug("Updating time evolution gates to iter {} | Δt = {:.2e}", status.iter, delta_t);
         time_gates_1body = qm::lbit::get_time_evolution_gates(delta_t, ham_gates_1body);
         time_gates_2body = qm::lbit::get_time_evolution_gates(delta_t, ham_gates_2body);
         time_gates_3body = qm::lbit::get_time_evolution_gates(delta_t, ham_gates_3body);
@@ -796,13 +812,13 @@ void flbit<Scalar>::time_evolve_lbit_state() {
     if(not has_swap_gates and not has_slow_gates) throw except::logic_error("None of swap or non-swap time evolution gates found");
     auto delta_t = status.delta_t.template to_floating_point<cx128>();
     if(has_swap_gates) {
-        tools::log->debug("Applying time evolution swap gates Δt = {:.2e}", fp(delta_t));
+        tools::log->debug("Applying time evolution swap gates Δt = {:.2e}", delta_t);
         tools::finite::mps::apply_swap_gates(*state_lbit, time_swap_gates_1body, CircuitOp::NONE, GateMove::AUTO, svd_cfg);
         tools::finite::mps::apply_swap_gates(*state_lbit, time_swap_gates_2body, CircuitOp::NONE, GateMove::AUTO, svd_cfg);
         tools::finite::mps::apply_swap_gates(*state_lbit, time_swap_gates_3body, CircuitOp::NONE, GateMove::AUTO, svd_cfg);
     }
     if(has_slow_gates) {
-        tools::log->debug("Applying time evolution gates Δt = {:.2e}", fp(delta_t));
+        tools::log->debug("Applying time evolution gates Δt = {:.2e}", delta_t);
         tools::finite::mps::apply_gates(*state_lbit, time_gates_1body, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
         tools::finite::mps::apply_gates(*state_lbit, time_gates_2body, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
         tools::finite::mps::apply_gates(*state_lbit, time_gates_3body, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
@@ -815,13 +831,13 @@ void flbit<Scalar>::time_evolve_lbit_state() {
         // Check that we would get back the original state if we time evolved backwards
         auto state_lbit_debug = *state_lbit;
         if(has_swap_gates) {
-            tools::log->debug("Applying time evolution swap gates backward Δt = {:.2e}", fp(delta_t));
+            tools::log->debug("Applying time evolution swap gates backward Δt = {:.2e}", delta_t);
             tools::finite::mps::apply_swap_gates(state_lbit_debug, time_swap_gates_3body, CircuitOp::ADJ, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_swap_gates(state_lbit_debug, time_swap_gates_2body, CircuitOp::ADJ, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_swap_gates(state_lbit_debug, time_swap_gates_1body, CircuitOp::ADJ, GateMove::AUTO, svd_cfg);
         }
         if(has_slow_gates) {
-            tools::log->debug("Applying time evolution gates backward Δt = {:.2e}", fp(delta_t));
+            tools::log->debug("Applying time evolution gates backward Δt = {:.2e}", delta_t);
             tools::finite::mps::apply_gates(state_lbit_debug, time_gates_3body, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_gates(state_lbit_debug, time_gates_2body, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_gates(state_lbit_debug, time_gates_1body, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);

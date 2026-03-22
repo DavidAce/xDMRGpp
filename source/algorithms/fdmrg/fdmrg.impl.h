@@ -1,5 +1,17 @@
 #pragma once
 #include "../fdmrg.h"
+#include "config/enums/AlgorithmStop.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/fdmrg_task.h"
+#include "config/enums/LogPolicy.h"
+#include "config/enums/MergeEvent.h"
+#include "config/enums/OptExit.h"
+#include "config/enums/OptRitz.h"
+#include "config/enums/OptSolver.h"
+#include "config/enums/ResetReason.h"
+#include "config/enums/StateInit.h"
+#include "config/enums/StorageEvent.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "io/fmt_custom.h"
@@ -256,16 +268,15 @@ void fdmrg<Scalar>::update_state() {
     opt_state.set_optexit(opt_meta.optExit);
 
     tools::log->trace("Optimization [{}]: {}. Variance change {:8.2e} --> {:8.2e} ({:.3f} %)", enum2sv(opt_meta.optSolver), flag2str(opt_meta.optExit),
-                      fp(variance_before_step.value()), fp(opt_state.get_variance()), fp(opt_state.get_relchange() * 100));
-    if(opt_state.get_relchange() > static_cast<RealScalar>(1000)) tools::log->warn("Variance increase by x {:.2e}", fp(opt_state.get_relchange()));
+                      variance_before_step.value(), opt_state.get_variance(), opt_state.get_relchange() * 100);
+    if(opt_state.get_relchange() > static_cast<RealScalar>(1000)) tools::log->warn("Variance increase by x {:.2e}", opt_state.get_relchange());
 
     if(tools::log->level() <= spdlog::level::debug) {
         tools::log->debug("Optimization result: {:<24} | E {:<20.16f}| σ²H {:<8.2e} | rnorm {:8.2e} | overlap {:.16f} | "
                           "sites {} |"
                           "{} | {} | time {:.2e} s",
-                          opt_state.get_name(), fp(opt_state.get_energy()), fp(opt_state.get_variance()), fp(opt_state.get_eigs_rnorm()),
-                          fp(opt_state.get_overlap()), opt_state.get_sites(), enum2sv(opt_state.get_optsolver()), flag2str(opt_state.get_optexit()),
-                          opt_state.get_time());
+                          opt_state.get_name(), opt_state.get_energy(), opt_state.get_variance(), opt_state.get_eigs_rnorm(), opt_state.get_overlap(),
+                          opt_state.get_sites(), enum2sv(opt_state.get_optsolver()), flag2str(opt_state.get_optexit()), opt_state.get_time());
     }
     last_optsolver = opt_state.get_optsolver();
 
@@ -282,9 +293,9 @@ void fdmrg<Scalar>::update_state() {
     if constexpr(settings::debug) {
         auto variance_before_svd = opt_state.get_variance();
         auto variance_after_svd  = tools::finite::measure::energy_variance(tensors);
-        tools::log->debug("Variance check before SVD: {:8.2e}", fp(variance_before_svd));
-        tools::log->debug("Variance check after  SVD: {:8.2e}", fp(variance_after_svd));
-        tools::log->debug("Variance change from  SVD: {:.16f}%", fp(100 * variance_after_svd / variance_before_svd));
+        tools::log->debug("Variance check before SVD: {:8.2e}", variance_before_svd);
+        tools::log->debug("Variance check after  SVD: {:8.2e}", variance_after_svd);
+        tools::log->debug("Variance change from  SVD: {:.16f}%", 100 * variance_after_svd / variance_before_svd);
     }
 
     tools::log->trace("Updating variance record holder");
@@ -311,20 +322,19 @@ void fdmrg<Scalar>::update_state() {
     var_delta_svd = var_exp - var_opt;
     std_delta_opt = std::sqrt(std::abs(var_opt)) - std::sqrt(std::abs(var_ini));
     std_delta_svd = std::sqrt(std::abs(var_exp)) - std::sqrt(std::abs(var_opt));
-    tools::log->trace("Energy   change Δsvd/Δopt: {:.16f}", fp(ene_delta_svd / ene_delta_opt));
-    tools::log->trace("Variance change Δsvd/Δopt: {:.16f}", fp(var_delta_svd / var_delta_opt));
-    tools::log->trace("Std.dev. change Δsvd/Δopt: {:.16f}", fp(std_delta_svd / std_delta_opt));
+    tools::log->trace("Energy   change Δsvd/Δopt: {:.16f}", ene_delta_svd / ene_delta_opt);
+    tools::log->trace("Variance change Δsvd/Δopt: {:.16f}", var_delta_svd / var_delta_opt);
+    tools::log->trace("Std.dev. change Δsvd/Δopt: {:.16f}", std_delta_svd / std_delta_opt);
 
     last_optsolver = opt_state.get_optsolver();
     last_optalgo   = opt_state.get_optalgo();
 
     if constexpr(settings::debug) {
         if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
-        tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", fp(initial_state.get_variance()),
-                          initial_state.get_tensor().dimensions());
-        tools::log->debug("After  optimization      : variance {:8.2e} | mps dims {}", fp(opt_state.get_variance()), opt_state.get_tensor().dimensions());
-        tools::log->debug("After  merge             : variance {:8.2e} | mps dims {}", fp(var_mrg), tensors.get_state().get_bond_dims_active());
-        tools::log->debug("After  bond expansion    : variance {:8.2e} | mps dims {}", fp(var_exp), bondexp_postopt_result.dimMP);
+        tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", initial_state.get_variance(), initial_state.get_tensor().dimensions());
+        tools::log->debug("After  optimization      : variance {:8.2e} | mps dims {}", opt_state.get_variance(), opt_state.get_tensor().dimensions());
+        tools::log->debug("After  merge             : variance {:8.2e} | mps dims {}", var_mrg, tensors.get_state().get_bond_dims_active());
+        tools::log->debug("After  bond expansion    : variance {:8.2e} | mps dims {}", var_exp, bondexp_postopt_result.dimMP);
     }
 
     if constexpr(settings::debug) tensors.assert_validity();

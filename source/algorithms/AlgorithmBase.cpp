@@ -1,4 +1,11 @@
 #include "AlgorithmBase.h"
+#include "config/enum_utils.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/OptRitz.h"
+#include "config/enums/SaturationPolicy.h"
+#include "config/enums/StorageEvent.h"
+#include "config/enums/UpdatePolicy.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
@@ -7,8 +14,6 @@
 #include "math/stat.h"
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
-#include <complex>
-#include <h5pp/h5pp.h>
 AlgorithmBase::AlgorithmBase(OptRitz opt_ritz_, AlgorithmType algo_type_) {
     status.opt_ritz  = opt_ritz_;
     status.algo_type = algo_type_;

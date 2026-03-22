@@ -8,6 +8,7 @@ namespace tools::finite::opt {
     template<typename Scalar> class opt_mps;
 }
 template<typename Scalar> class StateFinite;
+enum class xdmrg_task;
 
 /*!
  * \brief Class that runs the excited-state DMRG algorithm.

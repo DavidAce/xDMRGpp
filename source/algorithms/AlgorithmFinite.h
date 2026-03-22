@@ -1,16 +1,27 @@
 #pragma once
 
 #include "algorithms/AlgorithmBase.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/StorageEvent.h"
 #include "math/svd/config.h"
 #include "measure/MeasurementsStateFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tools/common/h5/storage_info.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/opt_meta.h"
+#include <deque>
 #include <general/sfinae.h>
 
 struct BondExpansionConfig;
 enum class BondExpansionOrder;
+enum class AlgorithmType;
+enum class OptAlgo;
+enum class OptRitz;
+enum class OptSolver;
+enum class ResetReason;
+enum class StateInit;
+enum class StateInitType;
+enum class UpdatePolicy;
 template<typename Scalar>
 class StateFinite;
 template<typename Scalar>

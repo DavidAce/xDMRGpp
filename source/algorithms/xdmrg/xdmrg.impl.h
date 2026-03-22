@@ -1,18 +1,30 @@
 #pragma once
 #include "../fdmrg.h"
 #include "../xdmrg.h"
+#include "config/enums/AlgorithmStop.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/fdmrg_task.h"
+#include "config/enums/LogPolicy.h"
+#include "config/enums/MergeEvent.h"
+#include "config/enums/MpoCompress.h"
+#include "config/enums/MposWithEdges.h"
+#include "config/enums/OptExit.h"
+#include "config/enums/OptRitz.h"
+#include "config/enums/OptSolver.h"
+#include "config/enums/ResetReason.h"
+#include "config/enums/ResumePolicy.h"
+#include "config/enums/StateInit.h"
+#include "config/enums/StorageEvent.h"
+#include "config/enums/xdmrg_task.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
-#include "general/iter.h"
 #include "io/fmt_custom.h"
 #include "math/eig.h"
 #include "math/num.h"
-#include "math/rnd.h"
 #include "math/svd.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
-#include "tensors/site/mpo/MpoSite.h"
-#include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction/contraction_policy.h"
@@ -327,10 +339,10 @@ void xdmrg<Scalar>::run_algorithm() {
             quot = vh2v / h2norm; // Assume the state is normalized (vv = 1)
         }
         if(quot < eps * 1000 or !std::isfinite(vh2v)) {
-            tools::log->warn("Switched to X2 backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", fp(vh2v), fp(h2norm), fp(quot));
+            tools::log->warn("Switched to X2 backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", vh2v, h2norm, quot);
             return ContractionBackend::X2;
         } else {
-            tools::log->info("Selected TBLIS backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} > 1000 * eps", fp(vh2v), fp(h2norm), fp(quot));
+            tools::log->info("Selected TBLIS backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} > 1000 * eps", vh2v, h2norm, quot);
             return ContractionBackend::TBLIS;
         }
     };
@@ -443,19 +455,18 @@ void xdmrg<Scalar>::update_state() {
     opt_state.set_optexit(opt_meta.optExit);
 
     tools::log->trace("Optimization [{}|{}]: {}. Variance change {:8.2e} --> {:8.2e} ({:.3f} %)", enum2sv(opt_meta.optAlgo), enum2sv(opt_meta.optSolver),
-                      flag2str(opt_meta.optExit), fp(var_latest), fp(opt_state.get_variance()), fp(opt_state.get_relchange() * 100));
+                      flag2str(opt_meta.optExit), var_latest, opt_state.get_variance(), opt_state.get_relchange() * 100);
     if(opt_state.get_relchange() > 1000) {
-        tools::log->warn("Variance increase by x {:.2e} | variance new {:.3e} | variance old {:.3e}", fp(opt_state.get_relchange()),
-                         fp(opt_state.get_variance()), fp(var_latest));
+        tools::log->warn("Variance increase by x {:.2e} | variance new {:.3e} | variance old {:.3e}", opt_state.get_relchange(), opt_state.get_variance(),
+                         var_latest);
     }
 
     if(tools::log->level() <= spdlog::level::debug) {
         tools::log->debug("Optimization result: {:<24} | E {:<20.16f}| σ²H {:<8.2e} | rnorm {:8.2e} | overlap {:.16f} | "
                           "sites {} | {:20} | {} | time {:.2e} s",
-                          opt_state.get_name(), fp(opt_state.get_energy()), fp(opt_state.get_variance()), fp(opt_state.get_eigs_rnorm()),
-                          fp(opt_state.get_overlap()), opt_state.get_sites(),
-                          fmt::format("[{}][{}]", enum2sv(opt_state.get_optalgo()), enum2sv(opt_state.get_optsolver())), flag2str(opt_state.get_optexit()),
-                          opt_state.get_time());
+                          opt_state.get_name(), opt_state.get_energy(), opt_state.get_variance(), opt_state.get_eigs_rnorm(), opt_state.get_overlap(),
+                          opt_state.get_sites(), fmt::format("[{}][{}]", enum2sv(opt_state.get_optalgo()), enum2sv(opt_state.get_optsolver())),
+                          flag2str(opt_state.get_optexit()), opt_state.get_time());
     }
 
     // Do the truncation with SVD
@@ -473,7 +484,7 @@ void xdmrg<Scalar>::update_state() {
     auto var_mrg = tools::finite::measure::energy_variance(tensors);
 
     if(var_mrg < 0) {
-        tools::log->info("Variance is negative! {:.16e}", fp(var_mrg));
+        tools::log->info("Variance is negative! {:.16e}", var_mrg);
         // Disable mpo compression
         settings::precision::use_compressed_mpo         = MpoCompress::NONE;
         settings::precision::use_compressed_mpo_squared = MpoCompress::NONE;
@@ -488,8 +499,8 @@ void xdmrg<Scalar>::update_state() {
             auto       IR    = MatrixType::Identity(NRm.rows(), NRm.cols());
             RealScalar NLerr = (NLm - IL).norm() / IL.norm();
             RealScalar NRerr = (NRm - IR).norm() / IR.norm();
-            tools::log->info("NL err: {:.16e}", fp(NLerr));
-            tools::log->info("NR err: {:.16e}", fp(NRerr));
+            tools::log->info("NL err: {:.16e}", NLerr);
+            tools::log->info("NR err: {:.16e}", NRerr);
         }
 
         {
@@ -505,11 +516,10 @@ void xdmrg<Scalar>::update_state() {
             tools::finite::ops::apply_mpos_general(tmp_state2, mpos2, svdcfg);
             RealScalar E1_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state1, tensors.get_state()));
             RealScalar E2_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state2, tensors.get_state()));
-            tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", fp(E2_global),
-                             t_res->get_last_interval());
+            tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", E2_global, t_res->get_last_interval());
 
             RealScalar VarH = E2_global - E1_global * E1_global;
-            tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
+            tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", VarH, t_res->get_last_interval());
         }
         {
             auto                t_res        = tid::tic_token("<ψ (H_global-E_local) | (H_global-E_local) ψ>");
@@ -519,8 +529,7 @@ void xdmrg<Scalar>::update_state() {
             auto                svdcfg       = svd::config(8192, 1e-20);
             tools::finite::ops::apply_mpos_general(tmp_state, mpos_shifted, svdcfg);
             RealScalar VarH_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
-            tools::log->info("energy variance <ψ (H_global-E_local) | (H_global-E_local) ψ>   = {:.16e} | t = {:.4e}", fp(VarH_global),
-                             t_res->get_last_interval());
+            tools::log->info("energy variance <ψ (H_global-E_local) | (H_global-E_local) ψ>   = {:.16e} | t = {:.4e}", VarH_global, t_res->get_last_interval());
         }
         {
             using ScalarL       = Scalar;
@@ -561,18 +570,18 @@ void xdmrg<Scalar>::update_state() {
             RealScalarL envvLnorm = envv.L.get_blkx2().norm();
             RealScalarL envvRnorm = envv.R.get_blkx2().norm();
 
-            tools::log->info("X2    var_opt            = {:.16e}", fp(opt_state.get_variance()));
-            tools::log->info("X2    var_mrg            = {:.16e}", fp(var_mrg));
-            tools::log->info("X2    |H1v|              = {:.16e}", fp(H1v.norm()));
-            tools::log->info("X2    |H2v|              = {:.16e}", fp(H2v.norm()));
-            tools::log->info("X2    v_H1v              = {:.16e}", fp(v_H1v));
-            tools::log->info("X2    v_H2v              = {:.16e}", fp(v_H2v));
-            tools::log->info("X2    v_H2v    (fp128)   = {:.16e}", fp(v_H2v_fp128));
-            tools::log->info("X2    energy variance    = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
-            tools::log->info("X2    |enveL|            = {:.16e}", fp(enveLnorm));
-            tools::log->info("X2    |enveR|            = {:.16e}", fp(enveRnorm));
-            tools::log->info("X2    |envvL|            = {:.16e}", fp(envvLnorm));
-            tools::log->info("X2    |envvR|            = {:.16e}", fp(envvRnorm));
+            tools::log->info("X2    var_opt            = {:.16e}", opt_state.get_variance());
+            tools::log->info("X2    var_mrg            = {:.16e}", var_mrg);
+            tools::log->info("X2    |H1v|              = {:.16e}", H1v.norm());
+            tools::log->info("X2    |H2v|              = {:.16e}", H2v.norm());
+            tools::log->info("X2    v_H1v              = {:.16e}", v_H1v);
+            tools::log->info("X2    v_H2v              = {:.16e}", v_H2v);
+            tools::log->info("X2    v_H2v    (fp128)   = {:.16e}", v_H2v_fp128);
+            tools::log->info("X2    energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
+            tools::log->info("X2    |enveL|            = {:.16e}", enveLnorm);
+            tools::log->info("X2    |enveR|            = {:.16e}", enveRnorm);
+            tools::log->info("X2    |envvL|            = {:.16e}", envvLnorm);
+            tools::log->info("X2    |envvR|            = {:.16e}", envvRnorm);
         }
         {
             using RealScalarL = fp64;
@@ -608,15 +617,15 @@ void xdmrg<Scalar>::update_state() {
             RealScalarL envvLnorm = envv.L.get_blkx2().norm();
             RealScalarL envvRnorm = envv.R.get_blkx2().norm();
 
-            tools::log->info("FP64  |H1v|              = {:.16e}", fp(H1v.norm()));
-            tools::log->info("FP64  |H2v|              = {:.16e}", fp(H2v.norm()));
-            tools::log->info("FP64  v_H1v              = {:.16e}", fp(v_H1v));
-            tools::log->info("FP64  v_H2v              = {:.16e}", fp(v_H2v));
-            tools::log->info("FP64  energy variance    = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
-            tools::log->info("FP64  |enveL|            = {:.16e}", fp(enveLnorm));
-            tools::log->info("FP64  |enveR|            = {:.16e}", fp(enveRnorm));
-            tools::log->info("FP64  |envvL|            = {:.16e}", fp(envvLnorm));
-            tools::log->info("FP64  |envvR|            = {:.16e}", fp(envvRnorm));
+            tools::log->info("FP64  |H1v|              = {:.16e}", H1v.norm());
+            tools::log->info("FP64  |H2v|              = {:.16e}", H2v.norm());
+            tools::log->info("FP64  v_H1v              = {:.16e}", v_H1v);
+            tools::log->info("FP64  v_H2v              = {:.16e}", v_H2v);
+            tools::log->info("FP64  energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
+            tools::log->info("FP64  |enveL|            = {:.16e}", enveLnorm);
+            tools::log->info("FP64  |enveR|            = {:.16e}", enveRnorm);
+            tools::log->info("FP64  |envvL|            = {:.16e}", envvLnorm);
+            tools::log->info("FP64  |envvR|            = {:.16e}", envvRnorm);
         }
 
         {
@@ -653,15 +662,15 @@ void xdmrg<Scalar>::update_state() {
             RealScalarL envvLnorm = envv.L.get_blkx2().norm();
             RealScalarL envvRnorm = envv.R.get_blkx2().norm();
 
-            tools::log->info("FP128 |H1v|              = {:.16e}", fp(H1v.norm()));
-            tools::log->info("FP128 |H2v|              = {:.16e}", fp(H2v.norm()));
-            tools::log->info("FP128 v_H1v              = {:.16e}", fp(v_H1v));
-            tools::log->info("FP128 v_H2v              = {:.16e}", fp(v_H2v));
-            tools::log->info("FP128 energy variance    = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
-            tools::log->info("FP128 |enveL|            = {:.16e}", fp(enveLnorm));
-            tools::log->info("FP128 |enveR|            = {:.16e}", fp(enveRnorm));
-            tools::log->info("FP128 |envvL|            = {:.16e}", fp(envvLnorm));
-            tools::log->info("FP128 |envvR|            = {:.16e}", fp(envvRnorm));
+            tools::log->info("FP128 |H1v|              = {:.16e}", H1v.norm());
+            tools::log->info("FP128 |H2v|              = {:.16e}", H2v.norm());
+            tools::log->info("FP128 v_H1v              = {:.16e}", v_H1v);
+            tools::log->info("FP128 v_H2v              = {:.16e}", v_H2v);
+            tools::log->info("FP128 energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
+            tools::log->info("FP128 |enveL|            = {:.16e}", enveLnorm);
+            tools::log->info("FP128 |enveR|            = {:.16e}", enveRnorm);
+            tools::log->info("FP128 |envvL|            = {:.16e}", envvLnorm);
+            tools::log->info("FP128 |envvR|            = {:.16e}", envvRnorm);
         }
 
         std::vector<std::string> msg1;
@@ -749,22 +758,22 @@ void xdmrg<Scalar>::update_state() {
             RealScalar res2_est  = proj_res2 + leak2_raw;
             RealScalar delta     = v_H2v - vH1_H1v;
 
-            tools::log->info("var_opt             = {:.16e}", fp(opt_state.get_variance()));
-            tools::log->info("var_mrg             = {:.16e}", fp(var_mrg));
-            tools::log->info("vH1_H1v             = {:.16e}", fp(vH1_H1v));
-            tools::log->info("v_H1v               = {:.16e} diff {:.16e}", fp(v_H1v), fp(v_H1v - std::sqrt(vH1_H1v)));
-            tools::log->info("v_H1v X2            = {:.16e}", fp(v_H1vx2));
-            tools::log->info("v_H1v Q             = {:.16e}", fp(v_H1vQ));
-            tools::log->info("v_H1v²              = {:.16e} diff {:.16e}", fp(v_H1v * v_H1v), fp(v_H1v * v_H1v - vH1_H1v));
-            tools::log->info("v_H2v               = {:.16e}", fp(v_H2v));
-            tools::log->info("v_H2v X2            = {:.16e}", fp(v_H2vx2));
-            tools::log->info("v_H2v Q             = {:.16e}", fp(v_H2vQ));
-            tools::log->info("|H1v-vH1v*v|        = {:.16e}", fp(rnorm1));
-            tools::log->info("delta               = {:.16e}", fp(delta));
-            tools::log->info("E_local est         = {:.16e}", fp(std::sqrt(vH1_H1v + rnorm1)));
-            tools::log->info("sqrt(|H1v-v_H1v*v|) = {:.16e}", fp(std::sqrt(rnorm1)));
-            tools::log->info("res2_est            = {:.16e}", fp(res2_est));
-            tools::log->info("energy variance     = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
+            tools::log->info("var_opt             = {:.16e}", opt_state.get_variance());
+            tools::log->info("var_mrg             = {:.16e}", var_mrg);
+            tools::log->info("vH1_H1v             = {:.16e}", vH1_H1v);
+            tools::log->info("v_H1v               = {:.16e} diff {:.16e}", v_H1v, v_H1v - std::sqrt(vH1_H1v));
+            tools::log->info("v_H1v X2            = {:.16e}", v_H1vx2);
+            tools::log->info("v_H1v Q             = {:.16e}", v_H1vQ);
+            tools::log->info("v_H1v²              = {:.16e} diff {:.16e}", v_H1v * v_H1v, v_H1v * v_H1v - vH1_H1v);
+            tools::log->info("v_H2v               = {:.16e}", v_H2v);
+            tools::log->info("v_H2v X2            = {:.16e}", v_H2vx2);
+            tools::log->info("v_H2v Q             = {:.16e}", v_H2vQ);
+            tools::log->info("|H1v-vH1v*v|        = {:.16e}", rnorm1);
+            tools::log->info("delta               = {:.16e}", delta);
+            tools::log->info("E_local est         = {:.16e}", std::sqrt(vH1_H1v + rnorm1));
+            tools::log->info("sqrt(|H1v-v_H1v*v|) = {:.16e}", std::sqrt(rnorm1));
+            tools::log->info("res2_est            = {:.16e}", res2_est);
+            tools::log->info("energy variance     = {:.16e}", v_H2v - v_H1v * v_H1v);
         }
 
         {
@@ -845,22 +854,22 @@ void xdmrg<Scalar>::update_state() {
             RealScalar res2_est  = proj_res2 + leak2_raw;
             RealScalar delta     = v_H2v - vH1_H1v;
 
-            tools::log->info("var_opt             = {:.16e}", fp(opt_state.get_variance()));
-            tools::log->info("var_mrg             = {:.16e}", fp(var_mrg));
-            tools::log->info("vH1_H1v             = {:.16e}", fp(vH1_H1v));
-            tools::log->info("v_H1v               = {:.16e} diff {:.16e}", fp(v_H1v), fp(v_H1v - std::sqrt(vH1_H1v)));
-            tools::log->info("v_H1v X2            = {:.16e}", fp(v_H1vx2));
-            tools::log->info("v_H1v Q             = {:.16e}", fp(v_H1vQ));
-            tools::log->info("v_H1v²              = {:.16e} diff {:.16e}", fp(v_H1v * v_H1v), fp(v_H1v * v_H1v - vH1_H1v));
-            tools::log->info("v_H2v               = {:.16e}", fp(v_H2v));
-            tools::log->info("v_H2v X2            = {:.16e}", fp(v_H2vx2));
-            tools::log->info("v_H2v Q             = {:.16e}", fp(v_H2vQ));
-            tools::log->info("|H1v-vH1v*v|        = {:.16e}", fp(rnorm1));
-            tools::log->info("delta               = {:.16e}", fp(delta));
-            tools::log->info("E_local est         = {:.16e}", fp(std::sqrt(vH1_H1v + rnorm1)));
-            tools::log->info("sqrt(|H1v-v_H1v*v|) = {:.16e}", fp(std::sqrt(rnorm1)));
-            tools::log->info("res2_est            = {:.16e}", fp(res2_est));
-            tools::log->info("energy variance     = {:.16e}", fp(v_H2v - v_H1v * v_H1v));
+            tools::log->info("var_opt             = {:.16e}", opt_state.get_variance());
+            tools::log->info("var_mrg             = {:.16e}", var_mrg);
+            tools::log->info("vH1_H1v             = {:.16e}", vH1_H1v);
+            tools::log->info("v_H1v               = {:.16e} diff {:.16e}", v_H1v, v_H1v - std::sqrt(vH1_H1v));
+            tools::log->info("v_H1v X2            = {:.16e}", v_H1vx2);
+            tools::log->info("v_H1v Q             = {:.16e}", v_H1vQ);
+            tools::log->info("v_H1v²              = {:.16e} diff {:.16e}", v_H1v * v_H1v, v_H1v * v_H1v - vH1_H1v);
+            tools::log->info("v_H2v               = {:.16e}", v_H2v);
+            tools::log->info("v_H2v X2            = {:.16e}", v_H2vx2);
+            tools::log->info("v_H2v Q             = {:.16e}", v_H2vQ);
+            tools::log->info("|H1v-vH1v*v|        = {:.16e}", rnorm1);
+            tools::log->info("delta               = {:.16e}", delta);
+            tools::log->info("E_local est         = {:.16e}", std::sqrt(vH1_H1v + rnorm1));
+            tools::log->info("sqrt(|H1v-v_H1v*v|) = {:.16e}", std::sqrt(rnorm1));
+            tools::log->info("res2_est            = {:.16e}", res2_est);
+            tools::log->info("energy variance     = {:.16e}", v_H2v - v_H1v * v_H1v);
         }
         for(size_t i = 0; i < msg1.size(); ++i) { tools::log->info("{} | {}", msg1.at(i), msg2.at(i)); }
 
@@ -885,10 +894,8 @@ void xdmrg<Scalar>::update_state() {
     ene_delta_svd = ene_exp - ene_opt;
     var_delta_opt = std::abs(var_opt - var_ini);
     var_delta_svd = std::abs(var_exp - var_opt);
-    tools::log->trace("Energy   change Δsvd/Δopt: {:.16f} | ini {:.16f} opt {:.16f} exp {:.16f}", fp(ene_delta_svd / ene_delta_opt), fp(ene_ini), fp(ene_opt),
-                      fp(ene_exp));
-    tools::log->trace("Variance change Δsvd/Δopt: {:.16f} | ini {:.16f} opt {:.16f} exp {:.16f}", fp(var_delta_svd / var_delta_opt), fp(var_ini), fp(var_opt),
-                      fp(var_exp));
+    tools::log->trace("Energy   change Δsvd/Δopt: {:.16f} | ini {:.16f} opt {:.16f} exp {:.16f}", ene_delta_svd / ene_delta_opt, ene_ini, ene_opt, ene_exp);
+    tools::log->trace("Variance change Δsvd/Δopt: {:.16f} | ini {:.16f} opt {:.16f} exp {:.16f}", var_delta_svd / var_delta_opt, var_ini, var_opt, var_exp);
 
     last_optsolver = opt_state.get_optsolver();
     last_optalgo   = opt_state.get_optalgo();
@@ -896,11 +903,10 @@ void xdmrg<Scalar>::update_state() {
     if constexpr(settings::debug) {
         if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors_active());
         if(tools::log->level() <= spdlog::level::trace) tools::log->trace("Truncation errors: {::8.3e}", tensors.state->get_truncation_errors());
-        tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", fp(initial_state.get_variance()),
-                          initial_state.get_tensor().dimensions());
-        tools::log->debug("After  optimization      : variance {:8.2e} | mps dims {}", fp(opt_state.get_variance()), opt_state.get_tensor().dimensions());
-        tools::log->debug("After  merge             : variance {:8.2e} | mps dims {}", fp(var_mrg), tensors.get_state().get_bond_dims_active());
-        tools::log->debug("After  bond expansion    : variance {:8.2e} | mps dims {}", fp(var_exp), bondexp_result.dimMP);
+        tools::log->debug("Before update            : variance {:8.2e} | mps dims {}", initial_state.get_variance(), initial_state.get_tensor().dimensions());
+        tools::log->debug("After  optimization      : variance {:8.2e} | mps dims {}", opt_state.get_variance(), opt_state.get_tensor().dimensions());
+        tools::log->debug("After  merge             : variance {:8.2e} | mps dims {}", var_mrg, tensors.get_state().get_bond_dims_active());
+        tools::log->debug("After  bond expansion    : variance {:8.2e} | mps dims {}", var_exp, bondexp_result.dimMP);
     }
 
     if constexpr(settings::debug) tensors.assert_validity();

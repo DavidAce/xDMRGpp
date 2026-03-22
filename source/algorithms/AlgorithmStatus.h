@@ -1,10 +1,15 @@
 #pragma once
-#include "config/enums.h"
+#include "config/enums/AlgorithmStop.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/OptRitz.h"
+#include "config/enums/StorageEvent.h"
 #include "math/float.h"
 #include <complex>
 #include <cstddef>
 #include <h5pp/details/h5ppFstr.h>
 #include <h5pp/details/h5ppVstr.h>
+#include <limits>
+#include <string_view>
 
 class AlgorithmStatus {
     public:

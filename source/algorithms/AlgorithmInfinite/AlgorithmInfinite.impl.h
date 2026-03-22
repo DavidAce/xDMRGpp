@@ -1,5 +1,13 @@
 #pragma once
 #include "../AlgorithmInfinite.h"
+#include "config/enums/AlgorithmStop.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/OptRitz.h"
+#include "config/enums/ResetReason.h"
+#include "config/enums/SaturationPolicy.h"
+#include "config/enums/StorageEvent.h"
+#include "config/enums/UpdatePolicy.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "debug/info.h"
@@ -88,7 +96,7 @@ void AlgorithmInfinite<Scalar>::update_precision_limit(std::optional<double> ene
     H_norm_estimate                   = max_energy;
 
     tools::log->info("Estimated limit on energy variance precision: {:.3e}, max_digits {:.4e}, |H|~{:.4e}, |H²|~{:.4e}", status.energy_variance_prec_limit,
-                     fp(max_digits), fp(max_energy), fp(max_energy_squared));
+                     max_digits, max_energy, max_energy_squared);
 }
 
 template<typename Scalar>
@@ -102,15 +110,13 @@ void AlgorithmInfinite<Scalar>::update_bond_dimension_limit() {
     auto tic = tid::tic_scope("bond_grow");
 
     // If we got here we want to increase the bond dimension limit progressively during the simulation
-    bool is_saturated      = status.algorithm_saturated_for > 1; // Allow one round while saturated so that extra efforts get a chance.
-    bool is_has_stuck      = status.algorithm_has_stuck_for > 1;
-    bool is_truncated      = tensors.state->is_limited_by_bond(status.bond_lim) or tensors.state->is_truncated(status.trnc_lim);
+    bool is_saturated = status.algorithm_saturated_for > 1; // Allow one round while saturated so that extra efforts get a chance.
+    bool is_has_stuck = status.algorithm_has_stuck_for > 1;
+    bool is_truncated = tensors.state->is_limited_by_bond(status.bond_lim) or tensors.state->is_truncated(status.trnc_lim);
 
     bool grow_if_truncated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::TRUNCATED);
     bool grow_if_saturated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::SAT_ALGO);
     bool grow_if_has_stuck = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::STK_ALGO);
-
-
 
     if(grow_if_truncated and not is_truncated) {
         tools::log->info("State is not limited by its bond dimension. Kept current bond limit {}", status.bond_lim);
@@ -384,30 +390,30 @@ void AlgorithmInfinite<Scalar>::print_status_full() {
     tools::log->info("Iterations            = {:<16d}", status.iter);
     switch(status.algo_type) {
         case AlgorithmType::iDMRG:
-            tools::log->info("Energy MPO            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_mpo(tensors)));
-            tools::log->info("Energy HAM            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_ham(tensors)));
-            tools::log->info("Energy MOM            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_mom(tensors)));
+            tools::log->info("Energy MPO            = {:<16.16f}", tools::infinite::measure::energy_per_site_mpo(tensors));
+            tools::log->info("Energy HAM            = {:<16.16f}", tools::infinite::measure::energy_per_site_ham(tensors));
+            tools::log->info("Energy MOM            = {:<16.16f}", tools::infinite::measure::energy_per_site_mom(tensors));
             break;
         case AlgorithmType::iTEBD:
-            tools::log->info("Energy HAM            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_ham(tensors)));
-            tools::log->info("Energy MOM            = {:<16.16f}", fp(tools::infinite::measure::energy_per_site_mom(tensors)));
+            tools::log->info("Energy HAM            = {:<16.16f}", tools::infinite::measure::energy_per_site_ham(tensors));
+            tools::log->info("Energy MOM            = {:<16.16f}", tools::infinite::measure::energy_per_site_mom(tensors));
             break;
         default: throw except::runtime_error("Wrong simulation type");
     }
     switch(status.algo_type) {
         case AlgorithmType::iDMRG:
-            tools::log->info("lg σ²H MPO         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_mpo(tensors)));
-            tools::log->info("lg σ²H HAM         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_ham(tensors)));
-            tools::log->info("lg σ²H MOM         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_mom(tensors)));
+            tools::log->info("lg σ²H MPO         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_mpo(tensors));
+            tools::log->info("lg σ²H HAM         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_ham(tensors));
+            tools::log->info("lg σ²H MOM         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_mom(tensors));
             break;
         case AlgorithmType::iTEBD:
-            tools::log->info("lg σ²H HAM         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_ham(tensors)));
-            tools::log->info("lg σ²H MOM         = {:<8.2e}", fp(tools::infinite::measure::energy_variance_per_site_mom(tensors)));
+            tools::log->info("lg σ²H HAM         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_ham(tensors));
+            tools::log->info("lg σ²H MOM         = {:<8.2e}", tools::infinite::measure::energy_variance_per_site_mom(tensors));
             break;
         default: throw except::runtime_error("Wrong simulation type");
     }
     tools::log->info("Truncation error      = {:<8.2e}", tools::infinite::measure::truncation_error(tensors.get_state()));
-    tools::log->info("Entanglement Entropy  = {:<16.16f}", fp(tools::infinite::measure::entanglement_entropy(tensors.get_state())));
+    tools::log->info("Entanglement Entropy  = {:<16.16f}", tools::infinite::measure::entanglement_entropy(tensors.get_state()));
     tools::log->info("χmax                  = {:<16d}", status.bond_max);
     tools::log->info("χ                     = {:<16d}", tools::infinite::measure::bond_dimension(tensors.get_state()));
 

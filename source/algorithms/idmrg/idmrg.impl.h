@@ -1,8 +1,10 @@
 #pragma once
 #include "../idmrg.h"
+#include "config/enums/AlgorithmStop.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/MergeEvent.h"
+#include "config/enums/OptRitz.h"
 #include "config/settings.h"
-#include "tensors/edges/EdgesInfinite.h"
-#include "tensors/model/ModelInfinite.h"
 #include "tensors/state/StateInfinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"

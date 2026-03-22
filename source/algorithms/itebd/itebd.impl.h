@@ -1,9 +1,11 @@
 #pragma once
 #include "../itebd.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/MergeEvent.h"
+#include "config/enums/OptRitz.h"
 #include "config/settings.h"
 #include "qm/time.h"
 #include "tensors/model/ModelInfinite.h"
-#include "tensors/site/mpo/MpoSite.h"
 #include "tensors/state/StateInfinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"

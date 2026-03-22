@@ -1,5 +1,7 @@
 #pragma once
 #include "AlgorithmFinite.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/StorageEvent.h"
 #include "qm/gate.h"
 #include "qm/lbit.h"
 #include <deque>
@@ -10,6 +12,7 @@
 
 template<typename Scalar> class StateFinite;
 template<typename Scalar> struct flbit_tmpl;
+enum class flbit_task;
 template<typename Scalar>
 class flbit : public AlgorithmFinite<Scalar> {
     using RealScalar = typename AlgorithmFinite<Scalar>::RealScalar;

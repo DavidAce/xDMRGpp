@@ -13,20 +13,19 @@ class StateFinite;
 
 template<typename Scalar>
 struct flbit_tmpl {
-    static std::pair<StateFinite<Scalar>, AlgorithmStatus> update_state(const size_t time_index, cx128 time_point,
-                                                                        const StateFinite<Scalar> &state_lbit_init,
+    static std::pair<StateFinite<Scalar>, AlgorithmStatus> update_state(const size_t time_index, cx128 time_point, const StateFinite<Scalar> &state_lbit_init,
                                                                         const std::vector<std::vector<qm::SwapGate>> &gates_tevo,
-                                                                        const std::vector<std::vector<qm::Gate>> &unitary_circuit,
-                                                                        const AlgorithmStatus &status_init);
+                                                                        const std::vector<std::vector<qm::Gate>>     &unitary_circuit,
+                                                                        const AlgorithmStatus                        &status_init);
 
-    static std::vector<std::vector<qm::SwapGate>> get_time_evolution_gates(const cx128 &time_point,
+    static std::vector<std::vector<qm::SwapGate>> get_time_evolution_gates(const cx128                                  &time_point,
                                                                            const std::vector<std::vector<qm::SwapGate>> &ham_swap_gates);
 
-    static StateFinite<Scalar> time_evolve_lbit_state(const StateFinite<Scalar> &state_lbit_init,
-                                                      const std::vector<std::vector<qm::SwapGate>> &gates_tevo, const AlgorithmStatus &status);
+    static StateFinite<Scalar> time_evolve_lbit_state(const StateFinite<Scalar> &state_lbit_init, const std::vector<std::vector<qm::SwapGate>> &gates_tevo,
+                                                      const AlgorithmStatus &status);
 
-    static StateFinite<Scalar> transform_to_real_basis(const StateFinite<Scalar> &state_lbit,
-                                                       const std::vector<std::vector<qm::Gate>> &unitary_circuit, const AlgorithmStatus &status);
+    static StateFinite<Scalar> transform_to_real_basis(const StateFinite<Scalar> &state_lbit, const std::vector<std::vector<qm::Gate>> &unitary_circuit,
+                                                       const AlgorithmStatus &status);
 
     static AlgorithmStatus check_convergence(const AlgorithmStatus &status);
 
