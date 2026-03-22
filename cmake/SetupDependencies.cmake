@@ -37,6 +37,7 @@ find_package(fmt          11.0.0...11.9.0 REQUIRED)
 find_package(CLI11        2.4.1...2.6.0   REQUIRED)                                         # Command line argument parser
 find_package(Backward     1.6             REQUIRED)
 find_package(toml11       4.4.0           REQUIRED)
+find_package(tomlplusplus 3.4.0           REQUIRED)
 #find_package(arpack++   2.3.0  REQUIRED)                                          # C++ frontend for arpack-ng. Custom find module.
 #find_package(mpfr       4.1.0  REQUIRED)
 
@@ -117,5 +118,4 @@ if(TARGET Eigen3::Eigen)
 else()
     message(FATAL_ERROR "Target not defined: Eigen3::Eigen")
 endif()
-
 
