@@ -90,6 +90,7 @@ class DMRGConan(ConanFile):
         self.requires("backward-cpp/1.6")
         self.requires("pcg-cpp/cci.20220409")
         self.requires("toml11/4.4.0")
+        self.requires("tomlplusplus/3.4.0")
 
 
 
