@@ -50,59 +50,77 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         //        log->info("sizeS = {} | lim {} | {} {} {} | {} ", sizeS, rank_lim, switchsize_gejsv, switchsize_gesvd, switchsize_gesdd,
         //        enum2sv(svd_rtn));
     }
-    if constexpr(!sfinae::is_any_v<Scalar, fp32, fp64, cx32, cx64>) svd_lib = svd::lib::eigen; // Eigen handles long double and fp128
+    constexpr bool lapacke_supported = sfinae::is_any_v<Scalar, fp32, fp64, cx32, cx64>;
+    if constexpr(!lapacke_supported) svd_lib = svd::lib::eigen; // Eigen handles long double and fp128
 #pragma omp atomic
     count++;
-    switch(svd_lib) {
-        case svd::lib::lapacke: {
-            try {
-                if(svd_rtn == svd::rtn::gersvd)
-                    return do_svd_rsvd(mat_ptr, rows, cols);
-                else
-                    return do_svd_lapacke(mat_ptr, rows, cols);
-            } catch(const std::exception &ex) {
-                log->warn("{} {} failed to perform SVD: {} | Trying Lapacke gejsv", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
+    if constexpr(!lapacke_supported) {
+        try {
+            if(svd_rtn == svd::rtn::gersvd)
+                return do_svd_rsvd(mat_ptr, rows, cols);
+            else
+                return do_svd_eigen(mat_ptr, rows, cols);
+        } catch(const std::exception &ex) {
+            if constexpr(sfinae::is_quadruple_prec_v<Scalar>) {
+                throw except::runtime_error("{} {} failed to perform SVD: {} | No other libraries to try with quadruple precision", enum2sv(svd_lib),
+                                            enum2sv(svd_rtn), std::string_view(ex.what()));
+            } else {
+                throw except::runtime_error("{} {} failed to perform SVD: {} | No LAPACKE routine available for type {}", enum2sv(svd_lib), enum2sv(svd_rtn),
+                                            std::string_view(ex.what()), sfinae::type_name<Scalar>());
+            }
+        }
+    } else {
+        switch(svd_lib) {
+            case svd::lib::lapacke: {
                 try {
-                    auto svd_rtn_backup = svd_rtn; // Restore after
-                    auto svd_log_level  = log->level();
-                    log->set_level(spdlog::level::trace);
-                    svd_rtn         = rtn::gejsv;
-                    auto [U, S, VT] = do_svd_lapacke(mat_ptr, rows, cols);
-                    svd_rtn         = svd_rtn_backup;
-                    log->set_level(svd_log_level);
-                    return {U, S, VT};
-                } catch(const std::exception &ex2) {
-                    log->warn("{} {} failed to perform SVD: {} | Trying Eigen JacobiSVD", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex2.what()));
-                    auto svd_rtn_backup = svd_rtn; // Restore after
-                    auto svd_log_level  = log->level();
-                    log->set_level(spdlog::level::trace);
-                    svd_rtn         = rtn::gejsv;
-                    auto [U, S, VT] = do_svd_eigen(mat_ptr, rows, cols);
-                    svd_rtn         = svd_rtn_backup;
-                    log->set_level(svd_log_level);
-                    return {U, S, VT};
+                    if(svd_rtn == svd::rtn::gersvd)
+                        return do_svd_rsvd(mat_ptr, rows, cols);
+                    else
+                        return do_svd_lapacke(mat_ptr, rows, cols);
+                } catch(const std::exception &ex) {
+                    log->warn("{} {} failed to perform SVD: {} | Trying Lapacke gejsv", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
+                    try {
+                        auto svd_rtn_backup = svd_rtn; // Restore after
+                        auto svd_log_level  = log->level();
+                        log->set_level(spdlog::level::trace);
+                        svd_rtn         = rtn::gejsv;
+                        auto [U, S, VT] = do_svd_lapacke(mat_ptr, rows, cols);
+                        svd_rtn         = svd_rtn_backup;
+                        log->set_level(svd_log_level);
+                        return {U, S, VT};
+                    } catch(const std::exception &ex2) {
+                        log->warn("{} {} failed to perform SVD: {} | Trying Eigen JacobiSVD", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex2.what()));
+                        auto svd_rtn_backup = svd_rtn; // Restore after
+                        auto svd_log_level  = log->level();
+                        log->set_level(spdlog::level::trace);
+                        svd_rtn         = rtn::gejsv;
+                        auto [U, S, VT] = do_svd_eigen(mat_ptr, rows, cols);
+                        svd_rtn         = svd_rtn_backup;
+                        log->set_level(svd_log_level);
+                        return {U, S, VT};
+                    }
                 }
+                break;
             }
-            break;
-        }
-        case svd::lib::eigen: {
-            try {
-                if(svd_rtn == svd::rtn::gersvd)
-                    return do_svd_rsvd(mat_ptr, rows, cols);
-                else
-                    return do_svd_eigen(mat_ptr, rows, cols);
-            } catch(const std::exception &ex) {
-                if constexpr(sfinae::is_quadruple_prec_v<Scalar>) {
-                    throw except::runtime_error("{} {} failed to perform SVD: {} | No other libraries to try with quadruple precision", enum2sv(svd_lib),
-                                                enum2sv(svd_rtn), std::string_view(ex.what()));
-                } else {
-                    log->warn("{} {} failed to perform SVD: {} | Trying Lapack", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
-                    return do_svd_lapacke(mat_ptr, rows, cols);
+            case svd::lib::eigen: {
+                try {
+                    if(svd_rtn == svd::rtn::gersvd)
+                        return do_svd_rsvd(mat_ptr, rows, cols);
+                    else
+                        return do_svd_eigen(mat_ptr, rows, cols);
+                } catch(const std::exception &ex) {
+                    if constexpr(sfinae::is_quadruple_prec_v<Scalar>) {
+                        throw except::runtime_error("{} {} failed to perform SVD: {} | No other libraries to try with quadruple precision", enum2sv(svd_lib),
+                                                    enum2sv(svd_rtn), std::string_view(ex.what()));
+                    } else {
+                        log->warn("{} {} failed to perform SVD: {} | Trying Lapack", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
+                        return do_svd_lapacke(mat_ptr, rows, cols);
+                    }
                 }
+                break;
             }
-            break;
+            default: throw std::logic_error("Unrecognized svd library");
         }
-        default: throw std::logic_error("Unrecognized svd library");
     }
     throw std::logic_error("Unrecognized svd library");
 }
@@ -229,14 +247,16 @@ std::tuple<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 2>> svd::solver::spli
     auto Smax                          = S.real().maxCoeff();
     // Stabilize by inserting avgS *  1/avgS
     Eigen::Index nonZeros = (S.cwiseAbs().array() > 0).count();
-    auto         avgS     = num::next_power_of_two<Real>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
-    if(avgS > 1) {
-        S /= avgS;
-        std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
-        U                                = U.leftCols(rank).eval();
-        S                                = S.head(rank).eval();
-        VT                               = VT.topRows(rank).eval();
-        U *= avgS;
+    if(nonZeros > 0) {
+        auto avgS = num::next_power_of_two<Real>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
+        if(avgS > 1) {
+            S                                /= avgS;
+            std::tie(rank, truncation_error)  = get_rank_from_truncation_error(S);
+            U                                 = U.leftCols(rank).eval();
+            S                                 = S.head(rank).eval();
+            VT                                = VT.topRows(rank).eval();
+            U                                *= avgS;
+        }
     }
     // rank = dropfilter(U, S, V, svd_cfg.truncation_limit.value_or(1e-16), 8);
     VT = S.asDiagonal() * VT; // Rescaled singular values
@@ -303,14 +323,16 @@ std::tuple<Eigen::Tensor<Scalar, 2>, Eigen::Tensor<Scalar, 4>> svd::solver::spli
     // Stabilize by inserting avgS *  1/avgS
     using R               = RealScalar<Scalar>;
     Eigen::Index nonZeros = (S.cwiseAbs().array() > 0).count();
-    auto         avgS     = num::next_power_of_two<R>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
-    if(avgS > 1) {
-        S /= avgS;
-        std::tie(rank, truncation_error) = get_rank_from_truncation_error(S);
-        U                                = U.leftCols(rank).eval();
-        S                                = S.head(rank).eval();
-        VT                               = VT.topRows(rank).eval();
-        VT *= avgS;
+    if(nonZeros > 0) {
+        auto avgS = num::next_power_of_two<R>(S.head(nonZeros).real().mean()); // Nearest power of two larger than S.mean()
+        if(avgS > 1) {
+            S                                /= avgS;
+            std::tie(rank, truncation_error)  = get_rank_from_truncation_error(S);
+            U                                 = U.leftCols(rank).eval();
+            S                                 = S.head(rank).eval();
+            VT                                = VT.topRows(rank).eval();
+            VT                               *= avgS;
+        }
     }
     // TRY PRINTING S before rescaling
     fmt::print("S r2l min {:.5e} | max {:.5e} -->  min {:.5e} | max {:.5e} | size {}\n", fp(Smin), fp(Smax), fp(S.real().minCoeff()), fp(S.real().maxCoeff()),

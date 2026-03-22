@@ -62,8 +62,8 @@ namespace Rsvd {
                     a.col(currCol).setZero();
                 } else {
                     // Normalize
-                    a.col(currCol) /= currColNorm;
-                    largestNormSeen = std::max(largestNormSeen, currColNorm);
+                    a.col(currCol)  /= currColNorm;
+                    largestNormSeen  = std::max(largestNormSeen, currColNorm);
                 }
             }
         }
