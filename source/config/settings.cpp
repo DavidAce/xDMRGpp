@@ -187,6 +187,10 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("model::lbit::u_mkind"                         , model::lbit::u_mkind);
     dmrg_config.load_parameter("model::lbit::spin_dim"                        , model::lbit::spin_dim);
     dmrg_config.load_parameter("model::lbit::distribution"                    , model::lbit::distribution);
+    dmrg_config.load_parameter("model::xxz::h_wdth"                           , model::xxz::h_wdth);
+    dmrg_config.load_parameter("model::xxz::delta"                            , model::xxz::delta);
+    dmrg_config.load_parameter("model::xxz::spin_dim"                         , model::xxz::spin_dim);
+    dmrg_config.load_parameter("model::xxz::distribution"                     , model::xxz::distribution);
 
     dmrg_config.load_parameter("strategy::move_sites_when_stuck"                    , strategy::move_sites_when_stuck);
     dmrg_config.load_parameter("strategy::projection_policy"                        , strategy::projection_policy);
@@ -211,11 +215,12 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("strategy::initial_state"                            , strategy::initial_state);
     dmrg_config.load_parameter("strategy::initial_pattern"                          , strategy::initial_pattern);
     dmrg_config.load_parameter("strategy::rbds_rate"                                , strategy::rbds_rate);
+    dmrg_config.load_parameter("strategy::rtes_rate"                                , strategy::rtes_rate);
     dmrg_config.load_parameter("strategy::bond_increase_when"                       , strategy::bond_increase_when);
     dmrg_config.load_parameter("strategy::bond_increase_rate"                       , strategy::bond_increase_rate);
     dmrg_config.load_parameter("strategy::trnc_decrease_when"                       , strategy::trnc_decrease_when);
     dmrg_config.load_parameter("strategy::trnc_decrease_rate"                       , strategy::trnc_decrease_rate);
-    dmrg_config.load_parameter("strategy::trnc_increase_vtol"                       , strategy::trnc_increase_vtol);
+    dmrg_config.load_parameter("strategy::trnc_increase_rtol"                       , strategy::trnc_increase_rtol);
     dmrg_config.load_parameter("strategy::trnc_increase_iter"                       , strategy::trnc_increase_iter);
     dmrg_config.load_parameter("strategy::etol_decrease_when"                       , strategy::etol_decrease_when);
     dmrg_config.load_parameter("strategy::etol_decrease_rate"                       , strategy::etol_decrease_rate);
@@ -264,6 +269,7 @@ void settings::load(Loader &dmrg_config) {
 
     //Parameters controlling infinite-DMRG
     dmrg_config.load_parameter("idmrg::on"                                    , idmrg::on);
+    dmrg_config.load_parameter("idmrg::iter_min"                              , idmrg::iter_min);
     dmrg_config.load_parameter("idmrg::iter_max"                              , idmrg::iter_max);
     dmrg_config.load_parameter("idmrg::bond_max"                              , idmrg::bond_max);
     dmrg_config.load_parameter("idmrg::bond_min"                              , idmrg::bond_min);
@@ -272,6 +278,7 @@ void settings::load(Loader &dmrg_config) {
 
     //Parameters controlling imaginary TEBD (Zero temperature)
     dmrg_config.load_parameter("itebd::on"                                    , itebd::on       );
+    dmrg_config.load_parameter("itebd::iter_min"                              , itebd::iter_min);
     dmrg_config.load_parameter("itebd::iter_max"                              , itebd::iter_max);
     dmrg_config.load_parameter("itebd::time_step_init_real"                   , itebd::time_step_init_real  );
     dmrg_config.load_parameter("itebd::time_step_init_imag"                   , itebd::time_step_init_imag  );
