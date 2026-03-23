@@ -2,5 +2,3 @@
 #include "eig/enums.h"
 #include "eig/solver.h"
 #include "eig/view.h"
-#include <algorithm>
-#include <optional>

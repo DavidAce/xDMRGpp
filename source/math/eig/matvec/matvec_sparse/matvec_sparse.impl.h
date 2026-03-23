@@ -241,7 +241,7 @@ template<typename Scalar, bool sparseLU>
 void MatVecSparse<Scalar, sparseLU>::set_shift(Cplx shift) {
     if(readyShift) return;
     if(sigma == shift) return;
-    eig::log->trace("Setting shift = {:.16f}", fp(shift));
+    eig::log->trace("Setting shift = {:.16f}", shift);
 
     sigma = shift;
     if(A_stl.empty()) {

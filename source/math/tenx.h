@@ -654,10 +654,10 @@ namespace tenx {
                     continue;
                 }
                 angles.emplace_back(std::arg(v.col(i)(0)));
-                Scalar inv_phase     = Scalar(0.0, -1.0) * angles.back();
-                Scalar exp_inv_phase = std::exp(inv_phase);
-                v.col(i) *= exp_inv_phase;
-                v.col(i) = (v.col(i).array().imag().cwiseAbs() > 1e-15).select(v.col(i), v.col(i).real().template cast<Scalar>());
+                Scalar inv_phase      = Scalar(0.0, -1.0) * angles.back();
+                Scalar exp_inv_phase  = std::exp(inv_phase);
+                v.col(i)             *= exp_inv_phase;
+                v.col(i)              = (v.col(i).array().imag().cwiseAbs() > 1e-15).select(v.col(i), v.col(i).real().template cast<Scalar>());
             }
         }
         return angles;
@@ -675,9 +675,9 @@ namespace tenx {
         if constexpr(std::is_same<Scalar, std::complex<double>>::value) {
             if(v.cols() != angles.size()) { throw std::runtime_error("Mismatch in columns and angles supplied"); }
             for(int i = 0; i < v.cols(); i++) {
-                Scalar exp_phase = std::exp(Scalar(0.0, 1.0) * angles[i]);
-                v.col(i) *= exp_phase;
-                v.col(i) = (v.col(i).array().imag().cwiseAbs() > 1e-15).select(v.col(i), v.col(i).real());
+                Scalar exp_phase  = std::exp(Scalar(0.0, 1.0) * angles[i]);
+                v.col(i)         *= exp_phase;
+                v.col(i)          = (v.col(i).array().imag().cwiseAbs() > 1e-15).select(v.col(i), v.col(i).real());
             }
         }
     }

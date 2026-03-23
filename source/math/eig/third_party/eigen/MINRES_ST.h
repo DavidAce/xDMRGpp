@@ -86,8 +86,8 @@ namespace Eigen {
                 // Pass 2: standard deviation
                 RealScalar ss = 0;
                 for(const auto &yi : y) {
-                    const RealScalar d = yi - s.avg;
-                    ss += d * d;
+                    const RealScalar d  = yi - s.avg;
+                    ss                 += d * d;
                 }
                 RealScalar var = sample ? (ss / static_cast<RealScalar>(s.n - 1)) : (ss / static_cast<RealScalar>(s.n));
 
@@ -108,9 +108,9 @@ namespace Eigen {
                 if(m >= 2) {
                     RealScalar dss = 0;
                     for(std::size_t i = 1; i < s.n; ++i) {
-                        RealScalar di = (y[i] - y[i - 1]) / dt;
-                        RealScalar dd = di - s.slope_avg;
-                        dss += dd * dd;
+                        RealScalar di  = (y[i] - y[i - 1]) / dt;
+                        RealScalar dd  = di - s.slope_avg;
+                        dss           += dd * dd;
                     }
                     RealScalar dvar = sample ? (dss / static_cast<RealScalar>(m - 1)) : (dss / static_cast<RealScalar>(m));
                     if(dvar < 0) dvar = 0;
@@ -172,11 +172,11 @@ namespace Eigen {
             iters                    = 0; // reset iters
             int minres_has_converged = 0;
 
-            constexpr int          rate_rrnorm      = 1;   // How often to save into history
-            constexpr int          rate_deltax      = 10;  // How often to save into history
+            constexpr int rate_rrnorm = 1;  // How often to save into history
+            constexpr int rate_deltax = 10; // How often to save into history
             // constexpr int          rate_resid2      = 100; // How often to correct the residual norm
-            constexpr int          rate_checks      = 10;  // How often to check convergence/saturation
-            constexpr int          rate_printf      = 10;  // How often to print results
+            constexpr int          rate_checks      = 10; // How often to check convergence/saturation
+            constexpr int          rate_printf      = 10; // How often to print results
             constexpr size_t       max_history_size = 50;
             std::deque<RealScalar> rrnorm_history;
             std::deque<RealScalar> deltax_history;
@@ -196,17 +196,17 @@ namespace Eigen {
                     // happy breakdown: Krylov process terminated
                     break;
                 }
-                const RealScalar beta = beta_new;
-                v_old                 = v;                       // update: at first time step, this makes v_old = 0 so value of beta doesn't matter
-                v_new /= beta_new;                               // overwrite v_new for next iteration
-                w_new /= beta_new;                               // overwrite w_new for next iteration
-                v                      = v_new;                  // update
-                w                      = w_new;                  // update
-                v_new.noalias()        = mat * w - beta * v_old; // compute v_new
-                const RealScalar alpha = numext::real(v_new.dot(w));
-                v_new -= alpha * v;                         // overwrite v_new
-                w_new     = precond.solve(v_new);           // overwrite w_new
-                beta_new2 = numext::real(v_new.dot(w_new)); // compute beta_new
+                const RealScalar beta   = beta_new;
+                v_old                   = v;                      // update: at first time step, this makes v_old = 0 so value of beta doesn't matter
+                v_new                  /= beta_new;               // overwrite v_new for next iteration
+                w_new                  /= beta_new;               // overwrite w_new for next iteration
+                v                       = v_new;                  // update
+                w                       = w_new;                  // update
+                v_new.noalias()         = mat * w - beta * v_old; // compute v_new
+                const RealScalar alpha  = numext::real(v_new.dot(w));
+                v_new                  -= alpha * v;                      // overwrite v_new
+                w_new                   = precond.solve(v_new);           // overwrite w_new
+                beta_new2               = numext::real(v_new.dot(w_new)); // compute beta_new
                 eigen_assert(beta_new2 >= RealScalar{0} && "PRECONDITIONER IS NOT POSITIVE DEFINITE");
                 beta_new = std::sqrt(beta_new2); // compute beta_new
 
@@ -225,15 +225,15 @@ namespace Eigen {
                 s     = beta_new / r1; // new sine
 
                 // Update solution
-                p_oold                = p_old;
-                p_old                 = p;
-                p.noalias()           = (w - r2 * p_old - r3 * p_oold) / r1;
-                const RealScalar step = beta_one * c * eta;
-                x += step * p;
+                p_oold                 = p_old;
+                p_old                  = p;
+                p.noalias()            = (w - r2 * p_old - r3 * p_oold) / r1;
+                const RealScalar step  = beta_one * c * eta;
+                x                     += step * p;
 
                 // Estimated update of the (preconditioned) residual norm squared.
-                residualNorm2 *= s * s;
-                bool rrnorm_has_converged = residualNorm2 < threshold2;
+                residualNorm2             *= s * s;
+                bool rrnorm_has_converged  = residualNorm2 < threshold2;
 
                 static constexpr RealScalar rrnorm_floor = std::numeric_limits<RealScalar>::denorm_min();
                 RealScalar                  rrnorm       = std::sqrt(residualNorm2 / rhsNorm2); // Relative residual norm

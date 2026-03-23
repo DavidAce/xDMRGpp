@@ -212,6 +212,4 @@ namespace tenx::sfinae {
     template<typename T>
     inline constexpr bool is_eigen_rowmajor_v = is_eigen_rowmajor<T>::value;
 
-
-
 }

@@ -1,6 +1,11 @@
 #pragma once
-#include "sfinae.h"
+#include <cassert>
+#include <cstddef>
+#include <Eigen/Core>
 #include <iterator>
+#include <type_traits>
+#include <unsupported/Eigen/CXX11/Tensor>
+#include <vector>
 
 namespace tenx {
 

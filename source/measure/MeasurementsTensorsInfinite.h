@@ -1,7 +1,8 @@
 #pragma once
-#include <array>
+#include <complex>
+#include <cstddef>
 #include <optional>
-#include <vector>
+#include <utility>
 
 template<typename Scalar>
 struct MeasurementsTensorsInfinite {

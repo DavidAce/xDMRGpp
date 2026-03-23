@@ -1,6 +1,5 @@
 #pragma once
 #include "math/cast.h"
-#include <string>
 #include <unsupported/Eigen/NonLinearOptimization>
 #include <unsupported/Eigen/NumericalDiff>
 #include <vector>

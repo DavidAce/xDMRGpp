@@ -2,11 +2,7 @@
 #include "enums.h"
 #include "settings.h"
 #include "solution.h"
-#include <memory>
-
-namespace spdlog {
-    class logger;
-}
+#include "tools/common/log.h"
 struct primme_params;
 
 namespace eig {
@@ -14,9 +10,9 @@ namespace eig {
 
     class solver {
         public:
-        eig::settings                   config;
-        eig::solution                   result;
-        std::shared_ptr<spdlog::logger> log;
+        eig::settings       config;
+        eig::solution       result;
+        tools::LoggerHandle log;
         solver();
         solver(const eig::settings &config);
         void setLogLevel(size_t loglevel);

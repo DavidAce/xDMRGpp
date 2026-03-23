@@ -85,8 +85,8 @@ namespace Eigen {
                 // Pass 2: sum of squared deviations
                 RealScalar ss = 0;
                 for(const auto &elem : a) {
-                    const RealScalar d = elem - avg;
-                    ss += d * d;
+                    const RealScalar d  = elem - avg;
+                    ss                 += d * d;
                 }
 
                 RealScalar var = sample ? (ss / static_cast<RealScalar>(n - 1)) : (ss / static_cast<RealScalar>(n));
@@ -97,12 +97,12 @@ namespace Eigen {
                 if(n >= 2) {
                     RealScalar Sx = 0, Sxx = 0, Sy = 0, Sxy = 0;
                     for(size_t j = 0; j < n; ++j) {
-                        RealScalar x = j;    // iteration index as RealScalar
-                        RealScalar y = a[j]; // eta_k value
-                        Sx += x;
-                        Sxx += x * x;
-                        Sy += y;
-                        Sxy += x * y;
+                        RealScalar x  = j;    // iteration index as RealScalar
+                        RealScalar y  = a[j]; // eta_k value
+                        Sx           += x;
+                        Sxx          += x * x;
+                        Sy           += y;
+                        Sxy          += x * y;
                     }
                     RealScalar den = n * Sxx - Sx * Sx;
                     if(den != 0) { slope = (n * Sxy - Sx * Sy) / den; }
@@ -125,7 +125,7 @@ namespace Eigen {
                 RealScalar pAp   = numext::real(p.dot(tmp));
                 Scalar     alpha = absNew / pAp; // the amount we travel on dir
 
-                x += alpha * p;          // update solution
+                x        += alpha * p;   // update solution
                 residual -= alpha * tmp; // update residual
 
                 residualNorm2 = residual.squaredNorm();

@@ -1,9 +1,9 @@
 #pragma once
 #include <memory>
+#include <mutex>
 #include <type_traits>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <unsupported/Eigen/CXX11/ThreadPool>
-#include <mutex>
 namespace tenx {
     namespace threads {
 

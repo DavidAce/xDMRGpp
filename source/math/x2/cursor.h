@@ -36,11 +36,11 @@ namespace x2_detail {
             for(int t = 0; t < axes_rank; ++t) {
                 const Index d = dim[size_t(t)];
                 assert(d > 0);
-                const Index q  = lin / d;
-                const Index r  = lin - q * d; // avoids % if you care
-                idx[size_t(t)] = r;
-                lin            = q;
-                off += r * st[size_t(t)];
+                const Index q   = lin / d;
+                const Index r   = lin - q * d; // avoids % if you care
+                idx[size_t(t)]  = r;
+                lin             = q;
+                off            += r * st[size_t(t)];
             }
             // if you want, you can assert(lin==0) in debug for in-range checks
         }
@@ -49,12 +49,12 @@ namespace x2_detail {
             // increment least-significant axis = t=0
             for(int t = 0; t < axes_rank; ++t) {
                 idx[size_t(t)] += 1;
-                off += st[size_t(t)];
+                off            += st[size_t(t)];
                 if(idx[size_t(t)] < dim[size_t(t)]) return;
 
                 // carry
-                idx[size_t(t)] = 0;
-                off -= wrap[size_t(t)];
+                idx[size_t(t)]  = 0;
+                off            -= wrap[size_t(t)];
             }
             // if axes_rank==0, this just does nothing
         }
@@ -94,12 +94,12 @@ namespace x2 {
                 {
                     Index tmp = r;
                     for(int t = 0; t < row_rank; ++t) {
-                        const int   ax  = row_axes[size_t(t)];
-                        const Index dim = dims[size_t(ax)];
-                        const Index v   = tmp % dim;
-                        tmp /= dim;
-                        coord[size_t(ax)] = v;
-                        off += v * stride[size_t(ax)];
+                        const int   ax     = row_axes[size_t(t)];
+                        const Index dim    = dims[size_t(ax)];
+                        const Index v      = tmp % dim;
+                        tmp               /= dim;
+                        coord[size_t(ax)]  = v;
+                        off               += v * stride[size_t(ax)];
                     }
                     assert(tmp == 0);
                 }
@@ -108,12 +108,12 @@ namespace x2 {
                 {
                     Index tmp = c;
                     for(int t = 0; t < col_rank; ++t) {
-                        const int   ax  = col_axes[size_t(t)];
-                        const Index dim = dims[size_t(ax)];
-                        const Index v   = tmp % dim;
-                        tmp /= dim;
-                        coord[size_t(ax)] = v;
-                        off += v * stride[size_t(ax)];
+                        const int   ax     = col_axes[size_t(t)];
+                        const Index dim    = dims[size_t(ax)];
+                        const Index v      = tmp % dim;
+                        tmp               /= dim;
+                        coord[size_t(ax)]  = v;
+                        off               += v * stride[size_t(ax)];
                     }
                     assert(tmp == 0);
                 }
@@ -127,13 +127,13 @@ namespace x2 {
                     const Index dim = dims[size_t(ax)];
                     const Index st  = stride[size_t(ax)];
 
-                    cv += 1;
+                    cv  += 1;
                     off += st;
 
                     if(cv < dim) return;
 
                     // wrap this axis back to 0 and carry
-                    cv = 0;
+                    cv   = 0;
                     off -= dim * st;
                 }
                 // if we get here you stepped past the end of the row/col range

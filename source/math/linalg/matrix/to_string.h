@@ -20,18 +20,18 @@ namespace linalg::matrix {
                 ss << m.derived().format(f);
                 return ss.str();
             }
-    #if defined(DMRG_USE_FLOAT128)
+#if defined(DMRG_USE_FLOAT128)
             else if constexpr(std::is_same_v<Inner, fp128>) {
                 auto to_chars_internal = [&](const auto &v) -> std::string {
                     using V = std::remove_cvref_t<decltype(v)>;
                     static_assert(std::is_floating_point_v<V>);
                     std::chars_format fmtType = std::chars_format::fixed;
-                    constexpr auto   bsize = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
-                    char             buffer[bsize]; // Temporary buffer for conversion
+                    constexpr auto    bsize   = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
+                    char              buffer[bsize]; // Temporary buffer for conversion
 
                     std::to_chars_result result;
                     // C++23 std::to_chars for floating-point has an overload to accept precision.
-                    result = std::to_chars(buffer , buffer + sizeof(buffer), v, fmtType, f.precision);
+                    result = std::to_chars(buffer, buffer + sizeof(buffer), v, fmtType, f.precision);
                     if(result.ec != std::errc{}) { throw std::system_error{static_cast<int>(result.ec), std::system_category()}; }
 
                     // Create a string_view for the converted result.
@@ -46,9 +46,9 @@ namespace linalg::matrix {
                 for(long i = 0; i < m.derived().rows(); ++i) {
                     s += f.rowPrefix;
                     for(long j = 0; j < m.derived().cols(); ++j) {
-                        auto rv = std::real(m.derived()(i,j));
-                        auto iv = std::imag(m.derived()(i,j));
-                        s += "(" +  to_chars_internal(rv) + ", " + to_chars_internal(iv) + ")";
+                        auto rv  = std::real(m.derived()(i, j));
+                        auto iv  = std::imag(m.derived()(i, j));
+                        s       += "(" + to_chars_internal(rv) + ", " + to_chars_internal(iv) + ")";
                         if(j + 1 != m.derived().cols()) s += f.coeffSeparator;
                     }
                     s += f.rowSuffix;
@@ -63,8 +63,8 @@ namespace linalg::matrix {
                 std::string s;
                 auto        probablesize = 4 + 2 * (m.derived().size() + 1) * std::max<size_t>(64, static_cast<size_t>(f.precision) + 34);
                 s.reserve(probablesize);
-                std::string fmt = "%." + std::to_string(f.precision) + "Qg";
-                s += f.matPrefix;
+                std::string fmt  = "%." + std::to_string(f.precision) + "Qg";
+                s               += f.matPrefix;
                 for(long i = 0; i < m.derived().rows(); ++i) {
                     s += f.rowPrefix;
                     for(long j = 0; j < m.derived().cols(); ++j) {
@@ -72,12 +72,12 @@ namespace linalg::matrix {
                         int iextent = quadmath_snprintf(nullptr, 0, fmt.data(), m.derived()(i, j).imag());
                         if(rextent < 0) throw std::runtime_error("quadmath_snprintf (real) returned < 0");
                         if(iextent < 0) throw std::runtime_error("quadmath_snprintf (imag) returned < 0");
-                        s += '(';
-                        auto roffset = s.size();
+                        s            += '(';
+                        auto roffset  = s.size();
                         s.resize(roffset + static_cast<size_t>(rextent));
                         quadmath_snprintf(s.data() + roffset, static_cast<size_t>(rextent + 1), fmt.data(), m.derived()(i, j).real());
-                        s += ',';
-                        auto ioffset = s.size();
+                        s            += ',';
+                        auto ioffset  = s.size();
                         s.resize(ioffset + static_cast<size_t>(iextent));
                         quadmath_snprintf(s.data() + ioffset, static_cast<size_t>(iextent + 1), fmt.data(), m.derived()(i, j).imag());
                         s += ')';
@@ -101,12 +101,12 @@ namespace linalg::matrix {
                 using V = std::remove_cvref_t<decltype(v)>;
                 static_assert(std::is_floating_point_v<V>);
                 std::chars_format fmtType = std::chars_format::fixed;
-                constexpr auto   bsize = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
-                char             buffer[bsize]; // Temporary buffer for conversion
+                constexpr auto    bsize   = std::numeric_limits<V>::max_digits10 + std::numeric_limits<V>::max_exponent10 + 10;
+                char              buffer[bsize]; // Temporary buffer for conversion
 
                 std::to_chars_result result;
                 // C++23 std::to_chars for floating-point has an overload to accept precision.
-                result = std::to_chars(buffer , buffer + sizeof(buffer), v, fmtType, f.precision);
+                result = std::to_chars(buffer, buffer + sizeof(buffer), v, fmtType, f.precision);
                 if(result.ec != std::errc{}) { throw std::system_error{static_cast<int>(result.ec), std::system_category()}; }
 
                 // Create a string_view for the converted result.
@@ -121,7 +121,7 @@ namespace linalg::matrix {
             for(long i = 0; i < m.derived().rows(); ++i) {
                 s += f.rowPrefix;
                 for(long j = 0; j < m.derived().cols(); ++j) {
-                    s += to_chars_internal(m.derived()(i,j));
+                    s += to_chars_internal(m.derived()(i, j));
                     if(j + 1 != m.derived().cols()) s += f.coeffSeparator;
                 }
                 s += f.rowSuffix;

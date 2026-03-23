@@ -1,15 +1,16 @@
 #pragma once
-#include "config/enums.h"
+#include "config/enums/OptRitz.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/float.h"
 #include "math/tenx.h"
 #include "StopReason.h"
 #include "tid/tid.h"
+#include "tools/common/log.h"
 #include <Eigen/Eigenvalues>
 #include <source_location>
-#include <spdlog/spdlog.h>
 
 template<typename Scalar> class JacobiDavidsonOperator;
+enum class OptAlgo;
 enum class ResidualCorrectionType { NONE, CHEAP_OLSEN, FULL_OLSEN, JACOBI_DAVIDSON, AUTO };
 enum class MaskPolicy { COMPRESS, RANDOMIZE };
 
@@ -184,9 +185,9 @@ class solver_base {
     void save_jd_stats(const IterativeLinearSolverConfig<Scalar> &cfg);
 
     protected:
-    spdlog::level::level_enum       logLevel = spdlog::level::warn;
-    std::shared_ptr<spdlog::logger> eiglog;
-    tid::ur                         last_log_time = tid::ur();
+    spdlog::level::level_enum logLevel = spdlog::level::warn;
+    tools::LoggerHandle       eiglog;
+    tid::ur                   last_log_time = tid::ur();
 
     Eigen::Index      qBlocks = 0;
     MatrixType        get_wBlock(fMultP_t MultP);

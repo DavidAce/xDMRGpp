@@ -5,6 +5,7 @@
 #include "view.h"
 #include <cassert>
 #include <limits>
+#include <stdexcept>
 
 namespace x2 {
     template<typename Scalar>
@@ -42,10 +43,10 @@ namespace x2 {
         A_dd.lo = (A - A_dd.hi()); // exact residual in fp64 arithmetic
     }
 
-
     template<typename Scalar, int rankC, int rankA, int rankB>
     void gemm_x2(X2TensorAsMatrixView<Scalar, rankC> &C_out, const ConstX2TensorAsMatrixView<Scalar, rankA> &A_in,
                  const ConstX2TensorAsMatrixView<Scalar, rankB> &B_in) {
+        if(C_out.rows() != A_in.rows() || C_out.cols() != B_in.cols() || B_in.rows() != A_in.cols()) throw std::invalid_argument("gemm_x2: dimension mismatch");
         assert(C_out.rows() == A_in.rows());
         assert(C_out.cols() == B_in.cols());
         assert(B_in.rows() == A_in.cols());
@@ -55,6 +56,7 @@ namespace x2 {
     template<typename Scalar, int rankC, int rankA, int rankB>
     void gemm_x2(X2TensorAsMatrixView<Scalar, rankC> &C_out, const ConstTensorAsMatrixView<Scalar, rankA> &A_in,
                  const ConstX2TensorAsMatrixView<Scalar, rankB> &B_in) {
+        if(C_out.rows() != A_in.rows() || C_out.cols() != B_in.cols() || B_in.rows() != A_in.cols()) throw std::invalid_argument("gemm_x2: dimension mismatch");
         assert(C_out.rows() == A_in.rows());
         assert(C_out.cols() == B_in.cols());
         assert(B_in.rows() == A_in.cols());
@@ -64,6 +66,7 @@ namespace x2 {
     template<typename Scalar, int rankC, int rankA, int rankB>
     void gemm_x2(X2TensorAsMatrixView<Scalar, rankC> &C_out, const ConstX2TensorAsMatrixView<Scalar, rankA> &A_in,
                  const ConstTensorAsMatrixView<Scalar, rankB> &B_in) {
+        if(C_out.rows() != A_in.rows() || C_out.cols() != B_in.cols() || B_in.rows() != A_in.cols()) throw std::invalid_argument("gemm_x2: dimension mismatch");
         assert(C_out.rows() == A_in.rows());
         assert(C_out.cols() == B_in.cols());
         assert(B_in.rows() == A_in.cols());
@@ -73,6 +76,7 @@ namespace x2 {
     template<typename Scalar, int rankC, int rankA, int rankB>
     void gemm_x2(X2TensorAsMatrixView<Scalar, rankC> &C_out, const ConstTensorAsMatrixView<Scalar, rankA> &A_in,
                  const ConstTensorAsMatrixView<Scalar, rankB> &B_in) {
+        if(C_out.rows() != A_in.rows() || C_out.cols() != B_in.cols() || B_in.rows() != A_in.cols()) throw std::invalid_argument("gemm_x2: dimension mismatch");
         assert(C_out.rows() == A_in.rows());
         assert(C_out.cols() == B_in.cols());
         assert(B_in.rows() == A_in.cols());

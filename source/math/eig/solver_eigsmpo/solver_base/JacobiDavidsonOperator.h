@@ -71,19 +71,19 @@ class JacobiDavidsonOperator : public Eigen::EigenBase<JacobiDavidsonOperator<Sc
 
     template<typename Rhs>
     Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> operator*(const Eigen::MatrixBase<Rhs> &x) const {
-        auto t_start = std::chrono::high_resolution_clock::now();
-        auto result  = Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
-        auto t_end   = std::chrono::high_resolution_clock::now();
-        m_optimer += std::chrono::duration<double>(t_end - t_start).count();
+        auto t_start  = std::chrono::high_resolution_clock::now();
+        auto result   = Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
+        auto t_end    = std::chrono::high_resolution_clock::now();
+        m_optimer    += std::chrono::duration<double>(t_end - t_start).count();
         m_opcounter++;
         return result;
     }
     template<typename Rhs>
     Eigen::Product<JacobiDavidsonOperator, Rhs, Eigen::AliasFreeProduct> gemm(const Eigen::MatrixBase<Rhs> &x) {
-        auto t_start = std::chrono::high_resolution_clock::now();
-        auto result  = MatrixOp(x);
-        auto t_end   = std::chrono::high_resolution_clock::now();
-        m_optimer += std::chrono::duration<double>(t_end - t_start).count();
+        auto t_start  = std::chrono::high_resolution_clock::now();
+        auto result   = MatrixOp(x);
+        auto t_end    = std::chrono::high_resolution_clock::now();
+        m_optimer    += std::chrono::duration<double>(t_end - t_start).count();
         m_opcounter++;
         return result;
     }
@@ -186,15 +186,15 @@ typename solver_base<Scalar>::VectorType solver_base<Scalar>::JacobiDavidsonSolv
         t_jdsol.toc();
         if constexpr(settings::debug_jdop)
             tools::log->trace("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | mat iter {} | time {:.2e}", get_solver_name(), matRepl.rows(),
-                                    static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), matRepl.iterations(),
+                                    static_cast<int>(solver.info()), solver.tolerance(), solver.error(), solver.iterations(), matRepl.iterations(),
                                     t_jdsol->get_last_interval());
-        cfg.result.iters += solver.iterations();
-        cfg.result.matvecs += matRepl.iterations();
-        cfg.result.precond += solver.preconditioner().iterations();
-        cfg.result.time += t_jdsol->get_last_interval();
-        cfg.result.time_matvecs += matRepl.elapsed_time();                     // Time doing matrix-vector multiplications
-        cfg.result.time_precond += solver.preconditioner().elapsed_time();     // Time doing in preconditioning step
-        cfg.result.time_jacobi += solver.preconditioner().time_jacobi();       // Time applying jacobi
+        cfg.result.iters          += solver.iterations();
+        cfg.result.matvecs        += matRepl.iterations();
+        cfg.result.precond        += solver.preconditioner().iterations();
+        cfg.result.time           += t_jdsol->get_last_interval();
+        cfg.result.time_matvecs   += matRepl.elapsed_time();                   // Time doing matrix-vector multiplications
+        cfg.result.time_precond   += solver.preconditioner().elapsed_time();   // Time doing in preconditioning step
+        cfg.result.time_jacobi    += solver.preconditioner().time_jacobi();    // Time applying jacobi
         cfg.result.time_chebyshev += solver.preconditioner().time_chebyshev(); // Time applying chebyshev
 
         // cfg.result.total_iters += solver.iterations();

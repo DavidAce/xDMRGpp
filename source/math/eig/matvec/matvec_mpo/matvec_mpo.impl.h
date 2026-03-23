@@ -176,7 +176,7 @@ void MatVecMPO<T>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, 
     }
 
     num_mv += *blockSize;
-    *err = 0;
+    *err    = 0;
 }
 
 template<typename Scalar>
@@ -235,7 +235,7 @@ void MatVecMPO<T>::set_shift(Cplx shift) {
     if(readyShift) return;
     if(sigma == shift) return;
 
-    eig::log->trace("Setting shift = {:.16f}", fp(shift));
+    eig::log->trace("Setting shift = {:.16f}", shift);
     sigma = shift; // We can shift the diagonal of the full matrix instead
 
     // The MPO is a rank4 tensor ijkl where the first 2 ij indices draw a simple

@@ -1,6 +1,7 @@
 #pragma once
 #include "../solver_gdplusk.h"
 #include "../StopReason.h"
+#include "config/enums/OptAlgo.h"
 #include "io/fmt_custom.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/eig/solver.h"
@@ -217,7 +218,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
 
         MatrixType Gram_ks      = Q_ks.adjoint() * Q_ks;
         RealScalar orthError_ks = (Gram_ks - MatrixType::Identity(Gram_ks.rows(), Gram_ks.cols())).norm();
-        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q_ks (orthError = {:.5e})", fp(orthError_ks));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q_ks (orthError = {:.5e})", orthError_ks);
 
         MatrixType HK_prev; // Calculated with matvecs in the orthogonalization/orthonormalization routines below
 
@@ -231,7 +232,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
 
         MatrixType Gram_K      = K_prev.adjoint() * K_prev;
         RealScalar orthError_K = (Gram_K - MatrixType::Identity(Gram_K.rows(), Gram_K.cols())).norm();
-        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of K after orthogonalization against Q_ks (orthError = {:.5e})", fp(orthError_K));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of K after orthogonalization against Q_ks (orthError = {:.5e})", orthError_K);
 
         assert(K_prev.cols() == HK_prev.cols());
         Q.conservativeResize(N, Q_ks.cols() + K_prev.cols());
@@ -248,10 +249,10 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
         m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * half;
         m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
         m.maskPolicy = MaskPolicy::COMPRESS;
-        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after composition: orthError: {:.5e}", fp(m.orthError));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after composition: orthError: {:.5e}", m.orthError);
         block_l2_orthonormalize(Q, HQ, m);
 
-        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after orthonorm : orthError: {:.5e}", fp(m.orthError));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after orthonorm : orthError: {:.5e}", m.orthError);
 
         status.iter_last_restart = status.iter;
     };
@@ -279,12 +280,12 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixTy
     m.Gram       = (m.Gram + m.Gram.adjoint()).eval() * half;
     m.orthError  = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
 
-    if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after appen: orthError: {:.5e}", fp(m.orthError));
+    if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after appen: orthError: {:.5e}", m.orthError);
 
     bool basis_was_restarted = status.iter_last_restart == status.iter;
     if(basis_was_restarted or m.orthError > normTol * std::sqrt(status.op_norm_estimate)) { block_l2_orthonormalize(Q, HQ, m); }
 
-    if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after ortho: orthError: {:.5e}", fp(m.orthError));
+    if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after ortho: orthError: {:.5e}", m.orthError);
     assert_l2_orthonormal(Q);
 
     assert(Q.colwise().norm().minCoeff() > eps);
@@ -343,7 +344,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
 
         MatrixType Gram_ks      = use_h2_inner_product ? Q_ks.adjoint() * H2Q_ks : Q_ks.adjoint() * Q_ks;
         RealScalar orthError_ks = (Gram_ks - MatrixType::Identity(Gram_ks.rows(), Gram_ks.cols())).norm();
-        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q_ks (orthError = {:.5e})", fp(orthError_ks));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q_ks (orthError = {:.5e})", orthError_ks);
 
         MatrixType H1K_prev, H2K_prev; // Calculated with matvecs in the orthogonalization/orthonormalization routines below
 
@@ -368,7 +369,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
 
         MatrixType Gram_K      = use_h2_inner_product ? K_prev.adjoint() * H2K_prev : K_prev.adjoint() * K_prev;
         RealScalar orthError_K = (Gram_K - MatrixType::Identity(Gram_K.rows(), Gram_K.cols())).norm();
-        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of K after orthogonalization against Q_ks (orthError = {:.5e})", fp(orthError_K));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of K after orthogonalization against Q_ks (orthError = {:.5e})", orthError_K);
 
         assert(K_prev.cols() == H1K_prev.cols());
         assert(K_prev.cols() == H2K_prev.cols());
@@ -391,14 +392,14 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
         m.orthError   = (m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols())).norm();
         m.maskPolicy  = MaskPolicy::COMPRESS;
         m.refresh_h2y = false;
-        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after composition: orthError: {:.5e}", fp(m.orthError));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after composition: orthError: {:.5e}", m.orthError);
 
         if(use_h2_inner_product) {
             block_h2_orthonormalize_dgks(Q, H1Q, H2Q, m);
         } else {
             block_l2_orthonormalize(Q, H1Q, H2Q, m);
         }
-        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after orthonorm : orthError: {:.5e}", fp(m.orthError));
+        if constexpr(settings::debug_gdplusk) eiglog->trace("Gram of Q after orthonorm : orthError: {:.5e}", m.orthError);
 
         status.iter_last_restart = status.iter;
     };
@@ -432,7 +433,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
         }
         m.refresh_h2y = false;
         if constexpr(settings::debug_gdplusk)
-            eiglog->trace("After appending [Q, Q_new]: orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError), fp(m.skewError));
+            eiglog->trace("After appending [Q, Q_new]: orthError={:.5e} symmError={:.5e} skewError={:.5e}", m.orthError, m.symmError, m.skewError);
 
         bool basis_was_restarted = status.iter_last_restart == status.iter;
         if(basis_was_restarted or m.symmError > normTol * std::sqrt(status.op_norm_estimate)) {
@@ -442,15 +443,13 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
                 block_l2_orthonormalize(Q, H1Q, H2Q, m);
             }
             if constexpr(settings::debug_gdplusk)
-                eiglog->trace("After orthonormalizing Q: orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError),
-                              fp(m.skewError));
+                eiglog->trace("After orthonormalizing Q: orthError={:.5e} symmError={:.5e} skewError={:.5e}", m.orthError, m.symmError, m.skewError);
         }
         if(m.symmError > eps * 1000000) {
             MatrixType GramError     = m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols());
             MatrixType GramSymmError = m.Gram_symm - MatrixType::Identity(m.Gram.rows(), m.Gram.cols());
-            eiglog->warn("After orthonormalizing Q: symmError: {:.5e} (too large!). Gram - I: \n{}\n", fp(m.symmError),
-                         linalg::matrix::to_string(GramError, 8));
-            eiglog->warn("|Gram_symm - I| = {:.4e} Gram_symm - I \n{}\n", fp(m.symmError), linalg::matrix::to_string(GramSymmError, 8));
+            eiglog->warn("After orthonormalizing Q: symmError: {:.5e} (too large!). Gram - I: \n{}\n", m.symmError, linalg::matrix::to_string(GramError, 8));
+            eiglog->warn("|Gram_symm - I| = {:.4e} Gram_symm - I \n{}\n", m.symmError, linalg::matrix::to_string(GramSymmError, 8));
         }
 
         if(use_h2_inner_product) {
@@ -465,7 +464,7 @@ void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H
     OrthMeta m;
     std::tie(Q, H1Q, H2Q, m) = orthonormalize_dgks_x2(Q, H1Q, H2Q);
 
-    eiglog->trace("After orthonormalization x2     : orthError={:.5e} symmError={:.5e} skewError={:.5e}", fp(m.orthError), fp(m.symmError), fp(m.skewError));
+    eiglog->trace("After orthonormalization x2     : orthError={:.5e} symmError={:.5e} skewError={:.5e}", m.orthError, m.symmError, m.skewError);
 
     //
     // OrthMeta m;

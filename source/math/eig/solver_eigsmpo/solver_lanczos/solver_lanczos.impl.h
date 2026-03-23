@@ -27,8 +27,8 @@ void solver_lanczos<Scalar>::write_Q_next_B_DGKS(Eigen::Index i) {
         MatrixType QjW;
         for(Eigen::Index j = i; j >= 0; --j) {
             // if(i - j > 3) continue; // Only subtracts projections onto Q_prev and Q_cur
-            auto Qj = Q.middleCols(j * b, b);
-            QjW     = (Qj.adjoint() * W);
+            auto Qj      = Q.middleCols(j * b, b);
+            QjW          = (Qj.adjoint() * W);
             W.noalias() -= Qj * QjW;
             // if(QjW.norm() < orthTolQ) break;
         }
@@ -94,7 +94,7 @@ void solver_lanczos<Scalar>::build() {
         // 3) Subtract projections to A and B once
         W.noalias() -= Q_cur * A; // Qi * Qi.adjoint()*H*Qi
         if(i > 0) {
-            auto Q_prev = Q.middleCols((i - 1) * b, b);
+            auto Q_prev  = Q.middleCols((i - 1) * b, b);
             W.noalias() -= Q_prev * B.adjoint(); // Qj * (Qi.adjoint()*H*Qj).adjoint(), j<i // B is also from the previous iteration
         }
 
@@ -137,8 +137,8 @@ void solver_lanczos<Scalar>::build() {
                 [[maybe_unused]] auto Q1Q1_norm = (Q1.adjoint() * Q1).norm();
                 [[maybe_unused]] auto Q2Q2_norm = (Q2.adjoint() * Q2).norm();
                 [[maybe_unused]] auto Q1Q2_norm = (Q1.adjoint() * Q2).norm();
-                assert(std::abs(Q1Q1_norm - std::sqrt<RealScalar>(b)) < orthTol);
-                assert(std::abs(Q2Q2_norm - std::sqrt<RealScalar>(b)) < orthTol);
+                assert(std::abs(Q1Q1_norm - std::sqrt(safe_cast<RealScalar>(b))) < orthTol);
+                assert(std::abs(Q2Q2_norm - std::sqrt(safe_cast<RealScalar>(b))) < orthTol);
                 assert(Q1Q2_norm < orthTol);
 
                 if(i > 0) {
@@ -147,7 +147,7 @@ void solver_lanczos<Scalar>::build() {
                     [[maybe_unused]] auto Q0Q1_norm  = (Q0.adjoint() * Q1).norm();
                     [[maybe_unused]] auto Q0Q2_norm  = (Q0.adjoint() * Q2).norm();
                     [[maybe_unused]] auto Q0HQ0_norm = (Q0.adjoint() * HQ).norm(); // A0
-                    assert(std::abs(Q0Q0_norm - std::sqrt<RealScalar>(b)) < orthTol);
+                    assert(std::abs(Q0Q0_norm - std::sqrt(safe_cast<RealScalar>(b))) < orthTol);
                     assert(Q0Q1_norm < orthTol * 10000);
                     assert(Q0Q2_norm < orthTol * 10000);
                 }
@@ -183,11 +183,11 @@ void solver_lanczos<Scalar>::build() {
                 eiglog->info("G = Q.adjoint()*Q = \n{}\n", linalg::matrix::to_string(G, 8));
                 for(long j = 0; j < diff.cols(); ++j) {
                     for(long i = 0; i < diff.rows(); ++i) {
-                        if(std::abs(diff(i, j)) > RealScalar{1e-6f}) { eiglog->info("diff({},{}) = {:.16f}", i, j, fp(diff(i, j))); }
+                        if(std::abs(diff(i, j)) > RealScalar{1e-6f}) { eiglog->info("diff({},{}) = {:.16f}", i, j, diff(i, j)); }
                     }
                 }
             }
-            eiglog->info("‖T_direct – T‖ = {:.4e} | ‖G-I‖ = {:.4e}", fp(diffNorm), fp(orthError));
+            eiglog->info("‖T_direct – T‖ = {:.4e} | ‖G-I‖ = {:.4e}", diffNorm, orthError);
             if(diffNorm > RealScalar{1e-4f} or orthError > RealScalar{1e-4f}) { throw except::runtime_error("Lanczos error"); }
         }
     }

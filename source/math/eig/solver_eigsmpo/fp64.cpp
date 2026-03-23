@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "solver_eigsmpo.impl.h"
 
 using Scalar = fp64;
 

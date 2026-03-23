@@ -1,6 +1,7 @@
 #pragma once
 #include "../solver_lobpcg.h"
 #include "../StopReason.h"
+#include "config/enums/OptAlgo.h"
 #include "io/fmt_custom.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/eig/solver.h"
@@ -87,8 +88,8 @@ std::pair<typename solver_lobpcg<Scalar>::VectorIdxT, typename solver_lobpcg<Sca
             Index prev_col_start = prev_blk * b;
             auto  Qj             = Q.middleCols(prev_col_start, b);
             // Project and subtract
-            MatrixType proj = Qj.adjoint() * Qk;
-            Qk -= Qj * proj;
+            MatrixType proj  = Qj.adjoint() * Qk;
+            Qk              -= Qj * proj;
         }
         active_block_mask(blk) = Qk.norm() > normTol;
         change_block_mask(blk) = 1;

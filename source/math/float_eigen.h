@@ -55,8 +55,8 @@ namespace Eigen {
                 const Scalar mask       = Scalar(-1) >> ((kTotalBits - numRandomBits) & (kTotalBits - 1));
                 Scalar       randomBits = 0;
                 for(int shift = 0; shift < numRandomBits; shift += kEntropy) {
-                    RandomReturnType r = RandomDevice::run();
-                    randomBits |= static_cast<Scalar>(r) << shift;
+                    RandomReturnType r  = RandomDevice::run();
+                    randomBits         |= static_cast<Scalar>(r) << shift;
                 }
                 // clear the excess bits
                 randomBits &= mask;

@@ -28,7 +28,7 @@ namespace linalg::matrix {
     template<typename DerivedA, typename DerivedB>
     auto kronecker(const Eigen::EigenBase<DerivedA> &A, const Eigen::EigenBase<DerivedB> &B, bool mirror = false) {
         if constexpr(is_PlainObject<DerivedA>::value and is_PlainObject<DerivedB>::value)
-            return kronecker(A, B, mirror);
+            return kronecker(A.derived(), B.derived(), mirror);
         else { return kronecker(A.derived().eval(), B.derived().eval(), mirror); }
     }
 

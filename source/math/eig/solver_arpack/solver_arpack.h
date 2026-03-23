@@ -1,13 +1,10 @@
 #pragma once
 #include "../enums.h"
-#include "../settings.h"
-#include "../sfinae.h"
-#include "../solution.h"
-#include <complex>
-#include <memory>
-#include <vector>
 
 namespace eig {
+    class settings;
+    class solution;
+
     template<typename MatrixType>
     class solver_arpack {
         private:

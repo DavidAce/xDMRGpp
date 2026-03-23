@@ -74,8 +74,8 @@ namespace x2 {
                     const int   ax  = row_axes[static_cast<size_t>(t)];
                     const Index dim = dims[static_cast<size_t>(ax)];
                     assert(dim > 0);
-                    idx[static_cast<size_t>(ax)] = tmp % dim;
-                    tmp /= dim;
+                    idx[static_cast<size_t>(ax)]  = tmp % dim;
+                    tmp                          /= dim;
                 }
                 assert(tmp == 0); // r in-range for computed rows()
             }
@@ -87,8 +87,8 @@ namespace x2 {
                     const int   ax  = col_axes[static_cast<size_t>(t)];
                     const Index dim = dims[static_cast<size_t>(ax)];
                     assert(dim > 0);
-                    idx[static_cast<size_t>(ax)] = tmp % dim;
-                    tmp /= dim;
+                    idx[static_cast<size_t>(ax)]  = tmp % dim;
+                    tmp                          /= dim;
                 }
                 assert(tmp == 0); // c in-range for computed cols()
             }

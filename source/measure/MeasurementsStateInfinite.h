@@ -1,7 +1,7 @@
 #pragma once
-#include <array>
+#include <complex>
 #include <optional>
-#include <vector>
+#include <utility>
 template<typename Scalar>
 struct MeasurementsStateInfinite {
     using RealScalar                               = decltype(std::real(std::declval<Scalar>()));

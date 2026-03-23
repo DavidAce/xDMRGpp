@@ -167,8 +167,8 @@ template<typename Scalar>
 std::vector<long> MatVecMPOS<Scalar>::get_offset(long x, long rank, long size) const {
     std::vector<long> indices(rank);
     for(int i = 0; i < rank; i++) {
-        indices[i] = x % size;
-        x /= size;
+        indices[i]  = x % size;
+        x          /= size;
     }
     return indices;
 }
@@ -178,8 +178,8 @@ template<size_t rank>
 constexpr std::array<long, rank> MatVecMPOS<Scalar>::get_offset(long flatindex, const std::array<long, rank> &dimensions) const {
     std::array<long, rank> indices;
     for(size_t i = 0; i < rank; i++) {
-        indices[i] = flatindex % (dimensions[i]);
-        flatindex /= (dimensions[i]);
+        indices[i]  = flatindex % (dimensions[i]);
+        flatindex  /= (dimensions[i]);
     }
     return indices;
 }
@@ -188,8 +188,8 @@ template<typename Scalar>
 std::vector<long> MatVecMPOS<Scalar>::get_offset(long flatindex, size_t rank, const std::vector<long> &dimensions) const {
     std::vector<long> indices(rank);
     for(size_t i = 0; i < rank; i++) {
-        indices[i] = flatindex % (dimensions[i]);
-        flatindex /= (dimensions[i]);
+        indices[i]  = flatindex % (dimensions[i]);
+        flatindex  /= (dimensions[i]);
     }
     return indices;
 }
@@ -229,7 +229,7 @@ constexpr long MatVecMPOS<Scalar>::ravel_multi_index(const std::array<long, rank
         long index   = 0;
         long dimprod = 1;
         for(size_t i = 0; i < rank; ++i) {
-            index += multi_index[i] * dimprod;
+            index   += multi_index[i] * dimprod;
             dimprod *= dimensions[i];
         }
         return index;
@@ -1142,12 +1142,12 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
         // bool shift_is_new = false; //std::isfinite(shift) and (jcbShift.has_value() ? std::abs(shift - jcbShift.value()) != 0 : true);
         bool bsize_is_new = jcbBlockSize != jcbMaxBlockSize;
         if(bsize_is_new or (shift_active and shift_is_new)) {
-            eig::log->trace("{}: Recomputing the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname, fp(shift),
+            eig::log->trace("{}: Recomputing the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname, shift,
                             bsize_is_new, shift_active, shift_is_new);
             doneCalcPc = false;
         } else {
             eig::log->trace("{}: No need to recompute the preconditioner with shift {:.16f} | block_is_new:{} | shift_active:{} | shift_is_new:{}", fname,
-                            fp(shift), bsize_is_new, shift_active, shift_is_new);
+                            shift, bsize_is_new, shift_active, shift_is_new);
         }
     }
 
@@ -1157,11 +1157,11 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
     jcbBlockSize = jcbMaxBlockSize;
     if(jcbBlockSize == 1) {
         if(jcbDiagA.size() + jcbDiagB.size() > 0) return; // We only need to do this once
-        eig::log->trace("{}: calculating the jacobi preconditioner ... (shift = {:.16f})", fname, fp(shift));
+        eig::log->trace("{}: calculating the jacobi preconditioner ... (shift = {:.16f})", fname, shift);
         jcbDiagA   = get_diagonal_new(0, mpos_A, envL_A, envR_A);
         jcbDiagB   = get_diagonal_new(0, mpos_B, envL_B, envR_B);
         doneCalcPc = true;
-        eig::log->debug("{}: calculating the jacobi preconditioner ... done (shift = {:.16f})", fname, fp(shift));
+        eig::log->debug("{}: calculating the jacobi preconditioner ... done (shift = {:.16f})", fname, shift);
     } else if(jcbBlockSize > 1) {
         std::vector<fp64> sparsity;
         auto              m_rss = debug::mem_hwm_in_mb();
@@ -1207,7 +1207,7 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
         }
         long nblocks = static_cast<long>(blockSpecs.size());
         eig::log->debug("{}: calculating the block jacobi preconditioner | {} | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} | overlap {}...",
-                        fname, eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks, fp(shift), jcbOverlapSize);
+                        fname, eig::FactorizationToString(factorization), size_mps, jcbBlockSize, nblocks, shift, jcbOverlapSize);
 #pragma omp parallel for ordered schedule(dynamic, 1)
         for(long blkidx = 0; blkidx < nblocks; ++blkidx) {
             eig::Factorization factorization_internal = factorization;
@@ -1271,15 +1271,15 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
                             RealScalar minev_after = es.eigenvalues().minCoeff();
                             RealScalar maxev_after = es.eigenvalues().maxCoeff();
                             eig::log->trace("Calculating |H1 {:+.3e} * H2| | abs | gmin {:.5e} | evals {:.5e} ... {:.5e} --> {:.5e} ... {:.5e} : {}",
-                                            fp(jcbShift.value()), fp(gmin), fp(minev_before), fp(maxev_before), fp(minev_after), fp(maxev_after),
+                                            jcbShift.value(), gmin, minev_before, maxev_before, minev_after, maxev_after,
                                             eig::FactorizationToString(factorization_internal));
                         } else {
-                            eig::log->trace("Calculating H1 {:+.3e} * H2  | gmin {:.5e} | evals {:.5e} ... {:.5e} : {}", fp(jcbShift.value()), fp(gmin),
-                                            fp(minev_before), fp(maxev_before), eig::FactorizationToString(factorization_internal));
+                            eig::log->trace("Calculating H1 {:+.3e} * H2  | gmin {:.5e} | evals {:.5e} ... {:.5e} : {}", jcbShift.value(), gmin, minev_before,
+                                            maxev_before, eig::FactorizationToString(factorization_internal));
                         }
 
                     } else {
-                        eig::log->trace("Calculating H1 - {:+.3e} * H2 | gmin={:.5e}: {}", fp(jcbShift.value()), fp(gmin),
+                        eig::log->trace("Calculating H1 - {:+.3e} * H2 | gmin={:.5e}: {}", jcbShift.value(), gmin,
                                         eig::FactorizationToString(factorization_internal));
                     }
 
@@ -1413,7 +1413,7 @@ void MatVecMPOS<Scalar>::CalcPc(RealScalar shift) {
         eig::log->debug("{}: calculating the block jacobi preconditioner | size {} | diagonal blocksize {} | nblocks {} | shift {:.5e} ... done | t "
                         "{:.3e} s | avg "
                         "sparsity {:.3e} | mem +{:.3e} MB",
-                        fname, size_mps, jcbBlockSize, nblocks, fp(shift), t_jcb.get_last_interval(), spavg, debug::mem_hwm_in_mb() - m_rss);
+                        fname, size_mps, jcbBlockSize, nblocks, shift, t_jcb.get_last_interval(), spavg, debug::mem_hwm_in_mb() - m_rss);
     }
 
     if(jcbMaxBlockSize == 1) {

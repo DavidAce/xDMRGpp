@@ -144,7 +144,7 @@ namespace x2_detail {
         // Add p_hi into sum_hi with add_with_residual; push all error into sum_lo (plus p_lo).
         Scalar s, e;
         add_with_residual(sum_hi, p_hi, s, e);
-        sum_hi = s;
+        sum_hi  = s;
         sum_lo += (e + p_lo);
     }
 
@@ -173,7 +173,7 @@ namespace x2_detail {
     EIGEN_STRONG_INLINE static void accumulate_lo3(Scalar &sum_lo, Scalar &sum_ll, const Scalar &q_hi, const Scalar &q_lo) {
         Scalar lo_new, lo_err;
         add_with_residual(sum_lo, q_hi, lo_new, lo_err);
-        sum_lo = lo_new;
+        sum_lo  = lo_new;
         sum_ll += (lo_err + q_lo);
     }
 

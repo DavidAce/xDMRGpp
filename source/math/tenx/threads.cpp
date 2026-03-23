@@ -1,12 +1,12 @@
 #include "threads.h"
-#include "math/cast.h"
-#include <thread>
-#include <unsupported/Eigen/CXX11/Tensor>
+#include <algorithm>
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #if defined(_OPENMP)
     #include <omp.h>
 #endif
-#include <mutex>   // std::once_flag, std::call_once
-#include <stdexcept>
+#include <mutex> // std::once_flag, std::call_once
 
 namespace tenx::threads {
     template<typename T>
@@ -26,7 +26,7 @@ namespace tenx::threads {
     std::unique_ptr<internal::ThreadPoolWrapper> internal::multiThreadWrapper;
 
     namespace {
-        std::once_flag init_flag;
+        std::once_flag    init_flag;
         std::atomic<bool> initialized{false};
     }
 
@@ -40,7 +40,7 @@ namespace tenx::threads {
     internal::ThreadPoolWrapper::ThreadPoolWrapper(int nt)
         : tp(std::make_unique<Eigen::ThreadPool>(nt)), dev(std::make_unique<Eigen::ThreadPoolDevice>(tp.get(), nt)) {}
 
-    const std::unique_ptr<internal::ThreadPoolWrapper> &get() noexcept{
+    const std::unique_ptr<internal::ThreadPoolWrapper> &get() noexcept {
     #if defined(_OPENMP)
         if(omp_in_parallel() && !initialized.load(std::memory_order_acquire)) {
             std::fprintf(stderr, "tenx::threads::get(): first-time initialization inside an OpenMP parallel region is forbidden");
@@ -54,8 +54,8 @@ namespace tenx::threads {
 
             // If num_threads==1 at init time, multiThreadWrapper may never be used,
             // but constructing it here keeps the logic very simple.
-            const int nt = std::max(1, static_cast<int>(internal::num_threads));
-            internal::multiThreadWrapper  = (nt > 1) ? std::make_unique<internal::ThreadPoolWrapper>(nt) : nullptr;
+            const int nt                 = std::max(1, static_cast<int>(internal::num_threads));
+            internal::multiThreadWrapper = (nt > 1) ? std::make_unique<internal::ThreadPoolWrapper>(nt) : nullptr;
 
             initialized.store(true, std::memory_order_release);
         });
@@ -76,7 +76,7 @@ namespace tenx::threads {
     void setNumThreads([[maybe_unused]] int num) {}
 
     namespace {
-        std::once_flag init_flag;
+        std::once_flag    init_flag;
         std::atomic<bool> initialized{false};
     }
 

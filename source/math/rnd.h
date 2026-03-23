@@ -1,5 +1,7 @@
 #pragma once
+#include <cmath>
 #include <complex>
+#include <numbers>
 #include <optional>
 #include <pcg_extras.hpp>
 #include <pcg_random.hpp>
@@ -42,7 +44,7 @@ namespace rnd {
 
     template<typename real_t = double>
     auto uniform_complex_in_circle(real_t radius = real_t{1}) {
-        return std::polar(uniform(real_t{0}, radius), uniform(real_t{0}, 2 * std::numbers::pi_v<real_t>));
+        return std::polar(std::sqrt(uniform(real_t{0}, real_t{1})) * radius, uniform(real_t{0}, 2 * std::numbers::pi_v<real_t>));
     }
     template<typename real_t = double>
     auto uniform_complex_on_circle(real_t radius = real_t{1}) {

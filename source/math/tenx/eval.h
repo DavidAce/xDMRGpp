@@ -37,9 +37,9 @@ namespace tenx {
         [[nodiscard]] constexpr auto data() const { return m_eval.data(); }
         [[nodiscard]] constexpr auto dimension(unsigned long n) const { return m_eval.dimensions()[n]; }
 
-        const Evaluator *operator->() const { return &m_eval; }
-        Evaluator       *operator->() { return &m_eval; }
-        [[nodiscard]] constexpr auto   map() const { return Eigen::TensorMap<const Eigen::Tensor<Scalar, NumDimensions>>(m_eval.data(), m_eval.dimensions()); }
+        const Evaluator             *operator->() const { return &m_eval; }
+        Evaluator                   *operator->() { return &m_eval; }
+        [[nodiscard]] constexpr auto map() const { return Eigen::TensorMap<const Eigen::Tensor<Scalar, NumDimensions>>(m_eval.data(), m_eval.dimensions()); }
     };
 
     // Evaluates expressions if needed

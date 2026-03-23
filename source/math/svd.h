@@ -50,10 +50,10 @@ namespace svd {
 
     class solver {
         private:
-        std::shared_ptr<spdlog::logger> log              = nullptr;
-        mutable double                  truncation_error = 0; // Stores the last truncation error
-        mutable long                    rank             = 0; // Stores the last rank
-        inline static long long         count            = 0; // Count the number of svd invocations for this execution
+        tools::LoggerHandle     log              = nullptr;
+        mutable double          truncation_error = 0; // Stores the last truncation error
+        mutable long            rank             = 0; // Stores the last rank
+        inline static long long count            = 0; // Count the number of svd invocations for this execution
 
         public:
         long   rank_max       = -1;                                     /*!< -1 means determine from given matrix */
@@ -110,7 +110,7 @@ namespace svd {
         template<typename Vec>
         [[nodiscard]] std::pair<long, fp64> get_rank_from_truncation_error(const Vec &S) const {
             using Scalar = typename Vec::Scalar;
-            using Real = Eigen::NumTraits<Scalar>::Real;
+            using Real   = Eigen::NumTraits<Scalar>::Real;
             const long n = safe_cast<long>(S.size());
             if(n <= 0) throw std::logic_error("get_rank_from_truncation_error: S.size() <= 0");
 
@@ -136,8 +136,8 @@ namespace svd {
             long rank_        = rank_lim;
 
             for(long i = n - 1; i >= 1; --i) {
-                const fp64 si = static_cast<fp64>(std::real(S(i)));
-                tail_norm_sq += si * si;
+                const fp64 si  = static_cast<fp64>(std::real(S(i)));
+                tail_norm_sq  += si * si;
 
                 if(i <= rank_lim && tail_norm_sq < thrSq) rank_ = i;
             }
@@ -149,7 +149,7 @@ namespace svd {
             // Return relative truncation error (dimensionless)
             fp64 tail_norm_sq_final = 0.0;
             for(long i = rank_; i < n; ++i) {
-                const fp64 si = static_cast<fp64>(std::real(S(i)));
+                const fp64 si       = static_cast<fp64>(std::real(S(i)));
                 tail_norm_sq_final += si * si;
             }
             const fp64 trunc_err_rel = std::sqrt(tail_norm_sq_final / SnormSq);

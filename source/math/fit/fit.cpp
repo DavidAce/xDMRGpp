@@ -1,5 +1,6 @@
 #include "math/cast.h"
 #include <Eigen/QR>
+#include <cmath>
 #include <string_view>
 #include <vector>
 
@@ -14,8 +15,13 @@ namespace fit {
         Eigen::MatrixXd X(x.size(), order + 1);
 
         // Populate the X matrix
-        for(long j = 0; j < X.rows() + 1; ++j)
-            for(long i = 0; i < X.cols(); ++i) X(i, j) = std::pow(x[safe_cast<size_t>(i)], j);
+        for(Eigen::Index row = 0; row < X.rows(); ++row) {
+            double xp = 1.0;
+            for(Eigen::Index col = 0; col < X.cols(); ++col) {
+                X(row, col) = xp;
+                xp *= x[safe_cast<size_t>(row)];
+            }
+        }
 
         // Allocate for the results
         std::vector<double> coeff(order + 1, 0);

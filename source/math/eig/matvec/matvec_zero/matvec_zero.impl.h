@@ -1,6 +1,7 @@
 #pragma once
 #include "../../log.h"
 #include "../matvec_zero.h"
+#include "debug/exceptions.h"
 #include "general/sfinae.h"
 #include "math/eig/solver.h"
 #include "math/svd.h"
@@ -12,7 +13,6 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tid/tid.h"
 #include "tools/common/contraction.h"
-#include <Eigen/Cholesky>
 #include <primme/primme.h>
 // #include <tblis/tblis.h>
 // #include <tblis/util/thread.h>
@@ -190,7 +190,7 @@ void MatVecZero<T>::set_shift(Cplx shift) {
             mpo.slice(offset4, extent4).reshape(extent2) += id * (sigma_per_mpo - shift_per_mpo);
         else
             mpo.slice(offset4, extent4).reshape(extent2) += id * std::real(sigma_per_mpo - shift_per_mpo);
-        eig::log->debug("Shifted MPO {} energy by {:.16f}", idx, fp(shift_per_mpo));
+        eig::log->debug("Shifted MPO {} energy by {:.16f}", idx, shift_per_mpo);
     }
     sigma = shift;
     if(not mpos_shf.empty()) {

@@ -65,24 +65,24 @@ namespace linalg::matrix {
             // DGKS re-orthogonalization on Q.col(i)
             // First CGS‐style sweep: project out previous q_j
             for(IdxT j = 0; j < i; ++j) {
-                Scalar alpha = m.Q.col(j).dot(m.Q.col(i));
-                m.Q.col(i) -= alpha * m.Q.col(j);
-                m.R(j, i) = alpha;
+                Scalar alpha  = m.Q.col(j).dot(m.Q.col(i));
+                m.Q.col(i)   -= alpha * m.Q.col(j);
+                m.R(j, i)     = alpha;
             }
             // Second sweep: mop up the rounding residues
             for(IdxT j = 0; j < i; ++j) {
-                Scalar beta = m.Q.col(j).dot(m.Q.col(i));
-                m.Q.col(i) -= beta * m.Q.col(j);
-                m.R(j, i) += beta; // now R(j,i)=α_j+β_j
+                Scalar beta  = m.Q.col(j).dot(m.Q.col(i));
+                m.Q.col(i)  -= beta * m.Q.col(j);
+                m.R(j, i)   += beta; // now R(j,i)=α_j+β_j
             }
 
             // Update the norm
-            m.R(i, i) = m.Q.col(i).norm();
+            m.R(i, i)   = m.Q.col(i).norm();
             m.Q.col(i) /= m.R(i, i); // Renormalize
 
             // Forward projection onto the remaining columns
             for(long j = i + 1; j < m.Q.cols(); ++j) {
-                m.R(i, j) = m.Q.col(i).dot(m.Q.col(j));
+                m.R(i, j)   = m.Q.col(i).dot(m.Q.col(j));
                 m.Q.col(j) -= m.R(i, j) * m.Q.col(i);
             }
         }
@@ -113,7 +113,7 @@ namespace linalg::matrix {
         m.R                  = MatrixType::Zero(A.cols(), A.cols());
         m.nCols              = A.cols();
         m.initColNorms       = A.colwise().norm();
-        RealScalar AsqrtSize = std::abs(std::sqrt<RealScalar>(A.cols()));
+        RealScalar AsqrtSize = std::abs(std::sqrt(static_cast<RealScalar>(A.cols())));
         RealScalar eps       = std::numeric_limits<RealScalar>::epsilon();
         m.nonZeroCols.reserve(A.cols());
 
@@ -132,7 +132,7 @@ namespace linalg::matrix {
             m.nonZeroCols.emplace_back(i);
             m.Q.col(i) /= m.R(i, i);
             for(long j = i + 1; j < m.Q.cols(); ++j) {
-                m.R(i, j) = m.Q.col(i).dot(m.Q.col(j));
+                m.R(i, j)   = m.Q.col(i).dot(m.Q.col(j));
                 m.Q.col(j) -= m.R(i, j) * m.Q.col(i);
             }
         }
@@ -335,17 +335,17 @@ namespace linalg::matrix {
             // First CGS‐style sweep: project out previous q_j
             if(i >= ncfix) {
                 for(IdxT j = 0; j < i; ++j) {
-                    Scalar alpha = m.Q.col(j).dot(m.Q.col(i));
-                    m.Q.col(i) -= alpha * m.Q.col(j);
+                    Scalar alpha  = m.Q.col(j).dot(m.Q.col(i));
+                    m.Q.col(i)   -= alpha * m.Q.col(j);
                 }
                 // Second sweep: mop up the rounding residues
                 for(IdxT j = 0; j < i; ++j) {
-                    Scalar beta = m.Q.col(j).dot(m.Q.col(i));
-                    m.Q.col(i) -= beta * m.Q.col(j);
+                    Scalar beta  = m.Q.col(j).dot(m.Q.col(i));
+                    m.Q.col(i)  -= beta * m.Q.col(j);
                 }
                 // Update the norm
-                colNorm    = m.Q.col(i).norm();
-                m.Rdiag(i) = colNorm;
+                colNorm     = m.Q.col(i).norm();
+                m.Rdiag(i)  = colNorm;
                 m.Q.col(i) /= colNorm; // Renormalize
             }
             assert(m.Q.col(i).allFinite());

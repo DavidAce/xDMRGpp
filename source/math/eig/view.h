@@ -2,8 +2,8 @@
 
 #include "debug/exceptions.h"
 #include "math/cast.h"
+#include "sfinae.h"
 #include "solution.h"
-#include <fmt/format.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 namespace eig::view {
 

@@ -210,7 +210,7 @@ template<typename Scalar>
 void MatVecDense<Scalar>::set_shift(Cplx sigma_) {
     if(readyShift) return;
     if(sigma == sigma_) return;
-    eig::log->trace("Setting shift = {:.16f}", fp(sigma));
+    eig::log->trace("Setting shift = {:.16f}", sigma);
     sigma = sigma_;
     if(A_stl.empty()) {
         A_stl.resize(safe_cast<size_t>(L * L));

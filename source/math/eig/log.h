@@ -13,6 +13,7 @@
     #pragma message "SPDLOG_COMPILED_LIB is not defined. Define it and link libspdlog to speed up compilation"
 #endif
 
+#include "tools/common/log.h"
 #include <fmt/compile.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -83,8 +84,8 @@ struct fmt::formatter<std::complex<T>, Char> : fmt::formatter<T, Char> {
 // #endif
 
 namespace eig {
-    inline auto log = spdlog::get("eig") == nullptr ? spdlog::stdout_color_mt("eig", spdlog::color_mode::always) : spdlog::get("eig");
-    extern void setLevel(spdlog::level::level_enum level);
-    extern void setLevel(size_t level);
-    extern void setTimeStamp(std::string_view stamp = "[%Y-%m-%d %H:%M:%S][%n]%^[%=8l]%$ %v");
+    inline tools::LoggerHandle log = spdlog::get("eig") == nullptr ? spdlog::stdout_color_mt("eig", spdlog::color_mode::always) : spdlog::get("eig");
+    extern void                setLevel(spdlog::level::level_enum level);
+    extern void                setLevel(size_t level);
+    extern void                setTimeStamp(std::string_view stamp = "[%Y-%m-%d %H:%M:%S][%n]%^[%=8l]%$ %v");
 }

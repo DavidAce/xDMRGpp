@@ -192,7 +192,7 @@ namespace eig {
         if(build_eigvecsR_real) {
             eigvecsR_real_fp32.resize(eigvecsR_cx32.size());
             for(size_t i = 0; i < eigvecsR_real_fp32.size(); i++) {
-                if(std::imag(eigvecsR_cx32[i]) > 1e-12f) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
+                if(std::abs(std::imag(eigvecsR_cx32[i])) > 1e-12f) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
                 eigvecsR_real_fp32[i] = std::real(eigvecsR_cx32[i]);
             }
             eigvecsR_cx32.clear();
@@ -200,7 +200,7 @@ namespace eig {
         if(build_eigvecsL_real) {
             eigvecsL_real_fp32.resize(eigvecsL_cx32.size());
             for(size_t i = 0; i < eigvecsL_real_fp32.size(); i++) {
-                if(std::imag(eigvecsL_cx32[i]) > 1e-12f) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
+                if(std::abs(std::imag(eigvecsL_cx32[i])) > 1e-12f) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
                 eigvecsL_real_fp32[i] = std::real(eigvecsL_cx32[i]);
             }
             eigvecsL_cx32.clear();
@@ -269,7 +269,7 @@ namespace eig {
         if(build_eigvecsR_real) {
             eigvecsR_real_fp64.resize(eigvecsR_cx64.size());
             for(size_t i = 0; i < eigvecsR_real_fp64.size(); i++) {
-                if(std::imag(eigvecsR_cx64[i]) > 1e-12) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
+                if(std::abs(std::imag(eigvecsR_cx64[i])) > 1e-12) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
                 eigvecsR_real_fp64[i] = std::real(eigvecsR_cx64[i]);
             }
             eigvecsR_cx64.clear();
@@ -277,7 +277,7 @@ namespace eig {
         if(build_eigvecsL_real) {
             eigvecsL_real_fp64.resize(eigvecsL_cx64.size());
             for(size_t i = 0; i < eigvecsL_real_fp64.size(); i++) {
-                if(std::imag(eigvecsL_cx64[i]) > 1e-12) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
+                if(std::abs(std::imag(eigvecsL_cx64[i])) > 1e-12) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
                 eigvecsL_real_fp64[i] = std::real(eigvecsL_cx64[i]);
             }
             eigvecsL_cx64.clear();
@@ -346,7 +346,7 @@ namespace eig {
         if(build_eigvecsR_real) {
             eigvecsR_real_fp128.resize(eigvecsR_cx128.size());
             for(size_t i = 0; i < eigvecsR_real_fp128.size(); i++) {
-                if(std::imag(eigvecsR_cx128[i]) > 1e-12) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
+                if(std::abs(std::imag(eigvecsR_cx128[i])) > 1e-12) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
                 eigvecsR_real_fp128[i] = std::real(eigvecsR_cx128[i]);
             }
             eigvecsR_cx128.clear();
@@ -354,7 +354,7 @@ namespace eig {
         if(build_eigvecsL_real) {
             eigvecsL_real_fp128.resize(eigvecsL_cx128.size());
             for(size_t i = 0; i < eigvecsL_real_fp128.size(); i++) {
-                if(std::imag(eigvecsL_cx128[i]) > 1e-12) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
+                if(std::abs(std::imag(eigvecsL_cx128[i])) > 1e-12) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
                 eigvecsL_real_fp128[i] = std::real(eigvecsL_cx128[i]);
             }
             eigvecsL_cx128.clear();

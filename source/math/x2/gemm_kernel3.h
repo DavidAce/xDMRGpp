@@ -10,16 +10,13 @@
 #include <type_traits>
 #include <utility>
 
-
 template<typename Scalar, int rankC, int rankA, int rankB>
-void gemm_x2_kernel_fused_packed_Cx2_Ax2_Bx2(
-    x2::TensorAsMatrixView<Scalar, rankC>            &C_hi, //
-    x2::TensorAsMatrixView<Scalar, rankC>            &C_lo, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankA> &A_hi, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankA> &A_lo, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankB> &B_hi, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankB> &B_lo)
-{
+void gemm_x2_kernel_fused_packed_Cx2_Ax2_Bx2(x2::TensorAsMatrixView<Scalar, rankC>            &C_hi, //
+                                             x2::TensorAsMatrixView<Scalar, rankC>            &C_lo, //
+                                             const x2::ConstTensorAsMatrixView<Scalar, rankA> &A_hi, //
+                                             const x2::ConstTensorAsMatrixView<Scalar, rankA> &A_lo, //
+                                             const x2::ConstTensorAsMatrixView<Scalar, rankB> &B_hi, //
+                                             const x2::ConstTensorAsMatrixView<Scalar, rankB> &B_lo) {
     constexpr Eigen::Index IB = 64;
     constexpr Eigen::Index JB = 8;
     constexpr Eigen::Index BK = 128;
@@ -149,7 +146,7 @@ void gemm_x2_kernel_fused_packed_Cx2_Ax2_Bx2(
                     }
 
                     // STORE/ACCUMULATE into C for this k0-panel.
-                      for(Eigen::Index j = 0; j < jb; ++j) {
+                    for(Eigen::Index j = 0; j < jb; ++j) {
                         const Scalar *__restrict sh  = sum_hi_buf + j * IB;
                         const Scalar *__restrict sl  = sum_lo_buf + j * IB;
                         const Scalar *__restrict sll = sum_ll_buf + j * IB;
@@ -169,8 +166,7 @@ void gemm_x2_kernel_fused_packed_Cx2_Ax2_Bx2(
 
                                 x2_detail::accumulate3(ch, cl, cll, sh[i], sl[i]); // (ch,cl,cll) += (sh,sl)
                                 x2_detail::accumulate_lo3(cl, cll, sll[i], Scalar(0));
-                                x2_detail::renorm3_to_x2(ch, cl, cll, s, e);       // renorm
-
+                                x2_detail::renorm3_to_x2(ch, cl, cll, s, e); // renorm
                             }
 
                             *Ccur.ptr_hi() = s;
@@ -186,13 +182,11 @@ void gemm_x2_kernel_fused_packed_Cx2_Ax2_Bx2(
 }
 
 template<typename Scalar, int rankC, int rankA, int rankB>
-void gemm_x2_kernel_fused_packed_Cx2_A_Bx2(
-    x2::TensorAsMatrixView<Scalar, rankC>            &C_hi, //
-    x2::TensorAsMatrixView<Scalar, rankC>            &C_lo, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankA> &A,    //
-    const x2::ConstTensorAsMatrixView<Scalar, rankB> &B_hi, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankB> &B_lo)
-{
+void gemm_x2_kernel_fused_packed_Cx2_A_Bx2(x2::TensorAsMatrixView<Scalar, rankC>            &C_hi, //
+                                           x2::TensorAsMatrixView<Scalar, rankC>            &C_lo, //
+                                           const x2::ConstTensorAsMatrixView<Scalar, rankA> &A,    //
+                                           const x2::ConstTensorAsMatrixView<Scalar, rankB> &B_hi, //
+                                           const x2::ConstTensorAsMatrixView<Scalar, rankB> &B_lo) {
     constexpr Eigen::Index IB = 64;
     constexpr Eigen::Index JB = 8;
     constexpr Eigen::Index BK = 128;
@@ -209,7 +203,7 @@ void gemm_x2_kernel_fused_packed_Cx2_A_Bx2(
 
 #pragma omp parallel
     {
-        x2::MatrixCursor<Scalar, rankA, x2::Access::ReadOnly>     Acur(A);
+        x2::MatrixCursor<Scalar, rankA, x2::Access::ReadOnly>    Acur(A);
         x2::X2MatrixCursor<Scalar, rankB, x2::Access::ReadOnly>  Bcur(B_hi, B_lo);
         x2::X2MatrixCursor<Scalar, rankC, x2::Access::ReadWrite> Ccur(C_hi, C_lo);
 
@@ -328,15 +322,12 @@ void gemm_x2_kernel_fused_packed_Cx2_A_Bx2(
     }
 }
 
-
 template<typename Scalar, int rankC, int rankA, int rankB>
-void gemm_x2_kernel_fused_packed_Cx2_Ax2_B(
-    x2::TensorAsMatrixView<Scalar, rankC>            &C_hi, //
-    x2::TensorAsMatrixView<Scalar, rankC>            &C_lo, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankA> &A_hi, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankA> &A_lo, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankB> &B)
-{
+void gemm_x2_kernel_fused_packed_Cx2_Ax2_B(x2::TensorAsMatrixView<Scalar, rankC>            &C_hi, //
+                                           x2::TensorAsMatrixView<Scalar, rankC>            &C_lo, //
+                                           const x2::ConstTensorAsMatrixView<Scalar, rankA> &A_hi, //
+                                           const x2::ConstTensorAsMatrixView<Scalar, rankA> &A_lo, //
+                                           const x2::ConstTensorAsMatrixView<Scalar, rankB> &B) {
     constexpr Eigen::Index IB = 64;
     constexpr Eigen::Index JB = 8;
     constexpr Eigen::Index BK = 128;
@@ -472,12 +463,10 @@ void gemm_x2_kernel_fused_packed_Cx2_Ax2_B(
 }
 
 template<typename Scalar, int rankC, int rankA, int rankB>
-void gemm_x2_kernel_fused_packed_Cx2_A_B(
-    x2::TensorAsMatrixView<Scalar, rankC>            &C_hi, //
-    x2::TensorAsMatrixView<Scalar, rankC>            &C_lo, //
-    const x2::ConstTensorAsMatrixView<Scalar, rankA> &A,    //
-    const x2::ConstTensorAsMatrixView<Scalar, rankB> &B)
-{
+void gemm_x2_kernel_fused_packed_Cx2_A_B(x2::TensorAsMatrixView<Scalar, rankC>            &C_hi, //
+                                         x2::TensorAsMatrixView<Scalar, rankC>            &C_lo, //
+                                         const x2::ConstTensorAsMatrixView<Scalar, rankA> &A,    //
+                                         const x2::ConstTensorAsMatrixView<Scalar, rankB> &B) {
     constexpr Eigen::Index IB = 64;
     constexpr Eigen::Index JB = 8;
     constexpr Eigen::Index BK = 128;
@@ -492,9 +481,9 @@ void gemm_x2_kernel_fused_packed_Cx2_A_B(
 
 #pragma omp parallel
     {
-        x2::MatrixCursor<Scalar, rankA, x2::Access::ReadOnly>     Acur(A);
-        x2::MatrixCursor<Scalar, rankB, x2::Access::ReadOnly>     Bcur(B);
-        x2::X2MatrixCursor<Scalar, rankC, x2::Access::ReadWrite>  Ccur(C_hi, C_lo);
+        x2::MatrixCursor<Scalar, rankA, x2::Access::ReadOnly>    Acur(A);
+        x2::MatrixCursor<Scalar, rankB, x2::Access::ReadOnly>    Bcur(B);
+        x2::X2MatrixCursor<Scalar, rankC, x2::Access::ReadWrite> Ccur(C_hi, C_lo);
 
         alignas(64) Scalar sum_hi_buf[JB * IB];
         alignas(64) Scalar sum_lo_buf[JB * IB];
@@ -600,4 +589,3 @@ void gemm_x2_kernel_fused_packed_Cx2_A_B(
         }
     }
 }
-

@@ -2,20 +2,10 @@
 #include "math/float.h"
 #include <algorithm>
 #include <cstdio>
+#include <mutex>
 #include <omp.h>
 #include <random>
 #include <stdexcept>
-
-#if defined(NDEBUG)
-namespace rnd {
-    inline constexpr bool debug = false;
-}
-#else
-    #include <omp.h>
-namespace rnd {
-    inline constexpr bool debug = true;
-}
-#endif
 
 namespace rnd {
 
@@ -36,11 +26,25 @@ namespace rnd {
     namespace internal {
         // Make a random number engine
         //        inline pcg64 rng;
+        inline std::mutex                          rng64_mutex;
+        inline std::mutex                          rng128_mutex;
         // Commonly used distributions
         inline std::uniform_int_distribution<int>     rand_int_01(0, 1);
         inline std::uniform_real_distribution<double> rand_double_01(0.0, 1.0);
         inline std::uniform_real_distribution<double> rand_double_0_2pi(0, 2.0 * M_PI);
         inline std::normal_distribution<double>       normal_double_01(0.0, 1.0);
+
+        template<typename Func>
+        decltype(auto) with_rng64_lock(Func &&func) {
+            std::scoped_lock lock(rng64_mutex);
+            return std::forward<Func>(func)(rng64);
+        }
+
+        template<typename Func>
+        decltype(auto) with_rng128_lock(Func &&func) {
+            std::scoped_lock lock(rng128_mutex);
+            return std::forward<Func>(func)(rng128);
+        }
     }
 
     void seed(std::optional<long> n) {
@@ -48,36 +52,30 @@ namespace rnd {
             auto given_seed = (unsigned long) n.value();
             std::printf("pcg-rng seed: %ld\n", given_seed);
             pcg_extras::seed_seq_from<pcg64> seq64(given_seed);
-            internal::rng64.seed(seq64);
-            pcg_extras::seed_seq_from<pcg128_once_insecure> seq128(given_seed);
-            internal::rng128.seed(seq128);
+            {
+                std::scoped_lock lock(internal::rng64_mutex, internal::rng128_mutex);
+                internal::rng64.seed(seq64);
+                pcg_extras::seed_seq_from<pcg128_once_insecure> seq128(given_seed);
+                internal::rng128.seed(seq128);
+            }
         } else {
             std::printf("pcg-rng seed: std::random_device\n");
             pcg_extras::seed_seq_from<std::random_device> seed_source;
+            std::scoped_lock                            lock(internal::rng64_mutex, internal::rng128_mutex);
             internal::rng64.seed(seed_source);
             internal::rng128.seed(seed_source);
         }
-        std::srand(static_cast<unsigned>(internal::rng64()));
+        std::srand(internal::with_rng64_lock([](auto &rng) { return static_cast<unsigned>(rng()); }));
     }
 
-    int uniform_integer_01() {
-        if constexpr(debug)
-            if(omp_get_num_threads() > 1) throw std::runtime_error("rnd::uniform_integer_01 is not thread safe!");
-        return internal::rand_int_01(internal::rng64);
-    }
+    int uniform_integer_01() { return internal::with_rng64_lock([](auto &rng) { return internal::rand_int_01(rng); }); }
 
-    double uniform_double_01() {
-        if constexpr(debug)
-            if(omp_get_num_threads() > 1) throw std::runtime_error("rnd::uniform_double_01 is not thread safe!");
-        return internal::rand_double_01(internal::rng64);
-    }
+    double uniform_double_01() { return internal::with_rng64_lock([](auto &rng) { return internal::rand_double_01(rng); }); }
 
     template<typename T>
     T uniform_integer_box(T min, T max) {
-        if constexpr(debug)
-            if(omp_get_num_threads() > 1) throw std::runtime_error("rnd::uniform_integer_box is not thread safe!");
         std::uniform_int_distribution<T> rand_int(std::min(min, max), std::max(min, max));
-        return rand_int(internal::rng64);
+        return internal::with_rng64_lock([&](auto &rng) { return rand_int(rng); });
     }
     template int      uniform_integer_box(int min, int max);
     template unsigned uniform_integer_box(unsigned min, unsigned max);
@@ -85,21 +83,21 @@ namespace rnd {
     template size_t   uniform_integer_box(size_t min, size_t max);
 
     double uniform_double_box(double min, double max) {
-        if constexpr(debug)
-            if(omp_get_num_threads() > 1) throw std::runtime_error("rnd::uniform_double_box is not thread safe!");
         std::uniform_real_distribution<> rand_real(std::min(min, max), std::max(min, max));
-        return rand_real(internal::rng64);
+        return internal::with_rng64_lock([&](auto &rng) { return rand_real(rng); });
     }
     double uniform_double_box(double halfwidth) {
-        if constexpr(debug)
-            if(omp_get_num_threads() > 1) throw std::runtime_error("rnd::uniform_double_box is not thread safe!");
         std::uniform_real_distribution<> rand_real(-halfwidth, halfwidth);
-        return rand_real(internal::rng64);
+        return internal::with_rng64_lock([&](auto &rng) { return rand_real(rng); });
     }
 
-    std::complex<double> uniform_complex_in_unit_circle() { return std::polar(uniform_double_01(), internal::rand_double_0_2pi(internal::rng64)); }
+    std::complex<double> uniform_complex_in_unit_circle() {
+        return internal::with_rng64_lock([](auto &rng) { return std::polar(std::sqrt(internal::rand_double_01(rng)), internal::rand_double_0_2pi(rng)); });
+    }
 
-    std::complex<double> uniform_complex_on_unit_circle() { return std::polar(1.0, internal::rand_double_0_2pi(internal::rng64)); }
+    std::complex<double> uniform_complex_on_unit_circle() {
+        return internal::with_rng64_lock([](auto &rng) { return std::polar(1.0, internal::rand_double_0_2pi(rng)); });
+    }
 
     std::complex<double> uniform_complex_box(double real_min, double real_max, double imag_min, double imag_max) {
         return {uniform_double_box(real_min, real_max), uniform_double_box(imag_min, imag_max)};
@@ -108,19 +106,22 @@ namespace rnd {
     template<typename T>
     std::vector<T> uniform_unit_n_sphere(size_t n) {
         std::vector<T> arr;
+        arr.reserve(n);
         double         norm = 0.0;
-        for(size_t i = 0; i < n; i++) {
-            if constexpr(std::is_same<T, std::complex<double>>::value) {
-                double re   = internal::normal_double_01(internal::rng64);
-                double im   = internal::normal_double_01(internal::rng64);
-                T      cx64 = T(1.0, 0.0) * re + T(0.0, 1.0) * im;
-                arr.push_back(cx64);
-                norm += re * re + im * im;
-            } else {
-                arr.push_back(internal::normal_double_01(internal::rng64));
-                norm += std::abs(arr[i] * arr[i]);
+        internal::with_rng64_lock([&](auto &rng) {
+            for(size_t i = 0; i < n; i++) {
+                if constexpr(std::is_same<T, std::complex<double>>::value) {
+                    double re   = internal::normal_double_01(rng);
+                    double im   = internal::normal_double_01(rng);
+                    T      cx64 = T(1.0, 0.0) * re + T(0.0, 1.0) * im;
+                    arr.push_back(cx64);
+                    norm += re * re + im * im;
+                } else {
+                    arr.push_back(internal::normal_double_01(rng));
+                    norm += std::abs(arr[i] * arr[i]);
+                }
             }
-        }
+        });
 
         norm = std::sqrt(norm);
         for(size_t i = 0; i < n; i++) { arr[i] /= norm; }
@@ -134,14 +135,14 @@ namespace rnd {
     }
     template<typename out_t>
     out_t uniform(out_t a, out_t b) {
-        if constexpr(debug)
-            if(omp_get_num_threads() > 1) throw std::runtime_error("rnd::uniform is not thread safe!");
         if constexpr(std::is_arithmetic_v<out_t>) {
             std::uniform_real_distribution<out_t> distribution(a, b);
-            return distribution(internal::rng64);
+            return internal::with_rng64_lock([&](auto &rng) { return distribution(rng); });
         } else if constexpr(std::is_same_v<out_t, fp128>) {
             __extension__ typedef __uint128_t __uint128;
-            auto                              rndval = static_cast<fp128>(internal::rng128()) / static_cast<fp128>(std::numeric_limits<__uint128>::max());
+            auto rndval = internal::with_rng128_lock(
+                [](auto &rng) { return static_cast<fp128>(rng()) / static_cast<fp128>(std::numeric_limits<__uint128>::max()); }
+            );
             return (rndval * (b - a)) + a;
         }
     }
@@ -159,11 +160,9 @@ namespace rnd {
 
     template<typename out_t>
     out_t normal(out_t mean, out_t std) {
-        if constexpr(debug)
-            if(omp_get_num_threads() > 1) throw std::runtime_error("rnd::normal is not thread safe!");
         if constexpr(std::is_arithmetic_v<out_t>) {
             std::normal_distribution<out_t> distribution(mean, std);
-            return distribution(internal::rng64);
+            return internal::with_rng64_lock([&](auto &rng) { return distribution(rng); });
         } else if constexpr(std::is_same_v<out_t, fp128>) {
             return normal_box_muller(mean, std);
         }
@@ -174,11 +173,9 @@ namespace rnd {
 
     template<typename out_t>
     out_t log_normal(out_t mean, out_t std) {
-        if constexpr(debug)
-            if(omp_get_num_threads() > 1) throw std::runtime_error("rnd::log_normal is not thread safe!");
         if constexpr(std::is_arithmetic_v<out_t>) {
             std::lognormal_distribution<out_t> distribution(mean, std);
-            return distribution(internal::rng64);
+            return internal::with_rng64_lock([&](auto &rng) { return distribution(rng); });
         } else if constexpr(std::is_same_v<out_t, fp128>) {
             auto n = std * normal_box_muller<out_t>(0, 1) + mean;
             return std::exp(n);
@@ -227,7 +224,9 @@ namespace rnd {
     template<typename out_t, typename Distribution>
     std::vector<out_t> random(Distribution &&d, size_t num) {
         auto rndvec = std::vector<out_t>(num);
-        for(size_t i = 0; i < num; ++i) rndvec[i] = d(internal::rng64);
+        internal::with_rng64_lock([&](auto &rng) {
+            for(size_t i = 0; i < num; ++i) rndvec[i] = d(rng);
+        });
         return rndvec;
     }
     //    template std::vetor<fp128>  random<fp128>(Distribution &&d, size_t num);

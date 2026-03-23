@@ -150,8 +150,8 @@ std::string getLogMessage(struct primme_params *primme, [[maybe_unused]] int *ba
     std::vector<Real> &eigvals = result.get_eigvals<Scalar, eig::Form::SYMM>();
 
     auto get_eigval = [&](long idx) -> Real {
-        bool lockedValid = numLocked != nullptr and * numLocked > 0 and lockedEvals != nullptr;
-        bool basisValid  = basisSize != nullptr and * basisSize > 0 and basisEvals != nullptr;
+        bool lockedValid = numLocked != nullptr and *numLocked > 0 and lockedEvals != nullptr;
+        bool basisValid  = basisSize != nullptr and *basisSize > 0 and basisEvals != nullptr;
         if(lockedValid) {
             if(idx < *numLocked)
                 return static_cast<Real *>(lockedEvals)[idx];
@@ -227,8 +227,8 @@ void monitorFun([[maybe_unused]] void *basisEvals, [[maybe_unused]] int *basisSi
             level = spdlog::level::debug;
         }
 
-        bool lockedValid = numLocked != nullptr and * numLocked > 0 and lockedEvals != nullptr and lockedNorms != nullptr;
-        bool basisValid  = basisSize != nullptr and * basisSize > 0 and basisEvals != nullptr and basisNorms != nullptr;
+        bool lockedValid = numLocked != nullptr and *numLocked > 0 and lockedEvals != nullptr and lockedNorms != nullptr;
+        bool basisValid  = basisSize != nullptr and *basisSize > 0 and basisEvals != nullptr and basisNorms != nullptr;
         using Real       = decltype(std::real(std::declval<Scalar>()));
         if(lockedValid) {
             auto &eigvals = result.get_eigvals<Scalar, eig::Form::SYMM>();

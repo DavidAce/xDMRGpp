@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
-#include <exception>
 #include <iterator>
 #include <numeric>
 #include <vector>
@@ -220,7 +219,7 @@ namespace num {
         T              val = static_cast<T>(a);
         std::vector<T> xs(N);
         for(auto &x : xs) {
-            x = val;
+            x    = val;
             val += h;
         }
         xs.front() = static_cast<T>(a);
@@ -520,8 +519,8 @@ namespace num {
             auto y_nx = std::next(y_it);
             if(x_nx == x_en) break;
             if(y_nx == y_en) break;
-            *r_it = sum;
-            sum += static_cast<ScalarY>(*x_nx - *x_it) * 0.5 * (*y_nx + *y_it);
+            *r_it  = sum;
+            sum   += static_cast<ScalarY>(*x_nx - *x_it) * 0.5 * (*y_nx + *y_it);
             x_it++;
             y_it++;
             r_it++;
@@ -541,11 +540,15 @@ namespace num {
 
     template<typename R, typename T>
     [[nodiscard]] R next_power_of_two(T val) {
-        return static_cast<R>(std::pow<long>(2, safe_cast<long>(std::ceil(std::log2(std::real(val))))));
+        const auto x = std::real(val);
+        if(x <= T{0}) return R{1};
+        return static_cast<R>(std::exp2(std::ceil(std::log2(x))));
     }
     template<typename R, typename T>
     [[nodiscard]] R prev_power_of_two(T val) {
-        return static_cast<R>(std::pow<long>(2, safe_cast<long>(std::floor(std::log2(std::real(val - 1))))));
+        const auto x = std::real(val);
+        if(x <= T{1}) return R{1};
+        return static_cast<R>(std::exp2(std::floor(std::log2(x))));
     }
     template<typename R, typename T>
     [[nodiscard]] R nearest_power_of_two(T val) {
@@ -572,8 +575,8 @@ namespace num {
 
     template<typename T>
     [[nodiscard]] inline T round_to_multiple_of(const T number, const T multiple) {
-        T result = number + multiple / 2;
-        result -= num::mod(result, multiple);
+        T result  = number + multiple / 2;
+        result   -= num::mod(result, multiple);
         return result;
     }
 
