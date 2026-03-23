@@ -1,14 +1,10 @@
 #pragma once
 
 #include "algorithms/AlgorithmStatus.h"
-#include "debug/exceptions.h"
 #include "io/fmt_custom.h"
 #include "math/float.h"
-#include "tid/enums.h"
 #include <array>
-#include <cstdio>
 #include <h5pp/h5pp.h>
-#include <memory>
 #include <unordered_map>
 #include <vector>
 

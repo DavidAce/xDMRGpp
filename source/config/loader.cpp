@@ -1,6 +1,7 @@
 #include "loader.h"
 #include <fstream>
 #include <h5pp/h5pp.h>
+namespace fs = std::filesystem;
 Loader::Loader(const fs::path &cfg_or_h5_file) {
     file_exists = fs::exists(cfg_or_h5_file);
     file_path   = fs::absolute(cfg_or_h5_file);

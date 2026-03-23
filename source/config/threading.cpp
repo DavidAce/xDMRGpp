@@ -49,10 +49,8 @@ namespace settings {
                                         omp_proc_bind);
         }
 
-
-
-        tools::log->info("OpenMP | omp_max_threads {} | omp_max_active_levels {} | omp_dynamic {} | omp_num_procs {}",
-                         omp_get_max_threads(), omp_get_max_active_levels(), omp_get_dynamic(), omp_get_num_procs());
+        tools::log->info("OpenMP | omp_max_threads {} | omp_max_active_levels {} | omp_dynamic {} | omp_num_procs {}", omp_get_max_threads(),
+                         omp_get_max_active_levels(), omp_get_dynamic(), omp_get_num_procs());
 
 //        omp_threads = safe_cast<unsigned int>(omp_get_max_threads());
 #endif

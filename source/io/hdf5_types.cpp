@@ -1,15 +1,8 @@
 #include "hdf5_types.h"
-#include "algorithms/AlgorithmStatus.h"
 #include "debug/exceptions.h"
-#include "io/fmt_custom.h"
 #include "tid/enums.h"
 #include <array>
-#include <cstdio>
 #include <h5pp/h5pp.h>
-#include <memory>
-#include <unordered_map>
-#include <vector>
-
 
 h5pp::hid::h5t &h5_enum_storage_event::get_h5t() {
     create();
@@ -312,7 +305,6 @@ void h5pp_ur::register_table_type() {
     H5Tinsert(h5_type, "level", HOFFSET(item, level), h5_level_type);
     H5Tinsert(h5_type, "count", HOFFSET(item, count), H5T_NATIVE_UINT64);
 }
-
 
 template class h5pp_table_measurements_finite<fp32>;
 template class h5pp_table_measurements_finite<fp64>;

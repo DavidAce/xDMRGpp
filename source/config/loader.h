@@ -1,20 +1,18 @@
 #pragma once
 #include "config/enums.h"
 #include "debug/exceptions.h"
-#include "io/filesystem.h"
-#include "math/cast.h"
-#include "tid/enums.h"
 #include "tools/common/log.h"
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 
 class Loader {
     public:
-    bool               file_exists;
-    fs::path           file_path;
-    fs::file_time_type file_date;
+    bool                            file_exists;
+    std::filesystem::path           file_path;
+    std::filesystem::file_time_type file_date;
 
-    explicit Loader(const fs::path &cfg_or_h5_file);
+    explicit Loader(const std::filesystem::path &cfg_or_h5_file);
 
     void                      load();
     void                      unload();
