@@ -2,6 +2,7 @@ add_source_target(xdmrg++-qm-lbit-h5tb
         TARGET_SOURCES
         h5tb.cpp
         OBJECT_LINK_LIBRARIES
+        xdmrg++-config
         xdmrg++-deps xdmrg++-flags
         )
 add_source_target(xdmrg++-qm-lbit
@@ -12,4 +13,3 @@ add_source_target(xdmrg++-qm-lbit
         xdmrg++-qm-lbit-h5tb
         xdmrg++-deps xdmrg++-flags
         )
-

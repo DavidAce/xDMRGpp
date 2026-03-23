@@ -1,10 +1,10 @@
 #pragma once
-#include "config/enums.h"
-#include "math/float.h"
 #include "math/svd/config.h"
 #include "measure/MeasurementsTensorsInfinite.h"
-#include <complex>
+#include <cstddef>
 #include <memory>
+#include <optional>
+#include <string_view>
 #include <unsupported/Eigen/CXX11/Tensor>
 
 template<typename Scalar>
@@ -13,6 +13,8 @@ template<typename Scalar>
 class ModelInfinite;
 template<typename Scalar>
 class EdgesInfinite;
+enum class MergeEvent;
+enum class ModelType;
 
 template<typename Scalar>
 class TensorsInfinite {

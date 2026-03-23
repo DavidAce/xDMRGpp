@@ -2,7 +2,6 @@
 #include "math/tenx.h"
 // tenx must appear first
 #include "config/debug.h"
-#include "config/enums.h"
 #include "math/float.h"
 #include "math/hash.h"
 #include "math/linalg/tensor/to_string.h"
@@ -102,15 +101,15 @@ MpsSite<Scalar>::RealScalar MpsSite<Scalar>::get_norm_error() const {
     RealScalar norm_error = std::numeric_limits<RealScalar>::quiet_NaN();
 
     if(get_label() == "B") {
-        auto BB_rank2 = tools::common::contraction::contract_mps_partial<std::array{0l, 2l}>(get_M_bare());
-        auto BB       = tenx::MatrixMap(BB_rank2);
-        norm_error    = (BB - MatrixReal::Identity(BB.rows(), BB.cols())).norm();
-        norm_error /= std::sqrt(static_cast<RealScalar>(get_chiL()));
+        auto BB_rank2  = tools::common::contraction::contract_mps_partial<std::array{0l, 2l}>(get_M_bare());
+        auto BB        = tenx::MatrixMap(BB_rank2);
+        norm_error     = (BB - MatrixReal::Identity(BB.rows(), BB.cols())).norm();
+        norm_error    /= std::sqrt(static_cast<RealScalar>(get_chiL()));
     } else { // Valid for A and AC
-        auto AA_rank2 = tools::common::contraction::contract_mps_partial<std::array{0l, 1l}>(get_M_bare());
-        auto AA       = tenx::MatrixMap(AA_rank2);
-        norm_error    = (AA - MatrixReal::Identity(AA.rows(), AA.cols())).norm();
-        norm_error /= std::sqrt(static_cast<RealScalar>(get_chiR()));
+        auto AA_rank2  = tools::common::contraction::contract_mps_partial<std::array{0l, 1l}>(get_M_bare());
+        auto AA        = tenx::MatrixMap(AA_rank2);
+        norm_error     = (AA - MatrixReal::Identity(AA.rows(), AA.cols())).norm();
+        norm_error    /= std::sqrt(static_cast<RealScalar>(get_chiR()));
     }
 
     if(!std::isfinite(norm_error)) throw except::runtime_error("MpsSite<Scalar>::get_norm_error: non-finite norm error: {}", fp(norm_error));

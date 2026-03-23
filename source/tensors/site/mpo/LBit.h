@@ -1,9 +1,10 @@
 #pragma once
 
+#include "h5tb/h5tb.h"
 #include "MpoSite.h"
-#include <Eigen/Core>
 #include <general/sfinae.h>
-#include <h5pp/details/h5ppHid.h>
+
+enum class ModelType;
 
 template<typename Scalar>
 class LBit : public MpoSite<Scalar> {

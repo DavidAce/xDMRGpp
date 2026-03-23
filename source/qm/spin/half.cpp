@@ -105,14 +105,9 @@ namespace qm::spin::half {
     //     1.0, 0.0,
     //     0.0, 1.0).finished();
 
-    std::array<Eigen::VectorXcd, 2> sx_spinors{((Eigen::VectorXcd(2) << 1.0 + 0.0i, 1.0 + 0.0i).finished() / std::sqrt(2)).eval(),
-                                               ((Eigen::VectorXcd(2) << 1.0 + 0.0i, -1.0 + 0.0i).finished() / std::sqrt(2)).eval()};
-
-    std::array<Eigen::VectorXcd, 2> sy_spinors{((Eigen::VectorXcd(2) << 1.0 + 0.0i, 0.0 + 1.0i).finished() / std::sqrt(2)).eval(),
-                                               ((Eigen::VectorXcd(2) << 1.0 + 0.0i, 0.0 - 1.0i).finished() / std::sqrt(2)).eval()};
-
-    std::array<Eigen::VectorXcd, 2> sz_spinors{((Eigen::VectorXcd(2) << 1.0 + 0.0i, 0.0 + 0.0i).finished() / std::sqrt(2)).eval(),
-                                               ((Eigen::VectorXcd(2) << 0.0 + 0.0i, 1.0 + 0.0i).finished() / std::sqrt(2)).eval()};
+    std::array<Eigen::VectorXcd, 2> sx_spinors(get_sx_spinors<Eigen::VectorXcd>());
+    std::array<Eigen::VectorXcd, 2> sy_spinors(get_sy_spinors<Eigen::VectorXcd>());
+    std::array<Eigen::VectorXcd, 2> sz_spinors(get_sz_spinors<Eigen::VectorXcd>());
 
     std::vector<Eigen::MatrixXcd> SX;
     std::vector<Eigen::MatrixXcd> SY;

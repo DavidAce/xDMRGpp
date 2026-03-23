@@ -61,7 +61,6 @@ void EdgesInfinite<Scalar>::eject_edges() {
     varR->clear();
 }
 
-
 template<typename Scalar>
 size_t EdgesInfinite<Scalar>::get_length() const {
     if(not num::all_equal(eneL->get_sites(), eneR->get_sites(), varL->get_sites(), varR->get_sites()))

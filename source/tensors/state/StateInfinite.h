@@ -1,14 +1,19 @@
 #pragma once
 
-#include "config/settings.h"
+#include "config/enums/AlgorithmType.h"
 #include "math/svd/config.h"
 #include "measure/MeasurementsStateInfinite.h"
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <vector>
 
 template<typename Scalar>
 class MpsSite;
+enum class MergeEvent;
+enum class ModelType;
 
 /*!
   \class StateInfinite

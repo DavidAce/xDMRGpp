@@ -1,4 +1,7 @@
 #pragma once
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/LogPolicy.h"
+#include "config/enums/ModelType.h"
 #include "math/tenx.h"
 // -- (textra first)
 #include "config/settings.h"
@@ -342,7 +345,7 @@ void StateFinite<Scalar>::assert_validity() const {
         for(const auto &mps : mps_sites)
             if(not mps->is_real()) {
                 auto M = mps->get_M_bare();
-                for(long idx = 0; idx < M.size(); ++idx) tools::log->warn("elem {}: {:.8e}", mps->get_position(), fp(M.data()[idx]));
+                for(long idx = 0; idx < M.size(); ++idx) tools::log->warn("elem {}: {:.8e}", mps->get_position(), M.data()[idx]);
                 throw except::runtime_error("state has imaginary part at mps position {}", mps->get_position());
             }
     }
@@ -547,11 +550,11 @@ double StateFinite<Scalar>::get_trf_cache_gbts() const {
     for(const auto &elem : get_cache<cx64>().trf) size_cx64 += static_cast<double>(elem.second.size());
     for(const auto &elem : get_cache<cx128>().trf) size_cx128 += static_cast<double>(elem.second.size());
 
-    size_fp32 *= 4.0 / std::pow(1024.0, 3.0);
-    size_fp64 *= 8.0 / std::pow(1024.0, 3.0);
+    size_fp32  *= 4.0 / std::pow(1024.0, 3.0);
+    size_fp64  *= 8.0 / std::pow(1024.0, 3.0);
     size_fp128 *= 16.0 / std::pow(1024.0, 3.0);
-    size_cx32 *= 8.0 / std::pow(1024.0, 3.0);
-    size_cx64 *= 16.0 / std::pow(1024.0, 3.0);
+    size_cx32  *= 8.0 / std::pow(1024.0, 3.0);
+    size_cx64  *= 16.0 / std::pow(1024.0, 3.0);
     size_cx128 *= 16.0 / std::pow(1024.0, 3.0);
     return size_fp32 + size_fp64 + size_fp128 + size_cx32 + size_cx64 + size_cx128;
 }
@@ -566,11 +569,11 @@ double StateFinite<Scalar>::get_mps_cache_gbts() const {
     for(const auto &elem : get_cache<cx64>().mps) size_cx64 += static_cast<double>(elem.second.size());
     for(const auto &elem : get_cache<cx128>().mps) size_cx128 += static_cast<double>(elem.second.size());
 
-    size_fp32 *= 4.0 / std::pow(1024.0, 3.0);
-    size_fp64 *= 8.0 / std::pow(1024.0, 3.0);
+    size_fp32  *= 4.0 / std::pow(1024.0, 3.0);
+    size_fp64  *= 8.0 / std::pow(1024.0, 3.0);
     size_fp128 *= 16.0 / std::pow(1024.0, 3.0);
-    size_cx32 *= 8.0 / std::pow(1024.0, 3.0);
-    size_cx64 *= 16.0 / std::pow(1024.0, 3.0);
+    size_cx32  *= 8.0 / std::pow(1024.0, 3.0);
+    size_cx64  *= 16.0 / std::pow(1024.0, 3.0);
     size_cx128 *= 32.0 / std::pow(1024.0, 3.0);
     return size_fp32 + size_fp64 + size_fp128 + size_cx32 + size_cx64 + size_cx128;
 }

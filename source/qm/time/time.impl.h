@@ -11,6 +11,8 @@
 #include <unsupported/Eigen/MatrixFunctions>
 #include <vector>
 
+using namespace std::complex_literals;
+
 template<typename T, typename Scalar>
 requires sfinae::is_std_complex_v<T>
 std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,

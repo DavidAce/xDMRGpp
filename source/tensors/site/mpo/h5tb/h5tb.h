@@ -1,5 +1,4 @@
 #pragma once
-#include "config/enums.h"
 #include "math/float.h"
 #include <h5pp/details/h5ppFstr.h>
 #include <h5pp/details/h5ppHid.h>

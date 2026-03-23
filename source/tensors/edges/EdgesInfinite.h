@@ -1,5 +1,6 @@
 #pragma once
 #include "tensors/site/env/EnvPair.h"
+#include <cstddef>
 #include <memory>
 #include <unsupported/Eigen/CXX11/Tensor>
 

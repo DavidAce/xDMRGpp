@@ -1,19 +1,25 @@
 #pragma once
-#include "config/enums.h"
+#include "config/enums/OptRitz.h"
 #include "general/sfinae.h"
-#include "h5tb/h5tb.h"
 #include "math/float.h"
 #include "math/tenx.h"
 #include "MpoFactory.h"
 #include <any>
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <type_traits>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <vector>
 
 namespace h5pp {
     class File;
 }
+enum class ModelType;
 template<typename Scalar>
 class MpoSite {
     public:

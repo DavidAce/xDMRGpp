@@ -1,4 +1,5 @@
 #pragma once
+#include "config/enums/ModelType.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "IsingRandomField.h"
@@ -204,12 +205,12 @@ void IsingRandomField<Scalar>::set_averages([[maybe_unused]] std::vector<TableMa
     double J_sum = 0;
     double h_sum = 0;
     for(auto &site_params : lattice_parameters) {
-        auto J1_     = std::any_cast<double>(site_params["J1"]);
-        auto J2_     = std::any_cast<double>(site_params["J2"]);
-        auto h_tran_ = std::any_cast<double>(site_params["h_tran"]);
-        auto h_rand_ = std::any_cast<double>(site_params["h_rand"]);
-        J_sum += J1_ + J2_;
-        h_sum += h_tran_ + h_rand_;
+        auto J1_      = std::any_cast<double>(site_params["J1"]);
+        auto J2_      = std::any_cast<double>(site_params["J2"]);
+        auto h_tran_  = std::any_cast<double>(site_params["h_tran"]);
+        auto h_rand_  = std::any_cast<double>(site_params["h_rand"]);
+        J_sum        += J1_ + J2_;
+        h_sum        += h_tran_ + h_rand_;
     }
 
     set_parameters(lattice_parameters[get_position()]);

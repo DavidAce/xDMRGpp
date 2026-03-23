@@ -1,11 +1,14 @@
 #pragma once
 #include "gate.h"
 #include "math/svd/config.h"
-#include "qm.h"
+#include <array>
 #include <complex>
 #include <Eigen/Core>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 enum class LbitCircuitGateWeightKind;
@@ -118,6 +121,17 @@ namespace qm::lbit {
             correrr.resize(idpth, ifmix, ilambda, iweight, imatrix, isize);
             corrmat.resize(idpth, ifmix, ilambda, iweight, imatrix, ireps, isize, isize);
             corroff.resize(idpth, ifmix, ilambda, iweight, imatrix, ireps, isize, isize);
+            cls_avg_fit.setZero();
+            cls_avg_rms.setZero();
+            cls_avg_rsq.setZero();
+            cls_typ_fit.setZero();
+            cls_typ_rms.setZero();
+            cls_typ_rsq.setZero();
+            corravg.setZero();
+            corrtyp.setZero();
+            correrr.setZero();
+            corrmat.setZero();
+            corroff.setZero();
         }
     };
 

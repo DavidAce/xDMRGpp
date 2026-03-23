@@ -1,7 +1,6 @@
 #include "../lbit.h"
 #include "../spin.h"
 #include "config/debug.h"
-#include "config/enums.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"

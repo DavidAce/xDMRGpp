@@ -1,17 +1,29 @@
 #pragma once
-#include "config/enums.h"
+#include "config/enums/LogPolicy.h"
+#include "config/enums/ModelType.h"
+#include "config/enums/MpoCompress.h"
+#include "config/enums/MposWithEdges.h"
+#include "debug/exceptions.h"
 #include "general/sfinae.h"
 #include "math/float.h"
 #include <any>
 #include <array>
 #include <complex>
+#include <functional>
 #include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <type_traits>
 #include <unordered_map>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <vector>
 
 template<typename Scalar> class MpoSite;
 template<typename Scalar> class TensorsFinite;
 template<typename Scalar> class ModelLocal;
+enum class OptRitz;
 
 template<typename Scalar>
 class ModelFinite {

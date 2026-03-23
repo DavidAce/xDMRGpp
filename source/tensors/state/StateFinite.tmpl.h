@@ -86,7 +86,10 @@ Eigen::Tensor<T, 3> StateFinite<Scalar>::get_multisite_mps(const std::vector<siz
             bool        prepend_L = mps.get_label() == "B" and site > 0 and site == sites.front();
             bool        append_L  = mps.get_label() == "A" and site + 1 < length and site == sites.back();
             if(prepend_L) {
-                // In this case all sites are "B" and we need to prepend the "L" from the site on the left to make a normalized multisite mps
+                // In this case all active sites are "B". We prepend the bond matrix from the site on the left
+                // to build the normalized effective tensor on these sites.
+                // In single-site r2l DMRG this is what turns the active site {pos+1} into the effective
+                // local block C(pos)B(pos+1): if the left neighbor is the center, we prepend LC.
                 if constexpr(debug_state) tools::log->trace("Prepending L to B site {}", site);
                 auto        t_prepend = tid::tic_scope("prepend", tid::level::higher);
                 const auto &mps_left  = get_mps_site(site - 1); // mps_left is either AC or B
@@ -128,10 +131,9 @@ Eigen::Tensor<T, 3> StateFinite<Scalar>::get_multisite_mps(const std::vector<siz
         RealT norm    = tenx::norm(multisite_mps);
         RealT normErr = std::abs(norm - RealT{1});
         RealT normTol = std::numeric_limits<RealT>::epsilon() * settings::precision::max_norm_slack;
-        if constexpr(debug_state) tools::log->trace("get_multisite_mps<{}>({}): norm ⟨ψ|ψ⟩ = {:.16f}", sfinae::type_name<T>(), sites, fp(norm));
+        if constexpr(debug_state) tools::log->trace("get_multisite_mps<{}>({}): norm ⟨ψ|ψ⟩ = {:.16f}", sfinae::type_name<T>(), sites, norm);
         if(normErr > normTol) {
-            tools::log->warn("get_multisite_mps<{}>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > normTol {:.2e}", sfinae::type_name<T>(), sites, fp(normErr),
-                             fp(normTol));
+            tools::log->warn("get_multisite_mps<{}>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > normTol {:.2e}", sfinae::type_name<T>(), sites, normErr, normTol);
         }
     }
     return multisite_mps;
@@ -293,9 +295,9 @@ std::array<double, 3> StateFinite<Scalar>::get_reduced_density_matrix_cost(const
             if(i == 0) { // It will append either chiL or chiR, but we take the worst case scenario here
                 if(sites.size() == 1) { ops_t2b += static_cast<double>(2l * chiL * chiR * std::max(chiL, chiR)); }
             } else {
-                auto bondR = pos == sites.back() ? chiR : bonds[i];
-                ops_t2b += std::pow(2.0, i + 1) * static_cast<double>(chiL * bonds[i - 1] * bondR);
-                mem_t2b = std::max(mem_t2b, std::pow(2.0, i + 1) * static_cast<double>(chiL * bondR));
+                auto bondR  = pos == sites.back() ? chiR : bonds[i];
+                ops_t2b    += std::pow(2.0, i + 1) * static_cast<double>(chiL * bonds[i - 1] * bondR);
+                mem_t2b     = std::max(mem_t2b, std::pow(2.0, i + 1) * static_cast<double>(chiL * bondR));
             }
         }
     }
@@ -315,31 +317,31 @@ std::array<double, 3> StateFinite<Scalar>::get_reduced_density_matrix_cost(const
         if(pos == sites.front()) {
             spindim *= 2;
             ops_l2r += spindim * spindim * static_cast<double>(chiL * bondR * bondR);
-            mem_l2r = std::max(mem_l2r, spindim * spindim * static_cast<double>(bondR * bondR));
+            mem_l2r  = std::max(mem_l2r, spindim * spindim * static_cast<double>(bondR * bondR));
         } else {
             bool do_trace = std::find(sites.begin(), sites.end(), pos) == sites.end();
             if(do_trace) {
-                ops_l2r += spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bonds[i - 1] * bondR); // Upper
-                ops_l2r += spindim * spindim * static_cast<double>(4l * bonds[i - 1] * bondR * bondR);        // Lower part 1 of 2
-                ops_l2r += spindim * spindim * static_cast<double>(2l * bondR * bondR);                       // Lower part 2 of 2
-                auto tmp1 = spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bondR);
-                auto tmp2 = spindim * spindim * static_cast<double>(bondR * bondR);
-                mem_l2r   = std::max(mem_l2r, tmp1 + tmp2);
+                ops_l2r   += spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bonds[i - 1] * bondR); // Upper
+                ops_l2r   += spindim * spindim * static_cast<double>(4l * bonds[i - 1] * bondR * bondR);        // Lower part 1 of 2
+                ops_l2r   += spindim * spindim * static_cast<double>(2l * bondR * bondR);                       // Lower part 2 of 2
+                auto tmp1  = spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bondR);
+                auto tmp2  = spindim * spindim * static_cast<double>(bondR * bondR);
+                mem_l2r    = std::max(mem_l2r, tmp1 + tmp2);
 
             } else {
-                ops_l2r += spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bonds[i - 1] * bondR); // Upper
-                ops_l2r += spindim * spindim * static_cast<double>(4l * bonds[i - 1] * bondR * bondR);        // Lower part
-                mem_l2r   = std::max(mem_l2r, spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bondR));
-                mem_l2r   = std::max(mem_l2r, spindim * spindim * static_cast<double>(4l * bondR * bondR));
-                auto tmp1 = spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bondR);
-                auto tmp2 = spindim * spindim * static_cast<double>(4l * bondR * bondR);
-                mem_l2r   = std::max(mem_l2r, tmp1 + tmp2);
-                spindim *= 2;
+                ops_l2r   += spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bonds[i - 1] * bondR); // Upper
+                ops_l2r   += spindim * spindim * static_cast<double>(4l * bonds[i - 1] * bondR * bondR);        // Lower part
+                mem_l2r    = std::max(mem_l2r, spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bondR));
+                mem_l2r    = std::max(mem_l2r, spindim * spindim * static_cast<double>(4l * bondR * bondR));
+                auto tmp1  = spindim * spindim * static_cast<double>(2l * bonds[i - 1] * bondR);
+                auto tmp2  = spindim * spindim * static_cast<double>(4l * bondR * bondR);
+                mem_l2r    = std::max(mem_l2r, tmp1 + tmp2);
+                spindim   *= 2;
             }
         }
     }
     ops_l2r += spindim * spindim * static_cast<double>(chiR); // add the last contraction that closes the density matrix
-    mem_l2r = std::max(mem_l2r, spindim * spindim);
+    mem_l2r  = std::max(mem_l2r, spindim * spindim);
     if(static_cast<double>(sizeof(T)) * mem_l2r / std::pow(1024.0, 3.0) >= settings::precision::max_cache_gbts) {
         mem_l2r = std::numeric_limits<double>::infinity();
         ops_l2r = std::numeric_limits<double>::infinity();
@@ -352,28 +354,28 @@ std::array<double, 3> StateFinite<Scalar>::get_reduced_density_matrix_cost(const
         if(pos == sites.back()) {
             spindim *= 2;
             ops_r2l += spindim * spindim * static_cast<double>(chiR * bondL * bondL);
-            mem_r2l = std::max(mem_r2l, spindim * spindim * static_cast<double>(bondL * bondL));
+            mem_r2l  = std::max(mem_r2l, spindim * spindim * static_cast<double>(bondL * bondL));
         } else {
             bool do_trace = std::find(sites.begin(), sites.end(), pos) == sites.end();
             if(do_trace) {
-                ops_r2l += spindim * spindim * static_cast<double>(2l * bondL * bonds[i] * bonds[i]); // Upper
-                ops_r2l += spindim * spindim * static_cast<double>(4l * bondL * bondL * bonds[i]);    // Lower part 1 of 2
-                ops_r2l += spindim * spindim * static_cast<double>(2l * bondL * bondL);               // Lower part 2 of 2
-                auto tmp1 = spindim * spindim * static_cast<double>(2l * bondL * bonds[i]);
-                auto tmp2 = spindim * spindim * static_cast<double>(bondL * bondL);
-                mem_r2l   = std::max(mem_r2l, tmp1 + tmp2);
+                ops_r2l   += spindim * spindim * static_cast<double>(2l * bondL * bonds[i] * bonds[i]); // Upper
+                ops_r2l   += spindim * spindim * static_cast<double>(4l * bondL * bondL * bonds[i]);    // Lower part 1 of 2
+                ops_r2l   += spindim * spindim * static_cast<double>(2l * bondL * bondL);               // Lower part 2 of 2
+                auto tmp1  = spindim * spindim * static_cast<double>(2l * bondL * bonds[i]);
+                auto tmp2  = spindim * spindim * static_cast<double>(bondL * bondL);
+                mem_r2l    = std::max(mem_r2l, tmp1 + tmp2);
             } else {
-                ops_r2l += spindim * spindim * static_cast<double>(2l * bondL * bonds[i] * bonds[i]); // Upper
-                ops_r2l += spindim * spindim * static_cast<double>(4l * bondL * bondL * bonds[i]);    // Lower part 1 of 2
-                auto tmp1 = spindim * spindim * static_cast<double>(2l * bondL * bonds[i]);
-                auto tmp2 = spindim * spindim * static_cast<double>(4l * bondL * bondL);
-                mem_r2l   = std::max(mem_r2l, tmp1 + tmp2);
-                spindim *= 2;
+                ops_r2l   += spindim * spindim * static_cast<double>(2l * bondL * bonds[i] * bonds[i]); // Upper
+                ops_r2l   += spindim * spindim * static_cast<double>(4l * bondL * bondL * bonds[i]);    // Lower part 1 of 2
+                auto tmp1  = spindim * spindim * static_cast<double>(2l * bondL * bonds[i]);
+                auto tmp2  = spindim * spindim * static_cast<double>(4l * bondL * bondL);
+                mem_r2l    = std::max(mem_r2l, tmp1 + tmp2);
+                spindim   *= 2;
             }
         }
     }
     ops_r2l += spindim * spindim * static_cast<double>(chiL); // add the last contraction that closes the density matrix
-    mem_r2l = std::max(mem_r2l, spindim * spindim);
+    mem_r2l  = std::max(mem_r2l, spindim * spindim);
     if(static_cast<double>(sizeof(T)) * mem_r2l / std::pow(1024.0, 3.0) >= settings::precision::max_cache_gbts) {
         mem_r2l = std::numeric_limits<double>::infinity();
         ops_r2l = std::numeric_limits<double>::infinity();
@@ -512,16 +514,16 @@ double StateFinite<Scalar>::get_transfer_matrix_cost(const std::vector<size_t> &
             // bonds[i] is always a bond directly to the right of pos, except for the last pos, where we use chiR instead
             if(pos == sites.front() and i < bonds.size()) {
                 ops += static_cast<double>(chiL * chiL * bonds[i] * bonds[i] * 2); // The left-most site
-                mem = std::max(mem, static_cast<double>(chiL * chiL * bonds[i] * bonds[i]));
+                mem  = std::max(mem, static_cast<double>(chiL * chiL * bonds[i] * bonds[i]));
             } else { // Appending sites in the interior
-                auto bondR = pos == sites.back() ? chiR : bonds.at(i);
-                ops += static_cast<double>(chiL * chiL * bonds[i - 1] * bonds[i - 1] * bondR * 2); // Upper mps
-                ops += static_cast<double>(chiL * chiL * bonds[i - 1] * bondR * bondR * 4);        // Lower mps part 1 of 2
-                ops += static_cast<double>(chiL * chiL * bondR * bondR * 2);                       // Lower mps part 2 of 2
-                auto tmp1 = static_cast<double>(chiL * chiL * bonds[i - 1] * bondR * 2);
-                auto tmp2 = std::max(tmp1, static_cast<double>(chiL * chiL * bondR * bondR * 4));
-                auto tmp3 = std::max(tmp2, static_cast<double>(chiL * chiL * bondR * bondR));
-                mem       = std::max(mem, tmp2 + tmp3);
+                auto bondR  = pos == sites.back() ? chiR : bonds.at(i);
+                ops        += static_cast<double>(chiL * chiL * bonds[i - 1] * bonds[i - 1] * bondR * 2); // Upper mps
+                ops        += static_cast<double>(chiL * chiL * bonds[i - 1] * bondR * bondR * 4);        // Lower mps part 1 of 2
+                ops        += static_cast<double>(chiL * chiL * bondR * bondR * 2);                       // Lower mps part 2 of 2
+                auto tmp1   = static_cast<double>(chiL * chiL * bonds[i - 1] * bondR * 2);
+                auto tmp2   = std::max(tmp1, static_cast<double>(chiL * chiL * bondR * bondR * 4));
+                auto tmp3   = std::max(tmp2, static_cast<double>(chiL * chiL * bondR * bondR));
+                mem         = std::max(mem, tmp2 + tmp3);
             }
         }
     }
@@ -531,16 +533,16 @@ double StateFinite<Scalar>::get_transfer_matrix_cost(const std::vector<size_t> &
             // bonds[i] is always a bond directly to the right of pos, except for the last pos, where we use chiR instead
             if(pos == sites.back() and i - 1 < bonds.size()) {
                 ops += static_cast<double>(chiR * chiR * bonds[i - 1] * bonds[i - 1] * 2); // The right-most site
-                mem = std::max(mem, static_cast<double>(chiR * chiR * bonds[i - 1] * bonds[i - 1]));
+                mem  = std::max(mem, static_cast<double>(chiR * chiR * bonds[i - 1] * bonds[i - 1]));
             } else { // Appending sites in the interior
-                auto bondL = pos == sites.front() ? chiL : bonds.at(i - 1);
-                ops += static_cast<double>(chiR * chiR * bonds[i] * bonds[i] * bondL * 2); // Upper mps
-                ops += static_cast<double>(chiR * chiR * bonds[i] * bondL * bondL * 4);    // Lower mps part 1 of 2
-                ops += static_cast<double>(chiR * chiR * bondL * bondL * 2);               // Lower mps part 2 of 2
-                auto tmp1 = static_cast<double>(chiR * chiR * bonds[i] * bondL * 2);
-                auto tmp2 = std::max(tmp1, static_cast<double>(chiR * chiR * bondL * bondL * 4));
-                auto tmp3 = std::max(tmp2, static_cast<double>(chiR * chiR * bondL * bondL));
-                mem       = std::max(mem, tmp2 + tmp3);
+                auto bondL  = pos == sites.front() ? chiL : bonds.at(i - 1);
+                ops        += static_cast<double>(chiR * chiR * bonds[i] * bonds[i] * bondL * 2); // Upper mps
+                ops        += static_cast<double>(chiR * chiR * bonds[i] * bondL * bondL * 4);    // Lower mps part 1 of 2
+                ops        += static_cast<double>(chiR * chiR * bondL * bondL * 2);               // Lower mps part 2 of 2
+                auto tmp1   = static_cast<double>(chiR * chiR * bonds[i] * bondL * 2);
+                auto tmp2   = std::max(tmp1, static_cast<double>(chiR * chiR * bondL * bondL * 4));
+                auto tmp3   = std::max(tmp2, static_cast<double>(chiR * chiR * bondL * bondL));
+                mem         = std::max(mem, tmp2 + tmp3);
             }
         }
     }
@@ -571,14 +573,14 @@ std::array<double, 2> StateFinite<Scalar>::get_transfer_matrix_costs(const std::
         if(has_cached_mps<T>(key)) continue;
         if(i == 0 and sites.size() == 1) { // It will append either chiL or chiR but we take the worst case scenario here
             ops_t2b += static_cast<double>(2l * chiL * chiR * std::max(chiL, chiR));
-            mem_t2b = std::max(mem_t2b, static_cast<double>(2l * chiL * chiR));
+            mem_t2b  = std::max(mem_t2b, static_cast<double>(2l * chiL * chiR));
         }
         if(i + 1 < bonds.size()) { // TTT...T*T
             ops_t2b += std::pow(2.0, i + 1) * static_cast<double>(chiL * bonds[i] * bonds[i + 1] * 2l);
-            mem_t2b = std::max(mem_t2b, std::pow(2.0, i + 1) * static_cast<double>(chiL * bonds[i + 1] * 2l));
+            mem_t2b  = std::max(mem_t2b, std::pow(2.0, i + 1) * static_cast<double>(chiL * bonds[i + 1] * 2l));
         } else if(i + 1 == sites.size() and i == bonds.size()) { // The last site
             ops_t2b += std::pow(2.0, i + 1) * static_cast<double>(2l * chiL * bonds[i - 1] * chiR);
-            mem_t2b = std::max(mem_t2b, std::pow(2.0, i + 1) * static_cast<double>(2l * chiL * chiR));
+            mem_t2b  = std::max(mem_t2b, std::pow(2.0, i + 1) * static_cast<double>(2l * chiL * chiR));
         }
     }
     auto cost_t2b = ops_t2b + mem_t2b;

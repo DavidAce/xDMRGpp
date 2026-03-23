@@ -1,7 +1,5 @@
-
-
 #include "qm/gate.h"
-#include "config/enums.h"
+#include "config/enums/GateOp.h"
 #include "debug/exceptions.h"
 #include "debug/info.h"
 #include "general/iter.h"
@@ -14,6 +12,7 @@
 #include "math/tenx.h"
 #include "tools/common/log.h"
 #include <fmt/ranges.h>
+#include <cassert>
 #include <set>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <utility>
@@ -81,7 +80,7 @@ auto group(const std::vector<long> &dim, const std::vector<size_t> &pattern) {
     for(size_t i = 0; i < pattern.size(); i++) {
         long product = 1;
         for(size_t j = 0; j < pattern[i]; j++) product *= dim[dim_offset + j];
-        res[i] = product;
+        res[i]      = product;
         dim_offset += pattern[i];
     }
     return res;
@@ -96,7 +95,7 @@ constexpr auto group(const std::array<long, N> &dim, const std::array<size_t, M>
     for(size_t i = 0; i < M; i++) {
         long product = 1;
         for(size_t j = 0; j < pattern[i]; j++) product *= dim[dim_offset + j];
-        res[i] = product;
+        res[i]      = product;
         dim_offset += pattern[i];
     }
     return res;
@@ -1060,15 +1059,22 @@ qm::Gate qm::trace_idx(const qm::Gate &gate, const std::vector<long> &idx) {
 qm::Gate qm::trace_pos(const qm::Gate &gate, const std::vector<size_t> &pos) {
     if(pos.size() <= 2) {
         auto              idx = gate.idx(pos);
+        if(idx.size() != 2 * pos.size()) throw except::logic_error("Cannot trace positions {} from gate {}", pos, gate.pos);
+        assert(idx.size() == 2 * pos.size());
         std::vector<long> idx_long(idx.begin(), idx.end());
         return qm::trace_idx(gate, idx_long);
     }
     qm::Gate tmp = gate;
-    for(auto &p : pos) { tmp = tmp.trace_pos(std::vector<size_t>{p}); }
+    for(auto &p : pos) { tmp = tmp.trace_pos(p); }
     return tmp;
 }
 
-qm::Gate qm::trace_pos(const qm::Gate &gate, size_t pos) { return qm::trace_pos(gate, gate.idx(std::vector<size_t>{pos})); }
+qm::Gate qm::trace_pos(const qm::Gate &gate, size_t pos) {
+    auto it = std::find(gate.pos.begin(), gate.pos.end(), pos);
+    if(it == gate.pos.end()) throw except::logic_error("Cannot trace missing position {} from gate {}", pos, gate.pos);
+    assert(it != gate.pos.end());
+    return qm::trace_pos(gate, std::vector<size_t>{pos});
+}
 
 cx64 qm::trace(const qm::Gate &gate) {
     qm::Gate t = qm::trace_pos(gate, gate.pos);

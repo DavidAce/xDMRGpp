@@ -1,9 +1,10 @@
 #pragma once
 #include "gate.h"
+#include "general/sfinae.h"
 #include "math/float.h"
-#include "qm.h"
 #include <complex>
 #include <Eigen/Core>
+#include <utility>
 #include <vector>
 
 namespace qm::time {

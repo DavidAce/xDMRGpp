@@ -1,13 +1,16 @@
 #pragma once
 
-#include "../config/enums.h"
 #include "math/float.h"
+#include <complex>
+#include <cstddef>
 #include <Eigen/Core>
+#include <string_view>
+#include <tuple>
 #include <unsupported/Eigen/CXX11/Tensor>
-
-#include "qm.h"
+#include <utility>
 #include <vector>
 
+enum class RandomizerMode;
 namespace qm::mpo {
     template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
     template<typename Scalar> using CplxScalar = std::complex<RealScalar<Scalar>>;
@@ -22,8 +25,8 @@ namespace qm::mpo {
         parity_projector_mpos(const Eigen::MatrixXcd &paulimatrix, size_t sites, int sector = 1);
 
     template<typename Scalar>
-    std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>
-        random_pauli_mpos(const Eigen::MatrixXcd &paulimatrix, size_t sites);
+    std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>> random_pauli_mpos(const Eigen::MatrixXcd &paulimatrix,
+                                                                                                                            size_t                  sites);
 
     template<typename Scalar>
     std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eigen::Tensor<Scalar, 3>>

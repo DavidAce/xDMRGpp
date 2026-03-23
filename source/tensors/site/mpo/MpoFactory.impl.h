@@ -1,4 +1,5 @@
 #pragma once
+#include "config/enums/ModelType.h"
 #include "debug/exceptions.h"
 #include "IsingMajorana.h"
 #include "IsingRandomField.h"

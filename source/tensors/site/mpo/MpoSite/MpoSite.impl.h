@@ -1,6 +1,8 @@
 #pragma once
 #include "../MpoSite.h"
 #include "config/debug.h"
+#include "config/enums/ModelType.h"
+#include "config/enums/OptRitz.h"
 #include "debug/exceptions.h"
 #include "io/fmt_f128_t.h"
 #include "math/cast.h"

@@ -1,13 +1,15 @@
 #pragma once
 // #include "debug/exceptions.h"
-#include "general/sfinae.h"
 #include "math/float.h"
 #include "math/tenx.h"
-#include "qm.h"
 #include <array>
 #include <complex>
 #include <deque>
+#include <functional>
+#include <numeric>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace iter {
@@ -18,7 +20,6 @@ namespace Eigen {
     struct IndexPair;
 }
 enum class GateOp;
-
 namespace qm {
 
     /* clang-format off */

@@ -1,12 +1,9 @@
 #pragma once
 
+#include "h5tb/h5tb.h"
 #include "MpoSite.h"
-#include <h5pp/details/h5ppHid.h>
-#include <Eigen/Core>
 
-namespace h5pp::hid {
-    class h5t;
-}
+enum class ModelType;
 
 template<typename Scalar>
 class IsingMajorana : public MpoSite<Scalar> {
@@ -33,7 +30,6 @@ class IsingMajorana : public MpoSite<Scalar> {
                                      std::optional<std::vector<size_t>> skip = std::nullopt) const final;
 
     public:
-
     explicit IsingMajorana(ModelType model_type_, size_t position_);
 
     // Functions that extend the base (no override)

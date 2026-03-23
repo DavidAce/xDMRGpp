@@ -146,7 +146,7 @@ Eigen::Tensor<T, 4> ModelFinite<Scalar>::get_multisite_mpo(const std::vector<siz
             if(do_trace) {
                 auto t_skip = tid::tic_scope("skipping", tid::level::highest);
                 // Trace the physical indices of this skipped mpo (this should trace an identity)
-                mpoR_traced = mpoR.trace(tenx::array2{2, 3});
+                mpoR_traced  = mpoR.trace(tenx::array2{2, 3});
                 mpoR_traced *= mpoR_traced.constant(static_cast<T>(0.5)); // divide by 2 (after tracing identity)
                 // Append it to the multisite mpo
                 multisite_mpo.device(*threads->dev) = mpoL.contract(mpoR_traced, tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2}).reshape(new_dims);

@@ -1,4 +1,6 @@
 #pragma once
+#include "config/enums/MergeEvent.h"
+#include "config/enums/ModelType.h"
 #include "tensors/edges/EdgesInfinite.h"
 #include "tensors/model/ModelInfinite.h"
 #include "tensors/site/mps/MpsSite.h"
@@ -121,7 +123,6 @@ void TensorsInfinite<Scalar>::merge_twosite_tensor(const Eigen::Tensor<Scalar, 3
     state->clear_cache();
     clear_measurements();
     tools::infinite::mps::merge_twosite_tensor(*state, twosite_tensor, mevent, svd_cfg);
-    //    normalize_state(bond_lim, svd_threshold, NormPolicy::IFNEEDED);
 }
 
 template<typename Scalar>

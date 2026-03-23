@@ -1,7 +1,14 @@
 #include "../lbit.h"
 #include "../spin.h"
 #include "config/debug.h"
-#include "config/enums.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/CircuitOp.h"
+#include "config/enums/GateMove.h"
+#include "config/enums/LbitCircuitGateMatrixKind.h"
+#include "config/enums/LbitCircuitGateWeightKind.h"
+#include "config/enums/MeanType.h"
+#include "config/enums/NormPolicy.h"
+#include "config/enums/StateInitType.h"
 // #include "config/settings.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
@@ -26,6 +33,7 @@
 #include "tools/finite/mps.h"
 #include "tools/finite/ops.h"
 #include <algorithm>
+#include <cassert>
 #include <fmt/ranges.h>
 #include <h5pp/h5pp.h>
 #include <unordered_set>
@@ -71,10 +79,10 @@ std::vector<std::vector<qm::Gate>> qm::lbit::get_unitary_2site_gate_layers(const
     /*! Returns a set of unitary two site operators used to transform between physical and l-bit representations */
     std::vector<std::vector<qm::Gate>> unitary_2site_gate_layers;
     tools::log->trace("Loading twosite unitaries");
-    for(auto &p : circuit) {
-        if(p.layer >= unitary_2site_gate_layers.size()) unitary_2site_gate_layers.emplace_back(std::vector<qm::Gate>{});
-        auto &layer = unitary_2site_gate_layers.at(p.layer);
-        layer.emplace_back(get_unitary_2site_gate(p));
+    for(const auto &p : circuit) {
+        if(unitary_2site_gate_layers.size() <= p.layer) unitary_2site_gate_layers.resize(p.layer + 1);
+        assert(unitary_2site_gate_layers.size() > p.layer);
+        unitary_2site_gate_layers[p.layer].emplace_back(get_unitary_2site_gate(p));
     }
     return unitary_2site_gate_layers;
 }
@@ -657,7 +665,7 @@ cx64 qm::lbit::get_lbit_2point_correlator2(const std::vector<std::vector<qm::Gat
     }
 
     // In the last step we trace everything down to a cx64
-    result = g.trace();
+    result  = g.trace();
     result /= std::pow(2, g.pos.size()); // Normalize by dividing the trace of each 2x2 identity.
     if constexpr(settings::verbose_circuit) {
         log.back().append(fmt::format("result = {:.6f}", result));
@@ -904,7 +912,7 @@ cx64 qm::lbit::get_lbit_2point_correlator3(const std::vector<std::vector<qm::Gat
         g = szj_gate.connect_below(g);
     }
     // In the last step we trace everything down to a cx64
-    result = g.trace();
+    result  = g.trace();
     result /= std::pow(2, g.pos.size()); // Normalize by dividing the trace of each 2x2 identity.
     t_olap.toc();
     if constexpr(settings::verbose_circuit) {
@@ -1410,14 +1418,23 @@ std::tuple<Eigen::Tensor<fp64, 2>, Eigen::Tensor<fp64, 2>, Eigen::Tensor<fp64, 2
         long   rows = lbit_corrmats.front().dimension(0); // dim 0
         long   cols = lbit_corrmats.front().dimension(1); // dim 1
         size_t reps = lbit_corrmats.size();               // dim 2
+        for(const auto &corrmat : lbit_corrmats) {
+            if(corrmat.dimension(0) != rows or corrmat.dimension(1) != cols)
+                throw except::logic_error("Correlation matrix size mismatch: expected {}x{}, got {}x{}", rows, cols, corrmat.dimension(0), corrmat.dimension(1));
+        }
+        assert(std::all_of(lbit_corrmats.begin(), lbit_corrmats.end(), [rows, cols](const auto &corrmat) {
+            return corrmat.dimension(0) == rows and corrmat.dimension(1) == cols;
+        }));
         avg.resize(rows, cols);
         typ.resize(rows, cols);
         err.resize(rows, cols);
+        avg.setZero();
+        typ.setZero();
+        err.setZero();
+        std::vector<fp64> slice(reps);
         for(long c = 0; c < cols; c++) {
             for(long r = 0; r < rows; r++) {
-                std::vector<fp64> slice;
-                slice.reserve(reps);
-                for(const auto &elem : lbit_corrmats) slice.emplace_back(elem(r, c));
+                for(size_t rep = 0; rep < reps; ++rep) slice[rep] = lbit_corrmats[rep](r, c);
                 avg(r, c) = stat::mean(slice);
                 typ(r, c) = stat::typical(slice);
                 err(r, c) = stat::sterr(slice);
@@ -1588,6 +1605,15 @@ qm::lbit::lbitSupportAnalysis qm::lbit::get_lbit_support_analysis(const UnitaryG
         auto [lbit_corrmat_avg,lbit_corrmat_typ, lbit_corrmat_err] = qm::lbit::get_lbit_correlation_statistics(lbit_corrmat_vec);
         auto [cls_avg, rms_avg, rsq_avg, yavg, cavg] = qm::lbit::get_characteristic_length_scale(lbit_corrmat_avg, MeanType::ARITHMETIC);
         auto [cls_typ, rms_typ, rsq_typ, ytyp, ctyp] = qm::lbit::get_characteristic_length_scale(lbit_corrmat_typ, MeanType::GEOMETRIC);
+        auto perm_err = get_permuted(lbit_corrmat_err, MeanType::ARITHMETIC);
+        auto perm_err_mat = tenx::MatrixMap(perm_err);
+        assert(perm_err.dimension(0) == i_width);
+        assert(perm_err.dimension(1) == i_width);
+        auto yerr = std::vector<fp64>(safe_cast<size_t>(perm_err.dimension(1)));
+        for(long col = 0; col < perm_err.dimension(1); ++col) yerr[safe_cast<size_t>(col)] = perm_err_mat.col(col).mean();
+        assert(yavg.size() == safe_cast<size_t>(i_width));
+        assert(yavg.size() == ytyp.size());
+        assert(yavg.size() == yerr.size());
         tools::log->info("Computed lbit decay reps {} | rand h {} | mpo {} | {} | time {:8.3f} s | cls {:>8.6f} | rmsd {:.3e} | rsq {:.6f} | decay {:2} sites: {::8.2e}",
                          reps, rndh, use_mpo, uprop.string(), t_lbit_analysis->restart_lap(),cls_typ, rms_typ, rsq_typ, ctyp, ytyp);
 
@@ -1604,6 +1630,8 @@ qm::lbit::lbitSupportAnalysis qm::lbit::get_lbit_support_analysis(const UnitaryG
         lbitSA.corravg.slice(offset6, extent6) = Eigen::TensorMap<Eigen::Tensor<fp64, 6>>(yavg.data(), extent6);
         extent6                              = {1, 1, 1, 1, 1, safe_cast<long>(ytyp.size())};
         lbitSA.corrtyp.slice(offset6, extent6) = Eigen::TensorMap<Eigen::Tensor<fp64, 6>>(ytyp.data(), extent6);
+        extent6                              = {1, 1, 1, 1, 1, safe_cast<long>(yerr.size())};
+        lbitSA.correrr.slice(offset6, extent6) = Eigen::TensorMap<Eigen::Tensor<fp64, 6>>(yerr.data(), extent6);
 
         auto t_plot = tid::tic_scope("plot");
         auto plt           = AsciiPlotter("lbit decay", 64, 20);

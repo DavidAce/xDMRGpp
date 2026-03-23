@@ -1,5 +1,6 @@
 #include "../lbit.h"
-#include "config/enums.h"
+#include "config/enums/LbitCircuitGateMatrixKind.h"
+#include "config/enums/LbitCircuitGateWeightKind.h"
 #include "debug/exceptions.h"
 #include "tools/common/log.h"
 #include <h5pp/details/h5ppType.h>
@@ -75,5 +76,5 @@ std::string qm::lbit::UnitaryGateParameters::fmt_value(std::string_view p) const
 }
 
 constexpr std::array<std::string_view, 9> qm::lbit::UnitaryGateParameters::get_parameter_names() noexcept {
-    return {"layer", "sites", "f", "w", "theta", "c", "lambda", "weight", "matrix"};
+    return {"layer", "sites", "f", "w", "theta", "c", "lambda", "wkind", "mkind"};
 }

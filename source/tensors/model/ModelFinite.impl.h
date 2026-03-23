@@ -2,6 +2,11 @@
 
 #include "math/tenx.h"
 // -- (textra first)
+#include "config/enums/LogPolicy.h"
+#include "config/enums/ModelType.h"
+#include "config/enums/MpoCompress.h"
+#include "config/enums/MposWithEdges.h"
+#include "config/enums/OptRitz.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
@@ -323,12 +328,12 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpo2_tensors(Scal
 
 template<typename Scalar>
 void ModelFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
-    const auto oldval = get_energy_shift_mpo();
-    const auto newval = energy_shift;
-    const RealScalar tol = RealScalar{100} * std::numeric_limits<RealScalar>::epsilon();
-    const RealScalar scale = std::max<RealScalar>(RealScalar{1}, std::max(std::abs(std::real(oldval)), std::abs(std::real(newval))));
+    const auto       oldval = get_energy_shift_mpo();
+    const auto       newval = energy_shift;
+    const RealScalar tol    = RealScalar{100} * std::numeric_limits<RealScalar>::epsilon();
+    const RealScalar scale  = std::max<RealScalar>(RealScalar{1}, std::max(std::abs(std::real(oldval)), std::abs(std::real(newval))));
     if(std::abs(std::real(oldval - newval)) <= tol * scale) return;
-    tools::log->trace("Shifting MPO energy: {:.16f}", fp(energy_shift));
+    tools::log->trace("Shifting MPO energy: {:.16f}", energy_shift);
     Scalar energy_shift_per_site = energy_shift / static_cast<RealScalar>(get_length());
     for(const auto &mpo : MPO) mpo->set_energy_shift_mpo(energy_shift_per_site);
     clear_cache();
@@ -578,7 +583,7 @@ Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4> ModelFinite<Scalar>::
             if(do_trace) {
                 auto t_skip = tid::tic_scope("skipping", tid::level::highest);
                 // Trace the physical indices of this skipped mpo (this should trace an identity)
-                mpoR_traced = mpoR.trace(tenx::array2{2, 3});
+                mpoR_traced  = mpoR.trace(tenx::array2{2, 3});
                 mpoR_traced *= mpoR_traced.constant(QuadScalar{0.5}); // divide by 2 (after tracing identity)
                 // Append it to the multisite mpo
                 multisite_mpo_t.device(*threads->dev) = mpoL.contract(mpoR_traced, tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2}).reshape(new_dims);
@@ -827,7 +832,6 @@ void ModelFinite<Scalar>::clear_cache_squared(LogPolicy logPolicy) const {
     cache_cx32.multisite_mpo_temps.clear();
     cache_cx64.multisite_mpo_temps.clear();
     cache_cx128.multisite_mpo_temps.clear();
-
 }
 
 template<typename Scalar>
@@ -975,7 +979,7 @@ Eigen::Tensor<T, 4> ModelFinite<Scalar>::get_multisite_mpo(const std::vector<siz
             if(do_trace) {
                 auto t_skip = tid::tic_scope("skipping", tid::level::highest);
                 // Trace the physical indices of this skipped mpo (this should trace an identity)
-                mpoR_traced = mpoR.trace(tenx::array2{2, 3});
+                mpoR_traced  = mpoR.trace(tenx::array2{2, 3});
                 mpoR_traced *= mpoR_traced.constant(static_cast<T>(0.5)); // divide by 2 (after tracing identity)
                 // Append it to the multisite mpo
                 multisite_mpo.device(*threads->dev) = mpoL.contract(mpoR_traced, tenx::idx({1}, {0})).shuffle(tenx::array4{0, 3, 1, 2}).reshape(new_dims);

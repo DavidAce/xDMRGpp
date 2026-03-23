@@ -1,10 +1,10 @@
 #pragma once
-#include "config/enums.h"
-#include "math/float.h"
 #include "tensors/site/env/EnvPair.h"
-#include <complex>
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 
@@ -120,7 +120,7 @@ class EdgesFinite {
     // [[nodiscard]] env_pair<x2::Tensor<Scalar, 3>>             get_multisite_env_ene_blkx2(std::optional<std::vector<size_t>> sites = std::nullopt);
     // [[nodiscard]] env_pair<x2::Tensor<Scalar, 3>>             get_multisite_env_var_blkx2(std::optional<std::vector<size_t>> sites = std::nullopt);
 
-  /* clang-format on */
+    /* clang-format on */
 
     [[nodiscard]] std::pair<std::vector<size_t>, std::vector<size_t>> get_active_ids() const;
 

@@ -1,10 +1,9 @@
 #pragma once
-#include "config/enums.h"
-#include "math/float.h"
-#include <complex>
+#include "config/enums/ModelType.h"
 #include <memory>
 #include <optional>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <vector>
 
 template<typename Scalar>
 class MpoSite;

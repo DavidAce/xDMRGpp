@@ -1,4 +1,7 @@
 #pragma once
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/MergeEvent.h"
+#include "config/enums/ModelType.h"
 #include "config/settings.h"
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"
@@ -253,7 +256,7 @@ const Eigen::Tensor<Scalar, 3> &StateInfinite<Scalar>::get_2site_mps(Scalar norm
     if(cache.twosite_mps) {
         // If norm is ever used, enforce that it stays consistent.
         if(cache.twosite_norm && cache.twosite_norm.value() != norm) {
-            tools::log->warn("get_2site_mps: called with different norm (old {}, new {}) while cached", fp(cache.twosite_norm.value()), fp(norm));
+            tools::log->warn("get_2site_mps: called with different norm (old {}, new {}) while cached", cache.twosite_norm.value(), norm);
         }
         return cache.twosite_mps.value();
     }

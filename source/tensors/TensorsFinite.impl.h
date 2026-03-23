@@ -1,5 +1,17 @@
 #pragma once
 #include "config/debug.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/BondExpansionPolicy.h"
+#include "config/enums/GateMove.h"
+#include "config/enums/LogPolicy.h"
+#include "config/enums/MergeEvent.h"
+#include "config/enums/ModelType.h"
+#include "config/enums/MpoCompress.h"
+#include "config/enums/NormPolicy.h"
+#include "config/enums/OptRitz.h"
+#include "config/enums/ResetReason.h"
+#include "config/enums/StateInit.h"
+#include "config/enums/StateInitType.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/sfinae.h"
@@ -155,13 +167,13 @@ void TensorsFinite<Scalar>::initialize_state(ResetReason reason, StateInit state
     tools::log->debug("Initializing state [{}] to [{}] | Reason [{}] | Type [{}] | Sector [{}] | bond_lim {} | eigspinors {} | pattern {}", state->get_name(),
                       enum2sv(state_init), enum2sv(reason), enum2sv(state_type), axis, bond_lim, use_eigenspinors, pattern);
 
-    tools::log->debug("Initializing state - Before: norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm_state(get_state())),
-                      fv(tools::finite::measure::spin_components(get_state())));
+    tools::log->debug("Initializing state - Before: norm {:.16f} | spin components {::+.16f}", tools::finite::measure::norm_state(get_state()),
+                      tools::finite::measure::spin_components(get_state()));
 
     tools::finite::mps::initialize_state(get_state(), state_init, state_type, axis, use_eigenspinors, bond_lim, pattern);
     state->assert_validity();
-    tools::log->debug("Initializing state - After : norm {:.16f} | spin components {::+.16f}", fp(tools::finite::measure::norm_state(get_state())),
-                      fv(tools::finite::measure::spin_components(get_state())));
+    tools::log->debug("Initializing state - After : norm {:.16f} | spin components {::+.16f}", tools::finite::measure::norm_state(get_state()),
+                      tools::finite::measure::spin_components(get_state()));
 }
 
 template<typename Scalar>
@@ -207,9 +219,9 @@ struct DebugStatus {
         return msg;
     }
     void print() const {
-        tools::log->debug("Energy   [{:<20}] = {:>20.16f}", tag, fp(ene));
-        tools::log->debug("Shift    [{:<20}] = {:>20.16f}", tag, fp(red));
-        tools::log->debug("σ²H      [{:<20}] = {:>20.16f}", tag, fp(var));
+        tools::log->debug("Energy   [{:<20}] = {:>20.16f}", tag, ene);
+        tools::log->debug("Shift    [{:<20}] = {:>20.16f}", tag, red);
+        tools::log->debug("σ²H      [{:<20}] = {:>20.16f}", tag, var);
     }
 };
 
@@ -280,7 +292,7 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
     const RealScalar tol   = RealScalar{100} * std::numeric_limits<RealScalar>::epsilon();
     const RealScalar scale = std::max<RealScalar>(RealScalar{1}, std::abs(std::real(energy_shift)));
     if(std::abs(std::real(model->get_energy_shift_mpo() - energy_shift)) <= tol * scale) {
-        tools::log->debug("MPO energy is already shifted: {:.16f}", fp(energy_shift));
+        tools::log->debug("MPO energy is already shifted: {:.16f}", energy_shift);
         return;
     }
 
@@ -289,7 +301,7 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
 
     measurements = MeasurementsTensorsFinite<Scalar>(); // Resets model-related measurements but not state measurements, which can remain
 
-    tools::log->info("Shifting MPO energy: {:.16f}", fp(energy_shift));
+    tools::log->info("Shifting MPO energy: {:.16f}", energy_shift);
     model->set_energy_shift_mpo(energy_shift);
     model->assert_validity();
     clear_cache();
@@ -325,10 +337,10 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
                 std::numeric_limits<RealScalar>::digits10 -
                 std::max<RealScalar>(static_cast<RealScalar>(0.0), static_cast<RealScalar>(std::log10(std::pow(std::abs(energy_shift), 2))));
             RealScalar critical_cancellation_error = std::pow<RealScalar>(static_cast<RealScalar>(10), -critical_cancellation_max_decimals);
-            tools::log->debug("Variance change              {:>20.16f}", fp(delta_var));
-            tools::log->debug("Variance change percent      {:>20.16f}", fp(delta_var_rel));
-            tools::log->debug("Critical cancellation decs   {:>20.16f}", fp(critical_cancellation_max_decimals));
-            tools::log->debug("Critical cancellation error  {:>20.16f}", fp(critical_cancellation_error));
+            tools::log->debug("Variance change              {:>20.16f}", delta_var);
+            tools::log->debug("Variance change percent      {:>20.16f}", delta_var_rel);
+            tools::log->debug("Critical cancellation decs   {:>20.16f}", critical_cancellation_max_decimals);
+            tools::log->debug("Critical cancellation error  {:>20.16f}", critical_cancellation_error);
             if(delta_var > critical_cancellation_error * static_cast<RealScalar>(1e3)) {
                 tools::log->warn("Variance changed significantly after energy shift+compression");
                 if(delta_var > static_cast<RealScalar>(1e6) * critical_cancellation_error)
@@ -341,7 +353,7 @@ void TensorsFinite<Scalar>::set_energy_shift_mpo(Scalar energy_shift) {
                                                 fp(delta_ene_rel));
             }
             if(ratio_var < static_cast<RealScalar>(0.8) or ratio_var > static_cast<RealScalar>(1.2))
-                tools::log->warn("Variance changed significantly after energy shift: old {:.6e} | new {:.6e}", fp(bef->var), fp(aft->var));
+                tools::log->warn("Variance changed significantly after energy shift: old {:.6e} | new {:.6e}", bef->var, aft->var);
             else if(ratio_var < static_cast<RealScalar>(0.01) or ratio_var > static_cast<RealScalar>(100))
                 throw except::runtime_error("Variance changed too much after energy shift: old {:.6e} | new {:.6e}", fp(bef->var), fp(aft->var));
         }
@@ -616,8 +628,7 @@ BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(BondExpansionCon
 
     if(res.ok) {
         tools::log->debug("Expanded environment {} block [{}-{}] | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f} | hsq {:.16f} -> {:.16f}",
-                          flag2str(bcfg.policy), res.posL, res.posR, fp(res.var_old), fp(res.var_new), fp(res.ene_old), fp(res.ene_new), fp(res.hsq_old),
-                          fp(res.hsq_new));
+                          flag2str(bcfg.policy), res.posL, res.posR, res.var_old, res.var_new, res.ene_old, res.ene_new, res.hsq_old, res.hsq_new);
         clear_measurements();
     } else {
         tools::log->debug("Expansion canceled: {}", res.msg);

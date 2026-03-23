@@ -1,6 +1,7 @@
 #pragma once
 #include "../MpoSite.h"
 #include "config/debug.h"
+#include "config/enums/OptRitz.h"
 #include "debug/exceptions.h"
 #include "math/float.h"
 #include "math/tenx.h"

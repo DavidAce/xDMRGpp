@@ -1,6 +1,7 @@
 #pragma once
 
-#include "config/enums.h"
+#include "config/enums/LogPolicy.h"
+#include "config/enums/NormPolicy.h"
 #include "math/float.h"
 #include "math/svd/config.h"
 #include "measure/MeasurementsTensorsFinite.h"
@@ -10,13 +11,25 @@
 #include <array>
 #include <complex>
 #include <memory>
+#include <optional>
+#include <string_view>
 #include <tensors/edges/EdgesFinite.h>
 #include <tensors/model/ModelFinite.h>
 // #include <tensors/state/StateFinite.h>
+#include <tuple>
+#include <type_traits>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <vector>
 
 struct BondExpansionConfig;
 class TensorsLocal;
+enum class AlgorithmType;
+enum class MergeEvent;
+enum class ModelType;
+enum class OptRitz;
+enum class ResetReason;
+enum class StateInit;
+enum class StateInitType;
 template<typename Scalar>
 class StateFinite;
 template<typename Scalar>
@@ -235,10 +248,10 @@ const Eigen::Tensor<T, 2> &TensorsFinite<Scalar>::get_effective_hamiltonian_squa
     cache.cached_sites_hamiltonian_squared = active_sites;
 
     if constexpr(std::is_same_v<T, Scalar>) {
-        const auto env = get_multisite_env_var_block();
+        const auto env                      = get_multisite_env_var_block();
         cache.effective_hamiltonian_squared = contract_mpo_env<T>(mpo, env.L, env.R);
     } else {
-        const auto env = get_multisite_env_var_block_as<T>();
+        const auto env                      = get_multisite_env_var_block_as<T>();
         cache.effective_hamiltonian_squared = contract_mpo_env<T>(mpo, env.L, env.R);
     }
     return cache.effective_hamiltonian_squared.value();

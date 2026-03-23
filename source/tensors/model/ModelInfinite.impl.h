@@ -1,4 +1,6 @@
 #pragma once
+#include "config/enums/ModelType.h"
+#include "config/enums/MpoCompress.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"

@@ -374,8 +374,8 @@ std::size_t EnvBase<Scalar>::get_unique_id() const {
     const auto h_lo = hash::hash_buffer(B.lo_data(), n);
 
     // Standard hash combine
-    std::size_t h = h_hi;
-    h ^= h_lo + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    std::size_t h  = h_hi;
+    h             ^= h_lo + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
 
     unique_id = h;
     return h;
