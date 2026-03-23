@@ -51,7 +51,7 @@
 #include "tools/finite/measure/norm.h"
 #include "tools/finite/measure/number_entropy.h"
 #include "tools/finite/measure/opdm.h"
-#include "tools/finite/measure/residual.impl.h"
+#include "tools/finite/measure/residual.h"
 #include "tools/finite/measure/spin.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
@@ -370,7 +370,7 @@ BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionO
     bcfg.maxiter       = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
     bcfg.nkrylov       = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
     bcfg.bond_factor   = order == BondExpansionOrder::PREOPT ? settings::strategy::dmrg_bond_expansion::preopt::bond_factor : 1.0f;
-    bcfg.bond_lim      = static_cast<long>(std::ceil(bcfg.bond_factor * status.bond_lim));
+    bcfg.bond_lim      = static_cast<long>(std::ceil(bcfg.bond_factor * static_cast<float>(status.bond_lim)));
     bcfg.trnc_lim      = status.trnc_min;
     bcfg.blocksize     = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
     bcfg.mixing_factor = status.mixing_factor;
@@ -1892,7 +1892,7 @@ void AlgorithmFinite<Scalar>::check_convergence_spin_parity_sector(std::string_v
 
         status.spin_parity_has_converged = target_axus_ok and target_sign_ok and spin_along_axus_near_abs1;
 
-        if(status.spin_parity_has_converged and spin_component_along_axus * target_sign < 0)
+        if(status.spin_parity_has_converged and spin_component_along_axus * static_cast<RealScalar>(target_sign) < 0)
             tools::log->warn("Spin components: {::.16f} | {} converged ({} requested) | threshold {:8.2}", spin_components, target_axus, target_axis,
                              threshold);
         if(not status.spin_parity_has_converged) {
