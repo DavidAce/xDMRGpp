@@ -1,6 +1,7 @@
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/StorageEvent.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
-#include "io/filesystem.h"
 #include "io/fmt_custom.h"
 #include "tid/tid.h"
 #include "tools/common/h5.h"
@@ -8,9 +9,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <h5pp/h5pp.h>
 
+namespace fs = std::filesystem;
 std::string get_dirname() { return "DMRG." + std::string(getenv("USER")); }
 
 std::string replace_substr(std::string text, std::string_view search, std::string_view replace) {

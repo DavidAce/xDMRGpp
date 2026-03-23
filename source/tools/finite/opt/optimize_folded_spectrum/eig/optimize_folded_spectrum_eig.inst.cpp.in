@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "optimize_folded_spectrum_eig.impl.h"
 
 using Scalar = @SCALAR@;
 

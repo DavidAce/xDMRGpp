@@ -58,7 +58,7 @@ tools::finite::opt::precond::standard::BasisChange<Scalar>::BasisChange(const op
         if constexpr(settings::debug_standard_basis_change) {
             Eigen::Tensor<RealScalar, 0> min_wL = wL.real().minimum(); // or iterate
             Eigen::Tensor<RealScalar, 0> min_wR = wR.real().minimum();
-            tools::log->info("min wL {:.3e}, min wR {:.3e}", fp(min_wL(0)), fp(min_wR(0)));
+            tools::log->info("min wL {:.3e}, min wR {:.3e}", min_wL(0), min_wR(0));
 
             tools::log->info("envL_agg dims: {}", envL_agg.dimensions());
             tools::log->info("envR_agg dims: {}", envR_agg.dimensions());
@@ -94,8 +94,8 @@ tools::finite::opt::precond::standard::BasisChange<Scalar>::BasisChange(const op
 
         auto U = es.eigenvectors();
         auto Y = es.eigenvalues();
-        tools::log->info("Y eigvals: {::.5e}", fv(Y));
-        if constexpr(settings::debug_standard_basis_change) { tools::log->info("Y min: {:.5e} max {:.5e}", fp(Y.minCoeff()), fp(Y.maxCoeff())); }
+        tools::log->info("Y eigvals: {::.5e}", Y);
+        if constexpr(settings::debug_standard_basis_change) { tools::log->info("Y min: {:.5e} max {:.5e}", Y.minCoeff(), Y.maxCoeff()); }
 
         const RealScalar   factor          = RealScalar{1e-3f};
         const Eigen::Index n               = Y.size();
@@ -158,7 +158,7 @@ tools::finite::opt::precond::standard::BasisChange<Scalar>::BasisChange(const op
                 Eigen::SelfAdjointEigenSolver<MatrixReal> es(sym(X.real()));
                 if(es.info() == Eigen::Success) {
                     auto ev = es.eigenvalues();
-                    tools::log->info("  eig({}): min={:.6e}, max={:.6e}", lbl, fp(ev.minCoeff()), fp(ev.maxCoeff()));
+                    tools::log->info("  eig({}): min={:.6e}, max={:.6e}", lbl, ev.minCoeff(), ev.maxCoeff());
                 } else {
                     tools::log->warn("  eig({}): decomposition failed", lbl);
                 }
@@ -169,24 +169,24 @@ tools::finite::opt::precond::standard::BasisChange<Scalar>::BasisChange(const op
                 RealScalar err_ST = (SS * TT - Id).norm() / std::max<RealScalar>(RealScalar{1}, Id.norm());
                 RealScalar err_TS = (TT * SS - Id).norm() / std::max<RealScalar>(RealScalar{1}, Id.norm());
 
-                tools::log->info("S*T inverse error {:.2e}", fp(err_ST));
-                tools::log->info("T*S inverse error {:.2e}", fp(err_TS));
+                tools::log->info("S*T inverse error {:.2e}", err_ST);
+                tools::log->info("T*S inverse error {:.2e}", err_TS);
             };
             auto check_projector = [&](const MatrixType &TT, const MatrixType &SS) {
                 MatrixType P    = SS * TT; // should be ~projector
                 RealScalar symm = herm_resid(P);
                 RealScalar idem = (P * P - P).norm() / std::max<RealScalar>(RealScalar{1}, P.norm());
-                tools::log->info("P symmetry {:.2e}, idempotence {:.2e}", fp(symm), fp(idem));
+                tools::log->info("P symmetry {:.2e}, idempotence {:.2e}", symm, idem);
                 RealScalar inv_rt = (SS * (TT * SS) - SS).norm() / std::max<RealScalar>(RealScalar{1}, SS.norm());
-                tools::log->info("round-trip inverse: {:.2e}", fp(inv_rt));
+                tools::log->info("round-trip inverse: {:.2e}", inv_rt);
             };
 
             auto check_congruence = [&](const MatrixType &X, const MatrixType &TT, const MatrixType &G, std::string_view lbl) {
                 MatrixType W   = TT.adjoint() * X * TT;
                 RealScalar rel = rel_err(W, G, X.norm());
                 RealScalar hrm = herm_resid(W);
-                tools::log->info("{}: ||T^H X T - G||/max(1,||X||) = {:.3e}", lbl, fp(rel));
-                tools::log->info("{}: Herm residual (rel) = {:.3e}", lbl, fp(hrm));
+                tools::log->info("{}: ||T^H X T - G||/max(1,||X||) = {:.3e}", lbl, rel);
+                tools::log->info("{}: Herm residual (rel) = {:.3e}", lbl, hrm);
                 eig_range(W, std::string(lbl) + "_sym");
             };
 

@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "init_entangled_state.impl.h"
 
 using Scalar = @SCALAR@;
 

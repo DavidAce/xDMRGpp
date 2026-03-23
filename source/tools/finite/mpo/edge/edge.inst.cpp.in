@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "edge.impl.h"
 
 using Scalar = @SCALAR@;
 

@@ -4,6 +4,7 @@
 #include "../BondExpansionResult.h"
 #include "../mixing_terms.h"
 #include "config/debug.h"
+#include "config/enums/BondExpansionPolicy.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/num.h"
@@ -15,7 +16,6 @@
 #include "tensors/state/StateFinite.h"
 #include "tools/common/log.h"
 #include "tools/finite/measure/hamiltonian.h"
-#include "tools/finite/measure/residual.h"
 namespace settings {
     inline constexpr bool debug_dmrg3s = false;
 }
@@ -42,7 +42,11 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_dmrg3s(StateFinite<S
     tools::finite::env::assert_edges_ene(state, model, edges);
     tools::finite::env::assert_edges_var(state, model, edges);
 
-    // DMRG3S enriches the current site and zero-pads the upcoming site after optimization, before moving.
+    // DMRG3S always works on the bond [pos, pos+1], where pos = state.get_position() is the site
+    // carrying the center matrix C. This is the same bond in both sweep directions; the sweep
+    // direction only changes which side of that fixed bond gets enriched and which side gets zero-padded.
+    //
+    // DMRG3S enriches the current effective site and zero-pads the upcoming side after optimization, before moving.
     // This method adds noise to the bond when expanding. Therefore, we rarely benefit from this method once
     // the bond dimension has already grown to its theoretical maximum: If bonds are numbered l=0,1,2...L
     // the maximum bond is d^min(l,L-l), where d is the spin dimension
@@ -60,10 +64,10 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_dmrg3s(StateFinite<S
         return res; // No update
     }
 
-    size_t posL = pos_expanded.front();
-    size_t posR = pos_expanded.back();
-    auto  &mpsL = state.get_mps_site(posL);
-    auto  &mpsR = state.get_mps_site(posR);
+    const size_t posL = pos_expanded.front();
+    const size_t posR = pos_expanded.back();
+    auto        &mpsL = state.get_mps_site(posL);
+    auto        &mpsR = state.get_mps_site(posR);
     if(state.num_bonds_at_maximum(pos_expanded) == 1) {
         auto res = BondExpansionResult<Scalar>();
         res.msg  = fmt::format("The bond upper limit has been reached for site pair [{}-{}] | mode {}", mpsL.get_tag(), mpsR.get_tag(), flag2str(bcfg.policy));
@@ -73,14 +77,14 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_dmrg3s(StateFinite<S
     assert(mpsL.get_chiR() == mpsR.get_chiL());
     // assert(std::min(mpsL.spin_dim() * mpsL.get_chiL(), mpsR.spin_dim() * mpsR.get_chiR()) >= mpsL.get_chiR());
 
-    size_t posP = state.get_direction() > 0 ? posL : posR;
-    size_t pos0 = state.get_direction() > 0 ? posR : posL;
-    auto  &mpsP = state.get_mps_site(posP);
-    auto  &mps0 = state.get_mps_site(pos0);
+    const size_t posP = state.get_direction() > 0 ? posL : posR;
+    const size_t pos0 = state.get_direction() > 0 ? posR : posL;
+    auto        &mpsP = state.get_mps_site(posP);
+    auto        &mps0 = state.get_mps_site(pos0);
 
-    auto dimL_old = mpsL.dimensions();
-    auto dimR_old = mpsR.dimensions();
-    auto dimP_old = mpsP.dimensions();
+    const auto dimL_old = mpsL.dimensions();
+    const auto dimR_old = mpsR.dimensions();
+    const auto dimP_old = mpsP.dimensions();
 
     // auto res = get_mixing_factors_postopt_rnorm(pos_expanded, state, model, edges, bcfg);
     // using R = decltype(std::real(std::declval<Scalar>()));
@@ -98,18 +102,18 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_dmrg3s(StateFinite<S
     res.var_old   = tools::finite::measure::energy_variance(state, model, edges);
 
     tools::log->debug("Expanding {}{} - {}{} | α = {:.5e} | factor {:.1e} | ene {:.16f} var {:.5e}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                      mpsR.dimensions(), fp(bcfg.mixing_factor), bcfg.bond_factor, fp(res.ene_old), fp(res.var_old));
+                      mpsR.dimensions(), bcfg.mixing_factor, bcfg.bond_factor, res.ene_old, res.var_old);
 
     // Set up the SVD
     // Bond dimension can't grow faster than x spin_dim.
-    auto bondL_max = mpsL.spin_dim() * mpsL.get_chiL();
-    auto bondR_max = mpsR.spin_dim() * mpsR.get_chiR();
-    auto bond_max  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bond_lim});
+    const auto bondL_max = mpsL.spin_dim() * mpsL.get_chiL();
+    const auto bondR_max = mpsR.spin_dim() * mpsR.get_chiR();
+    const auto bond_max  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bond_lim});
 
     auto svd_cfg = svd::config(bond_max, bcfg.trnc_lim);
 
-    bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
-    bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
+    const bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
+    const bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
 
     decltype(auto) M     = state.template get_multisite_mps<Scalar>({posP});
     decltype(auto) N     = mps0.template get_M_bare_as<Scalar>();
@@ -121,15 +125,19 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_dmrg3s(StateFinite<S
 
     if(state.get_direction() > 0) {
         auto [M_P_del, N_0] = internal::get_mixing_terms_MP_N0(M, N, P1, P2, bcfg);
+        res.dimMP           = M_P_del.dimensions();
+        res.dimN0           = N_0.dimensions();
         internal::merge_mixing_terms_MP_N0(state, mpsP, M_P_del, mps0, N_0, svd_cfg);
         tools::log->debug("Bond expansion l2r {} | {} α {:.4e} | svd_ε {:.2e} | χlim {} | χ {} -> {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy),
-                          fp(bcfg.mixing_factor), svd_cfg.truncation_limit.value(), svd_cfg.rank_max.value(), dimP_old, M.dimensions(), res.dimMP,
+                          bcfg.mixing_factor, svd_cfg.truncation_limit.value(), svd_cfg.rank_max.value(), dimP_old, M.dimensions(), res.dimMP,
                           mpsP.dimensions());
     } else {
         auto [N_0, M_P_del] = internal::get_mixing_terms_N0_MP(N, M, P1, P2, bcfg);
+        res.dimMP           = M_P_del.dimensions();
+        res.dimN0           = N_0.dimensions();
         internal::merge_mixing_terms_N0_MP(state, mps0, N_0, mpsP, M_P_del, svd_cfg);
         tools::log->debug("Bond expansion r2l {} | {} α {:.4e} | svd_ε {:.2e} | χlim {} | χ {} -> {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy),
-                          fp(bcfg.mixing_factor), svd_cfg.truncation_limit.value(), svd_cfg.rank_max.value(), dimP_old, M.dimensions(), M_P_del.dimensions(),
+                          bcfg.mixing_factor, svd_cfg.truncation_limit.value(), svd_cfg.rank_max.value(), dimP_old, M.dimensions(), res.dimMP,
                           mpsP.dimensions());
     }
 

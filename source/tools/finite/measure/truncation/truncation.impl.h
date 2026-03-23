@@ -1,10 +1,9 @@
-#pragma once
+#include "../truncation.h"
 #include "debug/exceptions.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
-#include "truncation.h"
 
 template<typename Scalar>
 std::vector<fp64> tools::finite::measure::truncation_errors(const StateFinite<Scalar> &state) {

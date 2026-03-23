@@ -1,6 +1,9 @@
 #pragma once
 
 #include "algorithms/AlgorithmStatus.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/CopyPolicy.h"
+#include "config/enums/StorageEvent.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "general/iter.h"
@@ -164,7 +167,7 @@ void tools::finite::h5::save::expectations(h5pp::File &h5file, const StorageInfo
             auto                 rows = safe_cast<hsize_t>(state.measurements.expectation_values_sz->dimension(0));
             std::vector<hsize_t> dims = {rows, 0};
             std::vector<hsize_t> chnk = {rows, settings::storage::dataset::expectation_values_spin_xyz::chunksize};
-            using Real = typename MeasurementsStateFinite<Scalar>::RealScalar;
+            using Real                = typename MeasurementsStateFinite<Scalar>::RealScalar;
             h5file.createDataset(dset_path, h5pp::type::getH5Type<Real>(), H5D_CHUNKED, dims, chnk);
         }
         tools::log->trace("Writing to dataset: {} | event {} | policy {}", dset_path, enum2sv(sinfo.storage_event),
@@ -292,7 +295,7 @@ void tools::finite::h5::save::subsystem_entanglement_entropies(h5pp::File &h5fil
     if(not attrs.link_exists) {
         std::vector<hsize_t> dims = {rows, cols, 0};
         std::vector<hsize_t> chnk = {rows, cols, settings::storage::dataset::subsystem_entanglement_entropies::chunksize};
-        using Real = typename MeasurementsStateFinite<Scalar>::RealScalar;
+        using Real                = typename MeasurementsStateFinite<Scalar>::RealScalar;
         h5file.createDataset(dset_path, h5pp::type::getH5Type<Real>(), H5D_CHUNKED, dims, chnk, std::nullopt, 2);
         h5file.writeAttribute("extent-1,offset,iter", dset_path, "index");
         h5file.writeAttribute("Entanglement entropies for subsystems", dset_path, "description");
@@ -328,7 +331,7 @@ void tools::finite::h5::save::information_lattice(h5pp::File &h5file, const Stor
     if(not attrs.link_exists) {
         std::vector<hsize_t> dims = {rows, cols, 0};
         std::vector<hsize_t> chnk = {rows, cols, settings::storage::dataset::information_lattice::chunksize};
-        using Real = typename MeasurementsStateFinite<Scalar>::RealScalar;
+        using Real                = typename MeasurementsStateFinite<Scalar>::RealScalar;
         h5file.createDataset(dset_path, h5pp::type::getH5Type<Real>(), H5D_CHUNKED, dims, chnk, std::nullopt, 2);
         h5file.writeAttribute("extent-1,offset,iter", dset_path, "index");
         h5file.writeAttribute("Information lattice", dset_path, "description");
@@ -368,7 +371,7 @@ void tools::finite::h5::save::information_center_of_mass(h5pp::File &h5file, con
     auto attrs      = tools::common::h5::save::get_save_attrs(h5file, table_path);
     if(attrs == sinfo) return;
     auto information_center_of_mass = tools::finite::measure::information_center_of_mass(state);
-    tools::log->info("information_center_of_mass: {:.16f} | t = {:.3e}", fp(information_center_of_mass),
+    tools::log->info("information_center_of_mass: {:.16f} | t = {:.3e}", information_center_of_mass,
                      state.measurements.see_time.has_value() ? state.measurements.see_time.value() : std::numeric_limits<double>::quiet_NaN());
     tools::finite::h5::save::data_as_table(h5file, sinfo, information_center_of_mass, "information_center_of_mass", "Information center of mass", "scale");
     if(state.measurements.see_time.has_value()) h5file.writeAttribute(state.measurements.see_time.value(), table_path, "time_see");
@@ -395,7 +398,7 @@ void tools::finite::h5::save::number_probabilities(h5pp::File &h5file, const Sto
         auto                 cols = static_cast<hsize_t>(state.measurements.number_probabilities->dimension(1));
         std::vector<hsize_t> dims = {rows, cols, 0};
         std::vector<hsize_t> chnk = {rows, cols, settings::storage::dataset::number_probabilities::chunksize};
-        using Real = typename MeasurementsStateFinite<Scalar>::RealScalar;
+        using Real                = typename MeasurementsStateFinite<Scalar>::RealScalar;
         h5file.createDataset(dset_path, h5pp::type::getH5Type<Real>(), H5D_CHUNKED, dims, chnk, std::nullopt, 6);
         h5file.writeAttribute("n_count, site, time", dset_path, "index");
         h5file.writeAttribute("Probability of finding n_count particles to the left of a site at a time index", dset_path, "description");
@@ -425,8 +428,8 @@ template<typename Scalar>
 void tools::finite::h5::save::number_entropies(h5pp::File &h5file, const StorageInfo &sinfo, const StateFinite<Scalar> &state) {
     if(not should_save(sinfo, settings::storage::table::number_entropies::policy)) return;
     if(state.get_algorithm() != AlgorithmType::fLBIT) {
-        tools::log->warn("Called tools::finite::h5::save::number_entropies from algorithm [{}]: This is currently only valid with the [fLBIT] algorithm",
-                         enum2sv(state.get_algorithm()));
+        tools::log->debug("Called tools::finite::h5::save::number_entropies from algorithm [{}]: This is currently only valid with the [fLBIT] algorithm",
+                          enum2sv(state.get_algorithm()));
         return;
     }
     auto t_hdf = tid::tic_scope("entropies", tid::level::higher);

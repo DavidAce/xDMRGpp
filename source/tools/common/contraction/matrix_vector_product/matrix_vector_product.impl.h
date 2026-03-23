@@ -119,8 +119,8 @@ namespace tools::common::contraction::internal {
         auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
         info.cancelation_factor = Smax / info.ST3;
         if constexpr(settings::debug_contraction)
-            tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} envR {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e}", fp(info.mps_norm),
-                             fp(info.mpo_norm), fp(info.envL_norm), fp(info.envR_norm), fp(info.ST1), fp(info.ST2), fp(info.ST3), fp(info.cancelation_factor));
+            tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} envR {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e}", info.mps_norm, info.mpo_norm,
+                             info.envL_norm, info.envR_norm, info.ST1, info.ST2, info.ST3, info.cancelation_factor);
         return info;
     }
 
@@ -163,7 +163,7 @@ namespace tools::common::contraction::internal {
         info.ST3                = get_norm(res.data(), res.dimensions());
         auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
         info.cancelation_factor = Smax / info.ST3;
-        tools::log->info("Contracted with eigen: cf: {:.3e} | type {}", fp(info.cancelation_factor), sfinae::type_name<Scalar>());
+        tools::log->info("Contracted with eigen: cf: {:.3e} | type {}", info.cancelation_factor, sfinae::type_name<Scalar>());
         return info;
     }
 
@@ -267,8 +267,8 @@ namespace tools::common::contraction::internal {
         auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
         info.cancelation_factor = Smax / info.ST3;
         if constexpr(settings::debug_contraction)
-            tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} envR {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e}", fp(info.mps_norm),
-                             fp(info.mpo_norm), fp(info.envL_norm), fp(info.envR_norm), fp(info.ST1), fp(info.ST2), fp(info.ST3), fp(info.cancelation_factor));
+            tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} envR {:.4e} ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e}", info.mps_norm, info.mpo_norm,
+                             info.envL_norm, info.envR_norm, info.ST1, info.ST2, info.ST3, info.cancelation_factor);
         return info;
     }
 }
@@ -386,8 +386,8 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
                 const RealScalar q4     = gamma * opnorm * xnorm / std::max(Axnorm, eps); // E.g. q4 > 1e-2: 2 digits lost
 
                 if constexpr(settings::debug_contraction)
-                    tools::log->debug("Switched matvec to x2:  opnorm={:.4e} xnorm={:.4e} q0={:.4e} q2={:.4e} q4={:.4e} q0Tol {:.4e} q2Tol {:.4e}", fp(opnorm),
-                                      fp(xnorm), fp(q0), fp(q2), fp(q4), fp(q0Tol), fp(q2Tol));
+                    tools::log->debug("Switched matvec to x2:  opnorm={:.4e} xnorm={:.4e} q0={:.4e} q2={:.4e} q4={:.4e} q0Tol {:.4e} q2Tol {:.4e}", opnorm,
+                                      xnorm, q0, q2, q4, q0Tol, q2Tol);
             } else {
                 if constexpr(use_tblis) {
                     info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
@@ -422,8 +422,8 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
                         tools::log->debug("matrix_vector_product: Redo matvec in x2:  opnorm={:.4e} xnorm={:.4e} Axnorm {:.4e} xAx={:.4e} -> {:.4e} "
                                           "q0={:.4e} q2={:.4e} q4={:.4e} q0Tol={:.4e} q2Tol={:.4e} q4Tol={:.4e} |xAx-xAx|={:.16e} "
                                           "|Ax-Ax_x2|={:.4e} |Ax-Ax_x2|/|Ax|={:.16e} f={:.4e}",
-                                          fp(opnorm), fp(xnorm), fp(Axnorm), fp(std::real(xAx)), fp(std::real(xAx_x2)), fp(q0), fp(q2), fp(q4), fp(q0Tol),
-                                          fp(q2Tol), fp(q4Tol), fp(xAx_diff), fp(Ax_diff), fp(Ax_reldiff), fp(f));
+                                          opnorm, xnorm, Axnorm, std::real(xAx), std::real(xAx_x2), q0, q2, q4, q0Tol, q2Tol, q4Tol, xAx_diff, Ax_diff,
+                                          Ax_reldiff, f);
                 }
             }
             break;
@@ -433,8 +433,8 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
 
     if constexpr(settings::debug_contraction)
         if(!msg.empty())
-            tools::log->info("matrix_vector_product: ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e} {}", fp(info.ST1), fp(info.ST2), fp(info.ST3),
-                             fp(info.cancelation_factor), msg);
+            tools::log->info("matrix_vector_product: ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e} {}", info.ST1, info.ST2, info.ST3, info.cancelation_factor,
+                             msg);
 }
 
 template<typename Scalar>
@@ -467,8 +467,8 @@ void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3> 
         info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
         if constexpr(settings::debug_contraction)
             if(!msg.empty())
-                tools::log->info("matrix_vector_product: ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e} {}", fp(info.ST1), fp(info.ST2), fp(info.ST3),
-                                 fp(info.cancelation_factor), msg);
+                tools::log->info("matrix_vector_product: ST1 {:.4e} ST2 {:.4e} ST3 {:.4e} cf: {:.4e} {}", info.ST1, info.ST2, info.ST3, info.cancelation_factor,
+                                 msg);
     } else {
         matrix_vector_product(res, mps, mpo, envL.to_EigenTensor(), envR.to_EigenTensor());
     }

@@ -1,4 +1,4 @@
-#include "../truncation.impl.h"
+#include "truncation.impl.h"
 
 using Scalar = @SCALAR@;
 

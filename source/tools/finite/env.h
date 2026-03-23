@@ -13,13 +13,6 @@ class ModelFinite;
 template<typename Scalar>
 class EdgesFinite;
 template<typename Scalar>
-class EnvEne;
-template<typename Scalar>
-class EnvVar;
-enum class BondExpansionPolicy;
-enum class OptAlgo;
-enum class OptRitz;
-template<typename Scalar>
 struct BondExpansionResult;
 namespace tools::finite::opt {
     struct OptMeta;

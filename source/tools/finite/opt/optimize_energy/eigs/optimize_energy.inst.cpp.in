@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "optimize_energy.impl.h"
 
 using Scalar = @SCALAR@;
 

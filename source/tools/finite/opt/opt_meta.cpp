@@ -1,5 +1,10 @@
 #include "../opt_meta.h"
-#include "config/enums.h"
+#include "config/enums/OptAlgo.h"
+#include "config/enums/OptExit.h"
+#include "config/enums/OptRitz.h"
+#include "config/enums/OptSolver.h"
+#include "config/enums/OptType.h"
+#include "config/enums/OptWhen.h"
 #include "debug/exceptions.h"
 #include <fmt/ranges.h>
 

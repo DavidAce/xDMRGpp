@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "extract_results.impl.h"
 
 using Scalar = @STORAGE_SCALAR@;
 using T      = @CALC_SCALAR@;

@@ -1,12 +1,12 @@
 #pragma once
-#include "math/float.h"
 #include "math/svd/config.h"
+#include <complex>
+#include <string_view>
+#include <utility>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 template<typename Scalar>
 class StateFinite;
-template<typename Scalar>
-class MpoSite;
 
 namespace tools::finite::ops {
     template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));

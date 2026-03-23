@@ -1,4 +1,4 @@
-#include "../expectation_value.impl.h"
+#include "expectation_value.impl.h"
 
 using CalcType = @OUTER_SCALAR@;
 using Scalar   = @INNER_SCALAR@;

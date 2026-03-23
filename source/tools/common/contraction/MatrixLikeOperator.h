@@ -40,8 +40,8 @@ class MatrixLikeOperator : public Eigen::EigenBase<MatrixLikeOperator<Scalar_>> 
         assert(x.allFinite());
         auto result = Eigen::Product<MatrixLikeOperator, Rhs, Eigen::AliasFreeProduct>(*this, x.derived());
         assert(result.allFinite());
-        auto t_end = std::chrono::high_resolution_clock::now();
-        m_optimer += std::chrono::duration<double>(t_end - t_start).count();
+        auto t_end  = std::chrono::high_resolution_clock::now();
+        m_optimer  += std::chrono::duration<double>(t_end - t_start).count();
         m_opcounter++;
         return result;
     }

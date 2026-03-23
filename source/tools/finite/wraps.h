@@ -1,8 +1,5 @@
 #pragma once
 
-#include <memory>
-#include <string_view>
-
 template<typename Scalar> class StateFinite;
 template<typename Scalar> class ModelFinite;
 template<typename Scalar> class EdgesFinite;

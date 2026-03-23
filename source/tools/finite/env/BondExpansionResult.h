@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <unsupported/Eigen/CXX11/Tensor>
+enum class BondExpansionPolicy;
 template<typename T>
 struct BondExpansionResult {
     using R                                    = decltype(std::real(std::declval<T>()));

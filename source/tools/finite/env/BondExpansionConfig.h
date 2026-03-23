@@ -1,7 +1,10 @@
 #pragma once
-#include "config/enums.h"
 #include <cstddef>
 enum class BondExpansionOrder { PREOPT, POSTOPT };
+enum class BondExpansionPolicy;
+enum class OptAlgo;
+enum class OptRitz;
+enum class OptType;
 struct BondExpansionConfig {
     BondExpansionOrder  order;
     BondExpansionPolicy policy;

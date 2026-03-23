@@ -1,6 +1,7 @@
 #pragma once
 #include "math/float.h"
 #include <Eigen/Core>
+#include <unsupported/Eigen/CXX11/Tensor>
 template<typename Scalar>
 class StateFinite;
 enum class ModelType;

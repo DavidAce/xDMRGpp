@@ -1,4 +1,4 @@
-#include "../entanglement_entropy.impl.h"
+#include "entanglement_entropy.impl.h"
 
 using Scalar = @SCALAR@;
 using Real   = tools::finite::measure::RealScalar<Scalar>;

@@ -4,8 +4,11 @@
 #include "../assertions.h"
 #include "../BondExpansionConfig.h"
 #include "../BondExpansionResult.h"
-#include "../expansion_terms.h"
 #include "config/debug.h"
+#include "config/enums/BondExpansionPolicy.h"
+#include "config/enums/MergeEvent.h"
+#include "config/enums/OptAlgo.h"
+#include "config/enums/OptRitz.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/eig/matvec/matvec_mpos.h"
@@ -19,10 +22,8 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
 #include "tools/finite/measure/hamiltonian.h"
-#include "tools/finite/measure/residual.h"
 #include "tools/finite/mps.h"
 #include <Eigen/Eigenvalues>
 
@@ -31,16 +32,16 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
                                const StateFinite<Scalar>   &state, //
                                const ModelFinite<Scalar>   &model, //
                                const EdgesFinite<Scalar>   &edges, //
-                               BondExpansionConfig          bcfg,  //
+                               const BondExpansionConfig   &bcfg,  //
                                BondExpansionResult<Scalar> &res) {
     if constexpr(sfinae::is_std_complex_v<T>) {
         using RealT = decltype(std::real(std::declval<T>()));
         if(state.is_real() and model.is_real() and edges.is_real()) { return get_optimally_mixed_block<RealT>(sites, state, model, edges, bcfg, res); }
     }
 
-    auto t_mixblk = tid::tic_scope("mixblk");
-    auto K1_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::DMRG);
-    auto K2_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::XDMRG);
+    auto       t_mixblk = tid::tic_scope("mixblk");
+    const auto K1_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::DMRG);
+    const auto K2_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::XDMRG);
 
     MatVecMPOS<T> H1 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
     MatVecMPOS<T> H2 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
@@ -50,20 +51,20 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
     using VectorR    = Eigen::Matrix<R, Eigen::Dynamic, 1>;
     auto nonZeroCols = std::vector<long>();
 
-    auto mps_size  = H1.get_size();
-    auto mps_shape = H1.get_shape_mps();
-    long ncv       = std::clamp(bcfg.nkrylov, 3ul, 256ul);
+    const auto mps_size     = H1.get_size();
+    const auto mps_shape    = H1.get_shape_mps();
+    const long requestedNcv = std::clamp(bcfg.nkrylov, 3ul, 256ul);
 
     auto H1V = MatrixT();
     auto H2V = MatrixT();
-    if(K1_on) H1V.resize(mps_size, ncv);
-    if(K2_on) H2V.resize(mps_size, ncv);
+    if(K1_on) H1V.resize(mps_size, requestedNcv);
+    if(K2_on) H2V.resize(mps_size, requestedNcv);
 
     // Default solution
     res.mixed_blk = state.template get_multisite_mps<Scalar>(sites);
 
     // Initialize Krylov vector 0
-    auto V   = MatrixT(mps_size, ncv);
+    auto V   = MatrixT(mps_size, requestedNcv);
     V.col(0) = tenx::asScalarType<T>(tenx::VectorCast(res.mixed_blk));
 
     R                  optVal = std::numeric_limits<R>::quiet_NaN();
@@ -77,11 +78,17 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
     size_t             numMGS = 0;
     std::string        msg;
     while(true) {
+        auto basisDim = static_cast<long>(V.cols());
+        if(basisDim == 0) {
+            msg = "empty Krylov basis";
+            break;
+        }
+
         // Define the krylov subspace
-        for(long i = 0; i + 1 < ncv; ++i) {
-            if(i < ncv / 2) {
+        for(long i = 0; i + 1 < basisDim; ++i) {
+            if(i < basisDim / 2) {
                 H1.MultAx(V.col(i).data(), V.col(i + 1).data());
-            } else if(i == ncv / 2) {
+            } else if(i == basisDim / 2) {
                 H2.MultAx(V.col(0).data(), V.col(i + 1).data());
             } else {
                 H2.MultAx(V.col(i).data(), V.col(i + 1).data());
@@ -94,16 +101,24 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
             auto mgs    = linalg::matrix::modified_gram_schmidt(V);
             nonZeroCols = std::move(mgs.nonZeroCols);
             V           = mgs.Q(Eigen::placeholders::all, nonZeroCols);
+            basisDim    = static_cast<long>(V.cols());
             numMGS++;
             if(nonZeroCols.size() == static_cast<size_t>(mgs.Q.cols())) break;
         }
 
+        if(basisDim == 0) {
+            msg = "empty Krylov basis after Gram-Schmidt";
+            break;
+        }
+
         // V should now have orthonormal vectors
         if(K1_on) {
-            for(long i = 0; i < ncv; ++i) H1.MultAx(V.col(i).data(), H1V.col(i).data());
+            H1V.resize(mps_size, basisDim);
+            for(long i = 0; i < basisDim; ++i) H1.MultAx(V.col(i).data(), H1V.col(i).data());
         }
         if(K2_on) {
-            for(long i = 0; i < ncv; ++i) H2.MultAx(V.col(i).data(), H2V.col(i).data());
+            H2V.resize(mps_size, basisDim);
+            for(long i = 0; i < basisDim; ++i) H2.MultAx(V.col(i).data(), H2V.col(i).data());
         }
         if(!std::isnan(optVal)) {
             if(bcfg.optAlgo == OptAlgo::DMRG)
@@ -120,19 +135,19 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
         }
         auto t_dotprod = tid::tic_scope("dotprod");
 
-        MatrixT K1 = MatrixT::Zero(ncv, ncv);
+        MatrixT K1 = MatrixT::Zero(basisDim, basisDim);
         if(K1_on) {
-            for(long j = 0; j < ncv; ++j) {
-                for(long i = j; i < ncv; ++i) { K1(i, j) = V.col(i).dot(H1V.col(j)); }
+            for(long j = 0; j < basisDim; ++j) {
+                for(long i = j; i < basisDim; ++i) { K1(i, j) = V.col(i).dot(H1V.col(j)); }
             }
             K1 = K1.template selfadjointView<Eigen::Lower>();
         }
 
-        MatrixT K2 = MatrixT::Zero(ncv, ncv);
+        MatrixT K2 = MatrixT::Zero(basisDim, basisDim);
         if(K2_on) {
             // Use abs to avoid negative near-zero values
-            for(long j = 0; j < ncv; ++j) {
-                for(long i = j; i < ncv; ++i) {
+            for(long j = 0; j < basisDim; ++j) {
+                for(long i = j; i < basisDim; ++i) {
                     if(i == j)
                         K2(i, j) = std::abs(V.col(i).dot(H2V.col(j)));
                     else
@@ -159,7 +174,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
                     evals = solver.eigenvalues();
                     evecs = solver.eigenvectors();
                 } else {
-                    tools::log->info("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8));
+                    if(tools::log->level() <= spdlog::level::info) { tools::log->info("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8)); }
                     tools::log->warn("Diagonalization of K1 exited with info {}", static_cast<int>(solver.info()));
                 }
 
@@ -200,11 +215,11 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
         }
         auto t_checks      = tid::tic_scope("checks");
         snorm              = static_cast<R>(evals.cwiseAbs().maxCoeff());
-        V                  = (V * evecs.real()).eval(); // Now V has ncv columns mixed according to evecs
+        V                  = (V * evecs.real()).eval(); // Keep the current Krylov basis width after mixing
         VectorR mixedNorms = V.colwise().norm();        // New state norms after mixing cols of V according to cols of evecs
         auto    mixedColOk = std::vector<long>();       // New states with acceptable norm and eigenvalue
         mixedColOk.reserve(static_cast<size_t>(mixedNorms.size()));
-        auto normTol = std::numeric_limits<R>::epsilon() * settings::precision::max_norm_slack;
+        auto normTol = std::numeric_limits<R>::epsilon() * safe_cast<R>(settings::precision::max_norm_slack);
         for(long i = 0; i < mixedNorms.size(); ++i) {
             if(std::abs(mixedNorms(i) - R{1}) > normTol) continue;
             // if(algo != OptAlgo::GDMRG and evals(i) <= 0) continue; // H2 and variance are positive definite, but the eigenvalues of GDMRG are not
@@ -213,7 +228,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
             mixedColOk.emplace_back(i);
         }
         if constexpr(!sfinae::is_quadruple_prec_v<T>) {
-            if(mixedColOk.size() <= 1) {
+            if(mixedColOk.size() <= 1 and tools::log->level() <= spdlog::level::debug) {
                 tools::log->debug("K1                     : \n{}\n", linalg::matrix::to_string(K1, 8));
                 tools::log->debug("K2                     : \n{}\n", linalg::matrix::to_string(K2, 8));
                 tools::log->debug("evals                  : \n{}\n", linalg::matrix::to_string(evals, 8));
@@ -225,16 +240,22 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
                 tools::log->debug("numZeroRowsK2          = {}", numZeroRowsK2);
                 tools::log->debug("ngramSchmidt           = {}", numMGS);
                 if(bcfg.optAlgo == OptAlgo::GDMRG) {
-                    H2.MultAx(V.col(0).data(), H2V.col(0).data());
-                    H2.MultAx(V.col(1).data(), H2V.col(1).data());
-                    H2.MultAx(V.col(2).data(), H2V.col(2).data());
-                    tools::log->debug("V.col(0).dot(H2*V.col(1)) = {:.16f}", V.col(0).dot(H2V.col(1)));
-                    tools::log->debug("V.col(0).dot(H2*V.col(2)) = {:.16f}", V.col(0).dot(H2V.col(2)));
-                    tools::log->debug("V.col(1).dot(H2*V.col(2)) = {:.16f}", V.col(1).dot(H2V.col(2)));
+                    if(V.cols() > 1) {
+                        H2.MultAx(V.col(0).data(), H2V.col(0).data());
+                        H2.MultAx(V.col(1).data(), H2V.col(1).data());
+                        tools::log->debug("V.col(0).dot(H2*V.col(1)) = {:.16f}", V.col(0).dot(H2V.col(1)));
+                    }
+                    if(V.cols() > 2) {
+                        H2.MultAx(V.col(2).data(), H2V.col(2).data());
+                        tools::log->debug("V.col(0).dot(H2*V.col(2)) = {:.16f}", V.col(0).dot(H2V.col(2)));
+                        tools::log->debug("V.col(1).dot(H2*V.col(2)) = {:.16f}", V.col(1).dot(H2V.col(2)));
+                    }
                 } else {
-                    tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1)));
-                    tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
-                    tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
+                    if(V.cols() > 1) { tools::log->debug("V.col(0).dot(V.col(1)) = {:.16f}", V.col(0).dot(V.col(1))); }
+                    if(V.cols() > 2) {
+                        tools::log->debug("V.col(0).dot(V.col(2)) = {:.16f}", V.col(0).dot(V.col(2)));
+                        tools::log->debug("V.col(1).dot(V.col(2)) = {:.16f}", V.col(1).dot(V.col(2)));
+                    }
                 }
             }
         }
@@ -286,7 +307,6 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
 
         // If we make it here: update the solution
         res.mixed_blk = tenx::asScalarType<Scalar>(tenx::TensorCast(V.col(optIdx), mps_shape));
-        VectorR col   = evecs.col(optIdx).real();
 
         if(mixedColOk.size() == 1) {
             msg = fmt::format("saturated: only one valid eigenvector");
@@ -297,7 +317,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
         if(iter + 1 < bcfg.maxiter)
             tools::log->debug("bond expansion result: {:.16f} [{}] | sites {} (size {}) | norm {:.16f} | rnorm {:.3e} | ngs {} | iters {} | "
                               "{:.3e} it/s |  {:.3e} s",
-                              fp(optVal), optIdx, sites, mps_size, fp(V.col(0).norm()), fp(rnorm), numMGS, iter, iter / t_mixblk->get_last_interval(),
+                              optVal, optIdx, sites, mps_size, V.col(0).norm(), rnorm, numMGS, iter, safe_cast<double>(iter) / t_mixblk->get_last_interval(),
                               t_mixblk->get_last_interval());
 
         iter++;
@@ -309,12 +329,13 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
 
     tools::log->debug("mixed state result: {:.16f} [{}] | ncv {} | sites {} (size {}) | norm {:.16f} | rnorm {:.3e} | ngs {} | iters "
                       "{} | {:.3e} s | {}",
-                      fp(optVal), optIdx, ncv, sites, mps_size, fp(V.col(0).norm()), fp(rnorm), numMGS, iter, t_mixblk->get_last_interval(), msg);
+                      optVal, optIdx, V.cols(), sites, mps_size, V.col(0).norm(), rnorm, numMGS, iter, t_mixblk->get_last_interval(), msg);
 }
 
 template<typename Scalar>
 BondExpansionResult<Scalar> get_mixing_factors_preopt_krylov(const std::vector<size_t> &sites, const StateFinite<Scalar> &state,
-                                                             const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg) {
+                                                             const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
+                                                             const BondExpansionConfig &bcfg) {
     // using R = decltype(std::real(std::declval<Scalar>()));
     tools::finite::env::assert_edges_ene(state, model, edges);
     tools::finite::env::assert_edges_var(state, model, edges);
@@ -354,15 +375,15 @@ template<typename Scalar>
 BondExpansionResult<Scalar> tools::finite::env::expand_bond_preopt_nsite(StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
                                                                          EdgesFinite<Scalar> &edges, BondExpansionConfig bcfg) {
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
-        throw except::runtime_error("expand_bond_forward_nsite: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
+        throw except::runtime_error("expand_bond_preopt_nsite: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
                                     edges.get_length());
     if(not num::all_equal(state.active_sites, model.active_sites, edges.active_sites))
-        throw except::runtime_error("expand_bond_forward_nsite: All active sites are not equal: state {} | model {} | edges {}", state.active_sites,
+        throw except::runtime_error("expand_bond_preopt_nsite: All active sites are not equal: state {} | model {} | edges {}", state.active_sites,
                                     model.active_sites, edges.active_sites);
     if(state.active_sites.empty()) throw except::logic_error("No active sites for bond expansion");
 
     bool nopreopt = !has_any_flags(bcfg.policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE);
-    if(nopreopt) throw except::logic_error("expand_bond_ssite_preopt: BondExpansionPolicy::PREOPT_NSITE_REAR|PREOPT_NSITE_FORE was not set in bcfg.policy");
+    if(nopreopt) throw except::logic_error("expand_bond_preopt_nsite: BondExpansionPolicy::PREOPT_NSITE_REAR|PREOPT_NSITE_FORE was not set in bcfg.policy");
 
     // Determine which bond to expand
     // We need at least 1 extra site, apart from the active site(s), to expand the environment for the upcoming optimization.
@@ -415,9 +436,9 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_preopt_nsite(StateFi
                       enum2sv(bcfg.optRitz), bcfg.trnc_lim, bcfg.bond_lim, res.bond_old, res.bond_new);
     state.clear_cache();
     state.clear_measurements();
-    using RealScalar = decltype(std::real(std::declval<Scalar>()));
+    using RealScalar              = decltype(std::real(std::declval<Scalar>()));
     static constexpr auto eps     = std::numeric_limits<RealScalar>::epsilon();
-    const auto            slack   = settings ::precision::max_norm_slack;
+    const auto            slack   = safe_cast<RealScalar>(settings::precision::max_norm_slack);
     auto                  normtol = eps * slack;
     for(const auto &mps : state.get_mps(pos_active_and_expanded)) mps.get().assert_normalized(normtol);
     env::rebuild_edges(state, model, edges);

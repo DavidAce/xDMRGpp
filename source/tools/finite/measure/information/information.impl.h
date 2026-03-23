@@ -1,11 +1,14 @@
 #pragma once
-
+#include "../dimensions.h"
+#include "../entanglement_entropy.h"
+#include "../information.h"
+#include "config/enums/GateMove.h"
+#include "config/enums/LogPolicy.h"
+#include "config/enums/NormPolicy.h"
+#include "config/enums/Precision.h"
 #include "config/settings.h"
 #include "debug/info.h"
-#include "dimensions.h"
-#include "entanglement_entropy.h"
 #include "general/iter.h"
-#include "information.h"
 #include "io/fmt_custom.h"
 #include "math/eig.h"
 #include "math/float.h"
@@ -35,6 +38,15 @@ namespace settings {
     inline constexpr bool debug_subsystem_entropy = false;
 }
 
+[[nodiscard]] inline InfoPolicy normalized_info_policy(InfoPolicy ip) {
+    ip.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err);
+    ip.eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size);
+    ip.svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim);
+    ip.svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim);
+    ip.precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision);
+    return ip;
+}
+
 template<typename ContainerType>
 RealScalar<typename ContainerType::Scalar> count_finite(const ContainerType &arr) {
     using real_t = RealScalar<typename ContainerType::Scalar>;
@@ -56,7 +68,7 @@ typename ContainerType::Scalar nansum(const ContainerType &arr) {
     real_t count = 0;
     for(const auto &a : arr) {
         if(std::isnan(a)) continue;
-        sum += a;
+        sum   += a;
         count += 1;
     }
     if(count == 0) return std::numeric_limits<real_t>::quiet_NaN();
@@ -72,7 +84,7 @@ typename ContainerType::Scalar nanmean(const ContainerType &arr) {
     real_t count = 0;
     for(const auto &a : arr) {
         if(std::isnan(a)) continue;
-        sum += a;
+        sum   += a;
         count += 1;
     }
     if(count == 0) return std::numeric_limits<real_t>::quiet_NaN();
@@ -155,16 +167,16 @@ auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchs
         eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
         eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result));
     } else {
-        const auto fraclist = std::array{0.0001, 0.001, 0.01, 0.1, 0.2, 1.0};
+        const auto fraclist = std::array<RealScalar, 6>{0.0001f, 0.001f, 0.01f, 0.1f, 0.2f, 1.0f};
         // Large case: approximate from truncated SVD (PSD => singular values = eigenvalues)
         const auto eps = std::numeric_limits<CalcType>::epsilon();
-        const auto tol = eps * 10000; // your criterion
+        const auto tol = eps * 10000.0f; // the criterion
 
         bool         got_any       = false;
         Eigen::Index last_rank_max = 0;
 
-        for(double frac : fraclist) {
-            Eigen::Index rank_max = static_cast<Eigen::Index>(std::floor(size * frac));
+        for(auto frac : fraclist) {
+            Eigen::Index rank_max = static_cast<Eigen::Index>(std::floor(safe_cast<RealScalar>(size) * frac));
             rank_max              = std::min(rank_max, svd_rank_max);
             if(rank_max < 2) continue;
 
@@ -205,7 +217,7 @@ auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchs
             if(smallest_kept >= tol and size > settings::precision::eig_max_size) {
                 tools::log->warn("get_eigenvalues: size {} exceeds eig_max_size. Approx eigenvalues from truncated SVD (rank_max {}), "
                                  "smallest kept value {:.3e}. Entropies may be inaccurate.",
-                                 size, last_rank_max, fp(smallest_kept));
+                                 size, last_rank_max, smallest_kept);
             }
         }
     }
@@ -409,7 +421,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     // if(eig_time > 1.0)
     if constexpr(settings::debug_subsystem_entropy)
         tools::log->trace("mode {} side {} | eig {} (max {}) | mat {} | chi {} {} | S {:.8f} | cch {::.2e} GB | mat {:.3e} s | eig {:.3e} s | sites {}",
-                          min_cost_idx, side, eig_sizes, eig_max_size, mat_costs, chiL, chiR, fp(entanglement_entropy_log2), state.get_cache_sizes(), mat_time,
+                          min_cost_idx, side, eig_sizes, eig_max_size, mat_costs, chiL, chiR, entanglement_entropy_log2, state.get_cache_sizes(), mat_time,
                           eig_time, sites);
     // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after eig");
 
@@ -490,8 +502,8 @@ SeeProgress<Scalar> check_see_progress(const RealArrayXX<Scalar> &see, LogPolicy
     }
     if(log_policy != LogPolicy::SILENT) {
         tools::log->log(lvl, " -- progress {:<6.2f}% bits {:<20.16f}/{} err {:.2e} icom {:.16f} neg {:.1e} mem[rss {:<.1f} hwm {:<.1f}]MB",
-                        fp(sp.progress * Real{100}), fp(sp.bits_found), fp(sp.bits_total), fp(sp.bits_error), fp(sp.icom), fp(sp.bits_minus),
-                        debug::mem_rss_in_mb(), debug::mem_hwm_in_mb());
+                        sp.progress * Real{100}, sp.bits_found, sp.bits_total, sp.bits_error, sp.icom, sp.bits_minus, debug::mem_rss_in_mb(),
+                        debug::mem_hwm_in_mb());
     }
     return sp;
 }
@@ -504,14 +516,11 @@ SeeProgress<Scalar> check_see_progress(const RealArrayXX<Scalar> &see, LogPolicy
  */
 template<typename Scalar>
 RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    ip.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err);
-    ip.eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size);
-    ip.svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim);
-    ip.svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim);
-    ip.precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision);
-
-    if(ip.is_compatible(state.measurements.info_policy)) {
-        if(state.measurements.subsystem_entanglement_entropies.has_value()) return state.measurements.subsystem_entanglement_entropies.value();
+    ip = normalized_info_policy(ip);
+    if(auto cache = state.measurements.get_cached_subsystem_entanglement_entropies(state, ip); cache) {
+        if(not state.measurements.subsystem_entanglement_entropies) state.measurements.subsystem_entanglement_entropies = cache->value();
+        state.measurements.info_policy = ip;
+        return cache->value();
     }
     // Clear the dependent objects from the measurements cache since we are going to re-calculate the entropies
     state.measurements.information_center_of_mass.reset();
@@ -653,7 +662,7 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
             }
             subsystemsL.pop_front();
             tools::log->info("swap l2r subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, posL,
-                             fp(see(ext - 1, safe_cast<long>(posL))), sites_l2r, measure::bond_dimensions(state_l2r));
+                             see(ext - 1, safe_cast<long>(posL)), sites_l2r, measure::bond_dimensions(state_l2r));
 
             if(!subsystem_success) {
                 // Reset and pop entries that have the same posR
@@ -721,7 +730,7 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
             }
             subsystemsR.pop_front();
             tools::log->info("swap r2l subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, off,
-                             fp(see(ext - 1, off)), sites_r2l, measure::bond_dimensions(state_r2l));
+                             see(ext - 1, off), sites_r2l, measure::bond_dimensions(state_r2l));
             if(!subsystem_success) {
                 // Pop entries that have the same posR
                 while(!subsystemsR.empty() and posR == subsystemsR.front().back()) { subsystemsR.pop_front(); }
@@ -730,9 +739,8 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
         // loop_counter++;
     }
 
-    state.measurements.see_time                         = t_see->get_last_interval();
-    state.measurements.subsystem_entanglement_entropies = see;
-    state.measurements.info_policy                      = ip;
+    state.measurements.see_time = t_see->get_last_interval();
+    state.measurements.set_cached_subsystem_entanglement_entropies(see, state, ip);
 
     check_see_progress<Scalar>(see, LogPolicy::DEBUG, spdlog::level::info);
     return see;
@@ -759,13 +767,16 @@ RealArrayXX<Scalar> tools::finite::measure::information_lattice(const RealArrayX
 
 template<typename Scalar>
 RealArrayXX<Scalar> tools::finite::measure::information_lattice(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    if(ip.is_compatible(state.measurements.info_policy)) {
-        if(state.measurements.information_lattice.has_value()) return state.measurements.information_lattice.value();
+    ip = normalized_info_policy(ip);
+    if(auto cache = state.measurements.get_cached_information_lattice(state, ip); cache) {
+        if(not state.measurements.information_lattice) state.measurements.information_lattice = cache->value();
+        state.measurements.info_policy = ip;
+        return cache->value();
     }
 
-    auto SEE                               = subsystem_entanglement_entropies_log2(state, ip);
-    auto infolattice                       = information_lattice<Scalar>(SEE);
-    state.measurements.information_lattice = infolattice;
+    auto SEE         = subsystem_entanglement_entropies_log2(state, ip);
+    auto infolattice = information_lattice<Scalar>(SEE);
+    state.measurements.set_cached_information_lattice(infolattice, state, ip);
     return infolattice;
 }
 
@@ -777,12 +788,15 @@ RealArrayX<Scalar> tools::finite::measure::information_per_scale(const RealArray
 
 template<typename Scalar>
 RealArrayX<Scalar> tools::finite::measure::information_per_scale(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    if(ip.is_compatible(state.measurements.info_policy)) {
-        if(state.measurements.information_per_scale.has_value()) return state.measurements.information_per_scale.value();
+    ip = normalized_info_policy(ip);
+    if(auto cache = state.measurements.get_cached_information_per_scale(state, ip); cache) {
+        if(not state.measurements.information_per_scale) state.measurements.information_per_scale = cache->value();
+        state.measurements.info_policy = ip;
+        return cache->value();
     }
-    auto               infolattice           = information_lattice(state, ip); // May have NaN
-    RealArrayX<Scalar> info_per_scale        = information_per_scale<Scalar>(infolattice);
-    state.measurements.information_per_scale = info_per_scale;
+    auto               infolattice    = information_lattice(state, ip); // May have NaN
+    RealArrayX<Scalar> info_per_scale = information_per_scale<Scalar>(infolattice);
+    state.measurements.set_cached_information_per_scale(info_per_scale, state, ip);
     return info_per_scale;
 }
 
@@ -832,10 +846,15 @@ RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const Real
  */
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    if(ip.is_compatible(state.measurements.info_policy)) {
-        if(state.measurements.information_center_of_mass.has_value()) return state.measurements.information_center_of_mass.value();
+    ip = normalized_info_policy(ip);
+    if(auto cache = state.measurements.get_cached_information_center_of_mass(state, ip); cache) {
+        if(not state.measurements.information_center_of_mass) state.measurements.information_center_of_mass = cache->value();
+        state.measurements.info_policy = ip;
+        return cache->value();
     }
-    return information_center_of_mass<Scalar>(information_lattice(state, ip));
+    auto value = information_center_of_mass<Scalar>(information_lattice(state, ip));
+    state.measurements.set_cached_information_center_of_mass(value, state, ip);
+    return value;
 }
 
 template<typename Scalar>
@@ -908,7 +927,7 @@ RealScalar<Scalar> tools::finite::measure::information_xi_from_avg_log_slope(con
     RealArrayX<Scalar> il  = information_per_scale(state, ip);
     if(il.size() <= 3) return nan;
     auto               L    = il.size();
-    RealArrayX<Scalar> l    = RealArrayX<Scalar>::LinSpaced(L, 0, L - 1l);
+    RealArrayX<Scalar> l    = RealArrayX<Scalar>::LinSpaced(L, 0, safe_cast<RealScalar<Scalar>>(L - 1l));
     RealArrayX<Scalar> mask = RealArrayX<Scalar>::Ones(L); // Mask to select the interesting interval
 
     bool has_extended_info = num::geq(il.tail(L / 2).sum(), 0.9); // Both topological and thermal states have >= 1 bits beyond L/2.

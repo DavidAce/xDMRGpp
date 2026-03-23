@@ -29,7 +29,7 @@ class ScaledMutableTensorMap {
         [[maybe_unused]] auto maxnew = std::frexp(maxval, &p2expn); // p2expn in we get maxval == maxnew * 2^(p2expn)
         if(std::abs(p2expn) > 1) {                                  // Only rescale if the shift is at least 2
             vector *= std::ldexp(RealScalar{1}, -p2expn);           // Rescale
-            ex2 += p2expn;                                          // Accumulate the exponent
+            ex2    += p2expn;                                       // Accumulate the exponent
         }
     }
 
@@ -42,9 +42,9 @@ class ScaledMutableTensorMap {
             return;
         }
 
-        auto vector = Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(ptr_raw, nelems);
-        vector *= std::ldexp(RealScalar{1}, ex2); // Unscale
-        ex2 = 0;                                  // Reset the exponent
+        auto vector  = Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(ptr_raw, nelems);
+        vector      *= std::ldexp(RealScalar{1}, ex2); // Unscale
+        ex2          = 0;                              // Reset the exponent
     }
 
     Eigen::TensorMap<const Eigen::Tensor<Scalar, rank>> get_tensor() const {
@@ -129,8 +129,8 @@ class ScaledConstTensorMap {
         storage.resize(static_cast<std::size_t>(nelems));
         std::copy(cptr, cptr + nelems, storage.data());
 
-        auto vector = Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(storage.data(), nelems);
-        vector *= std::ldexp(RealScalar{1}, -p2expn);
+        auto vector  = Eigen::Map<Eigen::Matrix<Scalar, Eigen::Dynamic, 1>>(storage.data(), nelems);
+        vector      *= std::ldexp(RealScalar{1}, -p2expn);
 
         ex2 = p2expn;
     }

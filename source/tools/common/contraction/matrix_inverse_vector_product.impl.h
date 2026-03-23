@@ -69,16 +69,16 @@ tools::common::contraction::VectorType<Scalar> tools::common::contraction::matri
         t_jdop.toc();
         if constexpr(settings::debug_jdop)
             tools::log->trace("{}: size {} | info {} | tol {:8.5e} | err {:8.5e} | iter {} | mat iter {} | time {:.2e}", get_solver_name(), MatrixOp.rows(),
-                                            static_cast<int>(solver.info()), fp(solver.tolerance()), fp(solver.error()), solver.iterations(), MatrixOp.iterations(),
+                                            static_cast<int>(solver.info()), solver.tolerance(), solver.error(), solver.iterations(), MatrixOp.iterations(),
                                             t_jdop->get_last_interval());
-        cfg.result.iters += solver.iterations();
-        cfg.result.matvecs += MatrixOp.iterations();
-        cfg.result.precond += solver.preconditioner().iterations();
-        cfg.result.time += t_jdop->get_last_interval();
+        cfg.result.iters        += solver.iterations();
+        cfg.result.matvecs      += MatrixOp.iterations();
+        cfg.result.precond      += solver.preconditioner().iterations();
+        cfg.result.time         += t_jdop->get_last_interval();
         cfg.result.time_matvecs += MatrixOp.elapsed_time();
         cfg.result.time_precond += solver.preconditioner().elapsed_time();
-        cfg.result.error = solver.error();
-        cfg.result.info  = solver.info();
+        cfg.result.error         = solver.error();
+        cfg.result.info          = solver.info();
         if(std::isnan(solver.error())) throw except::runtime_error("NaN in solver");
         return res;
     };

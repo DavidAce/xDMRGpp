@@ -1,10 +1,10 @@
 #pragma once
+#include "../expectation_value/contract.h"
+#include "../norm.h"
 #include "config/settings.h"
 #include "debug/info.h"
-#include "expectation_value/contract.h"
 #include "io/fmt_custom.h"
 #include "math/tenx.h"
-#include "norm.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
@@ -23,12 +23,13 @@ RealScalar<Scalar> tools::finite::measure::norm_1site(const StateFinite<Scalar> 
     const auto  pos = std::clamp(state.template get_position<long>(), 0l, state.template get_length<long>() - 1l);
     const auto &mps = state.get_mps_site(pos);
     tools::log->trace("Measuring norm using site {} with dimensions {}", pos, mps.dimensions());
-    Scalar norm = tools::common::contraction::contract_mps_norm(mps.get_M());
+    Scalar norm    = tools::common::contraction::contract_mps_norm(mps.get_M());
+    auto   eps     = std::numeric_limits<RealScalar<Scalar>>::epsilon();
+    auto   slack   = safe_cast<RealScalar<Scalar>>(settings::precision::max_norm_slack);
+    auto   normTol = eps * slack;
+    auto   normErr = std::abs(norm - RealScalar<Scalar>{1});
 
-    auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
-    auto normErr = std::abs(norm - RealScalar<Scalar>{1});
-
-    if(normErr > normTol) tools::log->debug("norm_1site: far from unity: {:.5e}", fp(normErr));
+    if(normErr > normTol) tools::log->debug("norm_1site: far from unity: {:.5e}", normErr);
     state.measurements.norm = std::abs(norm);
     return state.measurements.norm.value();
 }
@@ -52,12 +53,13 @@ RealScalar<Scalar> tools::finite::measure::norm_state(const StateFinite<Scalar> 
         }
         chain = contract_internal<Scalar>::contract_chain_M_Mconj_0_1_01_10(chain, M, threads);
     }
-    Scalar norm = tenx::MatrixMap(chain).trace();
+    Scalar norm    = tenx::MatrixMap(chain).trace();
+    auto   eps     = std::numeric_limits<RealScalar<Scalar>>::epsilon();
+    auto   slack   = safe_cast<RealScalar<Scalar>>(settings::precision::max_norm_slack);
+    auto   normTol = eps * slack;
+    auto   normErr = std::abs(norm - RealScalar<Scalar>{1});
 
-    auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
-    auto normErr = std::abs(norm - RealScalar<Scalar>{1});
-
-    if(normErr > normTol) tools::log->debug("norm_state: far from unity: {:.5e}", fp(normErr));
+    if(normErr > normTol) tools::log->debug("norm_state: far from unity: {:.5e}", normErr);
     state.measurements.norm = std::abs(norm);
     return state.measurements.norm.value();
 }

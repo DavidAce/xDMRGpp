@@ -1,7 +1,7 @@
 #pragma once
 #include <complex>
+#include <utility>
 #include <unsupported/Eigen/CXX11/Tensor>
-#include <vector>
 
 template<typename Scalar>
 class TensorsInfinite;

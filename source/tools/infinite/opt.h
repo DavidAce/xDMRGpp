@@ -1,6 +1,6 @@
 #pragma once
-#include "config/enums.h"
-#include <string>
+#include "config/enums/OptRitz.h"
+#include <string_view>
 #include <unsupported/Eigen/CXX11/Tensor>
 
 template<typename Scalar>

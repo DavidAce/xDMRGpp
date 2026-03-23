@@ -66,6 +66,10 @@ void tools::Logger::setLogger(std::shared_ptr<spdlog::logger> &other_log, const 
     if(timestamp and timestamp.value()) enableTimestamp(other_log);
 }
 
+void tools::Logger::setLogger(LoggerHandle &other_log, const std::string &name, std::optional<size_t> levelZeroToSix, std::optional<bool> timestamp) {
+    other_log = setLogger(name, levelZeroToSix, timestamp);
+}
+
 std::shared_ptr<spdlog::logger> tools::Logger::setLogger(const std::string &name, std::optional<size_t> levelZeroToSix, std::optional<bool> timestamp) {
     std::shared_ptr<spdlog::logger> other_log;
 

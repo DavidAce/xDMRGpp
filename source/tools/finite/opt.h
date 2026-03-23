@@ -1,13 +1,10 @@
 #pragma once
 
-#include <Eigen/Core>
-
 template<typename Scalar> class StateFinite;
 template<typename Scalar> class ModelFinite;
 template<typename Scalar> class EdgesFinite;
 template<typename Scalar> class TensorsFinite;
 class AlgorithmStatus;
-class ur;
 namespace eig {
     class solver;
 }

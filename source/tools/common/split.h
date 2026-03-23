@@ -1,11 +1,8 @@
 #pragma once
-#include "math/float.h"
 #include "math/svd/config.h"
-#include <complex>
 #include <deque>
-#include <Eigen/Core>
 #include <optional>
-#include <tuple>
+#include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 
 template<typename Scalar>

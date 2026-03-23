@@ -1,7 +1,7 @@
 #pragma once
+#include "../expectation_value.h"
+#include "../hamiltonian.h"
 #include "config/settings.h"
-#include "expectation_value.h"
-#include "hamiltonian.h"
 #include "math/num.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
@@ -23,6 +23,50 @@ namespace settings {
 }
 
 using tools::finite::measure::RealScalar;
+
+namespace tools::finite::measure::internal {
+    template<typename Scalar>
+    [[nodiscard]] constexpr RealScalar<Scalar> cache_match_tol() {
+        return static_cast<RealScalar<Scalar>>(1e-12);
+    }
+
+    template<typename Value, typename Tol>
+    void assert_cached_value_matches(const MeasurementFiniteCached<Value> *cache, const Value &value, Tol tol) {
+        if constexpr(settings::debug_hamiltonian) {
+            if(cache != nullptr) assert(std::abs(value - cache->value()) < tol);
+        } else {
+            (void)cache;
+            (void)value;
+            (void)tol;
+        }
+    }
+
+    template<typename Scalar>
+    Scalar get_or_compute_expval_hamiltonian(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
+                                             MeasurementsTensorsFinite<Scalar> *measurements) {
+        [[maybe_unused]] const auto *cache = measurements != nullptr ? measurements->get_cached_expval_hamiltonian(state, model, edges) : nullptr;
+        if(cache != nullptr) {
+            if constexpr(!settings::debug_hamiltonian) return cache->value();
+        }
+        auto value = tools::finite::measure::expval_hamiltonian<Scalar>(state, model, edges);
+        assert_cached_value_matches(cache, value, cache_match_tol<Scalar>());
+        if(measurements != nullptr) measurements->set_cached_expval_hamiltonian(value, state, model, edges);
+        return value;
+    }
+
+    template<typename Scalar>
+    Scalar get_or_compute_expval_hamiltonian_squared(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
+                                                     MeasurementsTensorsFinite<Scalar> *measurements) {
+        [[maybe_unused]] const auto *cache = measurements != nullptr ? measurements->get_cached_expval_hamiltonian_squared(state, model, edges) : nullptr;
+        if(cache != nullptr) {
+            if constexpr(!settings::debug_hamiltonian) return cache->value();
+        }
+        auto value = tools::finite::measure::expval_hamiltonian_squared<Scalar>(state, model, edges);
+        assert_cached_value_matches(cache, value, cache_match_tol<Scalar>());
+        if(measurements != nullptr) measurements->set_cached_expval_hamiltonian_squared(value, state, model, edges);
+        return value;
+    }
+}
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const Eigen::Tensor<Scalar, 3> &mps, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {
@@ -135,12 +179,16 @@ Scalar tools::finite::measure::expval_hamiltonian_squared(const Eigen::Tensor<Sc
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const TensorsFinite<Scalar> &tensors) {
-    return tools::finite::measure::expval_hamiltonian<Scalar>(tensors.get_state(), tensors.get_model(), tensors.get_edges());
+    tensors.assert_edges_ene();
+    return tools::finite::measure::internal::get_or_compute_expval_hamiltonian(tensors.get_state(), tensors.get_model(), tensors.get_edges(),
+                                                                                &tensors.measurements);
 }
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian_squared(const TensorsFinite<Scalar> &tensors) {
-    return tools::finite::measure::expval_hamiltonian_squared<Scalar>(*tensors.state, *tensors.model, *tensors.edges);
+    tensors.assert_edges_var();
+    return tools::finite::measure::internal::get_or_compute_expval_hamiltonian_squared(tensors.get_state(), tensors.get_model(), tensors.get_edges(),
+                                                                                        &tensors.measurements);
 }
 
 template<typename Scalar>
@@ -253,7 +301,16 @@ RealScalar<Scalar> tools::finite::measure::local_operator_norm_estimate(const Ei
 
 template<typename Scalar> RealScalar<Scalar> tools::finite::measure::local_hamiltonian_norm(const TensorsFinite<Scalar> &tensors, Eigen::Index maxiter,
                                                                                             fp32 reltol) {
-    return local_hamiltonian_norm(tensors.get_model(), tensors.get_edges(), maxiter, reltol);
+    tensors.assert_edges_ene();
+    [[maybe_unused]] const auto *cache =
+        tensors.measurements.get_cached_local_hamiltonian_norm(tensors, static_cast<long long>(maxiter), static_cast<double>(reltol));
+    if(cache != nullptr) {
+        if constexpr(!settings::debug_hamiltonian) return cache->value();
+    }
+    auto value = local_hamiltonian_norm(tensors.get_model(), tensors.get_edges(), maxiter, reltol);
+    tools::finite::measure::internal::assert_cached_value_matches(cache, value, tools::finite::measure::internal::cache_match_tol<Scalar>());
+    tensors.measurements.set_cached_local_hamiltonian_norm(value, tensors, static_cast<long long>(maxiter), static_cast<double>(reltol));
+    return value;
 }
 template<typename Scalar> RealScalar<Scalar> tools::finite::measure::local_hamiltonian_norm(const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                                                                             Eigen::Index maxiter, fp32 reltol) {
@@ -272,7 +329,16 @@ template<typename Scalar> RealScalar<Scalar>
 
 template<typename Scalar> RealScalar<Scalar> tools::finite::measure::local_hamiltonian_squared_norm(const TensorsFinite<Scalar> &tensors, Eigen::Index maxiter,
                                                                                                     fp32 reltol) {
-    return local_hamiltonian_squared_norm(tensors.get_model(), tensors.get_edges(), maxiter, reltol);
+    tensors.assert_edges_var();
+    [[maybe_unused]] const auto *cache =
+        tensors.measurements.get_cached_local_hamiltonian_squared_norm(tensors, static_cast<long long>(maxiter), static_cast<double>(reltol));
+    if(cache != nullptr) {
+        if constexpr(!settings::debug_hamiltonian) return cache->value();
+    }
+    auto value = local_hamiltonian_squared_norm(tensors.get_model(), tensors.get_edges(), maxiter, reltol);
+    tools::finite::measure::internal::assert_cached_value_matches(cache, value, tools::finite::measure::internal::cache_match_tol<Scalar>());
+    tensors.measurements.set_cached_local_hamiltonian_squared_norm(value, tensors, static_cast<long long>(maxiter), static_cast<double>(reltol));
+    return value;
 }
 template<typename Scalar> RealScalar<Scalar> tools::finite::measure::local_hamiltonian_squared_norm(const ModelFinite<Scalar> &model,
                                                                                                     const EdgesFinite<Scalar> &edges, Eigen::Index maxiter,
@@ -292,7 +358,15 @@ template<typename Scalar> RealScalar<Scalar>
 }
 
 template<typename Scalar> RealScalar<Scalar> tools::finite::measure::global_hamiltonian_trace(const TensorsFinite<Scalar> &tensors) {
-    return global_hamiltonian_trace(tensors.get_model(), tensors.get_edges());
+    tensors.assert_edges_ene();
+    [[maybe_unused]] const auto *cache = tensors.measurements.get_cached_global_hamiltonian_trace(tensors);
+    if(cache != nullptr) {
+        if constexpr(!settings::debug_hamiltonian) return cache->value();
+    }
+    auto value = global_hamiltonian_trace(tensors.get_model(), tensors.get_edges());
+    tools::finite::measure::internal::assert_cached_value_matches(cache, value, tools::finite::measure::internal::cache_match_tol<Scalar>());
+    tensors.measurements.set_cached_global_hamiltonian_trace(value, tensors);
+    return value;
 }
 template<typename Scalar> RealScalar<Scalar> tools::finite::measure::global_hamiltonian_trace(const ModelFinite<Scalar> &model,
                                                                                               const EdgesFinite<Scalar> &edges) {
@@ -375,7 +449,15 @@ template<typename Scalar> RealScalar<Scalar>
 }
 
 template<typename Scalar> RealScalar<Scalar> tools::finite::measure::global_hamiltonian_squared_trace(const TensorsFinite<Scalar> &tensors) {
-    return global_hamiltonian_squared_trace(tensors.get_model(), tensors.get_edges());
+    tensors.assert_edges_var();
+    [[maybe_unused]] const auto *cache = tensors.measurements.get_cached_global_hamiltonian_squared_trace(tensors);
+    if(cache != nullptr) {
+        if constexpr(!settings::debug_hamiltonian) return cache->value();
+    }
+    auto value = global_hamiltonian_squared_trace(tensors.get_model(), tensors.get_edges());
+    tools::finite::measure::internal::assert_cached_value_matches(cache, value, tools::finite::measure::internal::cache_match_tol<Scalar>());
+    tensors.measurements.set_cached_global_hamiltonian_squared_trace(value, tensors);
+    return value;
 }
 template<typename Scalar> RealScalar<Scalar> tools::finite::measure::global_hamiltonian_squared_trace(const ModelFinite<Scalar> &model,
                                                                                                       const EdgesFinite<Scalar> &edges) {
@@ -460,17 +542,14 @@ template<typename Scalar> RealScalar<Scalar>
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
                                                                      const EdgesFinite<Scalar> &edges, MeasurementsTensorsFinite<Scalar> *measurements) {
-    if(measurements != nullptr and measurements->energy_minus_energy_shift) {
-        if constexpr(!settings::debug_hamiltonian) {
-            // Return the cache hit when not debugging. Otherwise, check that it is correct!
-            // tools::log->trace("energy_minus_energy_shift: cache hit: {:.16f}", measurements->energy_minus_energy_shift.value());
-            return measurements->energy_minus_energy_shift.value();
-        }
+    [[maybe_unused]] const auto *cache = measurements != nullptr ? measurements->get_cached_energy_minus_energy_shift(state, model, edges) : nullptr;
+    if(cache != nullptr) {
+        if constexpr(!settings::debug_hamiltonian) return cache->value();
     }
     assert(num::all_equal(state.active_sites, model.active_sites, edges.active_sites));
     auto t_ene = tid::tic_scope("ene", tid::level::highest);
     if constexpr(settings::debug) tools::log->trace("Measuring energy: sites {}", state.active_sites);
-    auto e_minus_ered = expval_hamiltonian<Scalar>(state, model, edges);
+    auto e_minus_ered = tools::finite::measure::internal::get_or_compute_expval_hamiltonian(state, model, edges, measurements);
     if constexpr(settings::debug_hamiltonian) {
         [[maybe_unused]] constexpr auto tol           = static_cast<RealScalar<Scalar>>(1e-12);
         const auto                     &multisite_mps = state.template get_multisite_mps<Scalar>();
@@ -479,29 +558,21 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const State
         auto                            edbg = tools::common::contraction::expectation_value(multisite_mps, multisite_mpo, multisite_env.L, multisite_env.R);
         tools::log->trace("e_minus_ered: {:.16f}", fp(e_minus_ered));
         tools::log->trace("e_minus_edbg: {:.16f}", fp(edbg));
-        if(measurements != nullptr and measurements->energy_minus_energy_shift) {
-            tools::log->trace("e_minus_ehit: {:.16f}", fp(measurements->energy_minus_energy_shift.value()));
-            assert(std::abs(e_minus_ered - measurements->energy_minus_energy_shift.value()) < tol);
-        }
+        tools::finite::measure::internal::assert_cached_value_matches(cache, std::real(e_minus_ered), tol);
         assert(std::abs(e_minus_ered - edbg) < tol);
     }
 
     assert(std::abs(std::imag(e_minus_ered)) < static_cast<RealScalar<Scalar>>(1e-10));
-    if(measurements != nullptr) measurements->energy_minus_energy_shift = std::real(e_minus_ered);
-    return std::real(e_minus_ered);
+    auto value = std::real(e_minus_ered);
+    if(measurements != nullptr) measurements->set_cached_energy_minus_energy_shift(value, state, model, edges);
+    return value;
 }
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
                                                                      const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg,
                                                                      MeasurementsTensorsFinite<Scalar> *measurements) {
-    if(measurements != nullptr and measurements->energy_minus_energy_shift) {
-        if constexpr(!settings::debug_hamiltonian) {
-            // Return the cache hit when not debugging. Otherwise, check that it is correct!
-            // tools::log->trace("energy_minus_energy_shift: cache hit: {:.16f}", measurements->energy_minus_energy_shift.value());
-            return measurements->energy_minus_energy_shift.value();
-        }
-    }
+    (void)measurements;
     auto t_ene = tid::tic_scope("ene", tid::level::highest);
     assert(not model.active_sites.empty());
     assert(not edges.active_sites.empty());
@@ -525,10 +596,6 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen
             const auto edbg = tools::finite::measure::expectation_value<Scalar>(multisite_mps, mpos, envs, svd_cfg);
             tools::log->trace("e_minus_ered: {:.16f}", fp(e_minus_ered));
             tools::log->trace("e_minus_edbg: {:.16f}", fp(edbg));
-            if(measurements != nullptr and measurements->energy_minus_energy_shift) {
-                tools::log->trace("e_minus_ehit: {:.16f}", fp(measurements->energy_minus_energy_shift.value()));
-                assert(std::abs(e_minus_ered - measurements->energy_minus_energy_shift.value()) < RealScalar<Scalar>{1e-14f});
-            }
             assert(std::abs(e_minus_ered - edbg) < RealScalar<Scalar>{1e-14f});
         }
     } else {
@@ -546,22 +613,20 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen
             const auto                      edbg = tools::common::contraction::expectation_value(multisite_mps, mpo, env.L, env.R);
             tools::log->trace("e_minus_ered: {:.16f}", fp(e_minus_ered));
             tools::log->trace("e_minus_edbg: {:.16f}", fp(edbg));
-            if(measurements != nullptr and measurements->energy_minus_energy_shift) {
-                tools::log->trace("e_minus_ehit: {:.16f}", fp(measurements->energy_minus_energy_shift.value()));
-                assert(std::abs(e_minus_ered - measurements->energy_minus_energy_shift.value()) < tol);
-            }
             assert(std::abs(e_minus_ered - edbg) < tol);
         }
     }
     assert(std::abs(std::imag(e_minus_ered)) < static_cast<RealScalar<Scalar>>(1e-10));
-    if(measurements != nullptr) measurements->energy_minus_energy_shift = std::real(e_minus_ered);
     return std::real(e_minus_ered);
 }
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                                   MeasurementsTensorsFinite<Scalar> *measurements) {
-    if(measurements != nullptr and measurements->energy) return measurements->energy.value();
+    [[maybe_unused]] const auto *cache = measurements != nullptr ? measurements->get_cached_energy(state, model, edges) : nullptr;
+    if(cache != nullptr) {
+        if constexpr(!settings::debug_hamiltonian) return cache->value();
+    }
     // This measures the actual energy of the system regardless of the energy shift in the MPO's
     // If they are shifted, then
     //      "Actual energy" = (E - E_shift) + E_shift = (~0) + E_shift = E
@@ -570,7 +635,8 @@ RealScalar<Scalar> tools::finite::measure::energy(const StateFinite<Scalar> &sta
     auto e_minus_eshift = tools::finite::measure::energy_minus_energy_shift(state, model, edges, measurements);
     auto eshift         = std::real(model.get_energy_shift_mpo());
     auto energy         = e_minus_eshift + eshift;
-    if(measurements != nullptr) measurements->energy = energy;
+    tools::finite::measure::internal::assert_cached_value_matches(cache, energy, tools::finite::measure::internal::cache_match_tol<Scalar>());
+    if(measurements != nullptr) measurements->set_cached_energy(energy, state, model, edges);
     return energy;
 }
 
@@ -578,16 +644,15 @@ template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
                                                   const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg,
                                                   MeasurementsTensorsFinite<Scalar> *measurements) {
-    if(measurements != nullptr and measurements->energy) return measurements->energy.value();
+    (void)measurements;
     // This measures the actual energy of the system regardless of the energy shift in the MPO's
     // If they are shifted, then
     //      "Actual energy" = (E - E_shift) + E_shift = (~0) + E_shift = E
     // Else
     //      "Actual energy" = (E - E_shift) + E_shift = E  + 0 = E
-    auto e_minus_eshift = tools::finite::measure::energy_minus_energy_shift(multisite_mps, model, edges, svd_cfg, measurements);
+    auto e_minus_eshift = tools::finite::measure::energy_minus_energy_shift<Scalar>(multisite_mps, model, edges, svd_cfg, nullptr);
     auto eshift         = std::real(model.get_energy_shift_mpo());
     auto energy         = e_minus_eshift + eshift;
-    if(measurements != nullptr) measurements->energy = energy;
     return energy;
 }
 
@@ -608,19 +673,23 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const StateFinite<Sca
     //
     // Else, if E_shf = 0 (i.e. not shifted) we get the usual formula:
     //      Var H = <(H - 0)²> - <H - 0>² = H² - E²
-    if(measurements != nullptr and measurements->energy_variance) return measurements->energy_variance.value();
+    [[maybe_unused]] const auto *cache = measurements != nullptr ? measurements->get_cached_energy_variance(state, model, edges) : nullptr;
+    if(cache != nullptr) {
+        if constexpr(!settings::debug_hamiltonian) return cache->value();
+    }
     assert(not state.active_sites.empty());
     assert(not model.active_sites.empty());
     assert(not edges.active_sites.empty());
     assert(num::all_equal(state.active_sites, model.active_sites, edges.active_sites));
     if constexpr(settings::debug_hamiltonian) tools::log->trace("Measuring energy variance: sites {}", state.active_sites);
-    auto E  = expval_hamiltonian<Scalar>(state, model, edges);
+    auto E  = tools::finite::measure::internal::get_or_compute_expval_hamiltonian(state, model, edges, measurements);
     auto E2 = E * E;
-    auto H2 = expval_hamiltonian_squared<Scalar>(state, model, edges);
+    auto H2 = tools::finite::measure::internal::get_or_compute_expval_hamiltonian_squared(state, model, edges, measurements);
     assert(std::abs(std::imag(H2)) < static_cast<RealScalar<Scalar>>(1e-10));
     RealScalar<Scalar> var = std::real(H2 - E2);
     if constexpr(settings::debug_hamiltonian) tools::log->trace("Variance |H2-E2| = |{:.16f} - {:.16f}| = {:.16f}", fp(std::real(H2)), fp(E2), fp(var));
-    if(measurements != nullptr) measurements->energy_variance = var;
+    tools::finite::measure::internal::assert_cached_value_matches(cache, var, tools::finite::measure::internal::cache_match_tol<Scalar>());
+    if(measurements != nullptr) measurements->set_cached_energy_variance(var, state, model, edges);
     return var;
 }
 
@@ -642,13 +711,13 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
     //
     // Else, if E_shf = 0 (i.e. not shifted) we get the usual formula:
     //      Var H = <(H - 0)²> - <H - 0>² = H² - E²
-    if(measurements != nullptr and measurements->energy_variance) return measurements->energy_variance.value();
+    (void)measurements;
     assert(not model.active_sites.empty());
     assert(not edges.active_sites.empty());
     if(not num::all_equal(model.active_sites, edges.active_sites))
         throw std::runtime_error(
             fmt::format("Could not compute energy variance: active sites are not equal: model {} | edges {}", model.active_sites, edges.active_sites));
-    RealScalar<Scalar> energy = tools::finite::measure::energy_minus_energy_shift(multisite_mps, model, edges, svd_cfg, measurements);
+    RealScalar<Scalar> energy = tools::finite::measure::energy_minus_energy_shift<Scalar>(multisite_mps, model, edges, svd_cfg, nullptr);
     RealScalar<Scalar> E2     = energy * energy;
 
     auto t_var = tid::tic_scope("var", tid::level::highest);
@@ -689,7 +758,6 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
     RealScalar<Scalar> var = std::real(H2 - E2);
     if constexpr(settings::debug_hamiltonian)
         tools::log->debug("energy_variance: Var H = H² - E² = {:.16f} - {:.16f} = {:.16f} | sites {}", fp(std::real(H2)), fp(E2), fp(var), model.active_sites);
-    if(measurements != nullptr) measurements->energy_variance = var;
     return var;
 }
 
@@ -706,20 +774,14 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Tenso
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy(const TensorsFinite<Scalar> &tensors) {
-    if(not tensors.measurements.energy) {
-        tensors.assert_edges_ene();
-        tensors.measurements.energy = tools::finite::measure::energy(tensors.get_state(), tensors.get_model(), tensors.get_edges(), &tensors.measurements);
-    }
-    return tensors.measurements.energy.value();
+    tensors.assert_edges_ene();
+    return tools::finite::measure::energy(tensors.get_state(), tensors.get_model(), tensors.get_edges(), &tensors.measurements);
 }
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_variance(const TensorsFinite<Scalar> &tensors) {
-    if(not tensors.measurements.energy_variance) {
-        tensors.assert_edges_var();
-        tensors.measurements.energy_variance = tools::finite::measure::energy_variance(*tensors.state, *tensors.model, *tensors.edges, &tensors.measurements);
-    }
-    return tensors.measurements.energy_variance.value();
+    tensors.assert_edges_var();
+    return tools::finite::measure::energy_variance(tensors.get_state(), tensors.get_model(), tensors.get_edges(), &tensors.measurements);
 }
 
 template<typename Scalar>

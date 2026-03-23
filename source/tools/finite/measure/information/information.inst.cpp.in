@@ -1,4 +1,4 @@
-#include "../information.impl.h"
+#include "information.impl.h"
 
 using Scalar = @SCALAR@;
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "config/enums/OptRitz.h"
 #include "math/float.h"
 #include "tools/common/log.h"
 #include "tools/finite/opt.h"

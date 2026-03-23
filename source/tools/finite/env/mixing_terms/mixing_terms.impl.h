@@ -145,7 +145,7 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> tools::finite::env::internal
     auto P1_maxcolnorm = RealScalar{1};
     auto P2_maxcolnorm = RealScalar{1};
     if(P1_matrix.cols() > 0) P1_maxcolnorm = P1_matrix.colwise().norm().maxCoeff();
-    if(P1_matrix.cols() > 0) P2_maxcolnorm = P2_matrix.colwise().norm().maxCoeff();
+    if(P2_matrix.cols() > 0) P2_maxcolnorm = P2_matrix.colwise().norm().maxCoeff();
 
     auto M_P = Eigen::Tensor<T, 3>(M.dimension(0), M.dimension(1), M.dimension(2) + P1.dimension(2) + P2.dimension(2));
     M_P.setZero();
@@ -154,9 +154,12 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> tools::finite::env::internal
     auto M_P1 = M_P.slice(offP1, P1.dimensions());
     auto M_P2 = M_P.slice(offP2, P2.dimensions());
 
+    auto scale_P1 = P1_maxcolnorm > RealScalar{0} ? static_cast<RealScalar>(cfg.mixing_factor) / P1_maxcolnorm : RealScalar{0};
+    auto scale_P2 = P2_maxcolnorm > RealScalar{0} ? static_cast<RealScalar>(cfg.mixing_factor) / P2_maxcolnorm : RealScalar{0};
+
     M_M  = M;
-    M_P1 = P1 * P1.constant(static_cast<RealScalar>(cfg.mixing_factor) / P1_maxcolnorm);
-    M_P2 = P2 * P2.constant(static_cast<RealScalar>(cfg.mixing_factor) / P2_maxcolnorm);
+    M_P1 = P1 * P1.constant(scale_P1);
+    M_P2 = P2 * P2.constant(scale_P2);
 
     auto N_0 = Eigen::Tensor<T, 3>(N.dimension(0), M_P.dimension(2), N.dimension(2));
     N_0.setZero();

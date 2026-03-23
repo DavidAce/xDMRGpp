@@ -1,6 +1,11 @@
 
 #include "algorithms/AlgorithmStatus.h"
-#include "config/enums.h"
+#include "config/enums/AlgorithmStop.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/StateInit.h"
+#include "config/enums/StateInitType.h"
+#include "config/enums/StorageEvent.h"
+#include "config/enums/StoragePolicy.h"
 #include "config/settings.h"
 #include "debug/info.h"
 #include "general/iter.h"

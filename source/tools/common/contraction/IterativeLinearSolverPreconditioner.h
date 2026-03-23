@@ -131,7 +131,7 @@ class IterativeLinearSolverPreconditioner {
         }
         x = y_new;
         m_iterations++;
-        auto t_end = std::chrono::high_resolution_clock::now();
+        auto t_end        = std::chrono::high_resolution_clock::now();
         m_time_chebyshev += std::chrono::duration<double>(t_end - t_start).count();
     }
 
@@ -166,7 +166,7 @@ class IterativeLinearSolverPreconditioner {
         }
 
         m_iterations++;
-        auto t_end = std::chrono::high_resolution_clock::now();
+        auto t_end  = std::chrono::high_resolution_clock::now();
         m_time_jcb += std::chrono::duration<double>(t_end - t_start).count();
     }
 
@@ -244,8 +244,8 @@ class IterativeLinearSolverPreconditioner {
         solve_jacobi(b_deflated, x); // y = M_BJ⁻¹ b_deflated
 
         // Step 3: Reincorporate explicitly solved smallest eigenvectors
-        VectorType alpha_scaled = Y.cwiseProduct(alpha); // Λ⁻¹ α
-        x.noalias() += Z * alpha_scaled;                 // y = y + Z Λ⁻¹ Zᵀ r
+        VectorType alpha_scaled  = Y.cwiseProduct(alpha); // Λ⁻¹ α
+        x.noalias()             += Z * alpha_scaled;      // y = y + Z Λ⁻¹ Zᵀ r
     }
 
     template<typename Rhs, typename Dest>
@@ -284,7 +284,7 @@ class IterativeLinearSolverPreconditioner {
         if(config->precondType == PreconditionerType::CHEBYSHEV) { solve_chebyshev(b, x); }
         if(config->precondType == PreconditionerType::JACOBI) { solve_coarse_jacobi(b, x); }
 
-        auto t_end = std::chrono::high_resolution_clock::now();
+        auto t_end      = std::chrono::high_resolution_clock::now();
         m_time_elapsed += std::chrono::duration<double>(t_end - t_start).count();
     }
 

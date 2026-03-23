@@ -83,20 +83,20 @@ void tools::common::views<Scalar>::compute_mps_components(const StateInfinite<Sc
         Eigen::Tensor<Scalar, 0> thon_thon = theta_odd_normalized.contract(theta_odd_normalized.conjugate(), tenx::idx({0, 2}, {0, 2}))
                                                  .contract(l_odd, tenx::idx({0, 2}, {0, 1}))
                                                  .contract(r_odd, tenx::idx({0, 1}, {0, 1}));
-        Eigen::Tensor<Scalar, 0> tren_le = transfer_matrix_evn.contract(l_evn, tenx::idx({0, 1}, {0, 1})).contract(r_evn, tenx::idx({0, 1}, {0, 1}));
-        Eigen::Tensor<Scalar, 0> trod_lo = transfer_matrix_odd.contract(l_odd, tenx::idx({0, 1}, {0, 1})).contract(r_odd, tenx::idx({0, 1}, {0, 1}));
-        std::string              str     = "Check\n";
-        str += fmt::format(" l_odd_LCGB_r_evn                                = {:.15f}\n", fp(l_odd_LCGB_r_evn(0)));
-        str += fmt::format(" l_evn_LBGA_r_odd                                = {:.15f}\n", fp(l_evn_LBGA_r_odd(0)));
-        str += fmt::format(" < l_evn | r_evn >                               = {:.15f}\n", fp(le_re(0)));
-        str += fmt::format(" < l_odd | r_odd >                               = {:.15f}\n", fp(lo_ro(0)));
-        str += fmt::format(" < l_evn | LAGA  | r_odd >                       = {:.15f}\n", fp(le_laga(0)));
-        str += fmt::format(" < l_odd | LCGB  | r_evn >                       = {:.15f}\n", fp(lo_lcgb(0)));
-        str += fmt::format(" < theta     | theta >                           = {:.15f}\n", fp(thth(0)));
-        str += fmt::format(" < theta_evn_normalized | theta_evn_normalized > = {:.15f}\n", fp(then_then(0)));
-        str += fmt::format(" < theta_odd_normalized | theta_odd_normalized > = {:.15f}\n", fp(thon_thon(0)));
-        str += fmt::format(" < theta_evn_normalized | theta_evn_normalized > = {:.15f}\n", fp(tren_le(0)));
-        str += fmt::format(" < theta_odd_normalized | theta_odd_normalized > = {:.15f}\n", fp(trod_lo(0)));
+        Eigen::Tensor<Scalar, 0> tren_le  = transfer_matrix_evn.contract(l_evn, tenx::idx({0, 1}, {0, 1})).contract(r_evn, tenx::idx({0, 1}, {0, 1}));
+        Eigen::Tensor<Scalar, 0> trod_lo  = transfer_matrix_odd.contract(l_odd, tenx::idx({0, 1}, {0, 1})).contract(r_odd, tenx::idx({0, 1}, {0, 1}));
+        std::string              str      = "Check\n";
+        str                              += fmt::format(" l_odd_LCGB_r_evn                                = {:.15f}\n", fp(l_odd_LCGB_r_evn(0)));
+        str                              += fmt::format(" l_evn_LBGA_r_odd                                = {:.15f}\n", fp(l_evn_LBGA_r_odd(0)));
+        str                              += fmt::format(" < l_evn | r_evn >                               = {:.15f}\n", fp(le_re(0)));
+        str                              += fmt::format(" < l_odd | r_odd >                               = {:.15f}\n", fp(lo_ro(0)));
+        str                              += fmt::format(" < l_evn | LAGA  | r_odd >                       = {:.15f}\n", fp(le_laga(0)));
+        str                              += fmt::format(" < l_odd | LCGB  | r_evn >                       = {:.15f}\n", fp(lo_lcgb(0)));
+        str                              += fmt::format(" < theta     | theta >                           = {:.15f}\n", fp(thth(0)));
+        str                              += fmt::format(" < theta_evn_normalized | theta_evn_normalized > = {:.15f}\n", fp(then_then(0)));
+        str                              += fmt::format(" < theta_odd_normalized | theta_odd_normalized > = {:.15f}\n", fp(thon_thon(0)));
+        str                              += fmt::format(" < theta_evn_normalized | theta_evn_normalized > = {:.15f}\n", fp(tren_le(0)));
+        str                              += fmt::format(" < theta_odd_normalized | theta_odd_normalized > = {:.15f}\n", fp(trod_lo(0)));
         tools::log->trace(str);
     }
 }

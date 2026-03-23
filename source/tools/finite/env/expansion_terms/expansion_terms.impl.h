@@ -6,9 +6,9 @@
 #include "../BondExpansionConfig.h"
 #include "../BondExpansionResult.h"
 #include "../expansion_terms.h"
+#include "config/settings.h"
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"
-#include "config/settings.h"
 #include <Eigen/Core>
 #include <Eigen/QR>
 
@@ -27,7 +27,7 @@ void orthonormalize_dgks(const MatrixTypeX &X, MatrixTypeY &Y) {
     assert_allfinite(Y);
     // DGKS clean Y against X and orthonormalize Y
     // We do not assume that X or Y are normalized!
-    RealScalar threshold = std::numeric_limits<RealScalar>::epsilon() * Y.rows() * 5;
+    RealScalar threshold = std::numeric_limits<RealScalar>::epsilon() * safe_cast<RealScalar>(Y.rows() * 5);
     for(int rep = 0; rep < 50; ++rep) {
         auto maxProjX = RealScalar{0};
         for(Eigen::Index col_y = 0; col_y < Y.cols(); ++col_y) {
@@ -36,13 +36,13 @@ void orthonormalize_dgks(const MatrixTypeX &X, MatrixTypeY &Y) {
                 auto Xcol = X.col(col_x);
                 auto Xsqn = Xcol.squaredNorm();
                 if(Xsqn < threshold) { continue; }
-                MatrixType proj = (Xcol.adjoint() * Ycol) / Xcol.squaredNorm();
-                Ycol.noalias() -= Xcol * proj;
-                maxProjX = std::max(maxProjX, proj.colwise().norm().maxCoeff());
+                MatrixType proj  = (Xcol.adjoint() * Ycol) / Xcol.squaredNorm();
+                Ycol.noalias()  -= Xcol * proj;
+                maxProjX         = std::max(maxProjX, proj.colwise().norm().maxCoeff());
             }
         }
         if(maxProjX < threshold) break;
-        if(rep > 2) tools::log->info("dgks: rep = {}: maxProjX = {:.5e} | threshold {:.5e}", rep, fp(maxProjX), fp(threshold));
+        if(rep > 2) tools::log->info("dgks: rep = {}: maxProjX = {:.5e} | threshold {:.5e}", rep, maxProjX, threshold);
     }
     assert_allfinite(X);
     assert_allfinite(Y);
@@ -69,10 +69,10 @@ void tools::finite::env::internal::merge_rexpansion_terms_MP_N0(MpsSite<Scalar> 
     auto M_P_slice  = M_P.slice(offset, extent_M_P);
     auto N_0_slice  = N_0.slice(offset, extent_N_0);
 
-    auto LC_old        = mpsL.get_LC();
-    auto offset_LC     = Eigen::DSizes<Eigen::Index, 1>{0};
-    auto extent_LC     = Eigen::DSizes<Eigen::Index, 1>{std::min(bond_lim, LC_old.size())};
-    auto extent_LC_pad = Eigen::DSizes<Eigen::Index, 1>{bond_lim};
+    auto                     LC_old        = mpsL.get_LC();
+    auto                     offset_LC     = Eigen::DSizes<Eigen::Index, 1>{0};
+    auto                     extent_LC     = Eigen::DSizes<Eigen::Index, 1>{std::min(bond_lim, LC_old.size())};
+    auto                     extent_LC_pad = Eigen::DSizes<Eigen::Index, 1>{bond_lim};
     Eigen::Tensor<Scalar, 1> LC_pad(extent_LC_pad);
     if(std::real(schmidt_pad_value) < 0) schmidt_pad_value = std::real(LC_old.coeff(LC_old.size() - 1));
     LC_pad.setConstant(schmidt_pad_value);
@@ -124,13 +124,14 @@ void tools::finite::env::internal::merge_rexpansion_terms_N0_MP(MpsSite<Scalar> 
 }
 
 template<typename T>
-std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> tools::finite::env::internal::get_expansion_terms_MP_N0(const Eigen::Tensor<T, 3>    &M,   // Gets expanded
-                                                                                                            const Eigen::Tensor<T, 3>    &N,   // Gets padded
-                                                                                                            const Eigen::Tensor<T, 3>    &P1,  //
-                                                                                                            const Eigen::Tensor<T, 3>    &P2,  //
-                                                                                                            [[maybe_unused]] const BondExpansionResult<T> &res, //
-                                                                                                            Eigen::Index                  bond_lim, //
-                                                                                                            T                             pad_value) {
+std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>>
+    tools::finite::env::internal::get_expansion_terms_MP_N0(const Eigen::Tensor<T, 3>                     &M,        // Gets expanded
+                                                            const Eigen::Tensor<T, 3>                     &N,        // Gets padded
+                                                            const Eigen::Tensor<T, 3>                     &P1,       //
+                                                            const Eigen::Tensor<T, 3>                     &P2,       //
+                                                            [[maybe_unused]] const BondExpansionResult<T> &res,      //
+                                                            Eigen::Index                                   bond_lim, //
+                                                            T                                              pad_value) {
     /*
         We form M_P = [M | P] by concatenating along dimension 2.
         In matrix-language, the columns of P are added as new columns to M.
@@ -160,27 +161,39 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> tools::finite::env::internal
 
     // Now let's start calculating residuals.
     const auto M_matrix = tenx::MatrixMap(M, M.dimension(0) * M.dimension(1), M.dimension(2));
-    MatrixT    P_matrix;
+    MatrixT    P_matrix(M_matrix.rows(), 0);
     if(P1.size() > 0) {
-        P_matrix              = tenx::MatrixMap(P1, P1.dimension(0) * P1.dimension(1), P1.dimension(2));
-        RealScalar maxcolnorm = P_matrix.colwise().norm().maxCoeff();
-        P_matrix /= maxcolnorm;
+        auto P1_matrix  = tenx::MatrixMap(P1, P1.dimension(0) * P1.dimension(1), P1.dimension(2));
+        auto maxcolnorm = P1_matrix.colwise().norm().maxCoeff();
+        P_matrix        = P1_matrix;
+        if(maxcolnorm > RealScalar{0})
+            P_matrix /= maxcolnorm;
+        else
+            P_matrix.setZero();
     }
     if(P2.size() > 0) {
-        P_matrix.conservativeResize(M_matrix.rows(), P_matrix.cols() + P2.dimension(2));
-        P_matrix.rightCols(P2.dimension(2)) = tenx::MatrixMap(P2, P2.dimension(0) * P2.dimension(1), P2.dimension(2));
-        RealScalar maxcolnorm               = P_matrix.rightCols(P2.dimension(2)).colwise().norm().maxCoeff();
-        P_matrix.rightCols(P2.dimension(2)) /= maxcolnorm;
+        auto P2_matrix = tenx::MatrixMap(P2, P2.dimension(0) * P2.dimension(1), P2.dimension(2));
+        auto old_cols  = P_matrix.cols();
+        P_matrix.conservativeResize(M_matrix.rows(), old_cols + P2.dimension(2));
+        P_matrix.rightCols(P2.dimension(2)) = P2_matrix;
+        auto maxcolnorm                     = P2_matrix.colwise().norm().maxCoeff();
+        if(maxcolnorm > RealScalar{0})
+            P_matrix.rightCols(P2.dimension(2)) /= maxcolnorm;
+        else
+            P_matrix.rightCols(P2.dimension(2)).setZero();
     }
     VectorR P_norms = P_matrix.colwise().norm();
     // tools::log->info("P norms: {::.3e}", fv(P_norms));
-    orthonormalize_dgks(M_matrix, P_matrix);
-    RealScalar maxPnorm = std::max<RealScalar>(RealScalar{1}, P_matrix.colwise().norm().maxCoeff());
+    if(P_matrix.cols() > 0) orthonormalize_dgks(M_matrix, P_matrix);
+    RealScalar maxPnorm = RealScalar{1};
+    if(P_matrix.cols() > 0) maxPnorm = std::max<RealScalar>(RealScalar{1}, P_matrix.colwise().norm().maxCoeff());
 
-    Eigen::ColPivHouseholderQR<MatrixT> cpqr(P_matrix);
-    auto max_cols_keep_P = bond_lim < 0 ? cpqr.rank() : std::min<Eigen::Index>(cpqr.rank(), std::max<Eigen::Index>(0, bond_lim - M.dimension(2)));
-    max_cols_keep_P      = std::min(max_cols_keep_P, M_matrix.rows());
-    P_matrix             = cpqr.householderQ().setLength(max_cols_keep_P) * MatrixT::Identity(P_matrix.rows(), max_cols_keep_P);
+    if(P_matrix.cols() > 0) {
+        Eigen::ColPivHouseholderQR<MatrixT> cpqr(P_matrix);
+        auto max_cols_keep_P = bond_lim < 0 ? cpqr.rank() : std::min<Eigen::Index>(cpqr.rank(), std::max<Eigen::Index>(0, bond_lim - M.dimension(2)));
+        max_cols_keep_P      = std::min(max_cols_keep_P, M_matrix.rows());
+        P_matrix             = cpqr.householderQ().setLength(max_cols_keep_P) * MatrixT::Identity(P_matrix.rows(), max_cols_keep_P);
+    }
 
     Eigen::Index dim0 = M.dimension(0);
     Eigen::Index dim1 = M.dimension(1);
@@ -206,7 +219,8 @@ std::pair<Eigen::Tensor<T, 3>, Eigen::Tensor<T, 3>> tools::finite::env::internal
     auto M_P_matrix = tenx::MatrixMap(M_P, M_P.dimension(0) * M_P.dimension(1), M_P.dimension(2));
 
     assert_allfinite(M_P_matrix);
-    assert_orthonormal<2>(M_P, std::numeric_limits<RealScalar>::epsilon() * maxPnorm * settings::precision::max_norm_slack);
+    auto slack = safe_cast<RealScalar>(settings::precision::max_norm_slack);
+    assert_orthonormal<2>(M_P, std::numeric_limits<RealScalar>::epsilon() * maxPnorm * slack);
 
     return {M_P, N_0};
 }

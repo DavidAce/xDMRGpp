@@ -1,6 +1,7 @@
 #pragma once
 
 #include <complex>
+#include <unsupported/Eigen/CXX11/Tensor>
 
 template<typename Scalar>
 class StateFinite;

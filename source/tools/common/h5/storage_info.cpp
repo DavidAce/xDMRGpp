@@ -1,5 +1,9 @@
 #include "storage_info.h"
 #include "algorithms/AlgorithmStatus.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/ModelType.h"
+#include "config/enums/StorageEvent.h"
+#include "config/enums/StoragePolicy.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include <fmt/core.h>

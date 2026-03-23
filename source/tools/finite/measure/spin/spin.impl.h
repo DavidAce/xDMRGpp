@@ -1,13 +1,13 @@
 #pragma once
+#include "../correlation.h"
+#include "../expectation_value.h"
+#include "../spin.h"
 #include "config/debug.h"
-#include "correlation.h"
 #include "debug/exceptions.h"
-#include "expectation_value.h"
 #include "math/num.h"
 #include "math/tenx.h"
 #include "qm/mpo.h"
 #include "qm/spin.h"
-#include "spin.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
@@ -70,7 +70,7 @@ RealScalar<Scalar> tools::finite::measure::spin_alignment(const StateFinite<Scal
     if(not qm::spin::half::is_valid_axis(axis)) throw except::logic_error("unexpected axis [{}]", axis);
     auto spin_component_along_axis = tools::finite::measure::spin_component<Scalar>(state, qm::spin::half::get_pauli(axis));
     auto sign                      = qm::spin::half::get_sign(axis);
-    return sign * spin_component_along_axis;
+    return safe_cast<RealScalar<Scalar>>(sign) * spin_component_along_axis;
 }
 
 template<typename Scalar>
@@ -111,9 +111,18 @@ std::array<Eigen::Tensor<RealScalar<Scalar>, 2>, 3> tools::finite::measure::spin
     auto sx = qm::spin::half::tensor::sx;
     auto sy = qm::spin::half::tensor::sy;
     auto sz = qm::spin::half::tensor::sz;
-    if(not state.measurements.correlation_matrix_sx) state.measurements.correlation_matrix_sx = measure::correlation_matrix<Scalar>(state, sx, sx).real();
-    if(not state.measurements.correlation_matrix_sy) state.measurements.correlation_matrix_sy = measure::correlation_matrix<Scalar>(state, sy, sy).real();
-    if(not state.measurements.correlation_matrix_sz) state.measurements.correlation_matrix_sz = measure::correlation_matrix<Scalar>(state, sz, sz).real();
+    if(auto cache = state.measurements.get_cached_correlation_matrix_sx(state); cache)
+        state.measurements.correlation_matrix_sx = cache->value();
+    else
+        state.measurements.set_cached_correlation_matrix_sx(measure::correlation_matrix<Scalar>(state, sx, sx).real(), state);
+    if(auto cache = state.measurements.get_cached_correlation_matrix_sy(state); cache)
+        state.measurements.correlation_matrix_sy = cache->value();
+    else
+        state.measurements.set_cached_correlation_matrix_sy(measure::correlation_matrix<Scalar>(state, sy, sy).real(), state);
+    if(auto cache = state.measurements.get_cached_correlation_matrix_sz(state); cache)
+        state.measurements.correlation_matrix_sz = cache->value();
+    else
+        state.measurements.set_cached_correlation_matrix_sz(measure::correlation_matrix<Scalar>(state, sz, sz).real(), state);
     return {state.measurements.correlation_matrix_sx.value(), state.measurements.correlation_matrix_sy.value(),
             state.measurements.correlation_matrix_sz.value()};
 }
@@ -124,20 +133,26 @@ std::array<RealScalar<Scalar>, 3> tools::finite::measure::spin_structure_factor_
     auto sy = qm::spin::half::tensor::sy;
     auto sz = qm::spin::half::tensor::sz;
 
-    if(not state.measurements.structure_factor_x) {
+    if(auto cache = state.measurements.get_cached_structure_factor_x(state); cache) {
+        state.measurements.structure_factor_x = cache->value();
+    } else {
         auto correlation_matrix_sx = measure::correlation_matrix<Scalar>(state, sx, sx);
-        if(not state.measurements.correlation_matrix_sx) state.measurements.correlation_matrix_sx = correlation_matrix_sx.real();
-        state.measurements.structure_factor_x = measure::structure_factor(state, correlation_matrix_sx);
+        state.measurements.set_cached_correlation_matrix_sx(correlation_matrix_sx.real(), state);
+        state.measurements.set_cached_structure_factor_x(measure::structure_factor(state, correlation_matrix_sx), state);
     }
-    if(not state.measurements.structure_factor_y) {
+    if(auto cache = state.measurements.get_cached_structure_factor_y(state); cache) {
+        state.measurements.structure_factor_y = cache->value();
+    } else {
         auto correlation_matrix_sy = measure::correlation_matrix<Scalar>(state, sy, sy);
-        if(not state.measurements.correlation_matrix_sy) state.measurements.correlation_matrix_sy = correlation_matrix_sy.real();
-        state.measurements.structure_factor_y = measure::structure_factor(state, correlation_matrix_sy);
+        state.measurements.set_cached_correlation_matrix_sy(correlation_matrix_sy.real(), state);
+        state.measurements.set_cached_structure_factor_y(measure::structure_factor(state, correlation_matrix_sy), state);
     }
-    if(not state.measurements.structure_factor_z) {
+    if(auto cache = state.measurements.get_cached_structure_factor_z(state); cache) {
+        state.measurements.structure_factor_z = cache->value();
+    } else {
         auto correlation_matrix_sz = measure::correlation_matrix<Scalar>(state, sz, sz);
-        if(not state.measurements.correlation_matrix_sz) state.measurements.correlation_matrix_sz = correlation_matrix_sz.real();
-        state.measurements.structure_factor_z = measure::structure_factor(state, correlation_matrix_sz);
+        state.measurements.set_cached_correlation_matrix_sz(correlation_matrix_sz.real(), state);
+        state.measurements.set_cached_structure_factor_z(measure::structure_factor(state, correlation_matrix_sz), state);
     }
 
     return {state.measurements.structure_factor_x.value(), state.measurements.structure_factor_y.value(), state.measurements.structure_factor_z.value()};

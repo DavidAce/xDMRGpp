@@ -1,8 +1,9 @@
 #pragma once
 
-#include "expectation_value.h"
-#include "expectation_value/contract.h"
+#include "../expectation_value.h"
+#include "contract.h"
 #include "general/iter.h"
+#include "general/sfinae.h"
 #include "math/num.h"
 #include "tensors/site/env/EnvEne.h"
 #include "tensors/site/env/EnvPair.h"
@@ -19,7 +20,6 @@
 #include "tools/finite/mpo.h"
 #include "tools/finite/ops.h"
 #include <array>
-#include <general/sfinae.h>
 #include <h5pp/details/h5ppType.h>
 namespace settings {
     inline constexpr bool debug_expval = false;
@@ -43,7 +43,7 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
             using CplxScalar = std::complex<RealScalar>;
             auto expval      = expectation_value<CplxScalar>(state, ops);
             if(std::abs(std::imag(expval)) > std::numeric_limits<RealScalar>::epsilon() * 100)
-                tools::log->warn("expectation_value: result has imaginary part: {:.3e}", fp(expval));
+                tools::log->warn("expectation_value: result has imaginary part: {:.3e}", expval);
             return std::real(expval);
         }
     }
@@ -160,7 +160,7 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
     // Finish by contracting Redge3
     Eigen::Tensor<CalcType, 0> expval = contract_internal<CalcType>::contract_envL_envR_012_012(Ledge3, Redge3, threads);
     if(std::imag(expval.coeff(0)) > std::numeric_limits<Real>::epsilon() * 100)
-        tools::log->warn("expectation_value: result has imaginary part: {:8.2e}", fp(expval(0)));
+        tools::log->warn("expectation_value: result has imaginary part: {:8.2e}", expval(0));
     return expval.coeff(0);
 }
 

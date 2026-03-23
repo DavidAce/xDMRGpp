@@ -22,7 +22,6 @@ namespace h5pp {
     namespace hid {
         class h5t;
     }
-    struct DimsType;
 }
 namespace tools::common::h5 {
     namespace save {

@@ -1,7 +1,7 @@
 #pragma once
+#include "../residual.h"
 #include "math/num.h"
 #include "math/tenx.h"
-#include "residual.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/env/EnvEne.h"
@@ -73,7 +73,11 @@ RealScalar<Scalar> tools::finite::measure::residual_norm_H1(const std::vector<si
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm_H1(const TensorsFinite<Scalar> &tensors) {
-    return residual_norm_H1<Scalar>(tensors.active_sites, tensors.get_state(), tensors.get_model(), tensors.get_edges());
+    tensors.assert_edges_ene();
+    if(auto cache = tensors.measurements.get_cached_residual_norm_h1(tensors); cache) return cache->value();
+    auto value = residual_norm_H1<Scalar>(tensors.active_sites, tensors.get_state(), tensors.get_model(), tensors.get_edges());
+    tensors.measurements.set_cached_residual_norm_h1(value, tensors);
+    return value;
 }
 
 template<typename Scalar>
@@ -92,7 +96,11 @@ RealScalar<Scalar> tools::finite::measure::residual_norm_H2(const std::vector<si
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm_H2(const TensorsFinite<Scalar> &tensors) {
-    return residual_norm_H2<Scalar>(tensors.active_sites, tensors.get_state(), tensors.get_model(), tensors.get_edges());
+    tensors.assert_edges_var();
+    if(auto cache = tensors.measurements.get_cached_residual_norm_h2(tensors); cache) return cache->value();
+    auto value = residual_norm_H2<Scalar>(tensors.active_sites, tensors.get_state(), tensors.get_model(), tensors.get_edges());
+    tensors.measurements.set_cached_residual_norm_h2(value, tensors);
+    return value;
 }
 
 template<typename Scalar>
@@ -110,5 +118,9 @@ RealScalar<Scalar> tools::finite::measure::residual_norm_full(const StateFinite<
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::residual_norm_full(const TensorsFinite<Scalar> &tensors) {
-    return residual_norm_full<Scalar>(tensors.get_state(), tensors.get_model(), tensors.get_edges());
+    tensors.assert_edges_ene();
+    if(auto cache = tensors.measurements.get_cached_residual_norm_full(tensors); cache) return cache->value();
+    auto value = residual_norm_full<Scalar>(tensors.get_state(), tensors.get_model(), tensors.get_edges());
+    tensors.measurements.set_cached_residual_norm_full(value, tensors);
+    return value;
 }

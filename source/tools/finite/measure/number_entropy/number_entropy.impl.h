@@ -1,13 +1,14 @@
 #pragma once
+#include "../number_entropy.h"
+#include "../dimensions.h"
 #include "config/debug.h"
+#include "config/enums/AlgorithmType.h"
 #include "debug/exceptions.h"
-#include "dimensions.h"
 #include "general/iter.h"
 #include "math/cast.h"
 #include "math/num.h"
 #include "math/rnd.h"
 #include "math/tenx.h"
-#include "number_entropy.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
@@ -650,7 +651,10 @@ std::vector<Amplitude<Scalar, from>> generate_amplitude_list_rrp(long state_len,
  */
 template<typename Scalar>
 std::vector<RealScalar<Scalar>> tools::finite::measure::number_entropies(const StateFinite<Scalar> &state) {
-    if(state.measurements.number_entropies) return state.measurements.number_entropies.value();
+    if(auto cache = state.measurements.get_cached_number_entropies(state); cache) {
+        if(not state.measurements.number_entropies) state.measurements.number_entropies = cache->value();
+        return cache->value();
+    }
     if(state.get_algorithm() != AlgorithmType::fLBIT) {
         // Only fLBIT has particle-number conservation
         tools::log->warn("Called number_entropies(StateFinite) from algorithm [{}]: This is currently only valid with the [fLBIT] algorithm",
@@ -716,10 +720,7 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::number_entropies(const S
         cacheB_size = cache.size();
     }
     tools::log->disable_backtrace();
-    state.measurements.number_entropies        = number_entropies;
-    state.measurements.number_entropy_midchain = number_entropies.at(state.template get_length<size_t>() / 2);
-    state.measurements.number_entropy_current  = number_entropies.at(state.template get_position<size_t>() + 1);
-    state.measurements.number_probabilities    = probabilities;
+    state.measurements.set_cached_number_entropies(number_entropies, probabilities, state);
     tools::log->debug("Number entropies: cchA {} + cchB {} = {} | χ = {} | time {:.3e} s", cacheA_size, cacheB_size, cacheA_size + cacheB_size,
                       measure::bond_dimension_midchain(state), t_num->get_last_interval());
     // tools::log->debug("Number entropies: {::.4f}", number_entropies);
@@ -745,14 +746,15 @@ std::vector<RealScalar<Scalar>> tools::finite::measure::number_entropies(const S
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::number_entropy_current(const StateFinite<Scalar> &state) {
-    if(state.measurements.number_entropy_current) return state.measurements.number_entropy_current.value();
-    if(state.measurements.number_entropies) {
-        state.measurements.number_entropy_current = state.measurements.number_entropies->at(state.template get_position<size_t>() + 1);
+    if(auto cache = state.measurements.get_cached_number_entropies(state); cache) {
+        state.measurements.number_entropies        = cache->value();
+        state.measurements.number_entropy_midchain = cache->value().at(state.get_length() / 2);
+        state.measurements.number_entropy_current  = cache->value().at(state.template get_position<size_t>() + 1);
         return state.measurements.number_entropy_current.value();
     }
-    state.measurements.number_entropies = measure::number_entropies(state);
-    if(not state.measurements.number_entropies->empty()) {
-        state.measurements.number_entropy_current = state.measurements.number_entropies->at(state.template get_position<size_t>() + 1);
+    auto entropies = measure::number_entropies(state);
+    if(not entropies.empty()) {
+        state.measurements.number_entropy_current = entropies.at(state.template get_position<size_t>() + 1);
         return state.measurements.number_entropy_current.value();
     } else
         return 0;
@@ -760,14 +762,15 @@ RealScalar<Scalar> tools::finite::measure::number_entropy_current(const StateFin
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::number_entropy_midchain(const StateFinite<Scalar> &state) {
-    if(state.measurements.number_entropy_midchain) return state.measurements.number_entropy_midchain.value();
-    if(state.measurements.number_entropies) {
-        state.measurements.number_entropy_midchain = state.measurements.number_entropies->at(state.get_length() / 2);
+    if(auto cache = state.measurements.get_cached_number_entropies(state); cache) {
+        state.measurements.number_entropies        = cache->value();
+        state.measurements.number_entropy_midchain = cache->value().at(state.get_length() / 2);
+        if(state.has_center_point()) state.measurements.number_entropy_current = cache->value().at(state.template get_position<size_t>() + 1);
         return state.measurements.number_entropy_midchain.value();
     }
-    state.measurements.number_entropies = measure::number_entropies(state);
-    if(not state.measurements.number_entropies->empty()) {
-        state.measurements.number_entropy_midchain = state.measurements.number_entropies->at(state.get_length() / 2);
+    auto entropies = measure::number_entropies(state);
+    if(not entropies.empty()) {
+        state.measurements.number_entropy_midchain = entropies.at(state.get_length() / 2);
         return state.measurements.number_entropy_midchain.value();
     } else
         return 0;

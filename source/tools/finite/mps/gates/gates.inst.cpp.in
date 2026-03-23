@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "gates.impl.h"
 
 using Scalar = @SCALAR@;
 

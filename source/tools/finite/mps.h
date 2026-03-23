@@ -1,6 +1,9 @@
 #pragma once
 
-#include "config/enums.h"
+#include "config/enums/GateMove.h"
+#include "config/enums/NormPolicy.h"
+#include "config/enums/StateInit.h"
+#include "config/enums/StateInitType.h"
 #include "math/float.h"
 #include "math/svd/config.h"
 #include <complex>
@@ -9,7 +12,9 @@
 #include <optional>
 #include <set>
 #include <string>
-#include <tensors/state/StateFinite.h>
+#include <string_view>
+#include <unsupported/Eigen/CXX11/Tensor>
+#include <utility>
 #include <vector>
 namespace qm {
     class Gate;
@@ -20,6 +25,10 @@ namespace qm {
 template<typename Scalar> class StateFinite;
 template<typename Scalar> class MpsSite;
 enum class BitOrder {AsIs, Reverse};
+enum class CircuitOp;
+enum class GateOp;
+enum class LogPolicy;
+enum class MergeEvent;
 namespace tools{
     extern std::string get_bitfield(size_t nbits, const std::string &pattern, BitOrder bitOrder = BitOrder::AsIs);
     extern std::string get_bitfield(size_t nbits, size_t pattern, BitOrder bitOrder = BitOrder::AsIs);

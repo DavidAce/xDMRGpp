@@ -2,14 +2,11 @@
 
 #include <Eigen/Core>
 // Eigen goes first
-#include "math/float.h"
 #include "math/tenx/eval.h"
-#include "math/tenx/threads.h"
-#include <complex>
+#include <array>
 
 template<typename Scalar> class MatrixLikeOperator;
 template<typename Scalar> struct IterativeLinearSolverConfig;
-
 
 namespace tools::common::contraction {
     template<typename T> using VectorType = Eigen::Matrix<T, Eigen::Dynamic, 1>;

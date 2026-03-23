@@ -1,4 +1,4 @@
-#include "../opdm.impl.h"
+#include "opdm.impl.h"
 
 using Scalar = @SCALAR@;
 

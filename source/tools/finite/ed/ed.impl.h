@@ -1,6 +1,8 @@
 #pragma once
 #include "../ed.h"
 #include "algorithms/AlgorithmStatus.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/OptType.h"
 #include "general/iter.h"
 #include "math/eig.h"
 #include "math/num.h"
@@ -63,6 +65,7 @@ StateFinite<Scalar> tools::finite::ed::find_exact_state(const TensorsFinite<Scal
     auto comparator = [](const tools::finite::opt::opt_mps<Scalar> &lhs, const tools::finite::opt::opt_mps<Scalar> &rhs) {
         return lhs.get_overlap() > rhs.get_overlap();
     };
+    if(results.empty()) throw std::runtime_error("find_exact_state: eigensolver returned no converged eigenvectors");
     if(results.size() >= 2) std::sort(results.begin(), results.end(), comparator);
 
     auto  spin_dims     = std::vector<long>(tensors_ed.template get_length<size_t>(), 2l);
@@ -76,25 +79,25 @@ StateFinite<Scalar> tools::finite::ed::find_exact_state(const TensorsFinite<Scal
 
     tools::log->info("Bond dimensions χ                  = {}", tools::finite::measure::bond_dimensions(state_ed));
     tools::log->info("Bond dimension  χ (mid)            = {}", tools::finite::measure::bond_dimension_midchain(state_ed));
-    tools::log->info("Entanglement entropies Sₑ          = {::8.2e}", fv(tools::finite::measure::entanglement_entropies(state_ed)));
-    tools::log->info("Entanglement entropy   Sₑ (mid)    = {:8.2e}", fp(tools::finite::measure::entanglement_entropy_midchain(state_ed)));
+    tools::log->info("Entanglement entropies Sₑ          = {::8.2e}", tools::finite::measure::entanglement_entropies(state_ed));
+    tools::log->info("Entanglement entropy   Sₑ (mid)    = {:8.2e}", tools::finite::measure::entanglement_entropy_midchain(state_ed));
     if(status.algo_type == AlgorithmType::fLBIT) {
-        tools::log->info("Number entropies Sₙ                = {::8.2e}", fv(tools::finite::measure::number_entropies(state_ed)));
-        tools::log->info("Number entropy   Sₙ (mid)          = {:8.2e}", fp(tools::finite::measure::number_entropy_midchain(state_ed)));
+        tools::log->info("Number entropies Sₙ                = {::8.2e}", tools::finite::measure::number_entropies(state_ed));
+        tools::log->info("Number entropy   Sₙ (mid)          = {:8.2e}", tools::finite::measure::number_entropy_midchain(state_ed));
     }
-    tools::log->info("Spin components (global X,Y,Z)     = {::8.2e}", fv(tools::finite::measure::spin_components(state_ed)));
+    tools::log->info("Spin components (global X,Y,Z)     = {::8.2e}", tools::finite::measure::spin_components(state_ed));
 
     auto expectation_values_xyz = tools::finite::measure::spin_expectation_values_xyz(state_ed);
     auto structure_factor_xyz   = tools::finite::measure::spin_structure_factor_xyz(state_ed);
     auto opdm_spectrum          = tools::finite::measure::opdm_spectrum(state_ed, tensors.get_model().model_type);
 
-    tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", fv(expectation_values_xyz[0]));
-    tools::log->info("Expectation values ⟨σy⟩            = {::+9.6f}", fv(expectation_values_xyz[1]));
-    tools::log->info("Expectation values ⟨σz⟩            = {::+9.6f}", fv(expectation_values_xyz[2]));
-    tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σx_i σx_j⟩² = {:+.16f}", fp(structure_factor_xyz[0]));
-    tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σy_i σy_j⟩² = {:+.16f}", fp(structure_factor_xyz[1]));
-    tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σz_i σz_j⟩² = {:+.16f}", fp(structure_factor_xyz[2]));
-    tools::log->info("OPDM spectrum                      = {::+9.6f}", fv(opdm_spectrum));
+    tools::log->info("Expectation values ⟨σx⟩            = {::+9.6f}", expectation_values_xyz[0]);
+    tools::log->info("Expectation values ⟨σy⟩            = {::+9.6f}", expectation_values_xyz[1]);
+    tools::log->info("Expectation values ⟨σz⟩            = {::+9.6f}", expectation_values_xyz[2]);
+    tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σx_i σx_j⟩² = {:+.16f}", structure_factor_xyz[0]);
+    tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σy_i σy_j⟩² = {:+.16f}", structure_factor_xyz[1]);
+    tools::log->info("Structure f. L⁻¹ ∑_ij ⟨σz_i σz_j⟩² = {:+.16f}", structure_factor_xyz[2]);
+    tools::log->info("OPDM spectrum                      = {::+9.6f}", opdm_spectrum);
     tools::log->info("Truncation Errors ε                = {::8.2e}", state_ed.get_truncation_errors());
 
     return state_ed;

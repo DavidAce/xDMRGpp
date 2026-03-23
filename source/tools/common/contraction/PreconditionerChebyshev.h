@@ -122,8 +122,8 @@ class PreconditionerChebyshev {
         // Recurrence for steps 2 to m
         for(int k = 2; k <= degree; ++k) {
             matvec(r1, temp); // temp = A * r1
-            VectorType r2 = (RealScalar{2} / c) * (temp - d * r1) - r0;
-            x += alpha1 * r1;
+            VectorType r2  = (RealScalar{2} / c) * (temp - d * r1) - r0;
+            x             += alpha1 * r1;
 
             // Prepare for the next iteration
             r0 = std::move(r1);

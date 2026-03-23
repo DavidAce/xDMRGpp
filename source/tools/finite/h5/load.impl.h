@@ -1,4 +1,8 @@
 #pragma once
+#include "algorithms/AlgorithmStatus.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/ModelType.h"
+#include "config/enums/ResetReason.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "io/hdf5_types.h"
@@ -15,7 +19,6 @@
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/print.h"
-#include <algorithms/AlgorithmStatus.h>
 #include <complex>
 #include <h5pp/h5pp.h>
 #include <typeindex>
@@ -116,8 +119,8 @@ template<typename T1, typename T2, typename T3>
 requires std::is_floating_point_v<T1> and std::is_floating_point_v<T2>
 void compare(T1 val1, T2 val2, T3 tol, std::string_view tag) {
     if(val2 == 0) {
-        tools::log->warn("Value mismatch after resume: {} = {:.16f} | expected {:.16f} | diff = {:.16f} | tol = {:.16f}", tag, fp(val1), fp(val2),
-                         fp(std::abs(val1 - val2)), fp(tol));
+        tools::log->warn("Value mismatch after resume: {} = {:.16f} | expected {:.16f} | diff = {:.16f} | tol = {:.16f}", tag, val1, val2,
+                         std::abs(val1 - val2), tol);
         tools::log->warn("Value 2 is zero: It may not have been initialized in the previous simulation");
         return;
     }
@@ -125,8 +128,7 @@ void compare(T1 val1, T2 val2, T3 tol, std::string_view tag) {
         throw except::runtime_error("Value mismatch after resume: {} = {:.16f} | expected {:.16f} | diff = {:.16f} | tol = {:.16f}", tag, fp(val1), fp(val2),
                                     fp(std::abs(val1 - val2)), fp(tol));
     else
-        tools::log->debug("{} matches measurement on file: {:.16f} == {:.16f} | diff = {:.16f} | tol = {:.16f}", tag, fp(val1), fp(val2),
-                          fp(std::abs(val1 - val2)), fp(tol));
+        tools::log->debug("{} matches measurement on file: {:.16f} == {:.16f} | diff = {:.16f} | tol = {:.16f}", tag, val1, val2, std::abs(val1 - val2), tol);
 }
 template<typename Scalar>
 void tools::finite::h5::load::validate(const h5pp::File &h5file, std::string_view state_prefix, TensorsFinite<Scalar> &tensors, AlgorithmStatus &status,

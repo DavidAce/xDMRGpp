@@ -1,4 +1,9 @@
 #include "../mps.h"
+#include "debug/exceptions.h"
+#include "io/fmt_custom.h"
+#include <algorithm>
+#include <cctype>
+
 bool tools::finite::mps::init::bitfield_is_valid(size_t bitfield) { return bitfield != -1ul and init::used_bitfields.count(bitfield) == 0; }
 
 std::string tools::get_bitfield(size_t nbits, const std::string &pattern, BitOrder bitOrder) {

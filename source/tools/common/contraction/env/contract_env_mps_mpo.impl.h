@@ -54,7 +54,7 @@ namespace tools::common::contraction::internal {
             info.ST2                = get_norm(T2.data(), T2.dimensions());
             auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.env_norm, info.ST1, info.ST2});
             info.cancelation_factor = Smax / info.res_norm;
-            tools::log->info("Contracted env{} with eigen: cf: {:.3e} | type {}", side, fp(info.cancelation_factor), sfinae::type_name<Scalar>());
+            tools::log->info("Contracted env{} with eigen: cf: {:.3e} | type {}", side, info.cancelation_factor, sfinae::type_name<Scalar>());
         }
         return info;
     }
@@ -117,8 +117,8 @@ namespace tools::common::contraction::internal {
             auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.env_norm, info.ST1, info.ST2});
             info.cancelation_factor = Smax / info.res_norm;
             // if constexpr(settings::debug_contract_env)
-            tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} res {:.4e} ST1 {:.4e} ST2 {:.4e} cf: {:.4e}", fp(info.mps_norm), fp(info.mpo_norm),
-                             fp(info.env_norm), fp(info.res_norm), fp(info.ST1), fp(info.ST2), fp(info.cancelation_factor));
+            tools::log->info("norms: mps {:.4e} mpo {:.4e} envL {:.4e} res {:.4e} ST1 {:.4e} ST2 {:.4e} cf: {:.4e}", info.mps_norm, info.mpo_norm,
+                             info.env_norm, info.res_norm, info.ST1, info.ST2, info.cancelation_factor);
         }
         return info;
     }
@@ -175,8 +175,8 @@ namespace tools::common::contraction::internal {
             info.ST2                = T2.norm();
             auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.env_norm, info.ST1, info.ST2});
             info.cancelation_factor = Smax / info.res_norm;
-            tools::log->info("norms: mps {:.4e} mpo {:.4e} envR {:.4e} res {:.4e} ST1 {:.4e} ST2 {:.4e} cf: {:.4e}", fp(info.mps_norm), fp(info.mpo_norm),
-                             fp(info.env_norm), fp(info.res_norm), fp(info.ST1), fp(info.ST2), fp(info.cancelation_factor));
+            tools::log->info("norms: mps {:.4e} mpo {:.4e} envR {:.4e} res {:.4e} ST1 {:.4e} ST2 {:.4e} cf: {:.4e}", info.mps_norm, info.mpo_norm,
+                             info.env_norm, info.res_norm, info.ST1, info.ST2, info.cancelation_factor);
         }
         return info;
     }
@@ -273,8 +273,8 @@ namespace tools::common::contraction::internal::env_x2 {
             info.ST2                = T2.norm();
             auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.env_norm, info.ST1, info.ST2});
             info.cancelation_factor = Smax / info.res_norm;
-            tools::log->debug("envL_x2 norms: mps {:.4e} mpo {:.4e} envL {:.4e} res {:.4e} ST1 {:.4e} ST2 {:.4e} cf: {:.4e}", fp(info.mps_norm),
-                              fp(info.mpo_norm), fp(info.env_norm), fp(info.res_norm), fp(info.ST1), fp(info.ST2), fp(info.cancelation_factor));
+            tools::log->debug("envL_x2 norms: mps {:.4e} mpo {:.4e} envL {:.4e} res {:.4e} ST1 {:.4e} ST2 {:.4e} cf: {:.4e}", info.mps_norm, info.mpo_norm,
+                              info.env_norm, info.res_norm, info.ST1, info.ST2, info.cancelation_factor);
         }
         return info;
     }
@@ -332,8 +332,8 @@ namespace tools::common::contraction::internal::env_x2 {
             info.ST2                = T2.norm();
             auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.env_norm, info.ST1, info.ST2});
             info.cancelation_factor = Smax / info.res_norm;
-            tools::log->info("envR_x2 norms: mps {:.4e} mpo {:.4e} envR {:.4e} res {:.4e} ST1 {:.4e} ST2 {:.4e} cf: {:.4e}", fp(info.mps_norm),
-                             fp(info.mpo_norm), fp(info.env_norm), fp(info.res_norm), fp(info.ST1), fp(info.ST2), fp(info.cancelation_factor));
+            tools::log->info("envR_x2 norms: mps {:.4e} mpo {:.4e} envR {:.4e} res {:.4e} ST1 {:.4e} ST2 {:.4e} cf: {:.4e}", info.mps_norm, info.mpo_norm,
+                             info.env_norm, info.res_norm, info.ST1, info.ST2, info.cancelation_factor);
         }
         return info;
     }
@@ -393,7 +393,7 @@ void tools::common::contraction::contract_envL_mps_mpo(x2::Tensor<Scalar, 3>    
             auto blockv = tenx::VectorMap(block);
             auto err    = (resv - blockv).norm();
             auto rel    = err / resv.norm();
-            if(rel > Real{1e-14f}) tools::log->warn("contract_envL_mps_mpo x2 err: {:.4e} rel: {:.4e}", fp(err), fp(rel));
+            if(rel > Real{1e-14f}) tools::log->warn("contract_envL_mps_mpo x2 err: {:.4e} rel: {:.4e}", err, rel);
         }
     } else {
         Eigen::Tensor<Scalar, 3> block(mps.dimension(2), mps.dimension(2), mpo.dimension(1));
@@ -407,7 +407,7 @@ void tools::common::contraction::contract_envL_mps_mpo(x2::Tensor<Scalar, 3>    
             auto blkv = tenx::VectorMap(blkx2.to_EigenTensor());
             auto err  = (resv - blkv).norm();
             auto rel  = err / resv.norm();
-            if(rel > Real{1e-14f}) tools::log->warn("contract_envL_mps_mpo eigen err: {:.4e} rel: {:.4e}", fp(err), fp(rel));
+            if(rel > Real{1e-14f}) tools::log->warn("contract_envL_mps_mpo eigen err: {:.4e} rel: {:.4e}", err, rel);
         }
     }
 }
@@ -429,7 +429,7 @@ void tools::common::contraction::contract_envR_mps_mpo(x2::Tensor<Scalar, 3>    
             auto blockv = tenx::VectorMap(block);
             auto err    = (resv - blockv).norm();
             auto rel    = err / resv.norm();
-            if(rel > Real{1e-14f}) tools::log->warn("contract_envR_mps_mpo x2 err: {:.4e} rel: {:.4e}", fp(err), fp(rel));
+            if(rel > Real{1e-14f}) tools::log->warn("contract_envR_mps_mpo x2 err: {:.4e} rel: {:.4e}", err, rel);
         }
     } else {
         Eigen::Tensor<Scalar, 3> block(mps.dimension(1), mps.dimension(1), mpo.dimension(0));
@@ -444,7 +444,7 @@ void tools::common::contraction::contract_envR_mps_mpo(x2::Tensor<Scalar, 3>    
             auto blkv = tenx::VectorMap(blkx2.to_EigenTensor());
             auto err  = (resv - blkv).norm();
             auto rel  = err / resv.norm();
-            if(rel > Real{1e-14f}) tools::log->warn("contract_envR_mps_mpo eigen err: {:.4e} rel: {:.4e}", fp(err), fp(rel));
+            if(rel > Real{1e-14f}) tools::log->warn("contract_envR_mps_mpo eigen err: {:.4e} rel: {:.4e}", err, rel);
         }
     }
 }

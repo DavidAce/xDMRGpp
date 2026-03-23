@@ -1,6 +1,7 @@
 #include "infopolicy.h"
+#include "config/enums/Precision.h"
 
-bool InfoPolicy::is_compatible(const std::optional<InfoPolicy> &other) {
+bool InfoPolicy::is_compatible(const std::optional<InfoPolicy> &other) const {
     if(!other.has_value()) return false;
 
     // Require both to be set

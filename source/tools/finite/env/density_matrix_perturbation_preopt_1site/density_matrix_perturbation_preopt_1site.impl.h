@@ -5,36 +5,19 @@
 #include "../expansion_terms.h"
 #include "../mixer.h"
 #include "config/debug.h"
+#include "config/enums/BondExpansionPolicy.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
-#include "math/eig/matvec/matvec_mpos.h"
-#include "math/linalg/matrix/gramSchmidt.h"
-#include "math/linalg/matrix/to_string.h"
-#include "math/linalg/tensor/to_string.h"
 #include "math/num.h"
-#include "math/svd.h"
-#include "math/tenx.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/env/EnvEne.h"
 #include "tensors/site/env/EnvVar.h"
-#include "tensors/site/mpo/MpoSite.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tensors/TensorsFinite.h"
-#include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure/dimensions.h"
 #include "tools/finite/measure/hamiltonian.h"
-#include "tools/finite/measure/norm.h"
-#include "tools/finite/measure/residual.h"
-#include "tools/finite/mps.h"
-#include "tools/finite/opt.h"
-#include "tools/finite/opt_meta.h"
-#include "tools/finite/opt_mps.h"
-#include <Eigen/Eigenvalues>
-#include <source_location>
 
 namespace settings {
     inline constexpr bool debug_rexpansion_preopt_rdmp = false;
@@ -52,11 +35,19 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
     if(!has_flag(bcfg.policy, BondExpansionPolicy::PREOPT_RDMP_1SITE))
         throw except::logic_error("density_matrix_perturbation_preopt_1site: bcfg.policy must have BondExpansionPolicy::PREOPT_RDMP_1SITE set");
 
-    // PREOPT enriches the forward site and zero-pads the current site.
-    // Case list
-    // (a)     --> : [AC,B]  becomes  [AC, 0] [B P]^T
-    // (b)     <-- : [AC,B]  becomes  [AC, P] [B 0]^T
-    // where C gets zero-padded
+    // PREOPT always works on the bond [pos, pos+1], where pos = state.get_position() is the site
+    // carrying the center matrix C. This bond is selected in both sweep directions; the difference
+    // is only which side of that fixed bond gets enriched and which side gets zero-padded.
+    //
+    // The upcoming 1-site optimization uses:
+    //   (a) --> : active tensor AC(pos)
+    //   (b) <-- : active tensor C(pos)B(pos+1)
+    //             The r2l optimizer activates {pos+1}, and StateFinite::get_multisite_mps({pos+1})
+    //             prepends LC from site pos, so the effective local tensor is CB.
+    //
+    // Case list on the fixed pair [AC(pos), B(pos+1)]:
+    //   (a) --> : [AC, B] becomes [AC, 0] [B P]^T
+    //   (b) <-- : [AC, B] becomes [AC, P] [B 0]^T
     std::vector<size_t> pos_expanded;
     auto                pos = state.template get_position<size_t>();
     if(pos == std::clamp<size_t>(pos, 0, state.template get_length<size_t>() - 2)) pos_expanded = {pos, pos + 1};
@@ -92,9 +83,9 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
     auto  &mpsP = state.get_mps_site(posP);
     auto  &mps0 = state.get_mps_site(pos0);
 
-    auto dimL_old = mpsL.dimensions();
-    auto dimR_old = mpsR.dimensions();
-    auto dimP_old = mpsP.dimensions();
+    const auto dimL_old = mpsL.dimensions();
+    const auto dimR_old = mpsR.dimensions();
+    const auto dimP_old = mpsP.dimensions();
 
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
@@ -111,22 +102,21 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
     res.var_old   = tools::finite::measure::energy_variance(state, model, edges);
     res.hsq_old   = std::real(tools::finite::measure::expval_hamiltonian_squared(state, model, edges));
     tools::log->debug("density_matrix_perturbation_preopt_1site: Expanding {}{} - {}{} | ene {:.8f} var {:.5e} hsq {:.5e} | χmax {}", mpsL.get_tag(),
-                      mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), fp(res.ene_old), fp(res.var_old), fp(res.hsq_old), bcfg.bond_lim);
+                      mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(), res.ene_old, res.var_old, res.hsq_old, bcfg.bond_lim);
 
-    bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
-    bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
+    const bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
+    const bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
 
-    const auto    &mpoP          = model.get_mpo(posP);
-    const auto    &envP1         = state.get_direction() > 0 ? edges.get_env_eneR(posP) : edges.get_env_eneL(posP);
-    const auto    &envP2         = state.get_direction() > 0 ? edges.get_env_varR(posP) : edges.get_env_varL(posP);
-    const auto     P1            = use_P1 ? envP1.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
-    const auto     P2            = use_P2 ? envP2.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
-    decltype(auto) M             = mpsP.template get_M_bare_as<Scalar>();
-    decltype(auto) N             = mps0.template get_M_bare_as<Scalar>();
-    Scalar         pad_value_N0  = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
-    Scalar         pad_value_LC  = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
-    Scalar         pad_value_env = mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
-    auto           bond_lim      = -1ul; // bcfg.bond_lim;
+    const auto    &mpoP         = model.get_mpo(posP);
+    const auto    &envP1        = state.get_direction() > 0 ? edges.get_env_eneR(posP) : edges.get_env_eneL(posP);
+    const auto    &envP2        = state.get_direction() > 0 ? edges.get_env_varR(posP) : edges.get_env_varL(posP);
+    const auto     P1           = use_P1 ? envP1.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
+    const auto     P2           = use_P2 ? envP2.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
+    decltype(auto) M            = mpsP.template get_M_bare_as<Scalar>();
+    decltype(auto) N            = mps0.template get_M_bare_as<Scalar>();
+    Scalar         pad_value_N0 = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
+    Scalar         pad_value_LC = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
+    const auto     bond_lim     = -1ul;      // Keep the full temporary expansion; the mixer/SVD compresses it later.
 
     if(state.get_direction() > 0) {
         // [N Λc, M] are [A(i)Λc, B(i+1)]
@@ -155,7 +145,7 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_preo
         assert(state.template get_position<long>() == static_cast<long>(posP));
     }
 
-    internal::run_expansion_term_mixer(tensors, posP, pos0, pad_value_env, bcfg);
+    internal::run_expansion_term_mixer(tensors, posP, pos0, bcfg);
 
     tensors.clear_cache();
     tensors.clear_measurements();

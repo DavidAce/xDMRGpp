@@ -1,4 +1,4 @@
-#include "../hamiltonian.impl.h"
+#include "hamiltonian.impl.h"
 
 using Scalar = @SCALAR@;
 using Real   = tools::finite::measure::RealScalar<Scalar>;

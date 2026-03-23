@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "opt.impl.h"
 
 using Scalar = @SCALAR@;
 

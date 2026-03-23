@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "opt_mps.impl.h"
 
 using Scalar = @SCALAR@;
 

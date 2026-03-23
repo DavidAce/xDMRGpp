@@ -1,6 +1,7 @@
 #pragma once
 #include "../../env.h"
 #include "config/debug.h"
+#include "config/enums/AlgorithmType.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/linalg/matrix/to_string.h"

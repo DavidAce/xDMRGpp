@@ -1,10 +1,15 @@
 #pragma once
-#include "config/enums.h"
-#include "math/float.h"
+#include "debug/exceptions.h"
 #include "tensors/site/mps/MpsSite.h"
 #include <complex>
 #include <optional>
 #include <unsupported/Eigen/CXX11/Tensor>
+
+enum class OptAlgo;
+enum class OptExit;
+enum class OptRitz;
+enum class OptSolver;
+enum class OptType;
 
 namespace tools::finite::opt {
     template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));

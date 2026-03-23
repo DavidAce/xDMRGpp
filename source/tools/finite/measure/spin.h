@@ -3,7 +3,7 @@
 #include <array>
 #include <Eigen/Core>
 #include <string_view>
-
+#include <unsupported/Eigen/CXX11/Tensor>
 template<typename Scalar>
 class StateFinite;
 namespace tools::finite::measure {

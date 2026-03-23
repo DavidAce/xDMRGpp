@@ -1,4 +1,5 @@
 #pragma once
+#include "config/enums/OptAlgo.h"
 #include "config/settings.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/eig/solver_eigsmpo/solver_gdplusk.h"

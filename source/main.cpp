@@ -5,13 +5,14 @@
 #include "debug/info.h"
 #include "debug/stacktrace.h"
 #include "env/environment.h"
-#include "io/filesystem.h"
 #include "math/rnd.h"
 #include "math/tenx.h"
 #include "tools/common/log.h"
+#include <filesystem>
 #include <h5pp/h5pp.h>
 
 void clean_up() {
+    namespace fs = std::filesystem;
     if(not settings::storage::use_temp_dir) return;
     if(fs::exists(settings::storage::tmp::hdf5_temp_path)) {
         try {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 #include <vector>
 template<typename Scalar>
 class TensorsInfinite;
@@ -13,6 +13,7 @@ class EdgesInfinite;
 class AlgorithmStatus;
 enum class StorageLevel;
 enum class SimulationTask;
+struct StorageInfo;
 namespace h5pp {
     class File;
 }

@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "find_subspace.impl.h"
 
 using Scalar = @SCALAR@;
 using T      = Scalar;

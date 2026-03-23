@@ -1,6 +1,6 @@
 #pragma once
-#include <Eigen/Dense>
 #include "math/tenx.h"
+#include <Eigen/Dense>
 
 namespace tools::finite::opt::precond::common {
     template<typename Scalar> using Real           = decltype(std::real(std::declval<Scalar>()));

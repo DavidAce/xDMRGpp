@@ -1,18 +1,17 @@
 #pragma once
-#include "config/enums.h"
+#include "debug/exceptions.h"
 #include "math/svd/config.h"
-#include <unsupported/Eigen/CXX11/Tensor>
-#include <complex>
 #include <optional>
-#include <set>
-#include <string>
+#include <string_view>
+#include <unsupported/Eigen/CXX11/Tensor>
 
 template<typename Scalar>
 class StateInfinite;
+enum class MergeEvent;
 namespace tools::infinite::mps {
     template<typename Scalar>
     void merge_twosite_tensor(StateInfinite<Scalar> &state, const Eigen::Tensor<Scalar, 3> &twosite_tensor, MergeEvent mevent,
-                                     std::optional<svd::config> svd_cfg = std::nullopt);
+                              std::optional<svd::config> svd_cfg = std::nullopt);
 
     template<typename Scalar>
     void random_product_state([[maybe_unused]] const StateInfinite<Scalar> &state, [[maybe_unused]] std::string_view sector,

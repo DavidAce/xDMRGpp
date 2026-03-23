@@ -1,4 +1,4 @@
-#include "../dimensions.impl.h"
+#include "dimensions.impl.h"
 
 using Scalar = @SCALAR@;
 

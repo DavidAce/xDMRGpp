@@ -1,12 +1,11 @@
 #pragma once
 
-#include "config/enums.h"
+#include "config/enums/MpoCompress.h"
 #include "debug/exceptions.h"
 #include <complex>
+#include <utility>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
-template<typename Scalar>
-class StateFinite;
 template<typename Scalar>
 class ModelFinite;
 namespace svd {

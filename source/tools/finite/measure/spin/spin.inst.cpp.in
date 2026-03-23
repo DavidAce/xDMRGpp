@@ -1,4 +1,4 @@
-#include "../spin.impl.h"
+#include "spin.impl.h"
 
 using Scalar = @SCALAR@;
 using Real   = tools::finite::measure::RealScalar<Scalar>;

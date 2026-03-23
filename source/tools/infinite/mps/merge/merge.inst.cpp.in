@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "merge.impl.h"
 
 using Scalar = @SCALAR@;
 

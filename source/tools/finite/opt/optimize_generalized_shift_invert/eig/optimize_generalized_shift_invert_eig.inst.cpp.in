@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "optimize_generalized_shift_invert_eig.impl.h"
 
 using Scalar = @SCALAR@;
 

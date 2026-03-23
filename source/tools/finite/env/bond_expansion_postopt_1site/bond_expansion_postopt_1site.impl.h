@@ -6,6 +6,7 @@
 #include "../BondExpansionResult.h"
 #include "../expansion_terms.h"
 #include "config/debug.h"
+#include "config/enums/BondExpansionPolicy.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "math/eig/matvec/matvec_mpos.h"
@@ -46,10 +47,13 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
     if(!has_flag(bcfg.policy, BondExpansionPolicy::POSTOPT_1SITE))
         throw except::logic_error("expand_bond_postopt_1site: bcfg.policy must have BondExpansionPolicy::POSTOPT set");
 
-    // POSTOPT enriches the current site and zero-pads the upcoming site.
-    // Case list
-    // (a)     [ML, P] [MR 0]^T : postopt_rear (AC,B) -->
-    // (b)     [ML, 0] [MR P]^T : postopt_rear (AC,B) <--
+    // POSTOPT always works on the bond [pos, pos+1], where pos = state.get_position() is the site
+    // carrying the center matrix C. This is the same bond in both sweep directions; the sweep
+    // direction only changes which side of that fixed bond gets enriched and which side gets zero-padded.
+    //
+    // Case list on the fixed pair [AC(pos), B(pos+1)]:
+    //   (a) --> : [ML, P] [MR, 0]^T
+    //   (b) <-- : [ML, 0] [MR, P]^T
     // using R = decltype(std::real(std::declval<Scalar>()));
 
     std::vector<size_t> pos_expanded;
@@ -111,7 +115,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
     res.var_old   = tools::finite::measure::energy_variance(state, model, edges);
 
     tools::log->debug("Expanding {}{} - {}{} | ene {:.8f} var {:.5e} | χmax {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(),
-                      fp(res.ene_old), fp(res.var_old), bond_lim);
+                      res.ene_old, res.var_old, bond_lim);
 
     bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
     bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);

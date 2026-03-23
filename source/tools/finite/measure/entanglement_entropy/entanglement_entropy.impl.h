@@ -1,7 +1,6 @@
 #pragma once
-
+#include "../entanglement_entropy.h"
 #include "debug/exceptions.h"
-#include "entanglement_entropy.h"
 #include "math/float.h"
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"

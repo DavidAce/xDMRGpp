@@ -1,5 +1,6 @@
 #pragma once
-#include "config/enums.h"
+#include "config/enums/AlgorithmType.h"
+#include "config/enums/StorageEvent.h"
 #include "h5/storage_info.h"
 #include <h5pp/details/h5ppHid.h>
 #include <map>
@@ -7,6 +8,10 @@
 #include <string>
 #include <unordered_map>
 class AlgorithmStatus;
+enum class AlgorithmStop;
+enum class CopyPolicy;
+enum class ResumePolicy;
+enum class StoragePolicy;
 
 namespace h5pp {
     class File;

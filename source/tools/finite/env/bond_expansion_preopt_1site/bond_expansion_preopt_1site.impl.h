@@ -4,179 +4,45 @@
 #include "../BondExpansionResult.h"
 #include "../expansion_terms.h"
 #include "config/debug.h"
+#include "config/enums/BondExpansionPolicy.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
-#include "math/eig/matvec/matvec_mpos.h"
-#include "math/linalg/matrix/gramSchmidt.h"
-#include "math/linalg/matrix/to_string.h"
-#include "math/linalg/tensor/to_string.h"
 #include "math/num.h"
-#include "math/svd.h"
-#include "math/tenx.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/env/EnvEne.h"
 #include "tensors/site/env/EnvVar.h"
-#include "tensors/site/mpo/MpoSite.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
-#include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure/dimensions.h"
 #include "tools/finite/measure/hamiltonian.h"
-#include "tools/finite/measure/norm.h"
-#include "tools/finite/measure/residual.h"
-#include "tools/finite/mps.h"
-#include "tools/finite/opt_meta.h"
-#include <Eigen/Eigenvalues>
-#include <source_location>
 
 namespace settings {
     inline constexpr bool debug_rexpansion = false;
 }
 
 template<typename Scalar>
-void merge_rexpansion_terms_preopt_l2r(MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &N_0, MpsSite<Scalar> &mpsR, const Eigen::Tensor<Scalar, 3> &M_P) {
-    // The expanded bond sits between mpsL and mpsR.
-    // During preopt expansion -->
-    //      * mpsL is A(i)Λc
-    //      * mpsR is B(i+1)
-    //      * N_0 is [A(i), 0]
-    //      * M_P is [B(i+1), P]^T
-
-    tools::log->trace("merge_rexpansion_terms_preopt_l2r: ({}{},{}{})", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions());
-
-    // Create a padded LC
-
-    Eigen::Tensor<Scalar, 1> LC_pad(N_0.dimension(2));
-    LC_pad.setConstant(Scalar{0});
-
-    auto LC_off                  = tenx::array1{0};
-    auto LC_ext                  = tenx::array1{mpsL.get_LC().size()};
-    LC_pad.slice(LC_off, LC_ext) = mpsL.get_LC();
-
-    mpsL.set_M(N_0);
-    mpsL.set_LC(LC_pad);
-
-    mpsR.set_M(M_P);
-}
-
-template<typename Scalar>
-void merge_rexpansion_terms_preopt_r2l(MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &M_P, MpsSite<Scalar> &mpsR, const Eigen::Tensor<Scalar, 3> &N_0) {
-    // The expanded bond sits between mpsL and mpsR.
-    // During preopt expansion <--
-    //      * mpsL is A(i)Λc
-    //      * mpsR is B(i+1)
-    //      * M_P is [A(i), P]
-    //      * N_0 is [B, 0]^T
-
-    tools::log->trace("merge_rexpansion_terms_preopt_r2l: ({}{},{}{})", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions());
-    svd::solver svd;
-
-    // Create a longer padded LC
-    Eigen::Tensor<Scalar, 1> LC_pad(N_0.dimension(1));
-    LC_pad.setConstant(Scalar{0});
-    auto LC_off                  = tenx::array1{0};
-    auto LC_ext                  = tenx::array1{mpsL.get_LC().size()};
-    LC_pad.slice(LC_off, LC_ext) = mpsL.get_LC();
-    mpsL.set_M(M_P);
-    mpsL.set_LC(LC_pad, -1.0);
-
-    mpsR.set_M(N_0);
-}
-
-template<typename Scalar>
-void merge_rexpansion_terms_preopt_MP_N0(MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &M_P, MpsSite<Scalar> &mpsR, const Eigen::Tensor<Scalar, 3> &N_0,
-                                         Eigen::Index bond_lim, Scalar schmidt_pad_value) {
-    // The expanded bond sits between mpsL and mpsR.
-    // During postopt expansion -->
-    //      * mpsL is A(i)Λc
-    //      * mpsR is B(i+1)
-    //      * M_P is [A(i), P]
-    //      * N_0 is [B, 0]^T
-    tools::log->trace("merge_rexpansion_terms_preopt_MP_N0: ({}{},{}{})", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions());
-    assert(M_P.dimension(2) == N_0.dimension(1));
-    if(bond_lim > 0)
-        bond_lim = std::min<Eigen::Index>({bond_lim, N_0.dimension(2), M_P.dimension(1), mpsL.spin_dim() * mpsL.get_chiL(), mpsR.spin_dim() * mpsR.get_chiR()});
-    if(bond_lim <= 0) bond_lim = M_P.dimension(1);
-    // Create a padded LC
-    auto offset     = Eigen::DSizes<Eigen::Index, 3>{0, 0, 0};
-    auto extent_M_P = M_P.dimensions();
-    auto extent_N_0 = N_0.dimensions();
-    extent_M_P[2]   = bond_lim;
-    extent_N_0[1]   = bond_lim;
-    auto M_P_slice  = M_P.slice(offset, extent_M_P);
-    auto N_0_slice  = N_0.slice(offset, extent_N_0);
-
-    auto LC_old        = mpsL.get_LC();
-    auto offset_LC     = Eigen::DSizes<Eigen::Index, 1>{0};
-    auto extent_LC     = Eigen::DSizes<Eigen::Index, 1>{std::min(bond_lim, mpsL.get_LC().size())};
-    auto extent_LC_pad = Eigen::DSizes<Eigen::Index, 1>{bond_lim};
-
-    Eigen::Tensor<Scalar, 1> LC_pad(extent_LC_pad);
-    if(std::real(schmidt_pad_value) < 0) schmidt_pad_value = std::real(LC_old.coeff(LC_old.size() - 1));
-    LC_pad.setConstant(schmidt_pad_value);
-    LC_pad.slice(offset_LC, extent_LC) = LC_old.slice(offset_LC, extent_LC);
-    tenx::normalize(LC_pad);
-    mpsL.set_M(M_P_slice);
-    mpsL.set_LC(LC_pad, -1.0);
-    mpsR.set_M(N_0_slice);
-}
-
-template<typename Scalar>
-void merge_rexpansion_terms_preopt_N0_MP(MpsSite<Scalar> &mpsL, const Eigen::Tensor<Scalar, 3> &N_0, MpsSite<Scalar> &mpsR, const Eigen::Tensor<Scalar, 3> &M_P,
-                                         Eigen::Index bond_lim, Scalar schmidt_pad_value) {
-    // The expanded bond sits between mpsL and mpsR.
-    // During postopt expansion <--
-    //      * mpsL is A(i)Λc
-    //      * mpsR is B(i+1)
-    //      * N_0 is [A(i), 0]
-    //      * M_P is [B(i+1), P]^T
-
-    tools::log->trace("merge_rexpansion_terms_preopt_N0_MP: ({}{},{}{}) (exact)", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions());
-    assert(M_P.dimension(1) == N_0.dimension(2));
-    if(bond_lim > 0)
-        bond_lim = std::min<Eigen::Index>({bond_lim, N_0.dimension(2), M_P.dimension(1), mpsL.spin_dim() * mpsL.get_chiL(), mpsR.spin_dim() * mpsR.get_chiR()});
-    if(bond_lim <= 0) bond_lim = M_P.dimension(1);
-    // Create a padded LC
-    auto offset     = Eigen::DSizes<Eigen::Index, 3>{0, 0, 0};
-    auto extent_M_P = M_P.dimensions();
-    auto extent_N_0 = N_0.dimensions();
-    extent_M_P[1]   = bond_lim;
-    extent_N_0[2]   = bond_lim;
-    auto M_P_slice  = M_P.slice(offset, extent_M_P);
-    auto N_0_slice  = N_0.slice(offset, extent_N_0);
-
-    auto LC_old        = mpsL.get_LC();
-    auto offset_LC     = Eigen::DSizes<Eigen::Index, 1>{0};
-    auto extent_LC     = Eigen::DSizes<Eigen::Index, 1>{std::min(bond_lim, mpsL.get_LC().size())};
-    auto extent_LC_pad = Eigen::DSizes<Eigen::Index, 1>{bond_lim};
-
-    Eigen::Tensor<Scalar, 1> LC_pad(extent_LC_pad);
-    if(std::real(schmidt_pad_value) < 0) schmidt_pad_value = std::real(LC_old.coeff(LC_old.size() - 1));
-    LC_pad.setConstant(schmidt_pad_value);
-    LC_pad.slice(offset_LC, extent_LC) = LC_old.slice(offset_LC, extent_LC);
-    tenx::normalize(LC_pad);
-    mpsL.set_M(N_0_slice);
-    mpsL.set_LC(LC_pad, -1.0);
-    mpsR.set_M(M_P_slice);
-}
-
-template<typename Scalar>
 BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateFinite<Scalar> &state, ModelFinite<Scalar> &model, EdgesFinite<Scalar> &edges,
                                                                           BondExpansionConfig bcfg) {
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
-        throw except::runtime_error("expand_bond_postopt_1site: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
+        throw except::runtime_error("rexpand_bond_preopt_1site: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
                                     edges.get_length());
     if(!has_flag(bcfg.policy, BondExpansionPolicy::PREOPT_1SITE))
-        throw except::logic_error("expand_bond_postopt_1site: bcfg.policy must have BondExpansionPolicy::PREOPT_1SITE set");
+        throw except::logic_error("rexpand_bond_preopt_1site: bcfg.policy must have BondExpansionPolicy::PREOPT_1SITE set");
 
-    // PREOPT enriches the forward site and zero-pads the current site.
-    // Case list
-    // (a)     --> : [AC,B]  becomes  [AC, 0] [B P]^T
-    // (b)     <-- : [AC,B]  becomes  [AC, P] [B 0]^T
-    // where C gets zero-padded
+    // PREOPT always works on the bond [pos, pos+1], where pos = state.get_position() is the site
+    // carrying the center matrix C. This bond is selected in both sweep directions; the difference
+    // is only which side of that fixed bond gets enriched and which side gets zero-padded.
+    //
+    // The upcoming 1-site optimization uses:
+    //   (a) --> : active tensor AC(pos)
+    //   (b) <-- : active tensor C(pos)B(pos+1)
+    //             The r2l optimizer activates {pos+1}, and StateFinite::get_multisite_mps({pos+1})
+    //             prepends LC from site pos, so the effective local tensor is CB.
+    //
+    // Case list on the fixed pair [AC(pos), B(pos+1)]:
+    //   (a) --> : [AC, B] becomes [AC, 0] [B P]^T
+    //   (b) <-- : [AC, B] becomes [AC, P] [B 0]^T
     std::vector<size_t> pos_expanded;
     auto                pos = state.template get_position<size_t>();
     if(pos == std::clamp<size_t>(pos, 0, state.template get_length<size_t>() - 2)) pos_expanded = {pos, pos + 1};
@@ -187,10 +53,10 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
         return res; // No update
     }
 
-    size_t posL = pos_expanded.front();
-    size_t posR = pos_expanded.back();
-    auto  &mpsL = state.get_mps_site(posL);
-    auto  &mpsR = state.get_mps_site(posR);
+    const size_t posL = pos_expanded.front();
+    const size_t posR = pos_expanded.back();
+    auto        &mpsL = state.get_mps_site(posL);
+    auto        &mpsR = state.get_mps_site(posR);
     if(state.num_bonds_at_maximum(pos_expanded) == 1) {
         auto res = BondExpansionResult<Scalar>();
         res.msg =
@@ -200,14 +66,14 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
 
     assert(mpsL.get_chiR() == mpsR.get_chiL());
 
-    size_t posP = state.get_direction() > 0 ? posR : posL;
-    size_t pos0 = state.get_direction() > 0 ? posL : posR;
-    auto  &mpsP = state.get_mps_site(posP);
-    auto  &mps0 = state.get_mps_site(pos0);
+    const size_t posP = state.get_direction() > 0 ? posR : posL;
+    const size_t pos0 = state.get_direction() > 0 ? posL : posR;
+    auto        &mpsP = state.get_mps_site(posP);
+    auto        &mps0 = state.get_mps_site(pos0);
 
-    auto dimL_old = mpsL.dimensions();
-    auto dimR_old = mpsR.dimensions();
-    auto dimP_old = mpsP.dimensions();
+    const auto dimL_old = mpsL.dimensions();
+    const auto dimR_old = mpsR.dimensions();
+    const auto dimP_old = mpsP.dimensions();
 
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
@@ -231,10 +97,10 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
     auto bond_max  = std::min<Eigen::Index>({bondL_max, bondR_max, bcfg.bond_lim});
 
     tools::log->debug("Expanding {}{} - {}{} | ene {:.8f} var {:.5e} | χmax {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(),
-                      fp(res.ene_old), fp(res.var_old), bond_max);
+                      res.ene_old, res.var_old, bond_max);
 
-    bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
-    bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
+    const bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
+    const bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
 
     const auto    &mpoP  = model.get_mpo(posP);
     const auto    &envP1 = state.get_direction() > 0 ? edges.get_env_eneR(posP) : edges.get_env_eneL(posP);
@@ -252,7 +118,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
         auto [N_0, M_P] = internal::get_expansion_terms_N0_MP(N, M, P1, P2, res, bond_max, Scalar{0});
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
-        merge_rexpansion_terms_preopt_N0_MP(mps0, N_0, mpsP, M_P, bond_max, Scalar{1e-4f});
+        internal::merge_rexpansion_terms_N0_MP(mps0, N_0, mpsP, M_P, bond_max, Scalar{1e-4f});
         tools::log->debug("Bond expansion preopt l2r {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bond_max, dimP_old,
                           M.dimensions(), M_P.dimensions());
         assert(state.template get_position<long>() == static_cast<long>(pos0));
@@ -265,7 +131,7 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
         auto [M_P, N_0] = internal::get_expansion_terms_MP_N0(M, N, P1, P2, res, bond_max, Scalar{0});
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
-        merge_rexpansion_terms_preopt_MP_N0(mpsP, M_P, mps0, N_0, bond_max, Scalar{1e-4f});
+        internal::merge_rexpansion_terms_MP_N0(mpsP, M_P, mps0, N_0, bond_max, Scalar{1e-4f});
         tools::log->debug("Bond expansion preopt r2l {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bond_max, dimP_old,
                           M.dimensions(), M_P.dimensions());
         assert(state.template get_position<long>() == static_cast<long>(posP));
@@ -286,11 +152,11 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_preopt_1site(StateF
 
     assert(mpsL.get_chiR() == mpsR.get_chiL());
     if(mpsL.get_chiR() > bond_max) {
-        throw except::logic_error("rexpand_bond_postopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
+        throw except::logic_error("rexpand_bond_preopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
                                   mpsR.dimensions(), mpsL.get_chiR(), bond_max);
     }
     if(mpsR.get_chiL() > bond_max) {
-        throw except::logic_error("rexpand_bond_postopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
+        throw except::logic_error("rexpand_bond_preopt_1site: {}{} - {}{} | bond {} > max bond{}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
                                   mpsR.dimensions(), mpsL.get_chiR(), bond_max);
     }
     res.dimL_new = mpsL.dimensions();

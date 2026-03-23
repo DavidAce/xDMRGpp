@@ -5,36 +5,19 @@
 #include "../expansion_terms.h"
 #include "../mixer.h"
 #include "config/debug.h"
+#include "config/enums/BondExpansionPolicy.h"
 #include "config/settings.h"
 #include "debug/exceptions.h"
-#include "math/eig/matvec/matvec_mpos.h"
-#include "math/linalg/matrix/gramSchmidt.h"
-#include "math/linalg/matrix/to_string.h"
-#include "math/linalg/tensor/to_string.h"
 #include "math/num.h"
-#include "math/svd.h"
-#include "math/tenx.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
 #include "tensors/site/env/EnvEne.h"
 #include "tensors/site/env/EnvVar.h"
-#include "tensors/site/mpo/MpoSite.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tensors/TensorsFinite.h"
-#include "tid/tid.h"
-#include "tools/common/contraction.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure/dimensions.h"
 #include "tools/finite/measure/hamiltonian.h"
-#include "tools/finite/measure/norm.h"
-#include "tools/finite/measure/residual.h"
-#include "tools/finite/mps.h"
-#include "tools/finite/opt.h"
-#include "tools/finite/opt_meta.h"
-#include "tools/finite/opt_mps.h"
-#include <Eigen/Eigenvalues>
-#include <source_location>
 
 namespace settings {
     inline constexpr bool debug_rexpansion_postopt_rdmp = false;
@@ -52,10 +35,13 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_post
     if(!has_flag(bcfg.policy, BondExpansionPolicy::POSTOPT_RDMP_1SITE))
         throw except::logic_error("density_matrix_perturbation_postopt_1site: bcfg.policy must have BondExpansionPolicy::POSTOPT_RDMP_1SITE set");
 
-    // POSTOPT enriches the current site and zero-pads the upcoming site.
-    // Case list
-    // (a)     [ML, P] [MR 0]^T : postopt_rear (AC,B) -->
-    // (b)     [ML, 0] [MR P]^T : postopt_rear (AC,B) <--
+    // POSTOPT always works on the bond [pos, pos+1], where pos = state.get_position() is the site
+    // carrying the center matrix C. This is the same bond in both sweep directions; the sweep
+    // direction only changes which side of that fixed bond gets enriched and which side gets zero-padded.
+    //
+    // Case list on the fixed pair [AC(pos), B(pos+1)]:
+    //   (a) --> : [ML, P] [MR, 0]^T
+    //   (b) <-- : [ML, 0] [MR, P]^T
     // using R = decltype(std::real(std::declval<Scalar>()));
 
     std::vector<size_t> pos_expanded;
@@ -93,9 +79,9 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_post
     auto  &mpsP = state.get_mps_site(posP);
     auto  &mps0 = state.get_mps_site(pos0);
 
-    auto dimL_old = mpsL.dimensions();
-    auto dimR_old = mpsR.dimensions();
-    auto dimP_old = mpsP.dimensions();
+    const auto dimL_old = mpsL.dimensions();
+    const auto dimR_old = mpsR.dimensions();
+    const auto dimP_old = mpsP.dimensions();
 
     assert_edges_ene(state, model, edges);
     assert_edges_var(state, model, edges);
@@ -112,34 +98,29 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_post
     res.var_old   = tools::finite::measure::energy_variance(state, model, edges);
 
     tools::log->debug("Expanding {}{} - {}{} | ene {:.8f} var {:.5e} | χmax {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(), mpsR.dimensions(),
-                      fp(res.ene_old), fp(res.var_old), bcfg.bond_lim);
+                      res.ene_old, res.var_old, bcfg.bond_lim);
 
-    bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
-    bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
+    const bool use_P1 = has_flag(bcfg.policy, BondExpansionPolicy::H1);
+    const bool use_P2 = has_flag(bcfg.policy, BondExpansionPolicy::H2);
 
-    const auto    &mpoP          = model.get_mpo(posP);
-    const auto    &envP1         = state.get_direction() > 0 ? edges.get_env_eneL(posP) : edges.get_env_eneR(posP);
-    const auto    &envP2         = state.get_direction() > 0 ? edges.get_env_varL(posP) : edges.get_env_varR(posP);
-    const auto     P1            = use_P1 ? envP1.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
-    const auto     P2            = use_P2 ? envP2.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
-    decltype(auto) M             = mpsP.template get_M_bare_as<Scalar>();
-    decltype(auto) N             = mps0.template get_M_bare_as<Scalar>();
-    Scalar         pad_value_N0  = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
-    Scalar         pad_value_LC  = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
-    Scalar         pad_value_env = mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
-    auto           bond_lim      = -1ul; // bcfg.bond_lim;
+    const auto    &mpoP         = model.get_mpo(posP);
+    const auto    &envP1        = state.get_direction() > 0 ? edges.get_env_eneL(posP) : edges.get_env_eneR(posP);
+    const auto    &envP2        = state.get_direction() > 0 ? edges.get_env_varL(posP) : edges.get_env_varR(posP);
+    const auto     P1           = use_P1 ? envP1.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
+    const auto     P2           = use_P2 ? envP2.template get_expansion_term<Scalar>(mpsP, mpoP) : Eigen::Tensor<Scalar, 3>();
+    decltype(auto) M            = mpsP.template get_M_bare_as<Scalar>();
+    decltype(auto) N            = mps0.template get_M_bare_as<Scalar>();
+    Scalar         pad_value_N0 = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
+    Scalar         pad_value_LC = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
+    const auto     bond_lim     = -1ul;      // Keep the full temporary expansion; the mixer/SVD compresses it later.
     if(state.get_direction() > 0) {
         // [M Λc, N] are [A(i)Λc, B(i+1)]
         assert_orthonormal<2>(M); // A(i) should be left-orthonormal
         assert_orthonormal<1>(N); // B(i+1) should be right-orthonormal
-        // tools::log->info("LC old        = \n{}", linalg::tensor::to_string(mpsL.get_LC(), 8));
-
         auto [M_P, N_0] = internal::get_expansion_terms_MP_N0(M, N, P1, P2, res, bond_lim, pad_value_N0);
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
         internal::merge_rexpansion_terms_MP_N0(mpsP, M_P, mps0, N_0, bond_lim, pad_value_LC);
-        // tools::log->info("LC pad        = \n{}", linalg::tensor::to_string(mpsL.get_LC(), 8));
-
         tools::log->debug("Bond expansion l2r {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bcfg.bond_lim, dimP_old,
                           M.dimensions(), M_P.dimensions());
         assert(state.template get_position<long>() == static_cast<long>(posP));
@@ -157,7 +138,7 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_post
         assert(state.template get_position<long>() == static_cast<long>(pos0));
     }
 
-    internal::run_expansion_term_mixer(tensors, posP, pos0, pad_value_env, bcfg);
+    internal::run_expansion_term_mixer(tensors, posP, pos0, bcfg);
 
     tensors.clear_cache();
     tensors.clear_measurements();
@@ -174,12 +155,12 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_post
 
     assert(mpsL.get_chiR() == mpsR.get_chiL());
     if(mpsL.get_chiR() > bcfg.bond_lim) {
-        throw except::logic_error("rexpand_bond_postopt_1site: {}{} - {}{} | bond {} > max bond {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                                  mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
+        throw except::logic_error("density_matrix_perturbation_postopt_1site: {}{} - {}{} | bond {} > max bond {}", mpsL.get_tag(), mpsL.dimensions(),
+                                  mpsR.get_tag(), mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
     }
     if(mpsR.get_chiL() > bcfg.bond_lim) {
-        throw except::logic_error("rexpand_bond_postopt_1site: {}{} - {}{} | bond {} > max bond {}", mpsL.get_tag(), mpsL.dimensions(), mpsR.get_tag(),
-                                  mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
+        throw except::logic_error("density_matrix_perturbation_postopt_1site: {}{} - {}{} | bond {} > max bond {}", mpsL.get_tag(), mpsL.dimensions(),
+                                  mpsR.get_tag(), mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
     }
     res.dimL_new = mpsL.dimensions();
     res.dimR_new = mpsR.dimensions();

@@ -70,6 +70,7 @@ void assert_orthonormal(const Eigen::TensorBase<Derived, Eigen::ReadOnlyAccessor
         static_assert(rank == 3 and "assert_orthonormal: expression must be a tensor of rank 3");
 
         using Scalar     = typename decltype(tensor)::Scalar;
+        using RealScalar = decltype(std::real(std::declval<Scalar>()));
         using TensorType = Eigen::Tensor<Scalar, rank>;
         using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
         using MapType    = Eigen::Map<const MatrixType>;
@@ -86,11 +87,11 @@ void assert_orthonormal(const Eigen::TensorBase<Derived, Eigen::ReadOnlyAccessor
         G                                = X.conjugate().contract(X, idxpair); // Gram matrix
         auto Gm                          = MapType(G.data(), G.dimension(0), G.dimension(1));
         auto orthError                   = (Gm - MatrixType::Identity(Gm.cols(), Gm.rows())).norm();
-        if(orthError > 100 * threshold * Gm.rows()) {
+        if(orthError > 100 * threshold * safe_cast<RealScalar>(Gm.rows())) {
             auto Xm = MapType(X.data(), X.dimension(0) * X.dimension(oxis), X.dimension(axis));
             // tools::log->warn("X: \n{}\n", linalg::matrix::to_string(Xm, 8));
             tools::log->warn("G: \n{}\n", linalg::matrix::to_string(Gm, 8));
-            tools::log->warn("orthError: {:.5e}", fp(orthError));
+            tools::log->warn("orthError: {:.5e}", orthError);
             throw except::runtime_error("{}:{}: {}: matrix is non-orthonormal along axis [{}]: error = {:.5e} > threshold = {:.5e}", location.file_name(),
                                         location.line(), location.function_name(), axis, fp(orthError), fp(threshold));
         }

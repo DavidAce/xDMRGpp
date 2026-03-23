@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "optimize_subspace_variance.impl.h"
 
 using Scalar = @SCALAR@;
 

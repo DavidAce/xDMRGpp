@@ -1,9 +1,8 @@
 #pragma once
-
+#include "../expectation_value.h"
+#include "../correlation.h"
 #include "config/debug.h"
-#include "correlation.h"
 #include "debug/exceptions.h"
-#include "expectation_value.h"
 #include "math/tenx.h"
 #include "tensors/state/StateFinite.h"
 #include "tools/common/log.h"

@@ -1,4 +1,4 @@
-#include "../number_entropy.impl.h"
+#include "number_entropy.impl.h"
 
 using Scalar = @SCALAR@;
 

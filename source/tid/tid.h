@@ -2,11 +2,9 @@
 #include "enums.h"
 #include <chrono>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 #if defined(_OPENMP)
@@ -49,10 +47,10 @@ namespace tid {
         ~token() noexcept;
         token(const token &)            = delete;
         token &operator=(const token &) = delete;
-        void tic() noexcept;
-        void toc() noexcept;
-        ur  &ref() noexcept;
-        ur  *operator->() noexcept;
+        void   tic() noexcept;
+        void   toc() noexcept;
+        ur    &ref() noexcept;
+        ur    *operator->() noexcept;
     };
 
     /*! \brief The object that measures time

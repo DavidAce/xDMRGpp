@@ -64,13 +64,13 @@ void GeneralizedBasisChange<Scalar>::print_stats(const Eigen::Tensor<Scalar, 1> 
     RealScalar wmean = wmap.cwiseAbs().mean();
     RealScalar wnorm = tenx::norm(w);
     RealScalar wmax  = wmap.cwiseAbs().maxCoeff();
-    tools::log->info("{} : {::.3e} | norm {:.3e} | mean {:.3e} | max {:.3e}", tag, fv(tenx::VectorCast(w.real())), fp(wnorm), fp(wmean), fp(wmax));
+    tools::log->info("{} : {::.3e} | norm {:.3e} | mean {:.3e} | max {:.3e}", tag, tenx::VectorCast(w.real()), wnorm, wmean, wmax);
 };
 template<typename Scalar>
 void GeneralizedBasisChange<Scalar>::symmetrize(Eigen::Tensor<Scalar, 2> &E) {
     auto Em = MapMatType(E.data(), E.dimension(0), E.dimension(1));
     auto er = (Em - Em.adjoint()).norm() / Em.norm();
-    if(er >= RealScalar{1e-12f}) { tools::log->warn("hermiticty error: {:.5e}", fp(er)); }
+    if(er >= RealScalar{1e-12f}) { tools::log->warn("hermiticty error: {:.5e}", er); }
     Em = (RealScalar{0.5} * (Em + Em.adjoint())).eval();
 }
 
@@ -255,7 +255,7 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
                     if(tr < RealScalar{1e-10f}) continue;
                     if(std::abs(w(b)) <= RealScalar(1e-10f)) continue;
                     if(!is_hermitian_matrix(A_b)) continue;
-                    M2_map.noalias() += w(b) * (A_b.adjoint() * A_b)/(tr*tr);
+                    M2_map.noalias() += w(b) * (A_b.adjoint() * A_b) / (tr * tr);
                 }
                 return M2;
             };
@@ -320,8 +320,8 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
                     if(tr < RealScalar{1e-10f}) continue;
                     if(std::abs(w(b)) <= RealScalar(1e-10f)) continue;
                     if(!is_hermitian_matrix(A_b)) continue;
-                    MatrixType A_b_inv = inv(A_b);
-                    M2_map.noalias() += w(b) * (A_b_inv.adjoint() * A_b_inv);
+                    MatrixType A_b_inv  = inv(A_b);
+                    M2_map.noalias()   += w(b) * (A_b_inv.adjoint() * A_b_inv);
                 }
                 return M2;
             };
@@ -550,14 +550,14 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
                 assert(w.size() == env_zip.dimension(2));
                 D.setZero(env_zip.dimension(0));
                 for(Eigen::Index b = 0; b < env_zip.dimension(2); ++b) {
-                    auto env2_b     = Eigen::Tensor<Scalar, 2>(env_zip.chip(b, 2));
-                    auto env2_b_map = MapMatType(env2_b.data(), env2_b.dimension(0), env2_b.dimension(1));
-                    D += (w(b) * (U.adjoint() * env2_b_map * U).diagonal()).real();
+                    auto env2_b      = Eigen::Tensor<Scalar, 2>(env_zip.chip(b, 2));
+                    auto env2_b_map  = MapMatType(env2_b.data(), env2_b.dimension(0), env2_b.dimension(1));
+                    D               += (w(b) * (U.adjoint() * env2_b_map * U).diagonal()).real();
                 }
                 break;
             }
         }
-        D = D.cwiseAbs();
+        D  = D.cwiseAbs();
         D /= D.mean();
         assert(!D.isZero());
         assert(D.allFinite());
@@ -639,7 +639,7 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
             break;
         }
     }
-    D = D.cwiseAbs();
+    D  = D.cwiseAbs();
     D /= D.mean();
     // tools::log->info("Y : {::.5e}", fv(Y));
     // tools::log->info("D : {::.5e}", fv(D));
@@ -701,7 +701,7 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
             Eigen::SelfAdjointEigenSolver<MatrixReal> es(sym(X.real()));
             if(es.info() == Eigen::Success) {
                 auto ev = es.eigenvalues();
-                tools::log->info("  eig({}): min={:.6e}, max={:.6e}", lbl, fp(ev.minCoeff()), fp(ev.maxCoeff()));
+                tools::log->info("  eig({}): min={:.6e}, max={:.6e}", lbl, ev.minCoeff(), ev.maxCoeff());
             } else {
                 tools::log->warn("  eig({}): decomposition failed", lbl);
             }
@@ -711,9 +711,9 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
             MatrixType P    = SS * TT; // should be ~projector
             RealScalar symm = herm_resid(P);
             RealScalar idem = (P * P - P).norm() / std::max<RealScalar>(RealScalar{1}, P.norm());
-            tools::log->info("P symmetry {:.2e}, idempotence {:.2e}", fp(symm), fp(idem));
+            tools::log->info("P symmetry {:.2e}, idempotence {:.2e}", symm, idem);
             RealScalar inv_rt = (SS * (TT * SS) - SS).norm() / std::max<RealScalar>(RealScalar{1}, SS.norm());
-            tools::log->info("round-trip inverse: {:.2e}", fp(inv_rt));
+            tools::log->info("round-trip inverse: {:.2e}", inv_rt);
         };
         auto check_inverse = [&](const MatrixType &TT, const MatrixType &SS) {
             const auto Id = MatrixType::Identity(TT.rows(), TT.cols());
@@ -721,15 +721,15 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
             RealScalar err_ST = (SS * TT - Id).norm() / std::max<RealScalar>(RealScalar{1}, Id.norm());
             RealScalar err_TS = (TT * SS - Id).norm() / std::max<RealScalar>(RealScalar{1}, Id.norm());
 
-            tools::log->info("S*T inverse error {:.2e}", fp(err_ST));
-            tools::log->info("T*S inverse error {:.2e}", fp(err_TS));
+            tools::log->info("S*T inverse error {:.2e}", err_ST);
+            tools::log->info("T*S inverse error {:.2e}", err_TS);
         };
         auto check_congruence = [&](const MatrixType &X, const MatrixType &TT, const MatrixType &G, std::string_view lbl) {
             MatrixType W   = TT.adjoint() * X * TT;
             RealScalar rel = rel_err(W, G, X.norm());
             RealScalar hrm = herm_resid(W);
-            tools::log->info("{}: ||T^H X T - G||/max(1,||X||) = {:.3e}", lbl, fp(rel));
-            tools::log->info("{}: Herm residual (rel) = {:.3e}", lbl, fp(hrm));
+            tools::log->info("{}: ||T^H X T - G||/max(1,||X||) = {:.3e}", lbl, rel);
+            tools::log->info("{}: Herm residual (rel) = {:.3e}", lbl, hrm);
             eig_range(W, std::string(lbl) + "_sym");
         };
         if(bcfg.eat != EnvAggregateType::H2_zip) {

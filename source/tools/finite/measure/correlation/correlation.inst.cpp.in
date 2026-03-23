@@ -1,4 +1,4 @@
-#include "../correlation.impl.h"
+#include "correlation.impl.h"
 
 using Scalar = @SCALAR@;
 

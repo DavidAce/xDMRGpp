@@ -1,6 +1,4 @@
-#pragma once
-
-#include "dimensions.h"
+#include "../dimensions.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
@@ -62,7 +60,7 @@ std::vector<long> tools::finite::measure::bond_dimensions_active(const StateFini
     if(state.active_sites.size() == 2) return {state.get_mps_site(state.active_sites[0]).get_chiR()};
     std::vector<long> bond_dimensions;
     for(size_t i = 1; i < state.active_sites.size(); ++i) {
-        const auto pos = state.active_sites[i];
+        const auto  pos = state.active_sites[i];
         const auto &mps = state.get_mps_site(pos);
         bond_dimensions.push_back(mps.get_chiL());
     }

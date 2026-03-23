@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "ops.impl.h"
 
 using Scalar = @SCALAR@;
 using Real   = decltype(std::real(std::declval<Scalar>()));

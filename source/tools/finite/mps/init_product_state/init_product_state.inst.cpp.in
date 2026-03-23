@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "init_product_state.impl.h"
 
 using Scalar = @SCALAR@;
 
