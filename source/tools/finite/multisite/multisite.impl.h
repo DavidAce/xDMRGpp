@@ -1,0 +1,270 @@
+#pragma once
+#include <algorithm>
+#include "../multisite.h"
+#include "debug/exceptions.h"
+#include "math/num.h"
+#include "tensors/model/ModelFinite.h"
+#include "tensors/site/mpo/MpoSite.h"
+#include "tensors/site/mps/MpsSite.h"
+#include "tensors/state/StateFinite.h"
+#include "tools/common/log.h"
+#include "tools/finite/mps.h"
+
+template<typename Scalar>
+std::array<long, 3> tools::finite::multisite::get_dimensions(const StateFinite<Scalar> &state, std::optional<std::vector<size_t>> sites) {
+    sites = sites.value_or(state.active_sites);
+    if(sites.value().empty()) return std::array<long, 3>{0, 0, 0};
+    std::array<long, 3> dimensions{};
+    if(not std::is_sorted(sites.value().begin(), sites.value().end()) or
+       std::adjacent_find(sites.value().begin(), sites.value().end(), [](auto lhs, auto rhs) { return lhs >= rhs; }) != sites.value().end())
+        throw except::logic_error("Given site list is not strictly increasing: {}", sites.value());
+
+    dimensions[1] = state.get_mps_site(sites.value().front()).get_M().dimension(1);
+    dimensions[2] = state.get_mps_site(sites.value().back()).get_M().dimension(2);
+    dimensions[0] = 1;
+    for(auto &site : sites.value()) { dimensions[0] *= state.get_mps_site(site).get_M().dimension(0); }
+    return dimensions;
+}
+
+template<typename Scalar>
+std::array<long, 4> tools::finite::multisite::get_dimensions(const ModelFinite<Scalar> &model, std::optional<std::vector<size_t>> sites) {
+    if(not sites) sites = model.active_sites;
+    if(sites.value().empty()) return std::array<long, 4>{0, 0, 0, 0};
+    if(not std::is_sorted(sites.value().begin(), sites.value().end()) or
+       std::adjacent_find(sites.value().begin(), sites.value().end(), [](auto lhs, auto rhs) { return lhs >= rhs; }) != sites.value().end())
+        throw except::logic_error("Given site list is not strictly increasing: {}", sites.value());
+    std::array<long, 4> dimensions{};
+    dimensions[0] = model.get_mpo(sites.value().front()).MPO().dimension(0);
+    dimensions[1] = model.get_mpo(sites.value().back()).MPO().dimension(1);
+    dimensions[2] = 1;
+    dimensions[3] = 1;
+    for(auto &site : sites.value()) {
+        dimensions[2] *= model.get_mpo(site).MPO().dimension(2);
+        dimensions[3] *= model.get_mpo(site).MPO().dimension(3);
+    }
+    return dimensions;
+}
+
+template<typename Scalar>
+std::array<long, 4> tools::finite::multisite::get_dimensions_squared(const ModelFinite<Scalar> &model, std::optional<std::vector<size_t>> sites) {
+    if(not sites) sites = model.active_sites;
+    if(sites.value().empty()) return std::array<long, 4>{0, 0, 0, 0};
+    if(not std::is_sorted(sites.value().begin(), sites.value().end()) or
+       std::adjacent_find(sites.value().begin(), sites.value().end(), [](auto lhs, auto rhs) { return lhs >= rhs; }) != sites.value().end())
+        throw except::logic_error("Active site list is not strictly increasing: {}", sites.value());
+    std::array<long, 4> dimensions{};
+    dimensions[0] = model.get_mpo(sites.value().front()).MPO2().dimension(0);
+    dimensions[1] = model.get_mpo(sites.value().back()).MPO2().dimension(1);
+    dimensions[2] = 1;
+    dimensions[3] = 1;
+    for(auto &site : sites.value()) {
+        dimensions[2] *= model.get_mpo(site).MPO2().dimension(2);
+        dimensions[3] *= model.get_mpo(site).MPO2().dimension(3);
+    }
+    return dimensions;
+}
+
+template<typename Scalar>
+long tools::finite::multisite::get_problem_size(const StateFinite<Scalar> &state, std::optional<std::vector<size_t>> sites) {
+    auto dims = get_dimensions(state, sites);
+    return (dims[0] * dims[1] * dims[2]);
+}
+
+template<typename Scalar>
+std::vector<size_t> tools::finite::multisite::generate_site_list(StateFinite<Scalar> &state, long threshold, size_t max_sites, size_t min_sites,
+                                                                 const std::string &tag) {
+    min_sites = std::clamp(min_sites, 1ul, state.template get_length<size_t>());
+    max_sites = std::clamp(max_sites, min_sites, state.template get_length<size_t>());
+    tools::log->trace("Multisite activation {} | pos {} | direction {} | sites min {} max {} | max problem size {}", tag, state.template get_position<long>(),
+                      state.get_direction(), min_sites, max_sites, threshold);
+
+    // Generates a site list for multisite optimization
+
+    const auto                       current_position = state.template get_position<long>();
+    auto                             direction        = state.get_direction();
+    long                             length           = state.template get_length<long>();
+    std::vector<size_t>              sites;
+    std::vector<long>                sizes;
+    std::vector<std::array<long, 3>> shape;
+    // The center matrix C lives at state.get_position(), so the bond of interest is always [pos, pos+1].
+    // The sweep direction only changes which effective local tensor is optimized next:
+    //   On l2r: optimize [AC(pos)] and then move the center to the right.
+    //   On r2l: optimize [C(pos)B(pos+1)] and then move the center to the left.
+    // In single-site r2l we therefore select {pos+1}; StateFinite::get_multisite_mps({pos+1})
+    // prepends LC from site pos, turning that single active site into the effective CB block.
+    long max_pos = direction > 0 ? current_position : current_position + 1;
+    long min_pos = max_pos;
+    long max_off = safe_cast<long>(max_sites) - 1;
+
+    // bool at_edge = max_pos >= length or min_pos < 0;
+    bool at_edge = (min_pos == 0 && direction < 0) || (max_pos == length - 1 && direction > 0);
+    if(direction > 0) {
+        min_pos = std::clamp<long>(min_pos, 0l, length - 1l);
+        max_pos = std::clamp<long>(min_pos + max_off, min_pos, length - 1l);
+    } else {
+        max_pos = std::clamp<long>(max_pos, 0l, length - 1l);
+        min_pos = std::clamp<long>(max_pos - max_off, 0l, max_pos);
+    }
+
+    auto range = num::range<long>(min_pos, max_pos + 1); // +1 to include the right-most
+    if(direction < 0) std::reverse(range.begin(), range.end());
+    tools::log->trace("Candidate range {}", range);
+
+    for(auto &pos : range) {
+        if(pos != std::clamp<long>(pos, 0l, length - 1l)) continue;
+        sites.emplace_back(static_cast<size_t>(pos));
+        sizes.emplace_back(get_problem_size(state, sites));
+        shape.emplace_back(get_dimensions(state, sites));
+    }
+    tools::log->trace("Candidate sites {}", sites);
+    tools::log->trace("Candidate sizes {}", sizes);
+    // Evaluate the costs. Threshold depends on optSolver
+    // Case 1: All costs are equal              -> take all sites
+    // Case 2: Costs increase indefinitely      -> take until threshold
+    // Case 3: Costs increase and saturate      -> take until threshold
+
+    std::string reason;
+    while(true) {
+        if(sites.empty() and at_edge) {
+            reason = "Can't select sites beyond the edge";
+            break;
+        }
+        bool allequal = std::all_of(sizes.begin(), sizes.end(), [&sizes](long c) { return c == sizes.front(); });
+        auto size     = sizes.back();
+        if(size < threshold and sites.size() == max_sites) {
+            reason = "reached max sites";
+            break;
+        }
+        if(size <= threshold and sites.size() <= max_sites) {
+            reason = fmt::format("problem size <= {} and sites <= {}", threshold, max_sites);
+            break;
+        } else if(sites.size() <= min_sites) {
+            reason = fmt::format("at least {} sites had to be kept", min_sites);
+            break;
+        } else if(allequal and sites.size() <= max_sites) {
+            reason = fmt::format("all problem sizes with fewer sites are equal: {}", size);
+            break;
+        } else if(sites.size() == 1) {
+            throw except::logic_error("At least two sites required!");
+        } else if(sites.empty()) {
+            throw except::logic_error("No sites for a jump");
+        } else {
+            sites.pop_back();
+            sizes.pop_back();
+            shape.pop_back();
+        }
+    }
+
+    std::sort(sites.begin(), sites.end());
+    if(at_edge or shape.empty() or sizes.empty())
+        tools::log->debug("Multisite activation: current pos {} | direction {} | sites min {} max {} | max problem size {} | chosen sites {} | reason {}",
+                          current_position, direction, min_sites, max_sites, threshold, sites, reason);
+    else
+        tools::log->debug("Multisite activation: current pos {} | direction {} | sites min {} max {} | max problem size {} | chosen sites {} | "
+                          "shape {} = {} | reason {}",
+                          current_position, direction, min_sites, max_sites, threshold, sites, shape.back(), sizes.back(), reason);
+
+    // if(not at_edge and sites.size() < min_sites) throw except::logic_error("Activated sites ({}) < min_sites ({}): {}", sites.size(), min_sites, sites);
+    // if(not at_edge and sites.size() > max_sites) throw except::logic_error("Activated sites ({}) > max_sites ({}): {}", sites.size(), max_sites, sites);
+    return sites;
+}
+
+template<typename Scalar>
+std::vector<size_t> tools::finite::multisite::generate_site_list_old(StateFinite<Scalar> &state, long threshold, size_t max_sites, size_t min_sites,
+                                                                     const std::string &tag) {
+    // TODO: Rewrite generate_site_list
+    min_sites = std::clamp(min_sites, 1ul, state.template get_length<size_t>());
+    max_sites = std::clamp(max_sites, min_sites, state.template get_length<size_t>());
+    tools::log->trace("Multisite activation {} | site {} | direction {} | sites min {} max {} | max problem size {}", tag, state.template get_position<long>(),
+                      state.get_direction(), min_sites, max_sites, threshold);
+
+    const auto initial_position = state.template get_position<long>();
+    auto       direction        = state.get_direction();
+    //    long                                position         = initial_position;
+    long                             length  = state.template get_length<long>();
+    bool                             at_edge = initial_position <= -1 or initial_position >= length;
+    std::vector<size_t>              sites;
+    std::vector<long>                sizes;
+    std::vector<std::array<long, 3>> shape;
+
+    //    long max_pos = std::clamp(initial_position , initial_position, std::min<long>(length-1, static_cast<const long>(max_sites - 1)));
+    //    long min_pos = std::clamp(initial_position, initial_position, std::min<long>(length-1, static_cast<const long>(max_sites - 1)));
+
+    if(not at_edge) {
+        long max_pos = initial_position;
+        long min_pos = initial_position;
+        long max_off = safe_cast<long>(max_sites) - 1;
+        if(direction > 0) {
+            max_pos = std::clamp<long>(initial_position + max_off, initial_position, length - 1);
+            min_pos = std::clamp<long>(initial_position, 0l, length - 1);
+        } else {
+            // max_pos = std::clamp<long>(initial_position + 1, initial_position, length - 1);
+            max_pos = std::clamp<long>(initial_position, 0l, length - 1);
+            min_pos = std::clamp<long>(max_pos - max_off, 0l, max_pos);
+        }
+
+        auto range = num::range<size_t>(min_pos, max_pos + 1); // +1 to include last position
+        if(direction < 0) std::reverse(range.begin(), range.end());
+
+        sites.emplace_back(initial_position); // Current position is always included
+        sizes.emplace_back(get_problem_size(state, sites));
+        shape.emplace_back(get_dimensions(state, sites));
+        for(auto &pos : range) {
+            if(std::find(sites.begin(), sites.end(), pos) != sites.end()) continue; // Skip the first site
+            sites.emplace_back(pos);
+            sizes.emplace_back(get_problem_size(state, sites));
+            shape.emplace_back(get_dimensions(state, sites));
+        }
+    }
+    tools::log->trace("Candidate sites {}", sites);
+    tools::log->trace("Candidate sizes {}", sizes);
+    // Evaluate best cost. Threshold depends on optSolver
+    // Case 1: All costs are equal              -> take all sites
+    // Case 2: Costs increase indefinitely      -> take until threshold
+    // Case 3: Costs increase and saturate      -> take until threshold
+
+    std::string reason;
+    while(true) {
+        if(sites.empty() and at_edge) {
+            reason = "Can't select sites beyond the edge";
+            break;
+        }
+        bool allequal = std::all_of(sizes.begin(), sizes.end(), [sizes](long c) { return c == sizes.front(); });
+        auto size     = sizes.back();
+        if(size < threshold and sites.size() == max_sites) {
+            reason = "reached max sites";
+            break;
+        }
+        if(size <= threshold and sites.size() <= max_sites) {
+            reason = fmt::format("problem size <= {} and sites <= {}", threshold, max_sites);
+            break;
+        } else if(sites.size() <= min_sites) {
+            reason = fmt::format("at least {} sites had to be kept", min_sites);
+            break;
+        } else if(allequal and sites.size() <= max_sites) {
+            reason = fmt::format("all problem sizes with fewer sites are equal: {}", size);
+            break;
+        } else if(sites.size() == 1) {
+            throw except::logic_error("At least two sites required!");
+        } else if(sites.empty()) {
+            throw except::logic_error("No sites for a jump");
+        } else {
+            sites.pop_back();
+            sizes.pop_back();
+            shape.pop_back();
+        }
+    }
+
+    std::sort(sites.begin(), sites.end());
+    if(at_edge or shape.empty() or sizes.empty())
+        tools::log->debug("Multisite activation: current pos {} | direction {} | sites min {} max {} | max problem size {} | chosen sites {} | reason {}",
+                          initial_position, direction, min_sites, max_sites, threshold, sites, reason);
+    else
+        tools::log->debug("Multisite activation: current pos {} | direction {} | sites min {} max {} | max problem size {} | chosen sites {} | "
+                          "shape {} = {} | reason {}",
+                          initial_position, direction, min_sites, max_sites, threshold, sites, shape.back(), sizes.back(), reason);
+
+    // if(not at_edge and sites.size() < min_sites) throw except::logic_error("Activated sites ({}) < min_sites ({}): {}", sites.size(), min_sites, sites);
+    // if(not at_edge and sites.size() > max_sites) throw except::logic_error("Activated sites ({}) > max_sites ({}): {}", sites.size(), max_sites, sites);
+    return sites;
+}
