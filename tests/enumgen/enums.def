@@ -1,0 +1,34 @@
+# The .def file is the single source of truth for the generated demo.
+# Lines beginning with "doc " are copied verbatim into the generated header
+# before the next enum, so raw doxygen comment syntax is preserved.
+
+doc /*! \brief Selects which top-level algorithm family to run. */
+enum AlgorithmType : int
+item iDMRG /*!< Infinite DMRG */
+item fDMRG /*!< Finite DMRG */
+item xDMRG /*!< Excited-state DMRG */
+item iTEBD /*!< Infinite TEBD */
+item fLBIT /*!< Finite-system l-bit evolution */
+item ANY /*!< Match any algorithm */
+end
+
+doc /*! \brief Controls how MPOs are compressed. */
+enum MpoCompress
+item NONE /*!< Do not compress */
+item SVD /*!< Use SVD on each mpo */
+item DPL /*!< Deparallelization: removes parallel columns/rows from each mpo */
+item AUTO /*!< Select based on global setting */
+end
+
+doc /*! \brief When to do projections to a symmetry sector. */
+flags ProjectionPolicy : int
+item NEVER = 0 /*!< Never project */
+item INIT = 1 /*!< Project after initializing the state */
+item WARMUP = 2 /*!< Project during warmup */
+item STUCK = 4 /*!< Project when the algorithm is stuck */
+item ITER = 8 /*!< Project every iteration */
+item CONVERGED = 16 /*!< Project on converged iterations */
+item FINISHED = 32 /*!< Project the finished state during postprocessing */
+item FORCE = 64 /*!< Project even if not needed */
+alias DEFAULT = INIT | STUCK | CONVERGED /*!< Default policy for multisite dmrg steps */
+end

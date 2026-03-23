@@ -6,7 +6,6 @@
 #include "debug/info.h"
 #include "debug/stacktrace.h"
 #include "env/environment.h"
-#include "io/filesystem.h"
 #include "io/fmt_f128_t.h"
 #include "math/float.h"
 #include "math/linalg.h"
@@ -20,7 +19,6 @@
 #include "tensors/state/StateFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tools/common/log.h"
-#include "tools/finite/measure.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/ops.h"
 #include <fmt/format.h>
@@ -43,8 +41,8 @@ auto get_hamiltonian(const flbit &f) -> Eigen::Matrix<cx128, Eigen::Dynamic, Eig
     for(size_t i = 0; i < L - 1; ++i) {
         auto J2i = std::any_cast<h5pp::varr_t<fp128>>(J2[i]);
         for(size_t j = i + 1; j < L; ++j) {
-            auto r = j - i;
-            H += J2i[r] * SZ[i].cast<cx128>() * SZ[j].cast<cx128>();
+            auto r  = j - i;
+            H      += J2i[r] * SZ[i].cast<cx128>() * SZ[j].cast<cx128>();
         }
     }
     for(size_t i = 0; i < L - 2; ++i) H += std::any_cast<fp128>(J3[i]) * SZ[i + 0].cast<cx128>() * SZ[i + 1].cast<cx128>() * SZ[i + 2].cast<cx128>();

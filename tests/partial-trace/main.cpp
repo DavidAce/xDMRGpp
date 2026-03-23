@@ -128,7 +128,7 @@ TEST_CASE("Test partial trace of tensors", "[partial trace]") {
         auto tensor2_id_b = linalg::tensor::trace(tensor4_id_m_a, tenx::idx({1}, {3}));
 
         REQUIRE(equal(tensor2_m_a, tensor2_m_b));
-        REQUIRE(equal(tensor2_id_a, tensor2_id_a));
+        REQUIRE(equal(tensor2_id_a, tensor2_id_b));
         REQUIRE(equal(tensor2_m_a, matrix_m));
         REQUIRE(equal(tensor2_id_a, matrix_id));
 

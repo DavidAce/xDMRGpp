@@ -1,0 +1,4 @@
+# Generated input templates now come from `settings.def` via `generate_settings.py`.
+# Build the target `xdmrg++-test-tomlpp-parser-generate` (or the test executable)
+# to materialize the real template under the build directory:
+# `tests/tomlpp_parser/generated/input.test.toml`.

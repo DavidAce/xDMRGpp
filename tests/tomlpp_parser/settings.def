@@ -1,0 +1,154 @@
+# type ; variable ; default_toml ; cli ; doc
+
+## /*!
+##  *  \namespace settings
+##  *  This namespace contains settings such as time-step length, number of iterations and precision parameters for
+##  *  the different algorithms.
+##  */
+## /*! \namespace settings::model Settings for the Hamiltonian spin-model */
+ModelType                     ; settings::model::model_type                                          ; "ising_majorana"                       ; -m,--model     ; Choice of model: {ising_tf_rf,ising_sdual, ising_majorana, lbit}
+long                          ; settings::model::model_size                                          ; 22                                     ;                ; Number of sites on the chain. Only relevant for finite algorithms: fDMRG and xDMRG
+
+## /*! \namespace settings::console Settings for console output */
+int                           ; settings::console::loglevel                                          ; 0                                      ; -v,--loglevel  ; Verbosity [0-6]. Level 0 prints everything, 6 nothing. Level 2 or 3 is recommended for normal use
+int                           ; settings::console::logh5pp                                           ; 2                                      ; -V,--logh5pp   ; Verbosity of h5pp library [0-6] Level 2 or 3 is recommended for normal use
+bool                          ; settings::console::timestamp                                         ; true                                   ; --timestamp    ; Whether to put a timestamp on console outputs
+
+## /*!  \namespace settings::threading Parameters for multithreading
+##  *   num_threads is the total number of threads, num_threads = OMP_NUM_THREADS + std::threads
+##  *   If num_threads <= 0 then it is set to OMP_NUM_THREADS, or 1 if OMP_NUM_THREADS is not defined.
+##  *   If num_threads == OMP_NUM_THREADS then Eigen::Tensor multithreading is disabled.
+##  */
+unsigned int                  ; settings::threading::num_threads                                     ; 1                                      ; -t,--threads   ; Total number of c++11 threads, (mainly used by Eigen::Tensor)
+
+## /*!  \namespace settings::input Settings for initialization */
+long                          ; settings::input::seed                                                ; 1                                      ; -s,--seed      ; Main seed for the random number generator.
+
+## /*!  \namespace settings::storage Settings for output-file generation
+##  *
+##  * **NOTE: Storage levels**
+##  *
+##  *  enum StorageLevel:
+##  *       - `NONE`:   no data is saved at all
+##  *       - `LIGHT`:  Tables entries replace last. Mid-chain  data. No MPS
+##  *       - `NORMAL`: Tables entries are appended. Full chain data. No MPS
+##  *       - `FULL`:   Tables entries are appended. Full chain data. MPS is saved.
+##  *
+##  * **Note: Mid-chain**
+##  * The 'measurements' table takes mid-chain data so the corresponding tables are redundant and skipped.
+## 
+##  * **Note: Resume**
+##  * Simulations can only be resumed from a state with `StorageLevel::FULL`, except LBIT simulations, which can always resume.
+##  *
+##  */
+std::string                   ; settings::storage::output_filepath                                   ; "output/mbl_16000500000123.h5"         ; -o,--outfile   ; Name of the output HDF5 file relative to the execution point
+bool                          ; settings::storage::output_append_seed                                ; true                                   ; --append-seed  ; Append the seed for the random number generator to output_filepath
+int                           ; settings::storage::storage_interval                                  ; 1                                      ;                ; Write to file this often, in units of iterations. Applies to StorageEvent::Iteration.
+ResumePolicy                  ; settings::storage::resume_policy                                     ; "IF_UNSUCCESSFUL"                      ; --resume-policy ; Under which exit condition in the previous simulation should we resume this time
+FileCollisionPolicy           ; settings::storage::file_collision_policy                             ; "REPLACE"                              ; --collision-policy ; What to do when a prior output file is found. Choose between RESUME, REVIVE, BACKUP, RENAME, REPLACE
+FileResumePolicy              ; settings::storage::file_resume_policy                                ; "FAST"                                 ; --resume-mode  ; Depends on dataset "common/finished_all=bool" FULL: Ignore bool -> Scan .cfg to add missing items. FAST: exit if true.
+
+## /*! state_emid is obtained in the xDMRG algorithm (mid energy) */
+StoragePolicy                 ; settings::storage::mps::state_emid::policy                           ; "ITER|FINISH|REPLACE"                  ;                ;
+
+StoragePolicy                 ; settings::storage::table::status::policy                             ; "ALWAYS"                               ;                ;
+
+StoragePolicy                 ; settings::storage::table::memory::policy                             ; "FINISH|ITER|REPLACE"                  ;                ;
+
+## /*! Entanglement entropy (log2) of all contiguous subsystems */
+Precision                     ; settings::storage::dataset::subsystem_entanglement_entropies::precision ; "DOUBLE"                            ;                ; Use SINGLE or DOUBLE precision internally
+
+## /*! \namespace settings::strategy Settings affecting the convergence rate of the algorithms */
+ProjectionPolicy              ; settings::strategy::projection_policy                                 ; "ITER"                                 ;                ; Enum bitflag to control projections to a symmetry sector {NEVER,+INIT,WARMUP,+STUCK,ITER,+CONVERGED,FINISHED,FORCE,DEFAULT} (+ are DEFAULT)
+BlockSizePolicy               ; settings::strategy::dmrg_blocksize_policy                            ; "MIN"                                  ;                ; Bitflag to control the adaptive dmrg blocksize {MIN,MAX,INFO,INFOPLUS1,SATURATED,STUCK,FIN_BOND,FIN_TRNC}
+std::string                   ; settings::strategy::target_axis                                      ; "+z"                                   ;                ; Find an eigenstate with global spin component along this axis. Choose between Choose {none, (+-) x,y or z}
+std::string                   ; settings::strategy::initial_axis                                     ; "+z"                                   ;                ; Initialize state with global spin component along this axis. Choose {none, (+-) x,y or z}
+StateInitType                 ; settings::strategy::initial_type                                     ; "REAL"                                 ;                ; Initial state can be REAL/CPLX
+StateInit                     ; settings::strategy::initial_state                                    ; "PRODUCT_STATE_NEEL_SHUFFLED"          ;                ; Initial configuration for the spin chain (only for finite systems)
+
+## /*! \namespace settings::precision Settings for the convergence threshold and precision of MPS, SVD and eigensolvers */
+ScalarType                    ; settings::precision::algoScalar                                      ; "FP64"                                 ;                ; Scalar type for tensor storage (state, model, edges)
+ScalarType                    ; settings::precision::optScalar                                       ; "FP64"                                 ;                ; Scalar type for computations (eig, eigs, svd)
+long                          ; settings::precision::eig_max_size                                    ; 2048                                   ;                ; Maximum problem size before switching from eig to eigs.
+long                          ; settings::precision::eigs_iter_min                                   ; 10                                     ;                ; Minimum number of iterations for eigenvalue solver.
+long                          ; settings::precision::eigs_iter_max                                   ; 50                                     ;                ; Maximum number of iterations for eigenvalue solver.
+GainPolicy                    ; settings::precision::eigs_iter_gain_policy                           ; "SAT_ALGO"                             ;                ; Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC]
+double                        ; settings::precision::eigs_abstol_min                                 ; 1e-14                                  ;                ; Precision tolerance for halting the eigenvalue solver.
+double                        ; settings::precision::eigs_abstol_max                                 ; 1e-5                                   ;                ; Precision tolerance for halting the eigenvalue solver.
+MpoCompress                   ; settings::precision::use_compressed_mpo                              ; "DPL"                                  ;                ; Select the compression scheme for the virtual bond dimensions of H  mpos. Select {NONE, SVD (high compression), DPL (high precision)}
+MpoCompress                   ; settings::precision::use_compressed_mpo_squared                      ; "DPL"                                  ;                ; Select the compression scheme for the virtual bond dimensions of H² mpos. Select {NONE, SVD (high compression), DPL (high precision)}
+double                        ; settings::precision::variance_convergence_threshold                  ; 1e-13                                  ;                ; Desired precision on total energy variance. The MPS state is considered good enough when its energy variance reaches below this value
+
+## /*! \namespace settings::model::ising_majorana Settings for the Ising-Majorana model */
+double                        ; settings::model::ising_majorana::g                                   ; 0.500                                  ;                ; Interaction parameter for nearest ZZ and next-nearest XX neighbor coupling
+double                        ; settings::model::ising_majorana::delta                               ; -6.00                                  ;                ; Delta defined as log(J_mean) - log(h_mean). We get J_mean and h_mean by fixing delta = 2lnW, W = J_wdth = 1/h_wdth
+int                           ; settings::model::ising_majorana::spin_dim                            ; 2                                      ;                ; Spin dimension
+std::string                   ; settings::model::ising_majorana::distribution                        ; "uniform"                              ;                ; Random distribution for couplings and fields
+
+## /*! \namespace settings::model::lbit Settings for the l-bit Hamiltonian */
+double                        ; settings::model::lbit::J1_mean                                       ; 0.00                                   ;                ; Constant offset for on-site
+double                        ; settings::model::lbit::J2_mean                                       ; 0.00                                   ;                ; Constant offset for two-body interaction
+double                        ; settings::model::lbit::J3_mean                                       ; 0.00                                   ;                ; Constant offset for three-body interaction
+int                           ; settings::model::lbit::J2_span                                       ; -1                                     ;                ; Maximum allowed range for pairwise interactions, |i-j| <= J2_span. Use -1 for infinite. Note that J2_span + 1 MPOs are used
+int                           ; settings::model::lbit::u_depth                                       ; 16                                     ;                ; Depth of the circuit of unitary 2-site gates which transform lbit <-> real spaces
+double                        ; settings::model::lbit::u_fmix                                        ; 0.2                                    ;                ; Mixing factor for unitary transformation to real-space
+double                        ; settings::model::lbit::u_lambda                                      ; 1.0                                    ;                ; lambda parameter used in the Hermitian matrix g8mx for the unitary circuit gates: controls the size of the sz_i*sz_j terms
+LbitCircuitGateWeightKind     ; settings::model::lbit::u_wkind                                       ; "EXPDECAY"                             ;                ; Weights w_i in the unitary 2-site gates. Choose [IDENTITY, EXPDECAY] for 1 or exp(-2|h[i] - h[i+1]|), h are onsite fields in the Hamiltonian
+LbitCircuitGateMatrixKind     ; settings::model::lbit::u_mkind                                       ; "MATRIX_V2"                            ;                ; MATRIX_(V1|V2|V3) controls the kind of Hermitian matrix used in the unitary circuit gates
+std::array<double, 3>         ; settings::model::lbit::demo_triplet                                  ; [1.50, 0.00, 0.00]                     ;                ; Fixed-size float array.
+
+## /*! \namespace settings::flbit Settings for the finite l-bit algorithm */
+bool                          ; settings::flbit::on                                                  ; false                                  ;                ; Turns flbit simulation on/off.
+bool                          ; settings::flbit::run_iter_in_parallel                                ; false                                  ;                ; Time evolve each time step in parallel (because these are independent!)
+bool                          ; settings::flbit::run_effective_model                                 ; true                                   ;                ; Runs the effecive model before the actual simulation
+int                           ; settings::flbit::iter_min                                            ; 1                                      ;                ; Min number of iterations. One iterations moves L steps.
+int                           ; settings::flbit::iter_max                                            ; 5000                                   ;                ; Max number of iterations. One iterations moves L steps.
+bool                          ; settings::flbit::use_swap_gates                                      ; true                                   ;                ; Use gate swapping for pairwise long-range interactions rather then building a large multisite operator
+bool                          ; settings::flbit::use_mpo_circuit                                     ; false                                  ;                ; Cast the unitary circuit to compressed mpo form (this is not generally faster or more accurate, but good for testing)
+long                          ; settings::flbit::bond_min                                            ; 16                                     ;                ; Minimum bond dimension
+long                          ; settings::flbit::bond_max                                            ; 8192                                   ;                ; Maximum bond dimension (maximum number of singular values to keep in SVD).
+TimeScale                     ; settings::flbit::time_scale                                          ; "LOGSPACED"                            ;                ; Choose linear or logarithmically spaced time points (LINEAR|LOG)
+double                        ; settings::flbit::time_start_real                                     ; 1e-2                                   ;                ; Starting time point (real)
+double                        ; settings::flbit::time_start_imag                                     ; 0.0                                    ;                ; Starting time point (imag)
+double                        ; settings::flbit::time_final_real                                     ; 1e12                                   ;                ; Finishing time point (real)
+double                        ; settings::flbit::time_final_imag                                     ; 0.0                                    ;                ; Finishing time point (imag)
+int                           ; settings::flbit::time_num_steps                                      ; 50                                     ;                ; Number of steps from start to finish. Start and final times are included
+int                           ; settings::flbit::print_freq                                          ; 1                                      ;                ; Print frequency for console output. In units of iterations. (0 = off).
+bool                          ; settings::flbit::store_wavefn                                        ; false                                  ;                ; Whether to store the wavefunction. Runs out of memory quick, recommended is false for max_length > 14
+
+## /*! \namespace settings::flbit::cls Settings for calculating the characteristic length-scale of lbits */
+int                           ; settings::flbit::cls::num_rnd_circuits                               ; 0                                      ;                ; Calculate the characteristic length-scale for this many realizations of the unitary circuit
+bool                          ; settings::flbit::cls::exit_when_done                                 ; false                                  ;                ; If true, the program exits after calculating cls. Otherwise it starts the time evolution as usual
+bool                          ; settings::flbit::cls::randomize_hfields                              ; false                                  ;                ; Randomize the on-site fields of the Hamiltonian that goes into each realization of the unitary circuits
+int                           ; settings::flbit::cls::mpo_circuit_switchdepth                        ; 10                                     ;                ; Cast the unitary circuit to an approximate compressed MPO form when the circuit depth (u_depth) is this value or more
+int                           ; settings::flbit::cls::mpo_circuit_svd_bondlim                        ; 20                                     ;                ; The bond dimension limit used in the SVD when casting the circuit to compressed MPO form
+double                        ; settings::flbit::cls::mpo_circuit_svd_trnclim                        ; 1e-14                                  ;                ; The truncation error limit used in the SVD when casting the circuit to compressed MPO form
+
+## /*! \namespace settings::flbit::opdm Settings for calculating the averaged one-particle density matrix */
+int                           ; settings::flbit::opdm::num_rps                                       ; 0                                      ;                ; Number of random product states (zero magnetization) to average over ( <=0 to disable)
+bool                          ; settings::flbit::opdm::exit_when_done                                ; false                                  ;                ; If true, the program exits after calculating the opdm. Otherwise it starts the time evolution as usual
+
+## /*! \namespace settings::xdmrg Settings for the finite excited-state DMRG algorithm */
+bool                          ; settings::xdmrg::on                                                  ; true                                   ;                ; Turns xDMRG simulation on/off.
+OptAlgo                       ; settings::xdmrg::algo                                                ; "GDMRG"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]
+OptRitz                       ; settings::xdmrg::ritz                                                ; "LM"                                   ;                ; Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)]
+OptAlgo                       ; settings::xdmrg::algo_warmup                                         ; "GDMRG"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]
+OptRitz                       ; settings::xdmrg::ritz_warmup                                         ; "LM"                                   ;                ; Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)]
+OptAlgo                       ; settings::xdmrg::algo_stuck                                          ; "GDMRG"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]
+OptRitz                       ; settings::xdmrg::ritz_stuck                                          ; "LM"                                   ;                ; Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)]
+double                        ; settings::xdmrg::energy_spectrum_shift                               ; 0.0                                    ;                ; (Used with ritz == OptRitz::SM) Shift the energy eigenvalue spectrum by this amount: H -> H - shift
+double                        ; settings::xdmrg::energy_density_target                               ; 0.5                                    ;                ; (Used with ritz == OptRitz::TE) Target energy in [0-1], Target energy = energy_density_target * (EMAX+EMIN) + EMIN.
+int                           ; settings::xdmrg::iter_min                                            ; 10                                     ;                ; Min number of iterations. One iterations moves L steps.
+int                           ; settings::xdmrg::iter_max                                            ; 100                                    ;                ; Max number of iterations. One iterations moves L steps.
+long                          ; settings::xdmrg::bond_min                                            ; 8192                                   ;                ; Minimum bond dimension. Used at the start, during warmup or when bond_increase_when == true, or when starting from an entangled state
+long                          ; settings::xdmrg::bond_max                                            ; 8192                                   ;                ; Maximum bond dimension (number of singular values to keep after SVD).
+int                           ; settings::xdmrg::print_freq                                          ; 1                                      ;                ; Print frequency for console output. In units of iterations. (0 = off).
+int                           ; settings::xdmrg::max_states                                          ; 1                                      ;                ; Max number of random states to find using xDMRG on a single disorder realization
+bool                          ; settings::xdmrg::store_wavefn                                        ; false                                  ;                ; Whether to store the wavefunction. Runs out of memory quick, recommended is false for max_length > 14
+
+std::array<int, 3>            ; settings::demo::measurement_sites                                    ; [0, 10, 21]                            ;                ; Fixed-size int array.
+std::vector<double>           ; settings::demo::bond_schedule                                        ; [512.0, 1024.0, 2048.0, 4096.0]        ;                ; Dynamic float array.
+std::vector<double>           ; settings::demo::variance_targets                                     ; [1e-6, 1e-8, 1e-10]                    ;                ; Another vector<double>.
+std::complex<double>          ; settings::demo::spectral_shift                                       ; [0.125, -0.25]                         ;                ; Complex<double> encoded as [re, im].
+std::array<double, 2>         ; settings::demo::krylov_window                                        ; [-0.25, 0.25]                          ;                ; Fixed-size array for window edges.
+std::vector<std::string>      ; settings::demo::observables                                          ; ["energy", "entanglement_entropy", "opdm"] ;             ; Vector<string>.
