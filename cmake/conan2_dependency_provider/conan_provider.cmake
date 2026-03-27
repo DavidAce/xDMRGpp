@@ -572,7 +572,7 @@ macro(conan_provide_dependency method package_name)
     get_property(_conan_install_success GLOBAL PROPERTY CONAN_INSTALL_SUCCESS)
     if(NOT _conan_install_success)
         find_program(CONAN_COMMAND "conan" REQUIRED)
-        conan_get_version(${CONAN_COMMAND} CONAN_CURRENT_VERSION)
+        conan_get_version("${CONAN_COMMAND}" CONAN_CURRENT_VERSION)
         conan_version_check(MINIMUM ${CONAN_MINIMUM_VERSION} CURRENT ${CONAN_CURRENT_VERSION})
         message(STATUS "CMake-Conan: first find_package() found. Installing dependencies with Conan")
         if("default" IN_LIST CONAN_HOST_PROFILE OR "default" IN_LIST CONAN_BUILD_PROFILE)
@@ -640,7 +640,7 @@ macro(conan_provide_dependency method package_name)
         unset(_build_profile_flags)
         unset(_conan_install_success)
     else()
-        message(STATUS "CMake-Conan: find_package(${ARGV1}) found, 'conan install' already ran")
+        message(DEBUG "CMake-Conan: find_package(${ARGV1}) found, 'conan install' already ran")
         unset(_conan_install_success)
     endif()
 
@@ -656,10 +656,15 @@ macro(conan_provide_dependency method package_name)
     # Filter out `REQUIRED` from the argument list, as the first call may fail
     set(_find_args_${package_name} "${ARGN}")
     list(REMOVE_ITEM _find_args_${package_name} "REQUIRED")
+    # Keep the speculative Conan-only lookup quiet so only the final fallback
+    # search reports failures that actually matter to the configure result.
+    if(NOT "QUIET" IN_LIST _find_args_${package_name})
+        list(APPEND _find_args_${package_name} "QUIET")
+    endif()
     if(NOT "MODULE" IN_LIST _find_args_${package_name})
         find_package(${package_name} ${_find_args_${package_name}} BYPASS_PROVIDER PATHS "${_conan_generators_folder}" NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
-        unset(_find_args_${package_name})
     endif()
+    unset(_find_args_${package_name})
 
     # Invoke find_package a second time - if the first call succeeded,
     # this will simply reuse the result. If not, fall back to CMake default search

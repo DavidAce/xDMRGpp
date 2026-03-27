@@ -30,7 +30,7 @@ find_package(OpenMP                       REQUIRED BYPASS_PROVIDER COMPONENTS CX
 find_package(gfortran                     REQUIRED BYPASS_PROVIDER OPTIONAL_COMPONENTS quadmath)
 find_package(Lapacke                      REQUIRED BYPASS_PROVIDER MODULE)
 find_package(pcg-cpp                      REQUIRED)
-find_package(Eigen3       5.0.1           REQUIRED)                                         # Eigen3 numerical library
+find_package(Eigen3       5.0.0...5.1.0   REQUIRED)                                         # Eigen3 numerical library
 find_package(h5pp         1.11.0...1.11.3 REQUIRED)                                         # h5pp for writing to file binary in format
 find_package(spdlog       1.11.0...1.16.0 REQUIRED)
 find_package(fmt          11.0.0...11.9.0 REQUIRED)
@@ -118,4 +118,3 @@ if(TARGET Eigen3::Eigen)
 else()
     message(FATAL_ERROR "Target not defined: Eigen3::Eigen")
 endif()
-
