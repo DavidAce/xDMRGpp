@@ -1,5 +1,5 @@
 
-# DMRG++
+# xDMRG++
 
 ```{include} introduction.md
 ```
