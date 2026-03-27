@@ -131,7 +131,7 @@ namespace tools::logfmt {
     static_assert(std::same_as<adapted_arg_t<std::complex<double>>, std::complex<double>>,
                   "Native complex floating-point types should be forwarded directly to fmt.");
     static_assert(!contiguous_floating_range<std::string>, "Text types must not be treated as numeric ranges.");
-#if defined(__STDCPP_FLOAT128_T__)
+#if defined(DMRG_USE_FLOAT128) && defined(__STDCPP_FLOAT128_T__)
     static_assert(std::same_as<adapted_arg_t<std::float128_t>, fp<std::float128_t>>,
                   "Extended floating-point types must be wrapped in fp before reaching fmt.");
     static_assert(std::same_as<adapted_arg_t<std::complex<std::float128_t>>, fp<std::complex<std::float128_t>>>,

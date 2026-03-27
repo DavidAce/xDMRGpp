@@ -33,7 +33,7 @@ find_package(pcg-cpp                      REQUIRED)
 find_package(Eigen3       5.0.0...5.1.0   REQUIRED)                                         # Eigen3 numerical library
 find_package(h5pp         1.11.0...1.11.3 REQUIRED)                                         # h5pp for writing to file binary in format
 find_package(spdlog       1.11.0...1.16.0 REQUIRED)
-find_package(fmt          11.0.0...11.9.0 REQUIRED)
+find_package(fmt          11.0.0...12.9.0 REQUIRED)
 find_package(CLI11        2.4.1...2.6.0   REQUIRED)                                         # Command line argument parser
 find_package(Backward     1.6             REQUIRED)
 find_package(toml11       4.4.0           REQUIRED)
