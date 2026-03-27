@@ -20,7 +20,7 @@ option(H5PP_USE_FLOAT128               "Enable support for std::float128_t"     
 include(ExternalProject)
 ExternalProject_Add(external_h5pp
         GIT_REPOSITORY https://github.com/DavidAce/h5pp.git
-        GIT_TAG dev
+        GIT_TAG v1.11.3
         GIT_PROGRESS TRUE
         GIT_SHALLOW TRUE
         BUILD_ALWAYS TRUE
