@@ -7,33 +7,24 @@
 
 # Introduction
 
-The [density matrix renormalization group](https://en.wikipedia.org/wiki/Density_matrix_renormalization_group) (DMRG) algorithm is a
-variational technique used to calculate eigenstates of 1D quantum systems. DMRG works by iteratively optimizing a trial wave function in the
-form of a [Matrix Product State](https://en.wikipedia.org/wiki/Matrix_product_states) (MPS), until obtaining an
-eigenstate with high precision.
+The [density matrix renormalization group](https://en.wikipedia.org/wiki/Density_matrix_renormalization_group) (DMRG) is a variational method for one-dimensional quantum systems. `xDMRG++` represents states as [matrix product states](https://en.wikipedia.org/wiki/Matrix_product_state) (MPS) and Hamiltonians as [matrix product operators](https://en.wikipedia.org/wiki/Matrix_product_state#Matrix_product_operator) (MPO).
 
-xDMRG++ includes several algorithms for open boundary systems:
+xDMRG++ includes several algorithms for one-dimensional systems:
 
-- ***x*DMRG:** *Excited state* DMRG. For mid-spectrum eigenstates.
-- ***f*DMRG:** *finite* DMRG. For groundstates.
-- ***i*DMRG:** *infinite* DMRG. For groundstates of infinite translationally invariant systems.
-- ***i*TEBD:** *Imaginary Time Evolving Block Decimation*. For groundstates of infinite translationally invariant systems.
-
-One additional algorithm is included to study the dynamics in the Many-body Localized phase:
-
-- ***f*LBIT:** *Finite* l-BIT. Time evolution of finite systems in terms of local integrals of motion (l-bits).
+- ***x*DMRG:** *Excited state* DMRG. For interior eigenstates on finite chains.
+- ***f*DMRG:** *finite* DMRG. For ground states of finite chains.
+- ***i*DMRG:** *infinite* DMRG. For ground states of infinite translationally invariant systems.
+- ***i*TEBD:** *Imaginary Time Evolving Block Decimation*. For ground states of infinite translationally invariant systems.
+- ***f*LBIT:** *Finite* l-BIT. Time evolution of finite systems in terms of local integrals of motion in the [many-body localized](https://en.wikipedia.org/wiki/Many-body_localization) regime.
 
 
 ## Documentation
 
-For more information on using xDMRG++, visit
-
-https://kth-dmrg.readthedocs.io/en/latest/
+For more information on using xDMRG++, visit the [documentation](https://kth-dmrg.readthedocs.io/en/latest/).
 
 ### Working Notes (in construction)
 
-See the [working notes](https://github.com/DavidAce/Notebooks/blob/master/DMRG%2B%2B/DMRG%2B%2B.pdf) for a more
-theoretical background of this implementation.
+See the [working notes](https://github.com/DavidAce/Notebooks/blob/master/DMRG%2B%2B/DMRG%2B%2B.pdf) for implementation details and derivations that have not yet been merged into the main documentation.
 
 
 ---
@@ -42,31 +33,27 @@ theoretical background of this implementation.
 
 ## Input Configuration File
 
-The default input configuration file `input/input.cfg` sets simulation properties, such as algorithm, system size and
-precision.
-`xDMRG++` takes a custom input file from command-line arguments, e.g. `./xDMRG++ -c path/to/file.cfg`.  
+A convenient starting point is `input/default.cfg`, and additional example configurations are provided under `input/`. The configuration file sets the algorithm, model, system size, precision, storage policy, and related run parameters.
+`xDMRG++` takes a custom input file from the command line, for example `./xDMRG++ --config path/to/file.cfg`.
 
 ## Output Data File
 
-After execution the results are stored a binary file in HDF5 format. Its location is specified in the configuration
-file `input/input.cfg`. By default, the output file is `output/output.h5`, which will contain values like the final
-energies, entanglement entropies, and optionally the final state in MPS form.
+Results are stored in an [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file whose path is set in the input configuration. By default this is `output/output.h5`. Depending on the storage settings, the file can contain measurements, model parameters, iteration data, and saved MPS states for later analysis or resume.
 
-To view the data you can use any hdf5-viewer, such as HDFCompass or HDFViewer.
+To inspect the data you can use an HDF5 viewer such as [HDF Compass](https://github.com/HDFGroup/hdf-compass) or [HDFView](https://www.hdfgroup.org/download-hdfview/).
 
 ## Model Hamiltonians
 
-These model Hamiltonians of 1D quantum systems are included:
+These model Hamiltonians of one-dimensional quantum systems are included:
 
-- `ModelType::ising_sdual`: The Self-dual transverse-field Ising model.
-- `ModelType::ising_tf_rf`: The Transverse-field Ising model with random on-site field.
-- `ModelType::lbit`: The l-bit Hamiltonian, used to describe a many-body localized phase
-  in terms of its local integrals of motion (the l-bits).
+- `ModelType::ising_sdual`: The self-dual transverse-field Ising model.
+- `ModelType::ising_tf_rf`: The transverse-field Ising model with random on-site field.
+- `ModelType::ising_majorana`: The Ising-Majorana model.
+- `ModelType::xxz`: The XXZ spin chain.
+- `ModelType::lbit`: The l-bit Hamiltonian, used to describe a [many-body localized](https://en.wikipedia.org/wiki/Many-body_localization) phase in terms of local integrals of motion.
 
-The Hamiltonians are implemented as *Matrix Product Operators* (MPO), located under `source/tensors/model`. The model
-type is selected using the input configuration file in `input/input.cfg`, with the option `settings::model::model_type`.
-To add another model, one currently has to implement a new MPO and derive from `class_mpo_site` just like the existing
-models.
+The Hamiltonians are implemented as [matrix product operators](https://en.wikipedia.org/wiki/Matrix_product_state#Matrix_product_operator) under `source/tensors/model`. The corresponding settings are defined in `source/config/settings.h`, and example input files are provided under `input/`. The model type is selected in the input configuration file with `model::model_type`.
+To add another model, one currently has to implement a new MPO and derive from `MpoSite`, following the existing models.
 
 
 ---
@@ -78,11 +65,11 @@ models.
 
 The following software is required to build the project:
 
-- C++20 compiler (tested with gcc-12 and up and clang-18)
-- CMake version >= 3.24 to use presets.
+- C++23 compiler (tested with GCC 14 and newer, and Clang 19)
+- CMake version >= 3.24 to use presets
 
-In addition, conan version 2 is recommended for dependency installation. 
-To use conan: 
+Conan 2 is optional, but recommended if you want to use the Conan-based presets or dependency provider.
+To use Conan:
 
 ```
 pip install conan
@@ -108,51 +95,57 @@ The conan-dmrg remote is needed to download the latest version of [**h5pp**](htt
 - [**Backward-cpp**](https://github.com/bombela/backward-cpp) pretty stack trace printer.
 
 
-## Quick start
+## Quick start with CMake Presets
 
-- `git clone git@github.com:DavidAce/xDMRGpp.git` and `cd xDMRGpp`
-- Configure `cmake --preset <preset>` (see the available presets with `cmake --list-presets`)
-- Build with `cmake --build --preset <preset>`
-- Modify `input/default.cfg` to configure a simulation.
-- Run with `./build/<preset>/xDMRG++ -c input/default.cfg`.
-- Find generated data in `output/output.h5`.
+The recommended way to configure this project is with [CMake presets](https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html). A preset gives a name to a complete CMake configuration, including the build directory, build type, selected dependency provider, and toolchain-related settings.
 
-Some presets, with `conan` in their name, can use the 
-[CMake Dependency Provider](https://cmake.org/cmake/help/latest/guide/using-dependencies/index.html#dependency-providers)
-mechanism to let CMake call conan to install all the dependencies automatically.
+A typical example is `release-cmake-flexiblas-native`:
+
+```bash
+git clone git@github.com:DavidAce/xDMRGpp.git
+cd xDMRGpp
+cmake --list-presets
+cmake --preset release-cmake-flexiblas-native
+cmake --build --preset release-cmake-flexiblas-native
+./build/release-cmake-flexiblas-native/xDMRG++ --config input/default.cfg
+```
+
+The configure step creates the build tree under `build/release-cmake-flexiblas-native`. After the executable has been built, you can adjust `input/default.cfg` or use another file from `input/`, and the generated data will be written to the output path specified in the configuration, which is `output/output.h5` by default.
 
 ## Automatic Dependency Installation
 
-The CMake flag `DMRG_PACKAGE_MANAGER` controls the automated behavior for finding or installing dependencies. It can
+The CMake flag `DMRG_PACKAGE_MANAGER` selects how dependencies are found or installed. It can
 take one of these strings:
 
-| Option               | Description                                                                                         |
-|----------------------|-----------------------------------------------------------------------------------------------------|
-| `find` **(default)** | Use CMake's `find_package`  to find dependencies. (Use this with the CMake Presets labeled `conan`) |
-| `cmake`              | Use CMake to download and install dependencies during configure.                                    |
-|                      |                                                                                                     |
+| Option               | Description |
+|----------------------|-------------|
+| `find` **(default)** | Use CMake's `find_package` to locate dependencies already available in the environment. |
+| `cmake`              | Use the CMake dependency provider to download and install dependencies during configure. |
+| `conan`              | Use Conan-based dependency resolution. The presets with `conan` in their name also enable the Conan dependency provider. |
 
 
 ## CMake Options
 
  Add options to the CMake configuration as `cmake [-D<OPTION>=<VALUE>] ...`:
 
-| Var                           | Default | Description                                                       |
-|-------------------------------|---------|-------------------------------------------------------------------|
-| `DMRG_USE_QUADMATH`           | `FALSE` | Use __float128 from quadmath.h for lbit time evolution            |
-| `DMRG_USE_FLOAT128`           | `FALSE` | Use std::float128_t for lbit time evolution                       |
-| `DMRG_ENABLE_TBLIS`           | `FALSE` | Use TBLIS for faster tensor contractions (FP64) instead of Eigen3 |
-| `DMRG_ENABLE_TESTS`           | `FALSE` | Enable unit testing with ctest                                    |
-| `DMRG_BUILD_EXAMPLES`         | `FALSE` | Build examples                                                    |
-| `DMRG_BUILD_TOOLS`            | `FALSE` | Build tools                                                       |
-| `DMRG_ENABLE_DOCS`            | `FALSE` | Build documentation                                               |
-| `DMRG_CMAKE_DEBUG`            | `FALSE` | Extra information during CMake configuration                      |
-| `COMPILER_PROFILE_BUILD`      | `FALSE` | Enable -ftime-trace (inspect with ClangBuildAnalyzer)             |
-| `COMPILER_ENABLE_ASAN`        | `FALSE` | Enable runtime address sanitizer -fsanitize=address               |
-| `COMPILER_ENABLE_USAN`        | `FALSE` | Enable undefined behavior sanitizer -fsanitize=undefined          |
-| `COMPILER_ENABLE_PCH`         | `FALSE` | Enable precompiled headers to speed up compilation                |
-| `COMPILER_ENABLE_COVERAGE`    | `FALSE` | Enable test coverage                                              |
-| `EIGEN_USE_THREADS`           | `TRUE`  | Use STL threads to parallelize Eigen::Tensor                      |
+| Var                           | Default | Description |
+|-------------------------------|---------|-------------|
+| `DMRG_PACKAGE_MANAGER`        | `find`  | Select the automatic dependency manager: `find`, `cmake`, `conan`. |
+| `DMRG_USE_QUADMATH`           | `FALSE` | Enable `__float128` from `quadmath.h` for `fLBIT` time evolution. |
+| `DMRG_USE_FLOAT128`           | `FALSE` | Enable `std::float128_t` for `fLBIT` time evolution. |
+| `DMRG_ENABLE_FP32`            | `ON`    | Build explicit instantiations for `fp32`. |
+| `DMRG_ENABLE_FP64`            | `ON`    | Build explicit instantiations for `fp64`. |
+| `DMRG_ENABLE_FP128`           | `ON`    | Build explicit instantiations for the `fp128` aliases. |
+| `DMRG_ENABLE_CX32`            | `ON`    | Build explicit instantiations for `cx32`. |
+| `DMRG_ENABLE_CX64`            | `ON`    | Build explicit instantiations for `cx64`. |
+| `DMRG_ENABLE_CX128`           | `ON`    | Build explicit instantiations for the `cx128` aliases. |
+| `DMRG_ENABLE_TBLIS`           | `FALSE` | Use [TBLIS](https://github.com/MatthewsResearchGroup/tblis) for selected tensor contractions instead of Eigen. |
+| `DMRG_ENABLE_TESTS`           | `FALSE` | Enable unit tests and CTest targets. |
+| `DMRG_BUILD_EXAMPLES`         | `FALSE` | Build example programs. |
+| `DMRG_BUILD_TOOLS`            | `FALSE` | Build auxiliary tools. |
+| `DMRG_ENABLE_DOCS`            | `FALSE` | Build the documentation. |
+| `DMRG_CMAKE_DEBUG`            | `FALSE` | Print extra information during CMake configuration. |
+| `EIGEN_USE_THREADS`           | `TRUE`  | Enable threaded Eigen tensor operations. |
 
 
 In addition, variables such
