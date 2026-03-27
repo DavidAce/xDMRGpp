@@ -167,53 +167,58 @@ namespace tools::common::contraction::internal {
         return info;
     }
 
+#if defined(DMRG_ENABLE_TBLIS)
     template<typename Scalar>
     StatsMv<Scalar> contract_with_tblis(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
-        static_assert(settings::tblis_enabled);
-        if constexpr(settings::tblis_enabled) {
-            assert(mps.dimension(1) == envL.dimension(0));
-            assert(mps.dimension(2) == envR.dimension(0));
-            assert(mps.dimension(0) == mpo.dimension(2));
-            assert(envL.dimension(2) == mpo.dimension(0));
-            assert(envR.dimension(2) == mpo.dimension(1));
-            static const tblis::tblis_config *tblis_cfg = nullptr; // tblis::config(get_tblis_arch().data());
-            if constexpr(settings::tblis_use_openmp) { tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads())); }
-            auto contract_tblis_wrapper = [](const auto &A, const auto &B, auto &C, std::string_view la, std::string_view lb, std::string_view lc,
-                                             const tblis::tblis_config *cfg) {
-                contract_tblis(A.data(), A.dimensions(), B.data(), B.dimensions(), C.data(), C.dimensions(), la, lb, lc, cfg);
-            };
-
-            StatsMv<Scalar> info;
-            info.contract_left = mps.dimension(1) >= mps.dimension(2);
-
-            thread_local Eigen::Tensor<Scalar, 4> T1;
-            thread_local Eigen::Tensor<Scalar, 4> T2;
-            if(mps.dimension(1) >= mps.dimension(2)) {
-                T1.resize(mps.dimension(0), mps.dimension(2), envL.dimension(1), envL.dimension(2));
-                T2.resize(mpo.dimension(1), mpo.dimension(3), mps.dimension(2), envL.dimension(1));
-                contract_tblis_wrapper(mps, envL, T1, "afb", "fcd", "abcd", tblis_cfg);
-                contract_tblis_wrapper(mpo, T1, T2, "qhri", "rgjq", "higj", tblis_cfg);
-                contract_tblis_wrapper(T2, envR, res, "higj", "gkh", "ijk", tblis_cfg);
-            } else {
-                T1.resize(mps.dimension(0), mps.dimension(1), envR.dimension(1), envR.dimension(2));
-                T2.resize(mps.dimension(1), envR.dimension(1), mpo.dimension(0), mpo.dimension(3));
-                contract_tblis_wrapper(mps, envR, T1, "abf", "fcd", "abcd", tblis_cfg);
-                contract_tblis_wrapper(T1, mpo, T2, "qijk", "rkql", "ijrl", tblis_cfg);
-                contract_tblis_wrapper(T2, envL, res, "qkri", "qjr", "ijk", tblis_cfg);
-            }
-
-            info.mps_norm           = get_norm(mps.data(), mps.dimensions());
-            info.mpo_norm           = get_norm(mpo.data(), mpo.dimensions());
-            info.envL_norm          = get_norm(envL.data(), envL.dimensions());
-            info.envR_norm          = get_norm(envR.data(), envR.dimensions());
-            info.ST1                = get_norm(T1.data(), T1.dimensions());
-            info.ST2                = get_norm(T2.data(), T2.dimensions());
-            info.ST3                = get_norm(res.data(), res.dimensions());
-            auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
-            info.cancelation_factor = Smax / info.ST3;
-            return info;
+        assert(mps.dimension(1) == envL.dimension(0));
+        assert(mps.dimension(2) == envR.dimension(0));
+        assert(mps.dimension(0) == mpo.dimension(2));
+        assert(envL.dimension(2) == mpo.dimension(0));
+        assert(envR.dimension(2) == mpo.dimension(1));
+        static const tblis::tblis_config *tblis_cfg = nullptr; // tblis::config(get_tblis_arch().data());
+        if constexpr(settings::tblis_use_openmp) { tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads())); }
+        auto contract_tblis_wrapper = [](const auto &A, const auto &B, auto &C, std::string_view la, std::string_view lb, std::string_view lc,
+                                         const tblis::tblis_config *cfg) {
+            contract_tblis(A.data(), A.dimensions(), B.data(), B.dimensions(), C.data(), C.dimensions(), la, lb, lc, cfg);
         };
+
+        StatsMv<Scalar> info;
+        info.contract_left = mps.dimension(1) >= mps.dimension(2);
+
+        thread_local Eigen::Tensor<Scalar, 4> T1;
+        thread_local Eigen::Tensor<Scalar, 4> T2;
+        if(mps.dimension(1) >= mps.dimension(2)) {
+            T1.resize(mps.dimension(0), mps.dimension(2), envL.dimension(1), envL.dimension(2));
+            T2.resize(mpo.dimension(1), mpo.dimension(3), mps.dimension(2), envL.dimension(1));
+            contract_tblis_wrapper(mps, envL, T1, "afb", "fcd", "abcd", tblis_cfg);
+            contract_tblis_wrapper(mpo, T1, T2, "qhri", "rgjq", "higj", tblis_cfg);
+            contract_tblis_wrapper(T2, envR, res, "higj", "gkh", "ijk", tblis_cfg);
+        } else {
+            T1.resize(mps.dimension(0), mps.dimension(1), envR.dimension(1), envR.dimension(2));
+            T2.resize(mps.dimension(1), envR.dimension(1), mpo.dimension(0), mpo.dimension(3));
+            contract_tblis_wrapper(mps, envR, T1, "abf", "fcd", "abcd", tblis_cfg);
+            contract_tblis_wrapper(T1, mpo, T2, "qijk", "rkql", "ijrl", tblis_cfg);
+            contract_tblis_wrapper(T2, envL, res, "qkri", "qjr", "ijk", tblis_cfg);
+        }
+
+        info.mps_norm           = get_norm(mps.data(), mps.dimensions());
+        info.mpo_norm           = get_norm(mpo.data(), mpo.dimensions());
+        info.envL_norm          = get_norm(envL.data(), envL.dimensions());
+        info.envR_norm          = get_norm(envR.data(), envR.dimensions());
+        info.ST1                = get_norm(T1.data(), T1.dimensions());
+        info.ST2                = get_norm(T2.data(), T2.dimensions());
+        info.ST3                = get_norm(res.data(), res.dimensions());
+        auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
+        info.cancelation_factor = Smax / info.ST3;
+        return info;
     }
+#else
+    template<typename Scalar>
+    StatsMv<Scalar> contract_with_tblis(auto &, const auto &, const auto &, const auto &, const auto &) {
+        static_assert(!std::is_same_v<Scalar, Scalar>, "contract_with_tblis requires DMRG_ENABLE_TBLIS");
+        return {};
+    }
+#endif
 
     template<typename Scalar>
     StatsMv<Scalar> contract_with_gemm_x2(auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
