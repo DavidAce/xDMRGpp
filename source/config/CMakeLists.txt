@@ -1,6 +1,23 @@
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-file(GLOB XDMRG_CONFIG_ENUM_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/enums/*.h")
+set(XDMRG_CONFIG_ENUM_MASTER_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/enums.h)
+# Keep the generator inputs in sync with enums.h without paying the per-build
+# CONFIGURE_DEPENDS glob verification cost.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${XDMRG_CONFIG_ENUM_MASTER_HEADER})
+
+file(STRINGS ${XDMRG_CONFIG_ENUM_MASTER_HEADER}
+     XDMRG_CONFIG_ENUM_INCLUDE_LINES
+     REGEX "^[ \t]*#include \"config/enums/[^\"]+\\.h\"$")
+
+set(XDMRG_CONFIG_ENUM_HEADERS)
+foreach(enum_include IN LISTS XDMRG_CONFIG_ENUM_INCLUDE_LINES)
+    string(REGEX REPLACE "^[ \t]*#include \"config/enums/([^\"]+\\.h)\"$" "\\1" enum_header_name "${enum_include}")
+    list(APPEND XDMRG_CONFIG_ENUM_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/enums/${enum_header_name}")
+endforeach()
+
+if(NOT XDMRG_CONFIG_ENUM_HEADERS)
+    message(FATAL_ERROR "Failed to discover enum headers from ${XDMRG_CONFIG_ENUM_MASTER_HEADER}")
+endif()
 
 set(XDMRG_CONFIG_GENERATED_DIR ${CMAKE_BINARY_DIR}/source/config/generated)
 set(XDMRG_CONFIG_GENERATED_CPPS)
