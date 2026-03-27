@@ -1,30 +1,46 @@
 # Usage
 
 ## Input Configuration File
-The default input configuration file `input/input.cfg` sets simulation properties, such as algorithm, system size and precision.
-`DMRG++` admits custom input files from command-line arguments, e.g. `./DMRG++ -c path/to/file.cfg`.  
-The full list of configurable settings can be found under [Settings](Settings). 
+
+Simulation parameters are read from a text configuration file. A convenient starting point is `input/default.cfg`, and additional examples are provided under `input/`. These files select the algorithm, model, system size, numerical thresholds, output settings, and related run parameters.
+
+`xDMRG++` reads a custom configuration file from the command line. A typical invocation is:
+
+```bash
+./xDMRG++ --config path/to/file.cfg
+```
+
+When using a preset build, the full command usually looks more like:
+
+```bash
+./build/release-cmake-flexiblas-native/xDMRG++ --config input/default.cfg
+```
+
+The full list of configuration namespaces and variables is documented under [Settings](settings.md).
 
 ## Output Data File
-After execution the results are stored a binary file in HDF5 format. Its location is specified in the configuration file `input/input.cfg`.
-By default this should be in `output/output.h5`. This file will contain values like the final energies, entanglement entropies, entanglement spectrums and
-optionally the final state in MPS form.
 
-To view the data you can use any hdf5-viewer, such as HDFCompass.
+Simulation results are written to an [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file. The output path is set in the input configuration, and by default it is `output/output.h5`.
+
+The contents of the file depend on the active storage policy. A typical output file may include:
+
+- Model parameters and run metadata.
+- Iteration tables, convergence information, and measurements.
+- Saved [matrix product state](https://en.wikipedia.org/wiki/Matrix_product_state) data for later analysis.
+- State data needed to resume a simulation, when the relevant storage settings are enabled.
+
+To inspect the data you can use any HDF5 viewer, such as [HDF Compass](https://github.com/HDFGroup/hdf-compass) or [HDFView](https://www.hdfgroup.org/download-hdfview/).
 
 ## Model Hamiltonians
-These model Hamiltonians of 1D quantum systems are included:
 
-- `ModelType::ising_sdual`: The Self-dual transverse-field Ising model.
-- `ModelType::ising_tf_rf`: The Transverse-field Ising model with random on-site field. 
-- `ModelType::lbit`: The l-bit Hamiltonian, used to describe a many-body localized phase (MBL) 
-   in terms of its local integrals of motion (the l-bits).
- 
+The code currently includes the following one-dimensional model Hamiltonians:
 
-The Hamiltonians are implemented as *Matrix Product Operators* (MPO), located under `source/tensors/model`.
-The model type is selected using the input configuration file in `input/input.cfg`, with the option `settings::model::model_type`.
-To add another model, one currently has to implement a new MPO and derive from `class_mpo_site` just like the existing models. 
+- `ModelType::ising_sdual`: The self-dual transverse-field Ising model.
+- `ModelType::ising_tf_rf`: The transverse-field Ising model with random on-site field.
+- `ModelType::ising_majorana`: The Ising-Majorana model.
+- `ModelType::xxz`: The XXZ spin chain.
+- `ModelType::lbit`: The l-bit Hamiltonian, used to describe a [many-body localized](https://en.wikipedia.org/wiki/Many-body_localization) phase in terms of local integrals of motion.
 
+These Hamiltonians are implemented as [matrix product operators](https://en.wikipedia.org/wiki/Matrix_product_state#Matrix_product_operator) under `source/tensors/model`. The corresponding configuration variables live in `source/config/settings.h`, and the active model is selected in the input file with `model::model_type`.
 
-
-
+Adding a new model currently means implementing a new MPO site class and deriving it from `MpoSite`, following the structure of the existing models.
