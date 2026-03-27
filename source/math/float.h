@@ -4,7 +4,6 @@
 #include <complex>
 #include <cstring>
 #include <stdexcept>
-#include <stdfloat>
 #include <string>
 #include <string_view>
 #include <type_traits>

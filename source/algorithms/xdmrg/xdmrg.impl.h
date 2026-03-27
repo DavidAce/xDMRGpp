@@ -339,10 +339,10 @@ void xdmrg<Scalar>::run_algorithm() {
             quot = vh2v / h2norm; // Assume the state is normalized (vv = 1)
         }
         if(quot < eps * 1000 or !std::isfinite(vh2v)) {
-            tools::log->warn("Switched to X2 backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", vh2v, h2norm, quot);
+            tools::log->info("Switched to X2 backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", vh2v, h2norm, quot);
             return ContractionBackend::X2;
         } else {
-            tools::log->info("Selected TBLIS backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} > 1000 * eps", vh2v, h2norm, quot);
+            tools::log->debug("Selected TBLIS backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} > 1000 * eps", vh2v, h2norm, quot);
             return ContractionBackend::TBLIS;
         }
     };

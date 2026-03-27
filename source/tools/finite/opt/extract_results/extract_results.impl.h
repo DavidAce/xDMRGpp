@@ -89,8 +89,8 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
                 res.set_hsquared(std::real(vh2v));
                 res.set_variance(variance);
 
-                auto rnormH1_squared = rnormH1 * rnormH1;
-                tools::log->info("extract_results: variance <H²>-<H>²={:.16e}  |Hv-Ev|²= {:.16e}", variance, rnormH1_squared);
+                // auto rnormH1_squared = rnormH1 * rnormH1;
+                // tools::log->info("extract_results: variance <H²>-<H>²={:.16e}  |Hv-Ev|²= {:.16e}", variance, rnormH1_squared);
 
                 res.validate_basis_vector();
 
@@ -165,8 +165,8 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
     res.set_variance(variance);
     res.set_energy_shifted(std::real(vh1v));
     res.set_hsquared(std::real(vh2v));
-    auto rnormH1_squared = rnormH1 * rnormH1;
-    tools::log->info("extract_results: variance <H²>-<H>²={:.16e}  |Hv-Ev|²= {:.16e}", variance, rnormH1_squared);
+    // auto rnormH1_squared = rnormH1 * rnormH1;
+    // tools::log->info("extract_results: variance <H²>-<H>²={:.16e}  |Hv-Ev|²= {:.16e}", variance, rnormH1_squared);
 }
 
 template<typename CalcType, typename Scalar>

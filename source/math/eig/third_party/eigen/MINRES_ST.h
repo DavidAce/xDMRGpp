@@ -175,8 +175,8 @@ namespace Eigen {
             constexpr int rate_rrnorm = 1;  // How often to save into history
             constexpr int rate_deltax = 10; // How often to save into history
             // constexpr int          rate_resid2      = 100; // How often to correct the residual norm
-            constexpr int          rate_checks      = 10; // How often to check convergence/saturation
-            constexpr int          rate_printf      = 10; // How often to print results
+            constexpr int          rate_checks      = 10;   // How often to check convergence/saturation
+            constexpr int          rate_printf      = 1000; // How often to print results
             constexpr size_t       max_history_size = 50;
             std::deque<RealScalar> rrnorm_history;
             std::deque<RealScalar> deltax_history;
@@ -288,32 +288,36 @@ namespace Eigen {
                     bool rrnorm_slope_isclean     = rrnorm_large_history and std::abs(rr_stats.slope_sdv) < RealScalar{1e-3f};
                     bool rrnorm_has_saturated     = rrnorm_slope_issmall and rrnorm_slope_isclean;
 
-                    bool deltax_large_history = deltax_history.size() >= max_history_size / 2;
-                    bool deltax_slope_issmall = deltax_large_history and std::abs(dx_stats.slope_avg) < RealScalar{1e-4f};
-                    bool deltax_slope_isclean = deltax_large_history and std::abs(dx_stats.slope_sdv) < RealScalar{1e-3f};
-                    bool deltax_has_saturated = deltax_slope_issmall and deltax_slope_isclean;
+                    bool                  deltax_large_history = deltax_history.size() >= max_history_size / 2;
+                    bool                  deltax_slope_issmall = deltax_large_history and std::abs(dx_stats.slope_avg) < RealScalar{1e-4f};
+                    bool                  deltax_slope_isclean = deltax_large_history and std::abs(dx_stats.slope_sdv) < RealScalar{1e-3f};
+                    [[maybe_unused]] bool deltax_has_saturated = deltax_slope_issmall and deltax_slope_isclean;
 
                     bool minres_has_saturated = rrnorm_has_saturated and rrnorm_has_made_progress;
                     minres_has_converged      = rrnorm_has_converged ? (minres_has_converged + 1) : 0;
 
                     if constexpr(std::is_same_v<RealScalar, double>) {
-                        if((iters % rate_printf == 0) or minres_has_converged or minres_has_saturated) {
-                            std::printf("k: %4ld |rk|=%.3e |r0|=%.3e |rk|/|r0|=%.3e δ=%.3e log10 "
-                                        "| rr avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e "
-                                        "| dx avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e\n",
-                                        iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, deltax,                 //
-                                        rr_stats.avg, rr_stats.sdv, rr_stats.rel_sdv, rr_stats.slope_avg, rr_stats.slope_sdv, //
-                                        dx_stats.avg, dx_stats.sdv, dx_stats.rel_sdv, dx_stats.slope_avg, dx_stats.slope_sdv  //
-                            );
+                        if((iters >= rate_printf && iters % rate_printf == 0) or minres_has_converged or minres_has_saturated) {
+                            bool has_printed = false;
+                            if(iters >= rate_printf && iters % rate_printf == 0) {
+                                std::printf("MINRES k: %4ld |rk|=%.3e |r0|=%.3e |rk|/|r0|=%.3e δ=%.3e log10 "
+                                            "| rr avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e "
+                                            "| dx avg: %.3e  std: %.3e  rel: %.3e sla: %.3e sls: %.3e",
+                                            iters, std::sqrt(residualNorm2), std::sqrt(rhsNorm2), rrnorm, deltax,                 //
+                                            rr_stats.avg, rr_stats.sdv, rr_stats.rel_sdv, rr_stats.slope_avg, rr_stats.slope_sdv, //
+                                            dx_stats.avg, dx_stats.sdv, dx_stats.rel_sdv, dx_stats.slope_avg, dx_stats.slope_sdv  //
+                                );
+                                has_printed = true;
+                            }
+                            if(minres_has_saturated) {
+                                // std::printf(" -- minres saturated (rrnorm %d, deltax %d)\n", rrnorm_has_saturated, deltax_has_saturated);
+                                // break;
+                            } else if(minres_has_converged >= 1) {
+                                // std::printf(" -- minres converged for %d iters\n", minres_has_converged);
+                                break;
+                            } else if(has_printed)
+                                std::printf("\n");
                         }
-                    }
-                    if(minres_has_saturated) {
-                        std::printf(" -- minres saturated (rrnorm %d, deltax %d)\n", rrnorm_has_saturated, deltax_has_saturated);
-                        // break;
-                    }
-                    if(minres_has_converged >= 1) {
-                        std::printf(" -- minres converged for %d iters\n", minres_has_converged);
-                        break;
                     }
                 }
 
