@@ -33,7 +33,7 @@ function(pkg_install_dependencies  package_name)
         pkg_install(Backward)
 
 #         For parsing toml config files (work in progress)
-#        pkg_install(tomlplusplus)
+        pkg_install(tomlplusplus)
 
         # For parsing toml config files (work in progress)
         pkg_install(toml11)
