@@ -1,9 +1,9 @@
 DOXYFILE_ENCODING      = UTF-8
 PROJECT_NAME           = "DMRG++"
-PROJECT_NUMBER         = 2.1.0
+PROJECT_NUMBER         = 4.0.0
 PROJECT_BRIEF          = "DMRG algorithms for 1D quantum spin chains"
 PROJECT_LOGO           = 
-OUTPUT_DIRECTORY       =
+OUTPUT_DIRECTORY       = .
 CREATE_SUBDIRS         = NO
 ALLOW_UNICODE_NAMES    = NO
 OUTPUT_LANGUAGE        = English
