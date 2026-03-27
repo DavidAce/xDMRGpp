@@ -24,13 +24,13 @@ option(DMRG_BUILD_EXAMPLES          "Build examples"                            
 option(DMRG_BUILD_TOOLS             "Build tools"                                                       FALSE)
 option(DMRG_ENABLE_DOCS             "Build documentation"                                               FALSE)
 option(DMRG_CMAKE_DEBUG             "Extra information during CMake configuration"                      FALSE)
-option(DMRG_BENCH_CONTRACTION       "For internal development"                                          FALSE)
-option(DMRG_SAVE_CONTRACTION        "For internal development"                                          FALSE)
-option(COMPILER_PROFILE_BUILD       "Enable -ftime-trace (inspect with ClangBuildAnalyzer)"             FALSE)
-option(COMPILER_ENABLE_ASAN         "Enable runtime address sanitizer -fsanitize=address"               FALSE)
-option(COMPILER_ENABLE_USAN         "Enable undefined behavior sanitizer -fsanitize=undefined"          FALSE)
-option(COMPILER_ENABLE_PCH          "Enable precompiled headers to speed up compilation"                FALSE)
-option(COMPILER_ENABLE_COVERAGE     "Enable test coverage"                                              FALSE)
+option(DMRG_BENCH_CONTRACTION       "(Development) For internal development"                            FALSE)
+option(DMRG_SAVE_CONTRACTION        "(Development) For internal development"                            FALSE)
+option(COMPILER_PROFILE_BUILD       "(Development) Enable -ftime-trace (inspect with ClangBuildAnalyzer)" FALSE)
+option(COMPILER_ENABLE_ASAN         "(Development) Enable runtime address sanitizer -fsanitize=address" FALSE)
+option(COMPILER_ENABLE_USAN         "(Development) Enable undefined behavior sanitizer -fsanitize=undefined" FALSE)
+option(COMPILER_ENABLE_PCH          "(Development) Enable precompiled headers to speed up compilation"  FALSE)
+option(COMPILER_ENABLE_COVERAGE     "(Development) Enable test coverage"                                FALSE)
 option(EIGEN_USE_THREADS            "Use STL threads to parallelize Eigen::Tensor"                      TRUE)
 option(THREADS_PREFER_PTHREAD_FLAG  "Prefer -pthread flag over -lpthread or similar"                    TRUE)
 
@@ -59,7 +59,6 @@ if(NOT DMRG_PACKAGE_MANAGER IN_LIST DMRG_PACKAGE_MANAGERS_VALID)
 endif()
 
 
-
 ###  Check <optional>
 include(cmake/CheckCXXOptional.cmake)
 checkcxxoptional()
@@ -81,6 +80,15 @@ include(cmake/CompilerFlags.cmake)
 ### Include it using #include <env/environment.h>            ###
 ################################################################
 include(cmake/environment.cmake)
+
+
+if(DMRG_USE_FLOAT128)
+    include(CheckIncludeFileCXX)
+    check_include_file_cxx(stdfloat DMRG_HAS_STDFLOAT)
+    if(NOT DMRG_HAS_STDFLOAT)
+        message(FATAL_ERROR "Could not find header <stdfloat>")
+    endif()
+endif()
 
 ### Create the main executable
 add_executable(xDMRG++)
@@ -142,4 +150,3 @@ if(CMAKE_GENERATOR MATCHES Ninja)
             COMMENT "Generating ninja build statistics"
     )
 endif()
-
