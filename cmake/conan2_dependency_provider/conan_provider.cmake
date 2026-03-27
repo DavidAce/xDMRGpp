@@ -492,7 +492,7 @@ function(conan_install)
     endif()
 
     if(NOT "${return_code}" STREQUAL "0")
-        message(FATAL_ERROR "Conan install failed='${return_code}'")
+        message(FATAL_ERROR "Conan install failed='${return_code}': ${conan_stderr}")
     endif()
 
     # the files are generated in a folder that depends on the layout used, if
