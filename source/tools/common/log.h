@@ -4,11 +4,14 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
-#include <stdfloat>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
+
+#if defined(DMRG_USE_FLOAT128)
+    #include <stdfloat>
+#endif
 
 namespace tools::logfmt {
     template<typename T>
