@@ -94,6 +94,7 @@ namespace tools::h5db {
     };
 
     std::unordered_map<std::string, FileId> loadFileDatabase(const h5pp::File &h5_tgt);
+    std::unordered_map<std::string, InfoId<h5pp::TableInfo>> loadEnvDatabase(const h5pp::File &h5_tgt);
 
     template<typename InfoType, typename KeyType>
     std::unordered_map<std::string, InfoId<InfoType>> loadDatabase(const h5pp::File &h5_tgt, const std::vector<KeyType> &keys);

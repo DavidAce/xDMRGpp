@@ -112,7 +112,8 @@ struct ModelId {
     Hamiltonian h;
     Circuit     c;
     size_t      model_size;
-    std::string model_type;
+    ModelType   model_type = ModelType::ising_sdual;
+    std::string model_name;
     std::string algorithm;
     std::string key;
     std::string path;

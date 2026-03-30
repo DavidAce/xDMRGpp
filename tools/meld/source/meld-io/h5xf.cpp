@@ -401,15 +401,22 @@ namespace tools::h5xf {
             // Read the index and event fields so that we can filter entries
             auto indexfield = text::match(srcKey.indexkey, srcInfo.fieldNames.value());
             auto eventfield = text::match({"event"}, srcInfo.fieldNames.value());
+            auto trim_to_selected_window = [record_offset, record_extent](auto &vec) {
+                if(record_offset > vec.size()) throw except::range_error("record_offset {} > field size {}", record_offset, vec.size());
+                vec.erase(vec.begin(), vec.begin() + static_cast<long>(record_offset));
+                if(vec.size() > record_extent) vec.resize(static_cast<size_t>(record_extent));
+            };
             if(indexfield) {
                 t_readTableFld.tic();
                 h5pp::hdf5::readTableField(srcIndices, srcInfo, {indexfield.value()});
+                trim_to_selected_window(srcIndices);
                 tools::logger::log->trace("Retrieved index field {}", indexfield.value());
                 t_readTableFld.toc();
             }
             if(eventfield) {
                 t_readTableFld.tic();
                 h5pp::hdf5::readTableField(srcEvents, srcInfo, {eventfield.value()});
+                trim_to_selected_window(srcEvents);
                 tools::logger::log->trace("Retrieved event field {}", eventfield.value());
                 t_readTableFld.toc();
             }
@@ -422,7 +429,7 @@ namespace tools::h5xf {
                 }
                 size_t srcIndex = rec + record_offset;                 // Used to generate a path with the correct index, eg. bond_<srcIndex>
                 if(not srcIndices.empty()) srcIndex = srcIndices[rec]; // Replace with the desired index value -- this is only used to generate the target path
-                auto tgtPath = pathid.create_target_path<KeyT>(tgtName, rec);
+                auto tgtPath = pathid.create_target_path<KeyT>(tgtName, srcIndex);
                 if(tgtTableDb.find(tgtPath) == tgtTableDb.end()) {
                     t_createTable.tic();
                     tools::logger::log->debug("Adding target {} {}", srcKey.classtag, tgtPath);

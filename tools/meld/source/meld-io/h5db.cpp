@@ -24,6 +24,26 @@ namespace tools::h5db {
         return fileDatabase;
     }
 
+    std::unordered_map<std::string, InfoId<h5pp::TableInfo>> loadEnvDatabase(const h5pp::File &h5_tgt) {
+        auto t_scope = tid::tic_scope(__FUNCTION__);
+        std::unordered_map<std::string, InfoId<h5pp::TableInfo>> infoDataBase;
+        auto dbGroups = h5_tgt.findGroups(".db", "/", -1, -1, true);
+        for(const auto &dbGroup : dbGroups) {
+            if(dbGroup.find("/.env/") == std::string::npos) continue;
+            for(const auto &dbName : {"build", "exec", "git"}) {
+                auto dbPath = h5pp::format("{}/{}", dbGroup, dbName);
+                if(not h5_tgt.linkExists(dbPath)) continue;
+                auto seedIdDb = h5_tgt.readTableRecords<std::vector<SeedId>>(dbPath);
+                auto infoKey  = h5_tgt.readAttribute<std::string>(dbPath, "key");
+                auto infoPath = h5_tgt.readAttribute<std::string>(dbPath, "path");
+                infoDataBase[infoKey] = h5_tgt.getTableInfo(infoPath);
+                auto &infoId = infoDataBase[infoKey];
+                for(const auto &seedId : seedIdDb) infoId.insert(seedId.seed, seedId.index);
+            }
+        }
+        return infoDataBase;
+    }
+
     template<typename InfoType, typename KeyType>
     std::unordered_map<std::string, InfoId<InfoType>> loadDatabase(const h5pp::File &h5_tgt, const std::vector<KeyType> &keys) {
         auto t_scope = tid::tic_scope(__FUNCTION__);

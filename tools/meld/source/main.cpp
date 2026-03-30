@@ -105,7 +105,9 @@ int main(int argc, char *argv[]) {
         /* clang-format on */
     }
 
-    for(auto &src_sim : src_sims) {
+    std::vector<h5pp::fs::path> expanded_src_sims;
+    expanded_src_sims.reserve(src_sims.size());
+    for(const auto &src_sim : src_sims) {
         if(src_sim.is_relative()) {
             auto matching_dirs = tools::io::find_dir<false>(src_base, src_sim.string(), src_out);
             if(matching_dirs.size() > 5) {
@@ -115,11 +117,11 @@ int main(int argc, char *argv[]) {
             }
             if(matching_dirs.empty())
                 throw std::runtime_error(h5pp::format("No directories match the pattern: {} (subdir: [{}])", (src_base / src_sim).string(), src_out));
-            // We have multiple matches. Append them
-            for(auto &match : matching_dirs) src_sims.emplace_back(match);
+            for(const auto &match : matching_dirs) expanded_src_sims.emplace_back(match);
         } else
-            src_sim = h5pp::fs::canonical(src_sim);
+            expanded_src_sims.emplace_back(h5pp::fs::canonical(src_sim));
     }
+    src_sims = std::move(expanded_src_sims);
     // Now remove elements that do not exist
     src_sims.erase(std::remove_if(src_sims.begin(), src_sims.end(),
                                   [](const h5pp::fs::path &p) {
@@ -366,6 +368,7 @@ int main(int argc, char *argv[]) {
                 tgtdb.rbds  = tools::h5db::loadDatabase<BufferedTableInfo>(h5_tgt_part, keys.rbdses);
                 tgtdb.rtes  = tools::h5db::loadDatabase<BufferedTableInfo>(h5_tgt_part, keys.rteses);
                 tgtdb.model = tools::h5db::loadDatabase<h5pp::TableInfo>(h5_tgt_part, keys.models);
+                tgtdb.env   = tools::h5db::loadEnvDatabase(h5_tgt_part);
             }
             {
                 for(const auto &[infoKey, infoId] : tgtdb.table) infoId.info.assertReadReady();
@@ -375,6 +378,7 @@ int main(int argc, char *argv[]) {
                 for(const auto &[infoKey, infoId] : tgtdb.fesup) infoId.info.assertReadReady();
                 for(const auto &[infoKey, infoId] : tgtdb.rbds) infoId.info.assertReadReady();
                 for(const auto &[infoKey, infoId] : tgtdb.rtes) infoId.info.assertReadReady();
+                for(const auto &[infoKey, infoId] : tgtdb.env) infoId.info.assertReadReady();
             }
             uintmax_t tgtBytes = h5pp::fs::file_size(h5_tgt_part.getFilePath());
 
@@ -385,7 +389,7 @@ int main(int argc, char *argv[]) {
                 if(not file.is_regular_file()) continue;
                 if(file.path().extension() != ".h5") continue;
                 if(file.path().stem().string().find(src_match) == std::string::npos) continue;
-                bool include = incfilter.empty() or std::all_of(incfilter.begin(), incfilter.end(),
+                bool include = incfilter.empty() or std::any_of(incfilter.begin(), incfilter.end(),
                                                                 [&file](const auto &s) { return file.path().string().find(s) != std::string::npos; });
                 bool exclude =
                     std::any_of(excfilter.begin(), excfilter.end(), [&file](const auto &s) { return file.path().string().find(s) != std::string::npos; });

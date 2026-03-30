@@ -269,7 +269,8 @@ namespace tools::h5io {
                     }
                 }
                 srcModelId.model_size = h5_src.readAttribute<size_t>(hamiltonian_path, "model_size");
-                srcModelId.model_type = h5_src.readAttribute<std::string>(hamiltonian_path, "model_name");
+                srcModelId.model_type = h5_src.readAttribute<ModelType>(hamiltonian_path, "model_type");
+                srcModelId.model_name = h5_src.readAttribute<std::string>(hamiltonian_path, "model_name");
                 srcModelId.algorithm  = srcKey.algo;
                 srcModelId.key        = key;
                 srcModelId.path       = hamiltonian_path;
@@ -331,6 +332,7 @@ namespace tools::h5io {
             // Now write the same data as scalar attributes, which can be helpful sometimes
             h5_tgt.writeAttribute(modelId.model_size, hamiltonianPath, "model_size");
             h5_tgt.writeAttribute(modelId.model_type, hamiltonianPath, "model_type");
+            h5_tgt.writeAttribute(modelId.model_name, hamiltonianPath, "model_name");
         }
     }
     template void saveModel(const h5pp::File &h5_src, h5pp::File &h5_tgt, std::unordered_map<std::string, InfoId<h5pp::TableInfo>> &tgtModelDb,
