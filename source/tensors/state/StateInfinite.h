@@ -60,10 +60,10 @@ class StateInfinite {
     StateInfinite &operator=(const StateInfinite &other);     // copy assign
 
     template<typename T>
-    StateInfinite(const StateInfinite<T> &other);
+    StateInfinite(const StateInfinite<T> &other) noexcept;
 
     template<typename T>
-    StateInfinite &operator=(const StateInfinite<T> &other);
+    StateInfinite &operator=(const StateInfinite<T> &other) noexcept;
     // {
     //     if constexpr(std::is_same_v<Scalar, T>) {
     //         if(this == &other) return *this; // check for self-assignment

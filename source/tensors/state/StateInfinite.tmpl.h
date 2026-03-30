@@ -4,7 +4,7 @@
 #include "tensors/site/mps/MpsSite.h"
 template<typename Scalar>
 template<typename T>
-StateInfinite<Scalar>::StateInfinite(const StateInfinite<T> &other) {
+StateInfinite<Scalar>::StateInfinite(const StateInfinite<T> &other) noexcept {
     MPS_A                    = std::make_unique<MpsSite<Scalar>>(other.get_mps_siteA());
     MPS_B                    = std::make_unique<MpsSite<Scalar>>(other.get_mps_siteB());
     swapped                  = other.swapped;
@@ -19,7 +19,7 @@ StateInfinite<Scalar>::StateInfinite(const StateInfinite<T> &other) {
 
 template<typename Scalar>
 template<typename T>
-StateInfinite<Scalar> &StateInfinite<Scalar>::operator=(const StateInfinite<T> &other) {
+StateInfinite<Scalar> &StateInfinite<Scalar>::operator=(const StateInfinite<T> &other) noexcept {
     if constexpr(std::is_same_v<Scalar, T>) {
         if(this == &other) return *this; // check for self-assignment
     }

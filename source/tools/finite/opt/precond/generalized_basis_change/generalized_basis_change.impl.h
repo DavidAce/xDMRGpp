@@ -298,7 +298,7 @@ auto GeneralizedBasisChange<Scalar>::get_aggregate_envs(const Eigen::Tensor<Scal
             throw except::runtime_error("For H2_zip you must use the custom function");
         }
         case EnvAggregateType::M2_inv: {
-            auto inv = [this](const Eigen::Ref<const MatrixType> &mat) -> MatrixType {
+            auto inv = [](const Eigen::Ref<const MatrixType> &mat) -> MatrixType {
                 auto es = Eigen::SelfAdjointEigenSolver<MatrixType>(mat, Eigen::ComputeEigenvectors);
                 if(es.info() != Eigen::Success) throw except::runtime_error("M2_inv: eigensolver failed: info={}", int(es.info()));
 

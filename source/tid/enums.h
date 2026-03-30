@@ -1,4 +1,5 @@
 #pragma once
+#include "config/enum_utils.h"
 #include <stdexcept>
 #include <string_view>
 
@@ -30,12 +31,6 @@ namespace tid {
         throw std::runtime_error("Given item is not a tid::level enum");
     }
 }
-
-template<typename T>
-std::string_view enum2sv(const T item) noexcept;
-
-template<typename T>
-T sv2enum(std::string_view item);
 
 template<>
 constexpr std::string_view enum2sv(const tid::level l) noexcept {
