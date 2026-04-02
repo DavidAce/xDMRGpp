@@ -16,49 +16,59 @@ jobs:
       contents: read
       id-token: write
     env:
-      cache-name: cache-v3-${{ matrix.compiler }}-${{ matrix.manager }}
+      cache-name: cache-v4-${{ matrix.compiler }}-${{ matrix.manager }}
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_SLOPPINESS: include_file_mtime,pch_defines,time_macros
+      CCACHE_MAXSIZE: 384M
+      INSTALL_DIR: ${{ github.workspace }}/install/github-actions-${{ matrix.manager }}
     strategy:
       fail-fast: false # True stops all on first error. Stick to false when debugging
       matrix:
         include:
-          - { compiler: gcc,   manager: cmake }
-          - { compiler: gcc,   manager: conan }
-          - { compiler: clang, manager: conan }
+          - { compiler: gcc,   manager: cmake, coverage: true,  asan: false }
+          - { compiler: gcc,   manager: conan, coverage: false, asan: false }
+          - { compiler: clang, manager: conan, coverage: false, asan: true  }
 
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
       - uses: lukka/get-cmake@v4.2.0
-      - name: Setup caches
-        id: dmrg-cache
+      - name: Setup Python
+        if: matrix.manager == 'conan'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Update apt
+        run: sudo apt-get update
+
+      - name: Prepare cache directories
+        run: mkdir -p "$CCACHE_DIR" ~/.conan2 "$INSTALL_DIR"
+
+      - name: Setup ccache + dependency-provider cache
+        if: matrix.manager == 'cmake'
         uses: actions/cache@v5
         with:
           path: |
+            ${{ env.CCACHE_DIR }}
+            ${{ env.INSTALL_DIR }}
+          key: ${{ github.workflow }}-${{ env.cache-name }}
+
+      - name: Setup ccache + conan cache
+        if: matrix.manager == 'conan'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ${{ env.CCACHE_DIR }}
             ~/.conan2
-            ~/pkg-install
-            ~/.ccache
-          key: ${{ env.cache-name }}
-
-      - run: sudo apt update  # Only for Docker jobs
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-          cache: 'pip'
-          cache-dependency-path: '**/requirements.txt'
-
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2.22
-        with:
-          key: ${{ env.cache-name }}
-          max-size: 1000M
+          key: ${{ github.workflow }}-${{ env.cache-name }}
 
       - name: Setup gcc
         if: matrix.compiler == 'gcc'
         run: |
-          sudo apt install gcc-14 g++-14 -y
+          sudo apt-get install gcc-14 g++-14 -y
           echo "FC=gfortran-14" >> $GITHUB_ENV
           echo "CC=gcc-14"      >> $GITHUB_ENV
           echo "CXX=g++-14"     >> $GITHUB_ENV
@@ -66,20 +76,20 @@ jobs:
       - name: Setup clang
         if: matrix.compiler == 'clang'
         run: |
-          sudo apt install clang-18 libomp-18-dev -y
+          sudo apt-get install clang-18 libomp-18-dev -y
           echo "FC=gfortran-14" >> $GITHUB_ENV
           echo "CC=clang-18"    >> $GITHUB_ENV
           echo "CXX=clang++-18" >> $GITHUB_ENV
 
       - name: Setup apt packages
         run: |
-          sudo apt install ninja-build mold gcovr lcov gfortran-14 libgfortran-14-dev libstdc++-14-dev libdw-dev -y
-          sudo apt install libopenblas-dev liblapack-dev liblapacke-dev libopenmpi-dev openmpi-bin autopoint -y
+          sudo apt-get install ccache ninja-build mold gcovr lcov gfortran-14 libgfortran-14-dev libstdc++-14-dev libdw-dev -y
+          sudo apt-get install libopenblas-dev liblapack-dev liblapacke-dev libopenmpi-dev openmpi-bin autopoint -y
 
-      - name: Install Python Requirements
+      - name: Configure ccache
         run: |
-          pip install -r requirements.txt
-          pip install -r docs/requirements.txt
+          ccache --set-config=max_size=${CCACHE_MAXSIZE}
+          ccache --show-config
 
       - name: Install conan
         if: matrix.manager == 'conan'
@@ -95,16 +105,19 @@ jobs:
         uses: lukka/run-cmake@v10.8
         with:
           configurePreset: 'github-actions-${{ matrix.manager }}'
-          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=~/pkg-install']"
+          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=${{ env.INSTALL_DIR }}','-DCOMPILER_ENABLE_COVERAGE=${{ matrix.coverage && 'TRUE' || 'FALSE' }}','-DCOMPILER_ENABLE_ASAN=${{ matrix.asan && 'TRUE' || 'FALSE' }}']"
           buildPreset: 'github-actions-${{ matrix.manager }}'
           testPreset: 'github-actions-${{ matrix.manager }}'
+
+      - name: Show ccache stats
+        run: ccache --show-stats
 
       - name: Coverage
         if: matrix.compiler == 'gcc' && matrix.manager == 'cmake'
         run: |
           # Create lcov report
           lcov --gcov-tool=gcov-14 --capture --directory build/github-actions-${{ matrix.manager }} --output-file coverage.info
-          lcov --gcov-tool=gcov-14 --remove coverage.info '*/pkg-install*' '*/test-*' '/usr/*' 'include/c++/*' '*include/fmt/*' '*include/spdlog/*' '*/Eigen/*' '*/hdf5/*' '*catch.hpp' --output-file coverage.info # filter system-files
+          lcov --gcov-tool=gcov-14 --remove coverage.info '*/install/*' '*/test-*' '/usr/*' 'include/c++/*' '*include/fmt/*' '*include/spdlog/*' '*/Eigen/*' '*/hdf5/*' '*catch.hpp' --output-file coverage.info # filter system-files
           lcov --gcov-tool=gcov-14 --list coverage.info # debug info
 
       - name: Upload coverage to Codecov

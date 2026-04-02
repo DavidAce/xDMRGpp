@@ -30,6 +30,7 @@ option(COMPILER_PROFILE_BUILD       "(Development) Enable -ftime-trace (inspect 
 option(COMPILER_ENABLE_ASAN         "(Development) Enable runtime address sanitizer -fsanitize=address" FALSE)
 option(COMPILER_ENABLE_USAN         "(Development) Enable undefined behavior sanitizer -fsanitize=undefined" FALSE)
 option(COMPILER_ENABLE_PCH          "(Development) Enable precompiled headers to speed up compilation"  FALSE)
+option(COMPILER_ENABLE_CCACHE       "(Development) Enable ccache compiler launcher when available"      FALSE)
 option(COMPILER_ENABLE_COVERAGE     "(Development) Enable test coverage"                                FALSE)
 option(EIGEN_USE_THREADS            "Use STL threads to parallelize Eigen::Tensor"                      TRUE)
 option(THREADS_PREFER_PTHREAD_FLAG  "Prefer -pthread flag over -lpthread or similar"                    TRUE)
@@ -62,6 +63,9 @@ endif()
 ###  Check <optional>
 include(cmake/CheckCXXOptional.cmake)
 checkcxxoptional()
+
+###  Configure optional compiler launchers
+include(cmake/SetupCcache.cmake)
 
 ### Print extra info during CMake configure
 include(cmake/PrintBuildInfo.cmake)

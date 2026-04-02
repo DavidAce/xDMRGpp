@@ -372,11 +372,10 @@
       ]
     },
     {
-      "name": "github-actions",
+      "name": "github-actions-common",
       "displayName": "Default configuration for github-actions",
       "hidden": true,
       "inherits": [
-        "debug",
         "openblas",
         "default"
       ],
@@ -389,10 +388,26 @@
         "COMPILER_ENABLE_ASAN": "FALSE",
         "COMPILER_ENABLE_USAN": "FALSE",
         "COMPILER_ENABLE_CCACHE": "TRUE",
-        "CMAKE_VERBOSE_MAKEFILE": "TRUE"
+        "CMAKE_VERBOSE_MAKEFILE": "TRUE",
+        "CMAKE_MESSAGE_LOG_LEVEL": "VERBOSE"
       },
       "environment": {
         "VERBOSE": "1"
+      }
+    },
+    {
+      "name": "github-actions-unix",
+      "displayName": "Unix configuration for github-actions",
+      "hidden": true,
+      "inherits": [
+        "github-actions-common"
+      ],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS_DEBUG_INIT": "-O0 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CXX_FLAGS_DEBUG_INIT": "-O0 -ftemplate-backtrace-limit=0 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_CUDA_FLAGS_DEBUG_INIT": "-O0 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always",
+        "CMAKE_Fortran_FLAGS_DEBUG_INIT": "-O0 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fno-omit-frame-pointer -fdiagnostics-color=always"
       }
     },
     {
@@ -400,18 +415,15 @@
       "displayName": "CMake package manager configuration for github-actions",
       "inherits": [
         "cmake",
-        "github-actions"
-      ],
-      "cacheVariables": {
-        "COMPILER_ENABLE_COVERAGE": "TRUE"
-      }
+        "github-actions-unix"
+      ]
     },
     {
       "name": "github-actions-conan",
       "displayName": "Conan package manager configuration for github-actions",
       "inherits": [
         "conan",
-        "github-actions"
+        "github-actions-unix"
       ]
     },
     {
