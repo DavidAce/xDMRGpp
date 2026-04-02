@@ -48,10 +48,11 @@ def write_batch_files(batch_setup, configs, config_paths):
         config_filepath = Path(config['filename'])
         batch_filename = '{}/{}.json'.format(config_paths['config_dir'], config_filepath.stem)
         Path(batch_filename).parent.mkdir(parents=True, exist_ok=True)
-        batchjson = None
+        existing_batchjson = None
         if os.path.isfile(batch_filename):
             with open(batch_filename, 'r') as fp:
-                batchjson = json.load(fp)
+                existing_batchjson = json.load(fp)
+        batchjson = existing_batchjson
         if batchjson is None:
             batchjson = {
                 'projectname': batch_setup['projectname'],
@@ -61,7 +62,7 @@ def write_batch_files(batch_setup, configs, config_paths):
                 'output_stem': config_paths['output_stem'],
                 'output_prfx': config_paths['output_prfx'],
                 'status_dir': config_paths['status_dir'],
-                'seed_max' :  batch_setup['seed_max'],
+                'seed_max' :  batch_setup.get('seed_max'),
                 'seed_extent': [],
                 'seed_offset': [],
                 # 'seed_status': [],
@@ -83,31 +84,33 @@ def write_batch_files(batch_setup, configs, config_paths):
         write_config_file(config, config['template'], config['filename'])
 
         batch = batch_setup['batch'][seed_keys[0]]
-        # print(batch)
-        # print(batchjson)
+        expected_offsets = list(batch['seed_offset'])
+        expected_extents = list(batch['seed_extent'])
+        if existing_batchjson is not None and (
+                batchjson.get('seed_offset') != expected_offsets or
+                batchjson.get('seed_extent') != expected_extents):
+            raise ValueError(f"Batch definition changed for {batch_filename}. "
+                             f"Expected offsets/extents {(expected_offsets, expected_extents)} "
+                             f"but found {(batchjson.get('seed_offset'), batchjson.get('seed_extent'))}")
+
+        batchjson.update({
+            'projectname': batch_setup['projectname'],
+            'model_type': config['model::model_type'],
+            'config_file': str(config_filepath),
+            'output_path': str(Path(config["storage::output_filepath"]).parent),
+            'output_stem': config_paths['output_stem'],
+            'output_prfx': config_paths['output_prfx'],
+            'status_dir': config_paths['status_dir'],
+            'seed_max': batch_setup.get('seed_max'),
+            'seed_extent': expected_extents,
+            'seed_offset': expected_offsets,
+        })
         if 'time_steps' in batch:
             batchjson['time_steps'] = batch['time_steps']
+        else:
+            batchjson.pop('time_steps', None)
 
-        for offset, extent in zip(batch['seed_offset'], batch['seed_extent']):
-            extent_size = len(batchjson['seed_extent'])
-            offset_size = len(batchjson['seed_offset'])
-            if offset_size != extent_size:
-                raise ValueError(
-                    f"offset:{offset_size} and extent:{extent_size} are not equal lengths")
-
-            # Check if this offset is already in jobdict for this config
-            offset_index = batchjson['seed_offset'].index(offset) if offset in batchjson['seed_offset'] else -1
-            if offset_index < 0:
-                batchjson['seed_extent'].append(extent)
-                batchjson['seed_offset'].append(offset)
-                continue
-            seed_max = batchjson.get('seed_max', extent)
-            if batchjson['seed_extent'][offset_index] > seed_max:
-                raise ValueError(f"{batch_filename} has {offset=} at index {offset_index} with "
-                                 f"extent {batchjson['seed_extent'][offset_index]}.\n"
-                                 f"The new extent {extent} is incompatible")
-
-        batchjson['seed_counts'] = int(np.sum(batchjson['seed_extent']))
+        batchjson['seed_counts'] = int(np.sum(expected_extents))
         # print(json.dumps(batchjson, sort_keys=True, indent=4))
 
         with open(batch_filename, 'w') as fp:

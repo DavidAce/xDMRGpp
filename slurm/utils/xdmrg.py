@@ -74,7 +74,7 @@ def get_h5_status(filename, batch):
                 missing_attrs = [path for link,path in zip(expected_attrs,expected_link_attrs) if link is None]
                 if len(missing_dsets) > 0:
                     return f"FAILED|missing datasets:{missing_dsets}"
-                if len(missing_dsets) > 0:
+                if len(missing_attrs) > 0:
                     return f"FAILED|missing attributes:{missing_attrs}"
                 enum_event = h5py.check_enum_dtype(h5file['xDMRG/state_emid/status'].dtype['event'])  # key value pairs defining the enum
                 enum_algo_stop = h5py.check_enum_dtype(h5file['xDMRG/state_emid/status'].dtype['algo_stop'])  # key value pairs defining the enum
@@ -148,6 +148,23 @@ def replace_last_n(path: str, oldstring: str, newstring: str, n: int) -> int:
     return n - remain
 
 
+def load_status_map(path: str) -> dict:
+    status_map = {}
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip()
+            if not line:
+                continue
+            seed_str, status = line.split("|", maxsplit=1)
+            status_map[int(seed_str)] = status.split("|", maxsplit=1)[0]
+    return status_map
+
+
+def get_range_status(status_map: dict, offset: int, extent: int) -> str:
+    done_keys = {"FINISHED", "SKIP"}
+    if all(status_map.get(seed, "MISSING") in done_keys for seed in range(offset, offset + extent)):
+        return "FINISHED"
+    return "PENDING"
 
 
 def write_batch_status(batch_filename):
@@ -160,7 +177,6 @@ def write_batch_status(batch_filename):
         config_file = f'{batch["config_file"]}'
         status_file = f'{batch["status_dir"]}/{Path(config_file).stem}.status'
         seed_max    = batch.get('seed_max')
-        seed_status = copy(batch.get('seed_status'))  # Old one
         batch['seed_status'] = []
         if platform.node() != "neumann" and args.update_status:
             raise AssertionError("--update-status is only valid on neumann")
@@ -170,7 +186,6 @@ def write_batch_status(batch_filename):
             output_path = f'{output_prfx}/{batch["projectname"]}/{batch["output_path"]}'
             print(f"Updating status: {status_file}")
             with open(status_file, 'w') as sf:
-                status_count = 0
                 # First we check if there are any stray h5 files that have finished simulations
                 # This could happen for example if we reduced the batch size after we already ran some on the cluster.
                 # In that case we get these seeds for free.
@@ -185,38 +200,20 @@ def write_batch_status(batch_filename):
                 #         print(f'{config_file}: {seed}|{h5status}')
                 #         sf.write(f'{seed}|{h5status}\n')
                 #         num_seeds += 1
-                batch_is_finished = True
-                for sidx, (offset, extent) in enumerate(zip(batch['seed_offset'], batch['seed_extent'])):
-
+                for offset, extent in zip(batch['seed_offset'], batch['seed_extent']):
                     ## Start checking the h5 files
-                    is_finished = True
                     max_extent = np.max([extent, seed_max]) if seed_max is not None else extent
                     for seed in range(offset, offset + max_extent):
-                        h5status = None
-                        if seed_status is not None:
-                            if seed_status[sidx] == "FINISHED":
-                                h5status = seed_status[sidx]  # Short circuit
-                        if h5status is None:
-                            filename = f'{output_path}/{batch["output_stem"]}_{seed}.h5'
-                            h5status = get_h5_status(filename=filename, batch=batch)
+                        filename = f'{output_path}/{batch["output_stem"]}_{seed}.h5'
+                        h5status = get_h5_status(filename=filename, batch=batch)
                         is_finished = "FINISHED" in h5status
                         is_included = offset <= seed < offset + extent
 
                         if not is_included and not is_finished:
                             # We can skip this seed. If it is not included, but finished, we got a sim for free
-                            h5status='SKIP'
-                        if batch_is_finished == True and "MISSING" in h5status:
-                            batch_is_finished = False
+                            h5status = 'SKIP'
                         # print(f'{config_file}: {seed}|{h5status}')
                         sf.write(f'{seed}|{h5status}\n')
-
-
-
-
-                if batch_is_finished:
-                    batch['seed_status'].append("FINISHED")
-                else:
-                    batch['seed_status'].append("PENDING")
 
             # FINISHED + MISSING seeds might exceed extent. In that case, we can SKIP some of the MISSING ones
             # To do that we need to know how many simulations we need in total
@@ -229,6 +226,10 @@ def write_batch_status(batch_filename):
             nreplace = np.max([0,missing- (total_extent-finished)])
             # print(f'{total_extent=} {missing=} {finished=} {nreplace}')
             replace_last_n(status_file, oldstring="MISSING", newstring="SKIP",n=nreplace)
+            status_map = load_status_map(status_file)
+            for offset, extent in zip(batch['seed_offset'], batch['seed_extent']):
+                batch['seed_status'].append(get_range_status(status_map, offset, extent))
+            batch['batch_status'] = "FINISHED" if all(status == "FINISHED" for status in batch['seed_status']) else "PENDING"
 
 
 
@@ -272,7 +273,7 @@ def write_batch_status(batch_filename):
                 for h5file in sorted(Path(output_path).rglob('*.h5')):
                     if 'save' in h5file.name:
                         continue
-                    seed_found = int(re.split('_|\.', h5file.name)[1])
+                    seed_found = int(re.split(r'_|\.', h5file.name)[1])
                     seed_stray = True
                     for offset, extent in zip(batch['seed_offset'], batch['seed_extent']):
                         if offset <= seed_found < offset + extent:
@@ -293,29 +294,15 @@ def write_batch_status(batch_filename):
             if not os.path.isfile(status_file):
                 raise FileNotFoundError(f"{status_file}\n Hint: Perhaps you need to add --update on the first run")
 
-            status_count = 0
+            status_map = load_status_map(status_file)
             for offset, extent in zip(batch['seed_offset'], batch['seed_extent']):
                 extent_size = len(batch['seed_extent'])
                 offset_size = len(batch['seed_offset'])
                 if offset_size != extent_size:
                     raise ValueError(
                         f"offset:{offset_size} and extent:{extent_size} are not equal lengths")
-                is_finished = True
-                for idx, seed in enumerate(range(offset, offset + extent)):
-                    sfline = linecache.getline(status_file, idx + status_count + 1).rstrip()
-                    # print(idx, seed, sfline)
-                    sfseed, sfstatus = sfline.split('|', maxsplit=1)
-                    if seed != int(sfseed):
-                        print(f'WARNING: seed mismatch [{seed=}] != [{sfseed=}]')
-                    if sfstatus != "FINISHED":
-                        is_finished = False
-                        break
-                    # print(linecache.getline(status_file, idx+status_count))
-                status_count += extent
-                if is_finished:
-                    batch['seed_status'].append('FINISHED')
-                else:
-                    batch['seed_status'].append('PENDING')
+                batch['seed_status'].append(get_range_status(status_map, offset, extent))
+            batch['batch_status'] = "FINISHED" if all(status == "FINISHED" for status in batch['seed_status']) else "PENDING"
 
         return batch
 

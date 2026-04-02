@@ -25,7 +25,7 @@ EOF
   exit 1
 }
 
-while getopts df:ho:p:r:s:t:u:Lo: o; do
+while getopts "df:ho:p:r:s:t:u:L" o; do
       case $o in
         (d) dry_run="--dry-run";;
         (f) filesfrom=$OPTARG;;
@@ -35,6 +35,8 @@ while getopts df:ho:p:r:s:t:u:Lo: o; do
         (r) remote=$OPTARG;;
         (s) source=$OPTARG;;
         (t) target=$OPTARG;;
+        (u) user=$OPTARG;;
+        (L) follow_links="-L";;
         (:) echo "Option -$OPTARG requires an argument." >&2 ; exit 1 ;;
         (?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
         (*) usage ;;
@@ -68,6 +70,5 @@ fi
 
 ssh-agent -k
 eval "$(ssh-agent -s)"
-filesfrom="rclone-filesfrom/filesfrom.${SLURM_JOB_DEPENDENCY}_${SLURM_ARRAY_TASK_ID}.txt"
 
-rclone $operation --files-from=$filesfrom $source $remote:${prefix}/${target} $dry_run -L --update --multi-thread-streams=1 --transfers=1 --no-traverse
+rclone "$operation" --files-from="$filesfrom" "$source" "$remote:${prefix}/${target}" $dry_run $follow_links --update --multi-thread-streams=1 --transfers=1 --no-traverse

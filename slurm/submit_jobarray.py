@@ -3,14 +3,12 @@ import os
 import errno
 import subprocess
 from pathlib import Path
-from itertools import zip_longest
 from itertools import chain, islice
+from functools import lru_cache
 from datetime import datetime
 import socket
 import json
-from random import shuffle
 import numpy as np
-import linecache
 
 def chunks(iterable, n):
    "chunks(ABCDE,2) => AB CD E"
@@ -23,18 +21,39 @@ def chunks(iterable, n):
        except StopIteration:
            return
 
-def get_line_number(fname, text):
-    with open(fname) as f:
-        for i, line in enumerate(f):
-            if str(text) in line:
-                return i
+@lru_cache(maxsize=None)
+def load_status_entries(fname):
+    entries = []
+    status_map = {}
+    with open(fname, encoding='utf-8') as f:
+        for line in f:
+            line = line.rstrip()
+            if not line:
+                continue
+            seed_str, status = line.split('|', maxsplit=1)
+            seed = int(seed_str)
+            state = status.split('|', maxsplit=1)[0]
+            entries.append((seed, state))
+            status_map[seed] = state
+    return tuple(entries), status_map
 
-def get_lines(fname, off, ext):
-    line_off = get_line_number(fname, off)
-    lines = []
-    for idx in range(line_off, line_off + ext):
-        lines.append(linecache.getline(fname, idx + 1).rstrip())
-    return lines
+
+def get_status_states(fname, off, ext, ignore_seed_order=False):
+    entries, status_map = load_status_entries(fname)
+    expected_seeds = list(range(off, off + ext))
+    if ignore_seed_order:
+        return [status_map.get(seed, 'MISSING') for seed in expected_seeds]
+
+    for idx, (seed, _) in enumerate(entries):
+        if seed != off:
+            continue
+        window = entries[idx:idx + ext]
+        found_seeds = [entry_seed for entry_seed, _ in window]
+        if found_seeds != expected_seeds:
+            raise ValueError(f'Seed order mismatch in {fname}: expected {expected_seeds} got {found_seeds}')
+        return [state for _, state in window]
+
+    return [status_map.get(seed, 'MISSING') for seed in expected_seeds]
 
 
 def parse(project_name):
@@ -121,8 +140,9 @@ def run(cmd,env,args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STD
         if p.stdout:
             for line in p.stdout:
                 print(line, end='')  # process line here
-        if p.returncode:
-            raise subprocess.CalledProcessError(p.returncode, ' '.join(p.args))
+        ret = p.wait()
+        if ret:
+            raise subprocess.CalledProcessError(ret, p.args)
 
 def split_range(extent, offset, chunksize):
     extents = [min(extent,chunksize)]
@@ -223,7 +243,7 @@ def generate_sbatch_commands(project_name, args):
     else:
         cfgs = sorted(list(Path(args.config).glob('*.cfg')))
     if not cfgs:
-        raise FileNotFoundError(errno.ENOENT, f'{os.strerror(errno.ENOENT)}: no .cfg files found in {args.cfgspath}')
+        raise FileNotFoundError(errno.ENOENT, f'{os.strerror(errno.ENOENT)}: no .cfg files found in {args.config}')
 
     for cfg in cfgs:
         seedfile = '{}/{}.json'.format(Path(args.seedpath), Path(cfg).stem)
@@ -233,14 +253,18 @@ def generate_sbatch_commands(project_name, args):
             donekeys.append('FAILED')
         with open(seedfile, 'r') as fp:
             seedjson = json.load(fp)
-            for extent, offset, status in zip(seedjson['seed_extent'],seedjson['seed_offset'], seedjson['seed_status']):
-                if status == "FINISHED":
+            seed_statuses = seedjson.get('seed_status', ['PENDING'] * len(seedjson['seed_extent']))
+            if len(seed_statuses) != len(seedjson['seed_extent']):
+                raise ValueError(f'Seed status length mismatch in {seedfile}')
+            for extent, offset, status in zip(seedjson['seed_extent'], seedjson['seed_offset'], seed_statuses):
+                if status == "FINISHED" and not args.force_run:
                     continue
                 extents, offsets = split_range(extent,offset,args.sims_per_array)
                 for ext,off in zip(extents,offsets):
                     step = min(ext, args.sims_per_task)
                     # We can now check in the statusfile if this sub-portion has actually finished
-                    all_done = all([l.split('|')[1] in donekeys for l in get_lines(statfile, off, ext) ])
+                    states = get_status_states(statfile, off, ext, args.ignore_seed_order)
+                    all_done = all(state in donekeys for state in states)
                     if all_done:
                         continue
                     off_final = off

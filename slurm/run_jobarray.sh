@@ -61,6 +61,33 @@ log(){
   echo "$statusline" >> $2
 }
 
+make_filesfrom_path() {
+  mkdir -p "$tempdir/xDMRG++.$USER/rclone"
+  mktemp "$tempdir/xDMRG++.$USER/rclone/filesfrom.${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}_${model_seed}.XXXXXX"
+}
+
+get_status_for_seed() {
+  local seed="$1"
+  local file="$2"
+  awk -F'|' -v seed="$seed" '$1 == seed { print $2; exit }' "$file"
+}
+
+get_last_nonempty_line() {
+  awk 'NF { line = $0 } END { print line }' "$1"
+}
+
+get_info_field() {
+  local line="$1"
+  local key="$2"
+  printf '%s\n' "$line" | tr '|' '\n' | awk -F':' -v key="$key" '$1 == key { print $2; exit }'
+}
+
+update_loginfo_status() {
+  local state="$1"
+  log "$infoline|$state" "$loginfo"
+  rclone_files_to_remote copy "$loginfo" || true
+}
+
 rclone_files_to_remote () {
   if [ -z "$rclone_prefix" ]; then
     return 0
@@ -75,13 +102,12 @@ rclone_files_to_remote () {
   esac
 
   # Generate a file list
-  mkdir -p "$tempdir/xDMRG++.$USER/rclone"
-  filesfromtxt="$tempdir/xDMRG++.$USER/rclone/filesfrom.${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.txt"
+  filesfromtxt="$(make_filesfrom_path)"
   transferlist=()
   for file in "${@:2}"; do
     if [ -f "$file" ]; then
       echo "$file" >> "$filesfromtxt"
-      transferlist+=("$(basename $file)")
+      transferlist+=("$(basename "$file")")
     fi
   done
 
@@ -108,7 +134,7 @@ rclone_files_to_remote () {
       return 0
   else
       printf " -- FAILED\n"
-      cat $filesfromtxt
+      cat "$filesfromtxt"
       rm -rf "$filesfromtxt"
       return 1
   fi
@@ -128,12 +154,11 @@ rclone_files_from_remote () {
   esac
 
   # Generate a file list
-  mkdir -p "$tempdir/xDMRG++.$USER/rclone"
-  filesfromtxt="$tempdir/xDMRG++.$USER/rclone/filesfrom.${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.txt"
+  filesfromtxt="$(make_filesfrom_path)"
   transferlist=()
   for file in "${@:2}"; do
     echo "$file" >> "$filesfromtxt"
-    transferlist+=("$(basename $file)")
+    transferlist+=("$(basename "$file")")
   done
   rclone_operation="$1"
   if [[ "$rclone_operation" == "auto" ]]; then
@@ -153,7 +178,7 @@ rclone_files_from_remote () {
       printf " -- SUCCESS\n"
   else
       printf " -- FAILED\n"
-      cat $filesfromtxt
+      cat "$filesfromtxt"
   fi
   rm -rf "$filesfromtxt"
   return 0 # It's fine if this function fails
@@ -194,48 +219,49 @@ run_sim_id() {
   # Step 1)
   # Check if there is a status file. Return if this seed has finished
   if [ -f "$status_path" ]; then
-    status="$(fgrep -e "$model_seed" "$status_path" | cut -d '|' -f2)" # Should get one of TIMEOUT,FAILED,MISSING,FINISHED
+    status="$(get_status_for_seed "$model_seed" "$status_path")" # Should get one of TIMEOUT,FAILED,MISSING,FINISHED
     if [ -z "$status" ]; then
-          echodate "STATUS                   : $model_seed $id NULL"
-          return 0
-    fi
-    echodate "STATUS                   : $model_seed $id $status"
-    if [[ "$status" =~ FINISHED|SKIP  ]]; then
-      # Copy results back to remote
-      # We do this in case there are remnant files on disk that need to be moved.
-      # The rclone command has --update, so only newer files get moved.
-      rclone_files_to_remote auto "$logtext" "$loginfo" "$outfile"
-       # We do not add an RCLONED line anymore.
-      return 0
+      echodate "STATUS                   : $model_seed $id missing in status file; continuing"
+    else
+      echodate "STATUS                   : $model_seed $id $status"
+      if [[ "$status" =~ ^(FINISHED|SKIP)$ ]]; then
+        # Copy results back to remote
+        # We do this in case there are remnant files on disk that need to be moved.
+        # The rclone command has --update, so only newer files get moved.
+        rclone_files_to_remote auto "$logtext" "$loginfo" "$outfile"
+         # We do not add an RCLONED line anymore.
+        return 0
+      fi
     fi
   fi
 
 
-  mkdir -p $logdir
+  mkdir -p "$logdir"
 
   # Step  2)
   # Next, check if the results already exist in the remote
   # If they do, use copy the remote file to local
   # This command will only copy if the remote file is newer.
   rclone_files_from_remote copy "$loginfo"
-    if [[ -f $loginfo ]]; then
-    echodate "LOGINFO                  : $(tail -n 1 $loginfo)"
-    infostatus=$(tail -n 2 $loginfo | awk -F'|' '{print $NF}') # Should be one of RUNNING, FINISHED, RCLONED or FAILED. Add -n 2 to read two lines, in case there is a trailing newline
+  if [[ -f "$loginfo" ]]; then
+    last_info_line="$(get_last_nonempty_line "$loginfo")"
+    echodate "LOGINFO                  : $last_info_line"
+    infostatus="${last_info_line##*|}"
     echodate "STATUS (loginfo)         : $model_seed $id $infostatus"
 
-    if [[ "$infostatus" =~ FINISHED|SKIP ]] && [[ "$force_run" == "false" ]]; then
+    if [[ "$infostatus" =~ ^(FINISHED|SKIP)$ ]] && [[ "$force_run" == "false" ]]; then
       # Copy results back to remote
       # We do this in case there are remnant files on disk that need to be moved.
       # The rclone command has --update, so only newer files get moved.
       rclone_files_to_remote auto "$logtext" "$outfile" "$loginfo"
       return 0
-    elif [[ "$infostatus" =~ RUNNING ]] ; then
+    elif [[ "$infostatus" == "RUNNING" ]] ; then
       # This could be a simulation that terminated abruptly, or it is actually running right now.
       # We can find out because we can check if the slurm job id is still running using sacct
-      cluster="$(tail -n 1 $loginfo  | xargs -d '|'  -n1 | grep SLURM_CLUSTER_NAME | awk -F ':' '{print $2}')"
+      cluster="$(get_info_field "$last_info_line" SLURM_CLUSTER_NAME)"
       if [[ "$cluster" == "$SLURM_CLUSTER_NAME" ]];then
-        old_array_job_id="$(tail -n 1 $loginfo  | xargs -d '|'  -n1 | grep SLURM_ARRAY_JOB_ID | awk -F ':' '{print $2}')"
-        old_array_task_id="$(tail -n 1 $loginfo  | xargs -d '|'  -n1 | grep SLURM_ARRAY_TASK_ID | awk -F ':' '{print $2}')"
+        old_array_job_id="$(get_info_field "$last_info_line" SLURM_ARRAY_JOB_ID)"
+        old_array_task_id="$(get_info_field "$last_info_line" SLURM_ARRAY_TASK_ID)"
         old_job_id=${old_array_job_id}_${old_array_task_id}
         slurm_state=$(sacct -X --jobs $old_job_id --format=state --parsable2 --noheader)
         echodate "STATUS                   : jobid [$old_array_job_id] task [$old_array_task_id] step $id with seed $model_seed  has state [$slurm_state] on this cluster ($cluster)"
@@ -275,10 +301,9 @@ run_sim_id() {
   # Step 5) Prepare to launch
   if [ -z  "$dryrun" ]; then
     # Add a RUNNING line to loginfo and copy it to remote, to make sure other clusters can see this seed is taken
-    log "$infoline|RUNNING" "$loginfo"
-    rclone_files_to_remote copy "$loginfo"
+    update_loginfo_status RUNNING
     # Add a TIMEOUT line to loginfo if we are force-closed at any time from now on
-    trap 'log "$infoline|TIMEOUT" "$loginfo"' SIGINT SIGTERM
+    trap 'update_loginfo_status TIMEOUT' SIGINT SIGTERM
     echodate "EXEC LINE                : $exec --config=$config_path --outfile=$outfile --seed=$model_seed --threads=$SLURM_CPUS_PER_TASK $extra_args"
     echodate "LOGFILE                  : $logtext"
 
@@ -287,9 +312,9 @@ run_sim_id() {
     exit_code=$?
     echodate "EXIT CODE                : $exit_code"
     if [ "$exit_code" != "0" ]; then
-      log "$infoline|FAILED" "$loginfo"
+      update_loginfo_status FAILED
     else
-      log "$infoline|FINISHED" "$loginfo"
+      update_loginfo_status FINISHED
       rclone_files_to_remote auto "$logtext" "$loginfo" "$outfile"
       # We do not add an RCLONED line anymore.
     fi
@@ -298,7 +323,7 @@ run_sim_id() {
 }
 
 
-if [ ! -f $config_path ]; then
+if [ ! -f "$config_path" ]; then
     echodate "config file is not valid: $config_path"
     exit 1
 fi
@@ -340,23 +365,25 @@ ulimit -c unlimited
 output_path="$(fgrep -e "storage::output_filepath" "$config_path" | awk '{sub(/.*=/,""); sub(/ \/!*<.*/,""); print $1;}')"
 export output_path="$output_path"
 
+tempdir="/tmp"
+if [ -d "/scratch/local" ];then
+  tempdir="/scratch/local"
+elif [ -n "$PDC_TMP" ]; then
+  tempdir="$PDC_TMP"
+fi
+export tempdir
+
 # Find and copy the status file to tmp
 config_base="$(basename -s ".cfg" "$config_path")"
 export status_path="$status_dir/$config_base.status"
 if [ -f "$status_path" ]; then
-    tempdir="/tmp"
-    if [ -d "/scratch/local" ];then
-      tempdir="/scratch/local"
-    elif [ -n "$PDC_TMP" ]; then
-       tempdir="$PDC_TMP"
-    fi
     status_temp="$tempdir/xDMRG++.$USER/status/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
     status_name="$config_base.status"
     if [ ! -f "$status_temp/$status_name" ]; then
-      mkdir -p $status_temp
+      mkdir -p "$status_temp"
       cp $status_path $status_temp/
     fi
-    export status_path=$status_temp/$status_name
+    export status_path="$status_temp/$status_name"
     trap 'rm -rf "$status_temp"' EXIT
 fi
 
@@ -375,12 +402,17 @@ if [ "$parallel" == "true" ]; then
 
   export -f echodate
   export -f log
+  export -f make_filesfrom_path
+  export -f get_status_for_seed
+  export -f get_last_nonempty_line
+  export -f get_info_field
+  export -f update_loginfo_status
   export -f run_sim_id
   export -f rclone_files_to_remote
   export -f rclone_files_from_remote
   joblog="logs/parallel-$(( seed_offset + start_id ))_$(( seed_offset + end_id )).log" # zero-indexed id's
   echodate "parallel --memfree=$SLURM_MEM_PER_CPU --jobs=$SLURM_NTASKS --ungroup --delay=.2s --joblog=$joblog --colsep=' ' run_sim_id ::: seq $start_id $end_id"
-  parallel --memfree=$SLURM_MEM_PER_CPU \
+  parallel --env _ --memfree=$SLURM_MEM_PER_CPU \
            --jobs=$SLURM_NTASKS \
            --ungroup --delay=.2s --resume \
            --joblog=$joblog \
@@ -398,5 +430,3 @@ else
 fi
 
 exit $exit_code_save
-
-
