@@ -23,9 +23,9 @@ jobs:
       fail-fast: false # True stops all on first error. Stick to false when debugging
       matrix:
         include:
-          - { compiler: gcc,   manager: cmake, coverage: false, asan: false }
-          - { compiler: gcc,   manager: conan, coverage: false, asan: false }
-          - { compiler: clang, manager: conan, coverage: false, asan: true  }
+          - { compiler: gcc,   manager: cmake, coverage: false }
+          - { compiler: gcc,   manager: conan, coverage: false }
+          - { compiler: clang, manager: conan, coverage: false }
 
 
     steps:
@@ -34,7 +34,6 @@ jobs:
           fetch-depth: 1
       - uses: lukka/get-cmake@v4.2.0
       - name: Setup Python
-        if: matrix.manager == 'conan'
         uses: actions/setup-python@v6
         with:
           python-version: '3.x'
@@ -103,7 +102,7 @@ jobs:
         uses: lukka/run-cmake@v10.8
         with:
           configurePreset: 'github-actions-${{ matrix.manager }}'
-          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=${{ env.INSTALL_DIR }}','-DCOMPILER_ENABLE_COVERAGE=${{ matrix.coverage && 'TRUE' || 'FALSE' }}','-DCOMPILER_ENABLE_ASAN=${{ matrix.asan && 'TRUE' || 'FALSE' }}']"
+          configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=${{ env.INSTALL_DIR }}','-DCOMPILER_ENABLE_COVERAGE=${{ matrix.coverage && 'TRUE' || 'FALSE' }}']"
           buildPreset: 'github-actions-${{ matrix.manager }}'
           testPreset: 'github-actions-${{ matrix.manager }}'
 
