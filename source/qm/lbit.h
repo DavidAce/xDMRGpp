@@ -152,6 +152,21 @@ namespace qm::lbit {
     std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_dn,
                                                                            const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_md,
                                                                            const std::vector<Eigen::Tensor<Scalar, 4>> & mpos_up);
+    extern template std::vector<Eigen::Tensor<cx32, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx32, 4>> &mpos_dn,
+                                                                                   const std::vector<Eigen::Tensor<cx32, 4>> &mpos_up, bool adj_dn);
+    extern template std::vector<Eigen::Tensor<cx64, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx64, 4>> &mpos_dn,
+                                                                                   const std::vector<Eigen::Tensor<cx64, 4>> &mpos_up, bool adj_dn);
+    extern template std::vector<Eigen::Tensor<cx128, 4>> merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx128, 4>> &mpos_dn,
+                                                                                   const std::vector<Eigen::Tensor<cx128, 4>> &mpos_up, bool adj_dn);
+    extern template std::vector<Eigen::Tensor<cx32, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx32, 4>> &mpos_dn,
+                                                                                   const std::vector<Eigen::Tensor<cx32, 4>> &mpos_md,
+                                                                                   const std::vector<Eigen::Tensor<cx32, 4>> &mpos_up);
+    extern template std::vector<Eigen::Tensor<cx64, 4>>  merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx64, 4>> &mpos_dn,
+                                                                                   const std::vector<Eigen::Tensor<cx64, 4>> &mpos_md,
+                                                                                   const std::vector<Eigen::Tensor<cx64, 4>> &mpos_up);
+    extern template std::vector<Eigen::Tensor<cx128, 4>> merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<cx128, 4>> &mpos_dn,
+                                                                                   const std::vector<Eigen::Tensor<cx128, 4>> &mpos_md,
+                                                                                   const std::vector<Eigen::Tensor<cx128, 4>> &mpos_up);
     template<typename Scalar>
     std::vector<Eigen::Tensor<Scalar, 4>>  merge_unitary_mpo_layers(const std::vector<std::vector<Eigen::Tensor<Scalar, 4>>> & mpos);
     extern std::vector<Eigen::Tensor<cx64, 2>>  get_time_evolution_operators_2site(size_t sites, cx128 delta_t, const std::vector<Eigen::Tensor<cx64, 2>> &twosite_hams);

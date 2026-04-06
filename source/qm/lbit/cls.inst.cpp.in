@@ -1,0 +1,9 @@
+#include "cls.impl.h"
+
+using Scalar = @SCALAR@;
+
+template std::vector<Eigen::Tensor<Scalar, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_dn,
+                                                                                   const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_up, bool adj_dn);
+template std::vector<Eigen::Tensor<Scalar, 4>> qm::lbit::merge_unitary_mpo_layers(const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_dn,
+                                                                                   const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_md,
+                                                                                   const std::vector<Eigen::Tensor<Scalar, 4>> &mpos_up);

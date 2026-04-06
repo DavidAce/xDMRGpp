@@ -1,0 +1,6 @@
+#include "exp_internal.impl.h"
+
+using scalar_t = @OUTER_SCALAR@;
+using alpha_t  = @INNER_SCALAR@;
+
+template Eigen::Tensor<scalar_t, 2> qm::Gate::exp_internal(const Eigen::Tensor<scalar_t, 2> &op_, alpha_t alpha) const;

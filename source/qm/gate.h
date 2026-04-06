@@ -157,4 +157,9 @@ namespace qm {
         [[nodiscard]] Eigen::Tensor<cx64, 4> get_op(const std::vector<size_t> &pos);
         [[nodiscard]] Gate                   split() const; /*!< Split into individual sites with svd */
     };
+
+    extern template Eigen::Tensor<cx64, 2>  Gate::exp_internal(const Eigen::Tensor<cx64, 2> &op_, cx64 alpha) const;
+    extern template Eigen::Tensor<cx64, 2>  Gate::exp_internal(const Eigen::Tensor<cx64, 2> &op_, cx128 alpha) const;
+    extern template Eigen::Tensor<cx128, 2> Gate::exp_internal(const Eigen::Tensor<cx128, 2> &op_, cx64 alpha) const;
+    extern template Eigen::Tensor<cx128, 2> Gate::exp_internal(const Eigen::Tensor<cx128, 2> &op_, cx128 alpha) const;
 }

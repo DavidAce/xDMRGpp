@@ -115,149 +115,80 @@ void erase(std::vector<T1> &vec, T2 val) {
 Eigen::Tensor<cx64, 2> contract_a(const Eigen::Tensor<cx64, 2> &m, const Eigen::Tensor<cx64, 2> &ud, const std::array<long, 4> &shp_mid4,
                                   const std::array<long, 4> &shp_udn4, const std::array<long, 6> &shf6, const tenx::idxlistpair<1> &idx1,
                                   const tenx::idxlistpair<2> &idx2, const std::array<long, 2> &dim2) {
-    auto  res                 = Eigen::Tensor<cx64, 2>(dim2);
-    auto &threads             = tenx::threads::get();
-    res.device(*threads->dev) = ud.shuffle(tenx::array2{1, 0})
-                                    .conjugate()
-                                    .reshape(shp_udn4)
-                                    .contract(m.reshape(shp_mid4), idx1)
-                                    .contract(ud.reshape(shp_udn4), idx2)
-                                    .shuffle(shf6)
-                                    .reshape(dim2);
+    Eigen::Tensor<cx64, 2> res(dim2);
+    auto                  &threads = tenx::threads::get();
+    std::array<long, 6>    dim_t1{};
+    {
+        size_t pos = 0;
+        for(size_t i = 0; i < shp_udn4.size(); ++i)
+            if(i != static_cast<size_t>(idx1[0].first)) dim_t1[pos++] = shp_udn4[i];
+        for(size_t i = 0; i < shp_mid4.size(); ++i)
+            if(i != static_cast<size_t>(idx1[0].second)) dim_t1[pos++] = shp_mid4[i];
+    }
+    Eigen::Tensor<cx64, 6> t1(dim_t1);
+    t1.device(*threads->dev) = ud.shuffle(tenx::array2{1, 0}).conjugate().reshape(shp_udn4).contract(m.reshape(shp_mid4), idx1);
+    res.device(*threads->dev) = t1.contract(ud.reshape(shp_udn4), idx2).shuffle(shf6).reshape(dim2);
     return res;
 }
 
 Eigen::Tensor<cx64, 2> contract_b(const Eigen::Tensor<cx64, 2> &m, const Eigen::Tensor<cx64, 2> &ud, const std::array<long, 2> &shp_udn2,
                                   const std::array<long, 4> &shp_udn4, const tenx::idxlistpair<1> &idx1, const tenx::idxlistpair<2> &idx2) {
-    auto &threads = tenx::threads::get();
-    auto  res     = Eigen::Tensor<cx64, 2>(shp_udn2);
-    res.device(*threads->dev) =
-        ud.shuffle(tenx::array2{1, 0}).conjugate().reshape(shp_udn4).contract(m, idx1).contract(ud.reshape(shp_udn4), idx2).reshape(shp_udn2);
+    auto                  &threads = tenx::threads::get();
+    Eigen::Tensor<cx64, 2> res(shp_udn2);
+    auto                    dim_m = std::array<long, 2>{m.dimension(0), m.dimension(1)};
+    std::array<long, 4>     dim_t1{};
+    {
+        size_t pos = 0;
+        for(size_t i = 0; i < shp_udn4.size(); ++i)
+            if(i != static_cast<size_t>(idx1[0].first)) dim_t1[pos++] = shp_udn4[i];
+        for(size_t i = 0; i < dim_m.size(); ++i)
+            if(i != static_cast<size_t>(idx1[0].second)) dim_t1[pos++] = dim_m[i];
+    }
+    Eigen::Tensor<cx64, 4> t1(dim_t1);
+    t1.device(*threads->dev) = ud.shuffle(tenx::array2{1, 0}).conjugate().reshape(shp_udn4).contract(m, idx1);
+    res.device(*threads->dev) = t1.contract(ud.reshape(shp_udn4), idx2).reshape(shp_udn2);
     return res;
 }
 
 Eigen::Tensor<cx64, 2> contract_c(const Eigen::Tensor<cx64, 2> &m, const Eigen::Tensor<cx64, 2> &ud, const std::array<long, 6> &shp_mid6,
                                   const tenx::idxlistpair<1> &idx_dn, const tenx::idxlistpair<1> &idx_up, const std::array<long, 6> &shf6,
                                   const std::array<long, 2> &dim2) {
-    auto &threads = tenx::threads::get();
-    auto  res     = Eigen::Tensor<cx64, 2>(dim2);
-    res.device(*threads->dev) =
-        ud.shuffle(tenx::array2{1, 0}).conjugate().contract(m.reshape(shp_mid6), idx_dn).contract(ud, idx_up).shuffle(shf6).reshape(dim2);
+    auto                  &threads = tenx::threads::get();
+    Eigen::Tensor<cx64, 2> res(dim2);
+    auto                    dim_ud = std::array<long, 2>{ud.dimension(1), ud.dimension(0)};
+    std::array<long, 6>     dim_t1{};
+    {
+        size_t pos = 0;
+        for(size_t i = 0; i < dim_ud.size(); ++i)
+            if(i != static_cast<size_t>(idx_dn[0].first)) dim_t1[pos++] = dim_ud[i];
+        for(size_t i = 0; i < shp_mid6.size(); ++i)
+            if(i != static_cast<size_t>(idx_dn[0].second)) dim_t1[pos++] = shp_mid6[i];
+    }
+    Eigen::Tensor<cx64, 6> t1(dim_t1);
+    t1.device(*threads->dev) = ud.shuffle(tenx::array2{1, 0}).conjugate().contract(m.reshape(shp_mid6), idx_dn);
+    res.device(*threads->dev) = t1.contract(ud, idx_up).shuffle(shf6).reshape(dim2);
     return res;
 }
 
 Eigen::Tensor<cx64, 2> contract_d(const Eigen::Tensor<cx64, 2> &m, const Eigen::Tensor<cx64, 2> &ud, const std::array<long, 4> &shp_mid4,
                                   const tenx::idxlistpair<1> &idx_dn, const tenx::idxlistpair<1> &idx_up, const std::array<long, 4> &shf4,
                                   const std::array<long, 2> &dim2) {
-    auto &threads = tenx::threads::get();
-    auto  res     = Eigen::Tensor<cx64, 2>(dim2);
-    res.device(*threads->dev) =
-        ud.shuffle(tenx::array2{1, 0}).conjugate().contract(m.reshape(shp_mid4), idx_dn).contract(ud, idx_up).shuffle(shf4).reshape(dim2);
+    auto                  &threads = tenx::threads::get();
+    Eigen::Tensor<cx64, 2> res(dim2);
+    auto                    dim_ud = std::array<long, 2>{ud.dimension(1), ud.dimension(0)};
+    std::array<long, 4>     dim_t1{};
+    {
+        size_t pos = 0;
+        for(size_t i = 0; i < dim_ud.size(); ++i)
+            if(i != static_cast<size_t>(idx_dn[0].first)) dim_t1[pos++] = dim_ud[i];
+        for(size_t i = 0; i < shp_mid4.size(); ++i)
+            if(i != static_cast<size_t>(idx_dn[0].second)) dim_t1[pos++] = shp_mid4[i];
+    }
+    Eigen::Tensor<cx64, 4> t1(dim_t1);
+    t1.device(*threads->dev) = ud.shuffle(tenx::array2{1, 0}).conjugate().contract(m.reshape(shp_mid4), idx_dn);
+    res.device(*threads->dev) = t1.contract(ud, idx_up).shuffle(shf4).reshape(dim2);
     return res;
 }
-
-template<typename scalar_t, typename alpha_t>
-Eigen::Tensor<scalar_t, 2> qm::Gate::exp_internal(const Eigen::Tensor<scalar_t, 2> &op_, alpha_t alpha) const {
-    /* Note for flbit:
-     *  Let h = op(i,i), i.e. h are the diagonal entries in op
-     *  Let alpha = -i * delta be purely imaginary (since delta is real). So delta = imag(-alpha)
-     *  Now notice that
-     *       exp( -i * delta * h )
-     *  can become imprecise when delta is large, since delta and h are real and h ~O(1)
-     *
-     *  Instead, in the flbit case, we can exploit that h is real to compute
-     *       exp(-i * mod(delta * real(h), 2*pi))
-     *  which is equivalent but with a much smaller exponent.
-     *
-     *  Remember to do the modulo separately on each diagonal entry h!
-     */
-    //    static_assert(std::is_same_v<scalar_t, cx128>);
-    //    static_assert(std::is_same_v<alpha_t, cx128>);
-    //    if(!std::is_same_v<scalar_t, cx128>) { throw except::runtime_error("Expected scalar_t == cx128: got {}", sfinae::type_name<scalar_t>()); }
-    //    if(!std::is_same_v<alpha_t, cx128>) { throw except::runtime_error("Expected alpha_t == cx128: got {}", sfinae::type_name<alpha_t>()); }
-
-    auto           op_map                       = tenx::MatrixMap(op_);
-    constexpr bool scalar_t_is_float128         = std::is_same_v<scalar_t, __float128>;
-    constexpr bool scalar_t_is_complex_float128 = sfinae::is_std_complex_v<scalar_t> and std::is_same_v<typename scalar_t::value_type, __float128>;
-    bool           exp_diagonal                 = tenx::isDiagonal(op);
-
-    if(exp_diagonal and op_map.imag().isZero() and std::real(alpha) == 0) {
-        using namespace std::complex_literals;
-        auto diag = op_map.diagonal()
-                        .unaryExpr([&alpha](const scalar_t &h) -> scalar_t {
-                            // 6.28318530717958623199592693708837032318115234375
-                            // Now the same with mpfr
-                            //                            scalar_t exp_ialpha_h_mph;
-                            //                            if constexpr(std::is_arithmetic_v<scalar_t>) {
-                            //                                mpfr::mpreal::set_default_prec(256);
-                            //                                mpfr::mpreal::set_default_rnd(MPFR_RNDN);
-                            //                                auto alpha_mph        = mpfr::mpreal(-alpha.imag(), 256);
-                            //                                auto h_mph            = mpfr::mpreal(h.real(), 256);
-                            //                                auto alpha_h_mph      = alpha_mph * h_mph;
-                            //                                auto twopi_mph        = mpfr::mpreal("3.14159265358979323846264338327950288419716939937510") * 2;
-                            //                                auto fmod_alpha_h_mph = mpfr::mpreal();
-                            //                                mpfr_fmod(fmod_alpha_h_mph.mpfr_ptr(), (alpha_mph * h_mph).mpfr_srcptr(), twopi_mph.mpfr_srcptr(),
-                            //                                MPFR_RNDN); exp_ialpha_h_mph = static_cast<cx64>(std::exp(-1.0il * fmod_alpha_h_mph.toLDouble()));
-                            //                                tools::log->info("fmod mph: alpha {} * h {} = {} | 2pi {} | fmod {} | exp {}",
-                            //                                alpha_mph.toString(), h_mph.toString(),
-                            //                                                 alpha_h_mph.toString(), twopi_mph.toString(), fmod_alpha_h_mph.toString(),
-                            //                                                 exp_ialpha_h_mph);
-                            //                            }
-
-                            scalar_t exp_ialpha_t;
-#if defined(DMRG_USE_QUADMATH)
-                            {
-                                fp128 two_pi_128       = acosq(-1.0) * fp128(2.0);
-                                fp128 alpha_h_128      = fp128(-alpha.imag()) * fp128(h.real());
-                                fp128 fmod_alpha_h_128 = fmodq(alpha_h_128, two_pi_128);
-                                exp_ialpha_t           = std::exp(-1.0i * static_cast<fp64>(fmod_alpha_h_128));
-                                //                                tools::log->info("fmod: a {0} * h {1} = {2} | 2pi {3} | fmod {4} | exp {5}", -alpha.imag(),
-                                //                                h.real(), alpha_h_128, two_pi_128,
-                                //                                                 fmod_alpha_h_128, exp_ialpha_t);
-                            }
-#else
-                            {
-                                fp128 two_pi_ld       = std::acos(fp128(-1.0)) * fp128(2.0);
-                                fp128 alpha_h_ld      = static_cast<fp128>(std::imag(-alpha)) * static_cast<fp128>(std::real(h));
-                                fp128 fmod_alpha_h_ld = std::fmod(alpha_h_ld, two_pi_ld);
-                                exp_ialpha_t          = std::exp(-1.0i * static_cast<fp64>(fmod_alpha_h_ld));
-                                if(std::isnan(fmod_alpha_h_ld)) { throw except::runtime_error("fmod gave nan"); }
-                                //                                tools::log->info("fmod: a {0} ({0:a}) * h {1} ({1:a}) = {2} ({2:a}) | 2pi {3} ({3:a}) | fmod
-                                //                                {4}({4: a}) | exp{5}({4: 5})",
-                                //                                                 -alpha.imag(), h.real(), alpha_h_ld, two_pi_ld, fmod_alpha_h_ld,
-                                //                                                 exp_ialpha_t);
-                            }
-#endif
-                            return exp_ialpha_t;
-                        })
-                        .asDiagonal();
-
-        return tenx::TensorMap(diag.toDenseMatrix());
-    } else {
-        tools::log->error("The given matrix is not diagonal!");
-        if constexpr(scalar_t_is_float128 or scalar_t_is_complex_float128) {
-            throw except::runtime_error("Non-diagonal Matrix exponential is undefined for type {}", sfinae::type_name<scalar_t>());
-        }
-        if constexpr(std::is_arithmetic_v<scalar_t>) {
-            // This branch is valid for arithmetic T excluding T == __float128
-            return tenx::TensorMap((static_cast<scalar_t>(alpha) * tenx::MatrixMap(op_)).exp().eval());
-        } else if constexpr(sfinae::is_std_complex_v<scalar_t>) {
-            if constexpr(std::is_arithmetic_v<typename scalar_t::value_type>) {
-                // This branch is valid for std::complex<T> excluding T == __float128
-                using value_t   = typename scalar_t::value_type;
-                auto alpha_cast = std::complex<value_t>(static_cast<value_t>(std::real(alpha)), static_cast<value_t>(std::imag(alpha)));
-                return tenx::TensorMap((alpha_cast * tenx::MatrixMap(op_)).exp().eval());
-            }
-        }
-        // We can't do matrix exponential on __float128 or std::complex<__float128>()
-        throw except::runtime_error("Matrix exponential is undefined for type {}", sfinae::type_name<scalar_t>());
-    }
-}
-
-template Eigen::Tensor<cx64, 2>  qm::Gate::exp_internal(const Eigen::Tensor<cx64, 2> &op_, cx64 alpha) const;
-template Eigen::Tensor<cx64, 2>  qm::Gate::exp_internal(const Eigen::Tensor<cx64, 2> &op_, cx128 alpha) const;
-template Eigen::Tensor<cx128, 2> qm::Gate::exp_internal(const Eigen::Tensor<cx128, 2> &op_, cx64 alpha) const;
-template Eigen::Tensor<cx128, 2> qm::Gate::exp_internal(const Eigen::Tensor<cx128, 2> &op_, cx128 alpha) const;
 
 qm::Gate::Gate(const Eigen::Tensor<cx64, 2> &op_, std::vector<size_t> pos_, std::vector<long> dim_, cx64 alpha) : pos(std::move(pos_)), dim(std::move(dim_)) {
     auto dim_prod = std::accumulate(std::begin(dim), std::end(dim), 1, std::multiplies<>());
@@ -684,8 +615,10 @@ qm::Gate qm::insert(const qm::Gate &middle_gate, const qm::Gate &updown_gate) {
         if constexpr(settings::verbose_gates)
             tools::log->trace("Inserting gate pos {} between gates pos {} | pos_isect {} | pos_nsect {} | inc {}", middle_gate.pos, updown_gate.pos, pos_isect,
                               pos_nsect, inc);
-        return qm::Gate{updown_gate.op.conjugate().contract(middle_gate.op, tenx::idx({1}, {0})).contract(updown_gate.op, tenx::idx({1}, {0})), middle_gate.pos,
-                        middle_gate.dim};
+        Eigen::Tensor<cx64, 2> t1(tenx::array2{updown_gate.op.dimension(0), middle_gate.op.dimension(1)});
+        t1.device(*tenx::threads::get()->dev) = updown_gate.op.conjugate().contract(middle_gate.op, tenx::idx({1}, {0}));
+        Eigen::Tensor<cx64, 2> op = t1.contract(updown_gate.op, tenx::idx({1}, {0}));
+        return qm::Gate{op, middle_gate.pos, middle_gate.dim};
     }
     if(pos_isect.size() == 1 and pos_nsect.size() == 1 and middle_gate.pos.size() == 1 and updown_gate.pos.size() == 2) {
         // One common location, one uncommon. Then this connects a 1-site gate with 2-site gates up and down
