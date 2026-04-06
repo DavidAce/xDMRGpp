@@ -12,7 +12,7 @@
 #include "settings.h"
 
 template<>
-constexpr auto sv2enum<h5pp::LogLevel>(std::string_view item) {
+constexpr h5pp::LogLevel sv2enum<h5pp::LogLevel>(std::string_view item) {
     if(item == "trace") return h5pp::LogLevel::trace;
     if(item == "debug")
         return h5pp::LogLevel::debug;
@@ -21,7 +21,7 @@ constexpr auto sv2enum<h5pp::LogLevel>(std::string_view item) {
 }
 
 template<>
-constexpr auto sv2enum<spdlog::level::level_enum>(std::string_view item) {
+constexpr spdlog::level::level_enum sv2enum<spdlog::level::level_enum>(std::string_view item) {
     if(item == "trace") return spdlog::level::level_enum::trace;
     if(item == "debug")
         return spdlog::level::level_enum::debug;

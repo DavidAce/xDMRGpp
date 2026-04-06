@@ -15,13 +15,13 @@
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
 #include "tools/finite/h5.h"
-#include "tools/finite/measure.h"
 #include "tools/finite/mps.h"
 #include <h5pp/h5pp.h>
-#include <math/linalg/matrix.h>
+#include <math/linalg/matrix/to_string.h>
 #include <omp.h>
 
 namespace fs = std::filesystem;
+using scalar_t = cx64;
 
 std::vector<h5pp::fs::path> find_h5_dirs() {
     std::vector<h5pp::fs::path> result;
@@ -47,9 +47,9 @@ std::vector<h5pp::fs::path> find_h5_dirs() {
     return result;
 }
 
-void save_data(h5pp::File &h5file, const StateFinite &state, const AlgorithmStatus &status) {
+void save_data(h5pp::File &h5file, const StateFinite<scalar_t> &state, const AlgorithmStatus &status) {
     if(not state.position_is_inward_edge()) return;
-    auto sinfo = StorageInfo(status, state.get_name());
+    auto sinfo = StorageInfo(status, state.get_name(), settings::model::model_type);
 
     tools::log->debug("Writing to file: Event [{}] | state prefix [{}]", enum2sv(sinfo.storage_event), sinfo.get_state_prefix());
 
@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
                     tools::log->debug("Resuming [{}] | previous stop reason: {} | resume policy: {} ", state_prefix, enum2sv(algo_stop),
                                       enum2sv(settings::storage::resume_policy));
                     auto model_size = settings::model::model_size;
-                    auto state      = StateFinite(AlgorithmType::xDMRG, model_size, 0);
+                    auto state      = StateFinite<scalar_t>(AlgorithmType::xDMRG, model_size, 0);
                     auto status     = AlgorithmStatus();
 
                     try {

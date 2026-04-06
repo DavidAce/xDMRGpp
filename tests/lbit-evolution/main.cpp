@@ -19,12 +19,16 @@
 #include "tensors/state/StateFinite.h"
 #include "tensors/TensorsFinite.h"
 #include "tools/common/log.h"
+#include "tools/finite/measure/entanglement_entropy.h"
+#include "tools/finite/measure/number_entropy.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/ops.h"
 #include <fmt/format.h>
 #include <h5pp/h5pp.h>
 
-auto get_hamiltonian(const flbit &f) -> Eigen::Matrix<cx128, Eigen::Dynamic, Eigen::Dynamic> {
+using flbit_t = flbit<cx128>;
+
+auto get_hamiltonian(const flbit_t &f) -> Eigen::Matrix<cx128, Eigen::Dynamic, Eigen::Dynamic> {
     //    for(const auto &field : f.tensors.model->get_parameter("J1_rand"))
     using matrix_t = Eigen::Matrix<cx128, Eigen::Dynamic, Eigen::Dynamic>;
     auto L         = f.tensors.get_length<size_t>();
@@ -50,7 +54,7 @@ auto get_hamiltonian(const flbit &f) -> Eigen::Matrix<cx128, Eigen::Dynamic, Eig
     return H;
 }
 
-size_t assert_lbit_evolution(const flbit &f) {
+size_t assert_lbit_evolution(const flbit_t &f) {
     // Test time evolution as  |psi(t+dt)> = U exp(-iH'dt) U^-1 |psi(t)>, starting from t = 0
     // We get a unitary tensor whose index 1 connects onto index 0 on an MPS, meaning,
     /*
@@ -152,10 +156,10 @@ size_t assert_lbit_evolution(const flbit &f) {
     if(not unitarymatrix.isUnitary()) throw except::logic_error("unitarymatrix is not unitary");
     if(not exp_lbit_iHdt.isUnitary()) throw except::logic_error("exp_lbit_iHdt is not unitary");
 
-    auto             psi_real_init = tools::finite::measure::mps2tensor(*f.state_real_init);
-    auto             psi_lbit_init = tools::finite::measure::mps2tensor(*f.state_lbit_init);
-    auto             psi_fp128ebd  = tools::finite::measure::mps2tensor(*f.tensors.state);
-    auto             psi_lbit_tebd = tools::finite::measure::mps2tensor(*f.state_lbit);
+    auto             psi_real_init = tools::finite::mps::mps2tensor<cx128>(*f.state_real_init);
+    auto             psi_lbit_init = tools::finite::mps::mps2tensor<cx128>(*f.state_lbit_init);
+    auto             psi_fp128ebd  = tools::finite::mps::mps2tensor<cx128>(*f.tensors.state);
+    auto             psi_lbit_tebd = tools::finite::mps::mps2tensor<cx128>(*f.state_lbit);
     Eigen::VectorXcd vec_real_init = tenx::VectorMap(psi_real_init);
     Eigen::VectorXcd vec_lbit_init = tenx::VectorMap(psi_lbit_init);
     Eigen::VectorXcd vec_fp128ebd  = tenx::VectorMap(psi_fp128ebd);
@@ -245,7 +249,7 @@ size_t assert_lbit_evolution(const flbit &f) {
     return 1;
 }
 
-size_t assert_lbit_evolution(const flbit &f1, const flbit &f2) {
+size_t assert_lbit_evolution(const flbit_t &f1, const flbit_t &f2) {
     auto overlap_real_init = tools::finite::ops::overlap(*f1.state_real_init, *f2.state_real_init);
     auto overlap_lbit_init = tools::finite::ops::overlap(*f1.state_lbit_init, *f2.state_lbit_init);
     auto overlap_fp128evo  = tools::finite::ops::overlap(*f1.tensors.state, *f2.tensors.state);
@@ -322,8 +326,8 @@ int main(int argc, char *argv[]) {
     tools::log->info(" __float128 max_dig: {}", std::numeric_limits<fp128>::max_digits10());
 #endif
     // Initialize the flbit algorithm
-    auto flbit_swap = flbit(nullptr); // Will evolve with swap gates on
-    auto flbit_slow = flbit(nullptr); // Will evolve with swap gates off
+    auto flbit_swap = flbit_t(nullptr); // Will evolve with swap gates on
+    auto flbit_slow = flbit_t(nullptr); // Will evolve with swap gates off
 
     settings::flbit::use_swap_gates = true;
     set_log("swap");

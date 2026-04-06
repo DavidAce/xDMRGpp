@@ -9,7 +9,7 @@
 #include <tools/common/h5.h>
 #include <tools/common/log.h>
 #include <tools/finite/h5.h>
-#include <tools/finite/measure.h>
+#include <tools/finite/measure/expectation_value.h>
 
 struct PertData {
     long   seed               = 0;
@@ -29,6 +29,7 @@ struct spins {
 };
 
 int main() {
+    using scalar_t = cx64;
     tools::log                       = tools::Logger::setLogger("pert", 2, true);
     settings::threading::num_threads = 8; // omp_get_max_threads();
     settings::configure_threads();
@@ -95,12 +96,12 @@ int main() {
         settings::model::ising_majorana::delta = model_delta;
 
         tools::log->set_level(spdlog::level::warn);
-        auto model = ModelFinite(ModelType::ising_majorana, model_size);
+        auto model = ModelFinite<scalar_t>(ModelType::ising_majorana, model_size);
         tools::finite::h5::load::model(h5src, AlgorithmType::xDMRG, model);
         auto ene_upbd = model.get_energy_upper_bound();
 
         auto mpsinfo = tools::finite::h5::load::MpsInfo();
-        auto state   = StateFinite(AlgorithmType::xDMRG, model_size, position);
+        auto state   = StateFinite<scalar_t>(AlgorithmType::xDMRG, model_size, position);
         tools::finite::h5::load::state(h5src, "xDMRG/state_emid", state, mpsinfo);
         tools::log->set_level(spdlog::level::info);
 
@@ -122,8 +123,8 @@ int main() {
             auto state_pert = state;
             for(auto &mpo : model_pert.MPO) { mpo->set_parameter("g", g_perturb); }
             model_pert.build_mpo();
-            auto mposEne_pert = model_pert.get_all_mpo_tensors(MposWithEdges::ON);
-            auto ene_pert     = tools::finite::measure::expectation_value(state_pert, state_pert, mposEne_pert);
+            auto mposEne_pert = model_pert.get_mpo_tensors(0.0, MposWithEdges::ON);
+            auto ene_pert     = tools::finite::measure::expectation_value<scalar_t>(state_pert, state_pert, mposEne_pert);
 
             for(const auto &mpo : model_pert.MPO) mpo->set_energy_shift_mpo(cx64(std::real(ene_pert) / static_cast<double>(model_size), 0.0));
             for(auto &mpo : model_pert.MPO) { mpo->set_parity_shift_mpo_squared(spinZ > 0 ? 1 : -1, "z"); }
@@ -132,9 +133,9 @@ int main() {
             model_pert.build_mpo();
             model_pert.build_mpo_squared();
 
-            auto mposVar_pert = model_pert.get_compressed_mpos_squared(MposWithEdges::ON);
+            auto mposVar_pert = model_pert.get_mpo2_tensors(0.0, MposWithEdges::ON);
             auto var_pert =
-                std::abs(tools::finite::measure::expectation_value(state_pert, state_pert, mposVar_pert)); // Has reduced energy so this is immediately the variance
+                std::abs(tools::finite::measure::expectation_value<scalar_t>(state_pert, state_pert, mposVar_pert)); // Has reduced energy so this is immediately the variance
 
             tools::log->info("omp {:2} seed {} | delta {:.3e} -> {:.3e} | energy {:.3e} -> {:.3e} | variance {:.3e} -> {:.3e} | bound {:.3f}",omp_get_thread_num(),  seed, model_delta,
                              model_delta_avg, ene_old, ene_pert, var_old, var_pert, ene_upbd);
