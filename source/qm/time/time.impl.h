@@ -6,8 +6,6 @@
 #include "math/linalg/tensor/to_string.h"
 #include "math/tenx.h"
 #include "qm/time.h"
-#include "tools/common/log.h"
-#include <fmt/ranges.h>
 #include <unsupported/Eigen/MatrixFunctions>
 #include <vector>
 

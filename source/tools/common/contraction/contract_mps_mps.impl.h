@@ -1,6 +1,5 @@
 #pragma once
 #include "../contraction.h"
-#include "debug/exceptions.h"
 #include "math/tenx.h"
 // #include "tid/tid.h"
 #include "contraction_tblis.h"

@@ -9,7 +9,6 @@
 #include "qm/spin.h"
 #include "tools/common/log.h"
 #include <cassert>
-#include <fmt/ranges.h>
 
 /*! Builds the MPO string for measuring  spin on many-body systems.
  *      P = Π  σ_{i}

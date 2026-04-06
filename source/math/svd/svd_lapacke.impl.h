@@ -7,7 +7,6 @@
 #include <complex>
 #include <csignal>
 #include <Eigen/Core>
-#include <fmt/ranges.h>
 
 namespace svd {
 #if defined(NDEBUG)

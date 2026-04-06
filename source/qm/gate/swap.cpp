@@ -8,7 +8,6 @@
 #include "math/num.h"
 #include "tools/common/log.h"
 #include <fmt/format.h>
-#include <fmt/ranges.h>
 
 namespace settings {
     inline constexpr bool debug_swap   = false;

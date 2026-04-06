@@ -2,7 +2,6 @@
 #include "../contraction.h"
 #include "debug/exceptions.h"
 #include "math/tenx.h"
-#include <fmt/ranges.h>
 
 /* clang-format off */
 using namespace tools::common::contraction;

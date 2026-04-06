@@ -4,7 +4,6 @@
 #include "math/x2/gemm.h"
 #include "math/x2/view.h"
 #include "tid/tid.h"
-#include "tools/common/log.h"
 
 template<typename Scalar>
 class EnvEne;

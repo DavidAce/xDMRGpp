@@ -3,7 +3,6 @@
 #include "tid/tid.h"
 #include <debug/exceptions.h>
 #include <Eigen/QR>
-#include <fmt/ranges.h>
 
 #if defined(_OPENMP)
 

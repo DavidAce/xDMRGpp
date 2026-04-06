@@ -3,7 +3,6 @@
 #include "config/enums/ModelType.h"
 #include "config/enums/MpoCompress.h"
 #include "config/enums/MposWithEdges.h"
-#include "debug/exceptions.h"
 #include "general/sfinae.h"
 #include "math/float.h"
 #include <any>
@@ -12,6 +11,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -64,7 +64,7 @@ class ModelFinite {
         else if constexpr(std::is_same_v<T, cx128>) { return cache_cx128; }
         else static_assert(sfinae::invalid_type_v<T>);
         /* clang-format on */
-        throw except::runtime_error("Invalid type");
+        throw std::runtime_error("Invalid type");
     }
 
     //    std::vector<Eigen::Tensor<cx64, 4>> get_compressed_mpos(std::vector<Eigen::Tensor<cx64, 4>> mpos);

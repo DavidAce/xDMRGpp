@@ -32,7 +32,6 @@
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
 #include <Eigen/Eigenvalues>
-#include <h5pp/h5pp.h>
 #include <ranges>
 using namespace tools::finite::opt;
 using namespace tools::finite::opt::internal;

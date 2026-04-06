@@ -6,7 +6,6 @@
 #include "tools/common/contraction/contraction_policy.h"
 #include "tools/common/contraction/expectation_value.h"
 #include "tools/common/contraction/matrix_vector_product.h"
-#include "tools/common/log.h"
 
 template<typename Scalar>
 Scalar tools::common::contraction::expectation_value(const Scalar *const ket_ptr, std::array<long, 3> ket_dims,   //
