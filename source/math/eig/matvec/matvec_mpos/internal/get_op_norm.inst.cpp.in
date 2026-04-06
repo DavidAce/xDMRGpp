@@ -1,0 +1,6 @@
+#include "get_op_norm.impl.h"
+
+using Scalar = @SCALAR@;
+using Real   = typename MatVecMPOS<Scalar>::RealScalar;
+
+template Real MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters, Real reltol) const;

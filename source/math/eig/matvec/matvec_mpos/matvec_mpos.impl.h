@@ -3,6 +3,7 @@
 #include "../../log.h"
 #include "../matvec_mpos.h"
 #include "config/settings.h"
+#include "debug/exceptions.h"
 #include "debug/info.h"
 #include "general/sfinae.h"
 #include "io/fmt_f128_t.h"
@@ -21,7 +22,6 @@
 #include "tools/common/contraction/MatrixLikeOperator.h"
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
-#include <h5pp/h5pp.h>
 #include <math/stat.h>
 #include <primme/primme.h>
 #include <queue>
@@ -359,7 +359,7 @@ Scalar MatVecMPOS<Scalar>::get_matrix_element(long I, long J, const std::vector<
 
     if(fullsystem and mpo_i.size() == 1) {
         if(mpo_i.coeff(0) != Scalar{0.0} and shouldBeZero) {
-            auto valmsg = std::format("{:.16f}{:+.16f}i", std::real(mpo_i.coeff(0)), std::imag(mpo_i.coeff(0)));
+            auto valmsg = fmt::format("{:.16f}{:+.16f}i", std::real(mpo_i.coeff(0)), std::imag(mpo_i.coeff(0)));
             eig::log->info("({}, {}) = < {} | {} > = {}", I, J, irxs, icxs, valmsg);
         }
         return mpo_i.coeff(0);
@@ -388,10 +388,17 @@ Scalar MatVecMPOS<Scalar>::get_matrix_element(long I, long J, const std::vector<
 template<typename Scalar>
 typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::get_diagonal_new(long offset, const std::vector<Eigen::Tensor<Scalar, 4>> &MPOS,
                                                                              const Eigen::Tensor<Scalar, 3> &ENVL, const Eigen::Tensor<Scalar, 3> &ENVR) const {
-    if(MPOS.empty()) return VectorType::Ones(size_mps); // Assume an identity matrix
     auto res = VectorType(size_mps);
+    res.setZero();
+    if(offset >= size_mps or offset <= -size_mps) return res;
+    if(MPOS.empty()) {
+        if(offset == 0) res.setOnes(); // Assume an identity matrix
+        return res;
+    }
+    auto start = std::max<long>(0, -offset);
+    auto stop  = std::min<long>(size_mps, size_mps - offset);
 #pragma omp parallel for
-    for(long I = 0; I < size_mps; ++I) { res[I] = get_matrix_element(I, I + offset, MPOS, ENVL, ENVR); }
+    for(long I = start; I < stop; ++I) { res[I] = get_matrix_element(I, I + offset, MPOS, ENVL, ENVR); }
     return res;
 }
 
@@ -416,7 +423,7 @@ typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_diagonal_block(l
                 // res.template selfadjointView<Eigen::Lower>()(I, J) = get_matrix_element(I + offset, J + offset); // Lower part is sufficient
                 auto elem = get_matrix_element(I + offset, J + offset, MPOS, ENVL, ENVR);
                 res(I, J) = elem;
-                if constexpr(std::is_same_v<Scalar, cx64>)
+                if constexpr(sfinae::is_std_complex_v<Scalar>)
                     res(J, I) = std::conj(elem);
                 else
                     res(J, I) = elem;
@@ -485,23 +492,22 @@ typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_diagonal_block(l
                 std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
                 auto                block    = Eigen::Tensor<Scalar, 2>(ext_blk2);
                 if(envl_.dimension(0) <= envr_.dimension(0)) {
-                    block.device(*threads->dev) = envl_.slice(off_envl, ext_envl)
-                                                      .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
-                                                      .contract(envr_.slice(off_envr, ext_envr), tenx::idx({2}, {2}))
-                                                      .shuffle(tenx::array6{2, 0, 4, 3, 1, 5})
-                                                      .reshape(ext_blk2);
+                    Eigen::Tensor<Scalar, 5> temp(ext_envl[0], ext_envl[1], ext_envr[2], ext_mpos[2], ext_mpos[3]);
+                    temp.device(*threads->dev) =
+                        envl_.slice(off_envl, ext_envl).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}));
+                    block.device(*threads->dev) =
+                        temp.contract(envr_.slice(off_envr, ext_envr), tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5}).reshape(ext_blk2);
                 } else {
-                    block.device(*threads->dev) = envr_.slice(off_envr, ext_envr)
-                                                      .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}))
-                                                      .contract(envl_.slice(off_envl, ext_envl), tenx::idx({2}, {2}))
-                                                      .shuffle(tenx::array6{2, 4, 0, 3, 5, 1})
-                                                      .reshape(ext_blk2);
+                    Eigen::Tensor<Scalar, 5> temp(ext_envr[0], ext_envr[1], ext_envl[2], ext_mpos[2], ext_mpos[3]);
+                    temp.device(*threads->dev) =
+                        envr_.slice(off_envr, ext_envr).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}));
+                    block.device(*threads->dev) =
+                        temp.contract(envl_.slice(off_envl, ext_envl), tenx::idx({2}, {2})).shuffle(tenx::array6{2, 4, 0, 3, 5, 1}).reshape(ext_blk2);
                 }
                 return Eigen::Map<MatrixType>(block.data(), ext_blk2[0], ext_blk2[1]).block(IX - R0, JY - C0, ext_res[0], ext_res[1]);
             };
 
             res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) = get_subblock(MPOS, ENVL, ENVR);
-            MatrixType blkres                                         = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // MatrixType blkdbg = dbg.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // if(!blkres.isApprox(blkdbg)) {
             if constexpr(eig::debug_matvec_mpos)
@@ -541,7 +547,7 @@ typename MatVecMPOS<Scalar>::MatrixType
                 Scalar elemB = shift != RealScalar{0} ? get_matrix_element(I + offset, J + offset, MPOS_B, ENVL_B, ENVR_B) : Scalar{0.0};
                 Scalar elem  = elemA - shift * elemB;
                 res(I, J)    = elem;
-                if constexpr(std::is_same_v<Scalar, cx64>)
+                if constexpr(sfinae::is_std_complex_v<Scalar>)
                     res(J, I) = std::conj(elem);
                 else
                     res(J, I) = elem;
@@ -610,24 +616,23 @@ typename MatVecMPOS<Scalar>::MatrixType
                 std::array<long, 4> ext_mpos = {ext_envl[2], ext_envr[2], R_ext[0], C_ext[0]};
                 auto                block    = Eigen::Tensor<Scalar, 2>(ext_blk2);
                 if(envl_.dimension(0) <= envr_.dimension(0)) {
-                    block.device(*threads->dev) = envl_.slice(off_envl, ext_envl)
-                                                      .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}))
-                                                      .contract(envr_.slice(off_envr, ext_envr), tenx::idx({2}, {2}))
-                                                      .shuffle(tenx::array6{2, 0, 4, 3, 1, 5})
-                                                      .reshape(ext_blk2);
+                    Eigen::Tensor<Scalar, 5> temp(ext_envl[0], ext_envl[1], ext_envr[2], ext_mpos[2], ext_mpos[3]);
+                    temp.device(*threads->dev) =
+                        envl_.slice(off_envl, ext_envl).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}));
+                    block.device(*threads->dev) =
+                        temp.contract(envr_.slice(off_envr, ext_envr), tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5}).reshape(ext_blk2);
                 } else {
-                    block.device(*threads->dev) = envr_.slice(off_envr, ext_envr)
-                                                      .contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}))
-                                                      .contract(envl_.slice(off_envl, ext_envl), tenx::idx({2}, {2}))
-                                                      .shuffle(tenx::array6{2, 4, 0, 3, 5, 1})
-                                                      .reshape(ext_blk2);
+                    Eigen::Tensor<Scalar, 5> temp(ext_envr[0], ext_envr[1], ext_envl[2], ext_mpos[2], ext_mpos[3]);
+                    temp.device(*threads->dev) =
+                        envr_.slice(off_envr, ext_envr).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}));
+                    block.device(*threads->dev) =
+                        temp.contract(envl_.slice(off_envl, ext_envl), tenx::idx({2}, {2})).shuffle(tenx::array6{2, 4, 0, 3, 5, 1}).reshape(ext_blk2);
                 }
                 return Eigen::Map<MatrixType>(block.data(), ext_blk2[0], ext_blk2[1]).block(IX - R0, JY - C0, ext_res[0], ext_res[1]);
             };
 
             res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) = get_subblock(MPOS_A, ENVL_A, ENVR_A);
             if(shift != Scalar{0.0}) res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]) -= get_subblock(MPOS_B, ENVL_B, ENVR_B) * shift;
-            MatrixType blkres = res.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // MatrixType blkdbg = dbg.block(off_res[0], off_res[1], ext_res[0], ext_res[1]);
             // if(!blkres.isApprox(blkdbg)) {
             if constexpr(eig::debug_matvec_mpos)
@@ -1092,13 +1097,6 @@ typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultBx(const Eigen::
     VectorType y(x.rows());
     MultBx(x.data(), y.data());
     return y;
-}
-
-template<typename Derived>
-Eigen::Matrix<double, Eigen::Dynamic, 1> cond(const Eigen::MatrixBase<Derived> &m) {
-    auto solver = Eigen::BDCSVD(m.eval());
-    auto rank   = solver.nonzeroSingularValues();
-    return solver.singularValues().head(rank);
 }
 
 //-------------------------
@@ -1847,9 +1845,11 @@ Eigen::Tensor<Scalar, 6> MatVecMPOS<Scalar>::get_tensor() const {
         auto                     d2      = shape_mps[2];
         auto                    &threads = tenx::threads::get();
         Eigen::Tensor<Scalar, 6> tensor;
+        Eigen::Tensor<Scalar, 5> temp(envL_A.dimension(0), envL_A.dimension(1), mpos_A.front().dimension(1), mpos_A.front().dimension(2),
+                                      mpos_A.front().dimension(3));
         tensor.resize(tenx::array6{d0, d1, d2, d0, d1, d2});
-        tensor.device(*threads->dev) =
-            envL_A.contract(mpos_A.front(), tenx::idx({2}, {0})).contract(envR_A, tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5});
+        temp.device(*threads->dev)   = envL_A.contract(mpos_A.front(), tenx::idx({2}, {0}));
+        tensor.device(*threads->dev) = temp.contract(envR_A, tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5});
 
         return tensor;
     }
@@ -1872,9 +1872,11 @@ Eigen::Tensor<Scalar, 6> MatVecMPOS<Scalar>::get_tensor_ene() const {
         auto                     d2      = shape_mps[2];
         auto                    &threads = tenx::threads::get();
         Eigen::Tensor<Scalar, 6> tensor;
+        Eigen::Tensor<Scalar, 5> temp(envL_B.dimension(0), envL_B.dimension(1), mpos_B.front().dimension(1), mpos_B.front().dimension(2),
+                                      mpos_B.front().dimension(3));
         tensor.resize(tenx::array6{d0, d1, d2, d0, d1, d2});
-        tensor.device(*threads->dev) =
-            envL_B.contract(mpos_B.front(), tenx::idx({2}, {0})).contract(envR_B, tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5});
+        temp.device(*threads->dev)   = envL_B.contract(mpos_B.front(), tenx::idx({2}, {0}));
+        tensor.device(*threads->dev) = temp.contract(envR_B, tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5});
         return tensor;
     }
     throw except::runtime_error("MatVecMPOS<{}>::get_tensor_ene(): Not implemented for mpos.size() > 1", sfinae::type_name<Scalar>());
@@ -1898,16 +1900,21 @@ typename MatVecMPOS<Scalar>::SparseType MatVecMPOS<Scalar>::get_sparse_matrix() 
     // Fill lower
     std::vector<Eigen::Triplet<Scalar, long>> trip;
     trip.reserve(static_cast<size_t>(size_mps));
-    // #pragma omp parallel for collapse(2)
-    for(long J = 0; J < size_mps; J++) {
-#pragma omp parallel for
-        for(long I = J; I < size_mps; I++) {
-            auto elem = get_matrix_element(I, J, mpos_A, envL_A, envR_A);
-            if(std::abs(elem) > std::numeric_limits<RealScalar>::epsilon()) {
-#pragma omp critical
-                { trip.emplace_back(Eigen::Triplet<Scalar, long>{I, J, elem}); }
+#pragma omp parallel
+    {
+        std::vector<Eigen::Triplet<Scalar, long>> trip_local;
+        trip_local.reserve(static_cast<size_t>(std::max<long>(1, size_mps / 16)));
+#pragma omp for schedule(static)
+        for(long J = 0; J < size_mps; J++) {
+            for(long I = J; I < size_mps; I++) {
+                auto elem = get_matrix_element(I, J, mpos_A, envL_A, envR_A);
+                if(std::abs(elem) > std::numeric_limits<RealScalar>::epsilon()) {
+                    trip_local.emplace_back(Eigen::Triplet<Scalar, long>{I, J, elem});
+                }
             }
         }
+#pragma omp critical
+        trip.insert(trip.end(), trip_local.begin(), trip_local.end());
     }
     SparseType sparseMatrix(size_mps, size_mps);
     sparseMatrix.setFromTriplets(trip.begin(), trip.end());
@@ -1956,122 +1963,4 @@ bool MatVecMPOS<Scalar>::isReadyFactorOp() const {
 template<typename Scalar>
 bool MatVecMPOS<Scalar>::isReadyShift() const {
     return readyShift;
-}
-
-template<typename Scalar>
-typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::Index max_op_norm_iters, RealScalar reltol) const {
-    if(!std::isnan(op_norm_krylov) and max_op_norm_iters <= op_norm_krylov_iters) return op_norm_krylov;
-    auto shape_mpo = std::array<Eigen::Index, 4>{envL_A.dimension(2), envR_A.dimension(2), shape_mps[0], shape_mps[0]};
-
-    {
-        auto h1info = tools::common::contraction::internal::get_info_h1mv();
-        auto h2info = tools::common::contraction::internal::get_info_h2mv();
-        if(h1info.H1_local_dims == shape_mpo) {
-            op_norm_krylov = static_cast<RealScalar>(h1info.H1_local_norm);
-            return op_norm_krylov;
-        }
-        if(h2info.H2_local_dims == shape_mpo) {
-            op_norm_krylov = static_cast<RealScalar>(h2info.H2_local_norm);
-            return op_norm_krylov;
-        }
-    }
-
-    using Real    = RealScalar;
-    using VecType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-    using MatType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-    using VecReal = Eigen::Matrix<Real, Eigen::Dynamic, 1>;
-
-    auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, shape_mpo); // Use high-precision matvec
-    auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, shape_mpo); // Use high-precision matvec
-
-    Eigen::Tensor<Scalar, 3> vt(shape_mps);
-    Eigen::Tensor<Scalar, 3> wt(shape_mps);
-    auto                     v_map = Eigen::Map<VecType>(vt.data(), size_mps);
-    auto                     w_map = Eigen::Map<VecType>(wt.data(), size_mps);
-
-    VecType v = VecType::Random(size_mps).normalized();
-
-    Real         lambda    = Real{0};
-    Eigen::Index krylovdim = 3;
-    Eigen::Index iter      = 0;
-    for(iter = 0; iter < max_op_norm_iters; ++iter) {
-        const Eigen::Index p = std::max<Eigen::Index>(2, krylovdim);
-
-        // Build Krylov matrix K = [v, Av, A^2 v, ...]
-        MatType K(size_mps, p);
-        K.col(0) = v;
-
-        for(Eigen::Index j = 1; j < p; ++j) {
-            v_map = K.col(j - 1);
-            MultAx(vt.data(), wt.data());
-            K.col(j) = w_map;
-        }
-
-        // Orthonormalize K
-        Eigen::HouseholderQR<MatType> qr(K);
-
-        // Estimate effective subspace size from |R(j,j)|
-        // (R is p x p upper triangular inside matrixQR)
-        const MatType QR = qr.matrixQR().topLeftCorner(p, p);
-        VecReal       diag_abs(p);
-        for(Eigen::Index j = 0; j < p; ++j) diag_abs(j) = std::abs(QR(j, j));
-
-        const Real diag0    = (p > 0) ? diag_abs(0) : Real{0};
-        const Real drop_tol = std::max(Real{1e-20f}, Real{1e-12f} * diag0);
-
-        Eigen::Index k_eff = 0;
-        for(Eigen::Index j = 0; j < p; ++j) {
-            if(diag_abs(j) > drop_tol)
-                ++k_eff;
-            else
-                break;
-        }
-        k_eff = std::max<Eigen::Index>(k_eff, 1);
-
-        // Form thin Q explicitly: Q = qr.householderQ() * I(:, 0:k_eff-1)
-        // This is n x k_eff, k_eff is small so the explicit form is usually fine.
-        MatType Q = qr.householderQ() * MatType::Identity(size_mps, k_eff).eval();
-
-        // W = A Q (compute each column with your matvec)
-        MatType W(size_mps, k_eff);
-        for(Eigen::Index j = 0; j < k_eff; ++j) {
-            v_map = Q.col(j);
-            MultAx(vt.data(), wt.data());
-            W.col(j) = w_map;
-        }
-
-        // Projected operator T = Q^* (A Q) = Q^* W
-        MatType T = (Q.adjoint() * W).eval();
-        T         = ((T + T.adjoint()) / Real{2}).eval(); // suppress tiny non-Hermitian noise
-
-        Eigen::SelfAdjointEigenSolver<MatType> es(T);
-        if(es.info() != Eigen::Success) break;
-
-        const auto &evals = es.eigenvalues();
-        const auto &evecs = es.eigenvectors();
-
-        Eigen::Index idx = 0;
-        evals.cwiseAbs().maxCoeff(&idx);
-
-        const Scalar theta      = Scalar(evals(idx));
-        const Real   lambda_new = std::abs(evals(idx));
-
-        // Ritz vector y = Q x
-        VecType    y      = (Q * evecs.col(idx)).eval();
-        const Real y_norm = y.norm();
-        if(y_norm > Real{0}) y /= y_norm;
-
-        // Ritz residual r = W x - theta (Q x)
-        VecType    r      = (W * evecs.col(idx) - (Q * evecs.col(idx)) * theta).eval();
-        const Real r_norm = r.norm();
-
-        v      = std::move(y);
-        lambda = lambda_new;
-        if(lambda > Real{0} && r_norm < static_cast<Real>(reltol) * lambda) break;
-    }
-    op_norm_krylov_iters = max_op_norm_iters;
-    op_norm_krylov       = lambda;
-    // tools::log->debug("MatVecMPOS: iter {:<2}: lambda = {:.8e}", iter, fp(op_norm_krylov));
-
-    return lambda;
 }

@@ -6,6 +6,7 @@ add_source_target(xdmrg++-math-eig-matvec
         matvec_zero/matvec_zero.inst.cpp.in
         matvec_mpo/matvec_mpo.inst.cpp.in
         matvec_mpos/matvec_mpos.inst.cpp.in
+        matvec_mpos/internal/get_op_norm.inst.cpp.in
         INST_PAIR_TEMPLATE_FILES
         matvec_mpos/matvec_mpos.pair.inst.cpp.in
 
