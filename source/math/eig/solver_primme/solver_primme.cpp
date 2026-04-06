@@ -422,7 +422,7 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
         case primme_target::primme_closest_leq:
         case primme_target::primme_closest_abs: {
             if(not config.primme_targetShifts.empty()) {
-                eig::log->debug("Setting target shifts: {:.8f}", fmt::join(config.primme_targetShifts, ", "));
+                eig::log->debug("Setting target shifts: {::.8f}", fmw::wrap(config.primme_targetShifts));
                 primme.numTargetShifts = safe_cast<int>(config.primme_targetShifts.size());
                 primme.targetShifts    = config.primme_targetShifts.data();
             } else if(config.sigma and not matrix.isReadyShift()) {

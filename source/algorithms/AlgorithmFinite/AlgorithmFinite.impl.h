@@ -125,10 +125,10 @@ void AlgorithmFinite<Scalar>::run()
             tools::log->info("Attempting resume");
             resume();
         } catch(const except::state_error &ex) {
-            throw except::resume_error("Failed to resume state from file [{}]: {}", h5file->getFilePath(), ex.what());
+            throw except::resume_error("Failed to resume state from file [{}]: {}", fmw::wrap(h5file->getFilePath()), ex.what());
         } catch(const except::load_error &ex) {
-            throw except::resume_error("Failed to load simulation from file [{}]: {}", h5file->getFilePath(), ex.what());
-        } catch(const std::exception &ex) { throw except::runtime_error("Failed to resume from file [{}]: {}", h5file->getFilePath(), ex.what()); }
+            throw except::resume_error("Failed to load simulation from file [{}]: {}", fmw::wrap(h5file->getFilePath()), ex.what());
+        } catch(const std::exception &ex) { throw except::runtime_error("Failed to resume from file [{}]: {}", fmw::wrap(h5file->getFilePath()), ex.what()); }
     } else {
         run_default_task_list();
     }
@@ -625,7 +625,7 @@ void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
         throw except::logic_error("Expected grow_rate > 1.0. Got {}", rate);
     bond_new = std::min(bond_new, static_cast<double>(status.bond_max));
 
-    tools::log->info("Updated bond dimension limit: {} -> {} | reasons: {}", status.bond_lim, bond_new, fmt::join(reason, " | "));
+    tools::log->info("Updated bond dimension limit: {} -> {} | reasons: {}", status.bond_lim, bond_new, fmw::join(reason, " | "));
     status.bond_lim                   = safe_cast<long>(bond_new);
     status.bond_limit_has_reached_max = status.bond_lim == status.bond_max;
     // status.algorithm_has_stuck_for    = 0;
@@ -845,7 +845,8 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if(drop_if_next_iter and is_next_iter and truncated_ok) reason.emplace_back("next iter");
     if(drop_if_even_iter and is_even_iter and truncated_ok) reason.emplace_back("even iter");
     if(reason.empty()) {
-        tools::log->debug("Kept truncation error limit:  {:8.2e} | conditions: {} | no reason to update", status.trnc_lim, fmt::join(condition, " | "));
+        tools::log->debug("Kept truncation error limit:  {:8.2e} | conditions: {} | no reason to update", status.trnc_lim,
+                          fmw::join(condition, " | "));
         tools::log->trace("Truncation errors {::.3e}", tensors.get_state().get_truncation_errors());
 
         return;
@@ -862,7 +863,7 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if(trnc_new < status.trnc_min / rate) trnc_new = status.trnc_min; // If the truncation error is close enough to reaching min, just set min.
 
     tools::log->info("Updated truncation error limit: {:8.2e} -> {:8.2e} | conditions: {} | reasons: {}", status.trnc_lim, trnc_new,
-                     fmt::join(condition, " | "), fmt::join(reason, " | "));
+                     fmw::join(condition, " | "), fmw::join(reason, " | "));
     tools::log->info("Truncation errors {::8.2e}", tensors.get_state().get_truncation_errors());
 
     status.trnc_lim                   = trnc_new;
@@ -1087,9 +1088,11 @@ void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     eigs_reltol_new = std::clamp(eigs_reltol_new, eigs_reltol_min, eigs_reltol_max);
 
     if(dmrg_eigs_abstol != eigs_abstol_new)
-        tools::log->info("Updated eigs absolute tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_abstol, eigs_abstol_new, fmt::join(reason, " | "));
+        tools::log->info("Updated eigs absolute tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_abstol, eigs_abstol_new,
+                         fmw::join(reason, " | "));
     if(dmrg_eigs_reltol != eigs_reltol_new)
-        tools::log->info("Updated eigs relative tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_reltol, eigs_reltol_new, fmt::join(reason, " | "));
+        tools::log->info("Updated eigs relative tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_reltol, eigs_reltol_new,
+                         fmw::join(reason, " | "));
     dmrg_eigs_abstol = eigs_abstol_new;
     dmrg_eigs_reltol = eigs_reltol_new;
 }
@@ -1199,7 +1202,7 @@ void AlgorithmFinite<Scalar>::try_projection(std::optional<std::string> target_a
         if(projection_if_stuck) msg.emplace_back("stuck");
         if(projection_if_conv) msg.emplace_back("converged");
         if(projection_if_iter) msg.emplace_back("iter");
-        tools::log->debug("Trying projection to {} | reasons: {}", target_axis.value(), fmt::join(msg, " | "));
+        tools::log->debug("Trying projection to {} | reasons: {}", target_axis.value(), fmw::join(msg, " | "));
 
         auto sector_sign   = qm::spin::half::get_sign(target_axis.value());
         auto energy_old    = tools::finite::measure::energy(tensors);
@@ -1466,7 +1469,7 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
 
     auto H2_local = tools::finite::measure::expval_hamiltonian_squared(t);
     tools::log->info("H               <ψ | H_local | ψ>                               = {:.16e}", energy);
-    tools::log->info("H²              <ψ | H²_local | ψ>                              = {:.16e}", H2_local);
+    tools::log->info("H²              <ψ | H²_local | ψ>                              = {:.16e}", fp(H2_local));
     tools::log->info("energy variance <H²_local>-<H_local>²                           = {:.16e}", energy_variance_local);
 
     [[maybe_unused]] RealScalar E1_global1 = 0;
@@ -2032,7 +2035,7 @@ void AlgorithmFinite<Scalar>::print_status() {
         if(settings::precision::variance_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("σ²H:{:<}", status.variance_mpo_saturated_for));
         if(settings::precision::entanglement_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("Sₑ:{:<1}", status.entanglement_saturated_for));
         if(settings::precision::locinfoscale_saturation_sensitivity > 0) satstr.emplace_back(fmt::format("iₗ:{:<1}", status.locinfoscale_saturated_for));
-        report += fmt::format("[{}]", fmt::join(satstr, " "));
+        report += fmt::format("[{}]", fmw::join(satstr, " "));
     } else {
         report += " ";
     }

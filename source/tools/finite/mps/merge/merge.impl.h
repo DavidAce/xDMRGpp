@@ -23,7 +23,6 @@
 #include "tools/finite/measure/dimensions.h"
 #include "tools/finite/measure/norm.h"
 #include "tools/finite/ops.h"
-#include <fmt/ranges.h>
 namespace settings {
     inline constexpr bool debug_merge   = false;
     inline constexpr bool verbose_merge = false;

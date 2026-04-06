@@ -86,7 +86,7 @@ namespace tools::finite::opt {
         decltype(auto) get(T &&val, std::string_view name) const {
             if constexpr(sfinae::is_std_optional_v<T>) {
                 if(val.has_value()) { return val.value(); }
-                throw except::runtime_error("opt_mps<{}>: {} <{}> has not been set.", sfinae::type_name<Scalar>, name, sfinae::type_name<T>);
+                throw except::runtime_error("opt_mps<{}>: {} <{}> has not been set.", sfinae::type_name<Scalar>(), name, sfinae::type_name<T>());
             } else
                 return (val);
         }

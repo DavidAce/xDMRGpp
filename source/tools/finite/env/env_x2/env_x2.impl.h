@@ -28,8 +28,8 @@ void tools::finite::env::rebuild_edges_ene_x2(const StateFinite<Scalar> &state, 
     if(not num::all_equal(state.get_length(), model.get_length(), edges.get_length()))
         throw except::runtime_error("All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(), edges.get_length());
     if(not num::all_equal(state.active_sites, model.active_sites, edges.active_sites))
-        throw except::runtime_error("All active sites are not equal: state {} | model {} | edges {}", state.active_sites, model.active_sites,
-                                    edges.active_sites);
+        throw except::runtime_error("All active sites are not equal: state {} | model {} | edges {}", fmw::wrap(state.active_sites),
+                                    fmw::wrap(model.active_sites), fmw::wrap(edges.active_sites));
     auto         t_reb   = tid::tic_scope("rebuild_edges_ene_x2", tid::higher);
     const size_t L       = state.template get_length<size_t>();
     const size_t min_pos = 0;

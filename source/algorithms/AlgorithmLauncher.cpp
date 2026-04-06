@@ -57,7 +57,8 @@ void AlgorithmLauncher::start_h5file() {
                 try {
                     h5file = std::make_shared<h5pp::File>(settings::storage::output_filepath, h5pp::FileAccess::READONLY);
                     tools::log->info("Checking if the HDF5 file is valid: [{}]", settings::storage::output_filepath);
-                    if(not h5file->fileIsValid()) throw except::runtime_error("The HDF5 file is not valid: {}", settings::storage::output_filepath);
+                    if(not h5file->fileIsValid())
+                        throw except::runtime_error("The HDF5 file is not valid: {}", fmw::wrap(settings::storage::output_filepath));
 
                     // Let's first consider the new resume check method, which looks for attributes in the state_prefix.
                     auto states_that_may_resume = tools::common::h5::resume::find_states_that_may_resume(*h5file, settings::storage::resume_policy);
@@ -76,7 +77,7 @@ void AlgorithmLauncher::start_h5file() {
                     // and consult .cfg if there is anything more to be done.
 
                     if(not h5file->linkExists("common/finished_all"))
-                        throw except::runtime_error("Could not find link common/finished_all in file: {}", settings::storage::output_filepath);
+                        throw except::runtime_error("Could not find link common/finished_all in file: {}", fmw::wrap(settings::storage::output_filepath));
                     auto finished_all = h5file->readDataset<bool>("common/finished_all");
 
                     // For fLBIT simulations we can check if we actually got the expected number of iterations

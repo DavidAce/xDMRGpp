@@ -18,7 +18,6 @@
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/measure/residual.h"
 #include "tools/finite/opt/opt-internal.h"
-#include <fmt/ranges.h>
 
 template<typename CalcType, typename Scalar>
 void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps, const OptMeta &meta,

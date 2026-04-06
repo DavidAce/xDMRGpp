@@ -1,6 +1,6 @@
 #include "log.h"
 #include "debug/exceptions.h"
-#include "io/spdlog.h"
+#include "io/spdlog_setup.h"
 
 void tools::Logger::enableTimestamp(const std::shared_ptr<spdlog::logger> &other_log) {
     if(other_log != nullptr) {

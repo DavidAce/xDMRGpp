@@ -207,7 +207,7 @@ void xdmrg<Scalar>::init_energy_target(std::optional<double> energy_density_targ
             if(energy_density_target.value() < 0.0 or energy_density_target.value() > 1.0)
                 throw except::runtime_error(fmt::format(
                     "xdmrg::init_energy_target: with OptRitz::TE: invalid energy_density_target: Expected value in range [0.0 - 1.0], got: [{:.8f}]",
-                    energy_density_target));
+                    energy_density_target.value()));
             // Set energy boundaries. This function is supposed to run after find_energy_range!
             if(status.energy_max == status.energy_min)
                 throw except::runtime_error("xdmrg::init_energy_target: with OptRitz::TE Failed because energy_max == {} and energy_min == {}\n"

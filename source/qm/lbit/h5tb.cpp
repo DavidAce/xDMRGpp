@@ -67,7 +67,7 @@ std::string qm::lbit::UnitaryGateParameters::fmt_value(std::string_view p) const
         if(p == "f")      return fmt::format("{:<7.4f}"  , f);
         if(p == "w")      return fmt::format("{:<9.2e}"  , w);
         if(p == "theta")  return fmt::format("{::<+9.2e}", theta);
-        if(p == "c")      return fmt::format("{}"        , c);
+        if(p == "c")      return fmt::format("{}"        , fp(c));
         if(p == "lambda") return fmt::format("{:<7.4f}"  , l);
         if(p == "wkind") return fmt::format("{}"         , enum2sv(wkind));
         if(p == "mkind") return fmt::format("{}"         , enum2sv(mkind));

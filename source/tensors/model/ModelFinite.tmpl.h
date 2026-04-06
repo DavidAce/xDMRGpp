@@ -31,7 +31,7 @@ Eigen::Tensor<T, 4> ModelFinite<Scalar>::get_multisite_mpo(const std::vector<siz
     auto &cache = get_cache<T>();
     if(sites == active_sites and cache.multisite_mpo and not nbody) return cache.multisite_mpo.value();
 
-    auto                nbody_str    = fmt::format("{}", nbody.has_value() ? nbody.value() : std::vector<size_t>{});
+    auto                nbody_str    = fmt::format("{}", fmw::wrap(nbody.has_value() ? nbody.value() : std::vector<size_t>{}));
     auto                t_mpo        = tid::tic_scope("get_multisite_mpo", tid::level::highest);
     constexpr auto      shuffle_idx  = tenx::array6{0, 3, 1, 4, 2, 5};
     constexpr auto      contract_idx = tenx::idx({1}, {0});
@@ -137,7 +137,8 @@ Eigen::Tensor<T, 4> ModelFinite<Scalar>::get_multisite_mpo(const std::vector<siz
                 keep_log.emplace_back(pos);
             }
         }
-        auto new_cache_string = fmt::format("keep{}|skip{}|nbody{}|dims{}", keep_log, skip_log, nbody_str, new_dims);
+        auto new_cache_string =
+            fmt::format("keep{}|skip{}|nbody{}|dims{}", fmw::wrap(keep_log), fmw::wrap(skip_log), fmw::wrap(nbody_str), fmw::wrap(new_dims));
         if(do_cache and cache.multisite_mpo_temps.find(new_cache_string) != cache.multisite_mpo_temps.end()) {
             if constexpr(debug_cache or verbose_nbody) tools::log->trace("cache hit: {}", new_cache_string);
             multisite_mpo = cache.multisite_mpo_temps.at(new_cache_string);
@@ -172,8 +173,8 @@ const Eigen::Tensor<T, 4> &ModelFinite<Scalar>::get_multisite_mpo() const {
         // Check that the ids match
         auto active_ids = get_active_ids();
         if(active_ids != cache.multisite_mpo_ids)
-            throw except::runtime_error("get_multisite_mpo: cache has mismatching ids: active ids: {} | cache ids {}", active_ids,
-                                        cache.multisite_mpo_ids.value());
+            throw except::runtime_error("get_multisite_mpo: cache has mismatching ids: active ids: {} | cache ids {}", fmw::wrap(active_ids),
+                                        fmw::wrap(cache.multisite_mpo_ids.value()));
         return cache.multisite_mpo.value();
     }
     cache.multisite_mpo     = get_multisite_mpo<T>(active_sites);
@@ -379,8 +380,8 @@ const Eigen::Tensor<T, 4> &ModelFinite<Scalar>::get_multisite_mpo_squared() cons
         // Check that the ids match
         auto active_ids_sq = get_active_ids_sq();
         if(active_ids_sq != cache.multisite_mpo_squared_ids)
-            throw except::runtime_error("get_multisite_mpo_squared: cache has mismatching ids: active ids: {} | cache ids {}", active_ids_sq,
-                                        cache.multisite_mpo_squared_ids.value());
+            throw except::runtime_error("get_multisite_mpo_squared: cache has mismatching ids: active ids: {} | cache ids {}", fmw::wrap(active_ids_sq),
+                                        fmw::wrap(cache.multisite_mpo_squared_ids.value()));
         return cache.multisite_mpo_squared.value();
     }
     cache.multisite_mpo_squared     = get_multisite_mpo_squared<T>(active_sites);

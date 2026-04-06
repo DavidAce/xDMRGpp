@@ -49,7 +49,6 @@
 #include "tools/finite/ops.h"
 #include "tools/finite/print.h"
 #include <complex>
-#include <fmt/ranges.h>
 #include <h5pp/h5pp.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 
@@ -269,13 +268,13 @@ template<typename Scalar> void flbit<Scalar>::run_preprocessing() {
             auto        uadjoint_u            = Eigen::MatrixXcd(u_circuit_m.adjoint() * u_circuit_m);
             std::string err;
             if(std::abs(overlap_real1_real2.real() + overlap_real1_real2.imag() - 1) > status.trnc_lim * 10)
-                err += fmt::format("overlap_real1_real2: {:.16f}\n", overlap_real1_real2);
+                err += fmt::format("overlap_real1_real2: {:.16f}\n", fp(overlap_real1_real2));
             if(std::abs(overlap_real1_u_lbit.real() + overlap_real1_u_lbit.imag() - 1) > status.trnc_lim * 10)
-                err += fmt::format("overlap_real1_u_lbit: {:.16f}\n", overlap_real1_u_lbit);
+                err += fmt::format("overlap_real1_u_lbit: {:.16f}\n", fp(overlap_real1_u_lbit));
             if(std::abs(overlap_lbit_ua_real1.real() + overlap_lbit_ua_real1.imag() - 1) > status.trnc_lim * 10)
-                err += fmt::format("overlap_lbit_ua_real1: {:.16f}\n", overlap_lbit_ua_real1);
+                err += fmt::format("overlap_lbit_ua_real1: {:.16f}\n", fp(overlap_lbit_ua_real1));
             if(std::abs(overlap_lbit_ua_real2.real() + overlap_lbit_ua_real2.imag() - 1) > status.trnc_lim * 10)
-                err += fmt::format("overlap_lbit_ua_real2: {:.16f}\n", overlap_lbit_ua_real2);
+                err += fmt::format("overlap_lbit_ua_real2: {:.16f}\n", fp(overlap_lbit_ua_real2));
             if(not uadjoint_u.isIdentity(status.trnc_lim * 10)) err += fmt::format("uadjoint_u is not an identity matrix");
 
             if(not err.empty()) throw except::logic_error("Debug error:\n{}", err);
@@ -430,7 +429,7 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
             status_eff.delta_t   = time;
             using namespace std::complex_literals;
             auto t_f64 = std::complex<fp64>(static_cast<fp64>(time.real()), static_cast<fp64>(time.imag()));
-            if(t_f64.real() > 1e8 or t_f64.imag() > 1e8) { tools::log->warn("Precision is bad when time > 1e8 | current time == {:.2e}", t_f64); }
+            if(t_f64.real() > 1e8 or t_f64.imag() > 1e8) { tools::log->warn("Precision is bad when time > 1e8 | current time == {:.2e}", fp(t_f64)); }
             // Generate the time evolution operator in diagonal form
             tools::log->debug("Exponentiating the diagonal Hamiltonians");
 
@@ -446,7 +445,7 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
             //            Eigen::VectorXcd tevo_eff_diagonal = (-1.0i * t_f64 * hamiltonian_eff_diagonal).array().exp();
             VecType tevo_eff_diagonal = hamiltonian_eff_diagonal.unaryExpr(tevo_op);
             // Time evolve
-            tools::log->debug("Time-evolving: {}", t_f64);
+            tools::log->debug("Time-evolving: {}", fp(t_f64));
             VecType psi_eff = tevo_eff_diagonal.asDiagonal() * u_and_adj_psi_init_vector;
             tools::log->debug("Merging into state");
 
@@ -484,7 +483,7 @@ void flbit<Scalar>::update_state() {
      * \fn void update_state()
      */
     auto delta_t = status.delta_t.template to_floating_point<cx128>();
-    tools::log->debug("Starting fLBIT: iter {} | Δt = {:.2e}", status.iter, delta_t);
+    tools::log->debug("Starting fLBIT: iter {} | Δt = {:.2e}", status.iter, fp(delta_t));
     if(not state_lbit) throw except::logic_error("state_lbit == nullptr: Set the state in lbit basis before running an flbit step");
     if(not state_lbit_init) {
         state_lbit_init = std::make_unique<StateFinite<Scalar>>(*state_lbit);
@@ -519,7 +518,7 @@ template<typename Scalar> void flbit<Scalar>::update_time_step() {
     status.delta_t = time_points[status.iter];
     if(settings::flbit::time_scale == TimeScale::LOGSPACED)
         if(cmp_t(status.delta_t.template to_floating_point<cx128>(), 0.0)) throw except::logic_error("Expected nonzero delta_t after time step update");
-    tools::log->debug("Time step iter {} | Δt = {} | t = {:8.2e}", status.iter, status.delta_t.template to_floating_point<cx64>(),
+    tools::log->debug("Time step iter {} | Δt = {} | t = {:8.2e}", status.iter, fp(status.delta_t.template to_floating_point<cx64>()),
                       status.phys_time.template to_floating_point<fp64>());
 }
 
@@ -760,7 +759,7 @@ void flbit<Scalar>::update_time_evolution_gates() {
     auto delta_t = status.delta_t.template to_floating_point<cx128>();
     if(has_swap_gates) {
         auto t_upd = tid::tic_scope("upd_time_evo_swap_gates");
-        tools::log->debug("Updating time evolution swap gates to iter {} | Δt = {:.2e}", status.iter, delta_t);
+        tools::log->debug("Updating time evolution swap gates to iter {} | Δt = {:.2e}", status.iter, fp(delta_t));
         time_swap_gates_1body = qm::lbit::get_time_evolution_swap_gates(delta_t, ham_swap_gates_1body);
         time_swap_gates_2body = qm::lbit::get_time_evolution_swap_gates(delta_t, ham_swap_gates_2body);
         time_swap_gates_3body = qm::lbit::get_time_evolution_swap_gates(delta_t, ham_swap_gates_3body);
@@ -768,7 +767,7 @@ void flbit<Scalar>::update_time_evolution_gates() {
     }
     if(has_slow_gates) {
         auto t_upd = tid::tic_scope("upd_time_evo_gates");
-        tools::log->debug("Updating time evolution gates to iter {} | Δt = {:.2e}", status.iter, delta_t);
+        tools::log->debug("Updating time evolution gates to iter {} | Δt = {:.2e}", status.iter, fp(delta_t));
         time_gates_1body = qm::lbit::get_time_evolution_gates(delta_t, ham_gates_1body);
         time_gates_2body = qm::lbit::get_time_evolution_gates(delta_t, ham_gates_2body);
         time_gates_3body = qm::lbit::get_time_evolution_gates(delta_t, ham_gates_3body);
@@ -812,13 +811,13 @@ void flbit<Scalar>::time_evolve_lbit_state() {
     if(not has_swap_gates and not has_slow_gates) throw except::logic_error("None of swap or non-swap time evolution gates found");
     auto delta_t = status.delta_t.template to_floating_point<cx128>();
     if(has_swap_gates) {
-        tools::log->debug("Applying time evolution swap gates Δt = {:.2e}", delta_t);
+        tools::log->debug("Applying time evolution swap gates Δt = {:.2e}", fp(delta_t));
         tools::finite::mps::apply_swap_gates(*state_lbit, time_swap_gates_1body, CircuitOp::NONE, GateMove::AUTO, svd_cfg);
         tools::finite::mps::apply_swap_gates(*state_lbit, time_swap_gates_2body, CircuitOp::NONE, GateMove::AUTO, svd_cfg);
         tools::finite::mps::apply_swap_gates(*state_lbit, time_swap_gates_3body, CircuitOp::NONE, GateMove::AUTO, svd_cfg);
     }
     if(has_slow_gates) {
-        tools::log->debug("Applying time evolution gates Δt = {:.2e}", delta_t);
+        tools::log->debug("Applying time evolution gates Δt = {:.2e}", fp(delta_t));
         tools::finite::mps::apply_gates(*state_lbit, time_gates_1body, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
         tools::finite::mps::apply_gates(*state_lbit, time_gates_2body, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
         tools::finite::mps::apply_gates(*state_lbit, time_gates_3body, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
@@ -831,13 +830,13 @@ void flbit<Scalar>::time_evolve_lbit_state() {
         // Check that we would get back the original state if we time evolved backwards
         auto state_lbit_debug = *state_lbit;
         if(has_swap_gates) {
-            tools::log->debug("Applying time evolution swap gates backward Δt = {:.2e}", delta_t);
+            tools::log->debug("Applying time evolution swap gates backward Δt = {:.2e}", fp(delta_t));
             tools::finite::mps::apply_swap_gates(state_lbit_debug, time_swap_gates_3body, CircuitOp::ADJ, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_swap_gates(state_lbit_debug, time_swap_gates_2body, CircuitOp::ADJ, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_swap_gates(state_lbit_debug, time_swap_gates_1body, CircuitOp::ADJ, GateMove::AUTO, svd_cfg);
         }
         if(has_slow_gates) {
-            tools::log->debug("Applying time evolution gates backward Δt = {:.2e}", delta_t);
+            tools::log->debug("Applying time evolution gates backward Δt = {:.2e}", fp(delta_t));
             tools::finite::mps::apply_gates(state_lbit_debug, time_gates_3body, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_gates(state_lbit_debug, time_gates_2body, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_gates(state_lbit_debug, time_gates_1body, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
@@ -1049,7 +1048,7 @@ void flbit<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_po
             }
             auto rho_matrix = tenx::MatrixMap(rho);
             auto rho_trace  = rho_matrix.trace();
-            tools::log->debug("rho trace: {:.16f}", rho_trace);
+            tools::log->debug("rho trace: {:.16f}", fp(rho_trace));
             if(not rho_matrix.isApprox(rho_matrix.adjoint())) throw except::logic_error("rho is not hermitian");
             eig_sol.eig<eig::Form::SYMM>(rho.data(), rho.dimension(0), eig::Vecs::OFF);
             auto eigvals = eig::view::get_eigvals<fp64>(eig_sol.result);

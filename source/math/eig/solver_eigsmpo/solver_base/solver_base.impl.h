@@ -4,6 +4,7 @@
 #include "config/enums/OptAlgo.h"
 #include "config/enums/OptRitz.h"
 #include "io/fmt_custom.h"
+#include "io/spdlog_setup.h"
 #include "JacobiDavidsonOperator.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/eig/solver.h"
@@ -17,7 +18,6 @@
 #include "tools/common/contraction/contraction_policy.h"
 #include "tools/finite/opt_mps.h"
 #include <Eigen/Eigenvalues>
-#include <spdlog/sinks/stdout_color_sinks.h>
 namespace settings {
 #if defined(NDEBUG)
     inline constexpr bool debug_solver = false;
@@ -2176,7 +2176,7 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType
                 Scalar     proj_ij = (proj1 + proj2) / (RealScalar{2} * normSq);
                 // Scalar proj_ij = proj1 ;
                 eiglog->info("(i:{:3}, j:{:3}): p1 = {:.4e} | p2 = {:.4e} | |p1-p2| = {:.4e} |yi| = {:.4e} |yj| = {:.4e} |h2yi| = {:.4e} |h2yj| = {:.4e}", i, j,
-                             proj1, proj2, std::abs(proj1 - proj2), yi.norm(), yj.norm(), h2yi.norm(), h2yj.norm());
+                             fp(proj1), fp(proj2), std::abs(proj1 - proj2), yi.norm(), yj.norm(), h2yi.norm(), h2yj.norm());
 
                 // subtract
                 yj.noalias()   -= yi * proj_ij;

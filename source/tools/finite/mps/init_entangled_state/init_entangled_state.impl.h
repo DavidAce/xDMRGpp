@@ -14,7 +14,6 @@
 #include "tools/finite/measure/spin.h"
 #include <bitset>
 #include <Eigen/QR>
-#include <fmt/ranges.h>
 
 using tools::finite::mps::RealScalar;
 

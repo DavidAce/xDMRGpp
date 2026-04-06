@@ -7,6 +7,7 @@
 #include "config/enums/StorageEvent.h"
 #include "config/enums/StoragePolicy.h"
 #include "config/settings.h"
+#include "debug/exceptions.h"
 #include "debug/info.h"
 #include "general/iter.h"
 #include "io/hdf5_types.h"

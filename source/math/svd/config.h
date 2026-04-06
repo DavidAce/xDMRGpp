@@ -1,7 +1,6 @@
 #pragma once
-#include <fmt/core.h>
-#include <fmt/std.h>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <variant>
 

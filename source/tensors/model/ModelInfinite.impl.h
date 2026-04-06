@@ -109,7 +109,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelInfinite<Scalar>::get_compressed_mpo_
     // Print the results
     std::vector<std::string> report;
     if(tools::log->level() == spdlog::level::trace)
-        for(const auto &mpo : mpos_sq) report.emplace_back(fmt::format("{}", mpo.dimensions()));
+        for(const auto &mpo : mpos_sq) report.emplace_back(fmt::format("{}", fmw::wrap(mpo.dimensions())));
 
     for(size_t iter = 0; iter < 1; iter++) {
         // Next compress from left to right

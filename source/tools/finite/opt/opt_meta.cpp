@@ -6,7 +6,6 @@
 #include "config/enums/OptType.h"
 #include "config/enums/OptWhen.h"
 #include "debug/exceptions.h"
-#include <fmt/ranges.h>
 
 namespace tools::finite::opt {
     OptMeta::OptMeta()
@@ -39,8 +38,8 @@ namespace tools::finite::opt {
     std::string OptMeta::string() const {
         std::string res;
         res += label;
-        res += fmt::format(" | site {}", chosen_sites);
-        res += fmt::format(" | dims {} = {}", problem_dims, problem_size);
+        res += fmt::format(" | site {}", fmw::wrap(chosen_sites));
+        res += fmt::format(" | dims {} = {}", fmw::wrap(problem_dims), fmw::wrap(problem_size));
         res += fmt::format(" | solv {}", enum2sv(optSolver));
         res += fmt::format(" | type {}", enum2sv(optType));
         res += fmt::format(" | ritz {}", enum2sv(optRitz));

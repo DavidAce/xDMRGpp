@@ -27,7 +27,6 @@ SOFTWARE.
 #include <algorithm>
 #include <cmath>
 #include <fmt/core.h>
-#include <fmt/ranges.h>
 #include <numeric>
 
 size_t map_to_idx(double val, double in_min, double in_max, size_t num_steps) {

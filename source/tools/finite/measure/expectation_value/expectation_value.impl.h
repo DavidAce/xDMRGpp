@@ -155,7 +155,8 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
     }
 
     if(Ledge3.dimensions() != Redge3.dimensions())
-        throw except::runtime_error("expectation_value: Ledge3 and Redge3 dimension mismatch: {} != {}", Ledge3.dimensions(), Redge3.dimensions());
+        throw except::runtime_error("expectation_value: Ledge3 and Redge3 dimension mismatch: {} != {}", fmw::wrap(Ledge3.dimensions()),
+                                    fmw::wrap(Redge3.dimensions()));
 
     // Finish by contracting Redge3
     Eigen::Tensor<CalcType, 0> expval = contract_internal<CalcType>::contract_envL_envR_012_012(Ledge3, Redge3, threads);

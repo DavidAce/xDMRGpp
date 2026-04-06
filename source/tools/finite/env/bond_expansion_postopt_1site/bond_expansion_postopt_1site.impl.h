@@ -149,17 +149,16 @@ BondExpansionResult<Scalar> tools::finite::env::rexpand_bond_postopt_1site(State
         res.dimMP       = M_P.dimensions();
         res.dimN0       = N_0.dimensions();
         internal::merge_rexpansion_terms_N0_MP(mps0, N_0, mpsP, M_P, bond_lim, Scalar{1e-4f});
-        tools::log->debug("Bond expansion r2l {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bond_lim, dimP_old, M.dimensions(),
-                          M_P.dimensions());
+        tools::log->debug("Bond expansion r2l {} | {} | χmax {} | χ {} -> {} -> {}", pos_expanded, flag2str(bcfg.policy), bond_lim, dimP_old,
+                          fmw::wrap(M.dimensions()), fmw::wrap(M_P.dimensions()));
         assert(state.template get_position<long>() == static_cast<long>(pos0));
     }
 
-    if(mpsP.dimensions()[0] * std::min(mpsP.dimensions()[1], mpsP.dimensions()[2]) < std::max(mpsP.dimensions()[1], mpsP.dimensions()[2])) {
-        tools::log->warn("Bond expansion failed: {} -> {}", dimP_old, mpsP.dimensions());
-    }
+    if(mpsP.dimensions()[0] * std::min(mpsP.dimensions()[1], mpsP.dimensions()[2]) < std::max(mpsP.dimensions()[1], mpsP.dimensions()[2]))
+        tools::log->warn("Bond expansion failed: {} -> {}", dimP_old, fmw::wrap(mpsP.dimensions()));
 
-    if(dimL_old[1] != mpsL.get_chiL()) throw except::runtime_error("mpsL changed chiL during bond expansion: {} -> {}", dimL_old, mpsL.dimensions());
-    if(dimR_old[2] != mpsR.get_chiR()) throw except::runtime_error("mpsR changed chiR during bond expansion: {} -> {}", dimR_old, mpsR.dimensions());
+    if(dimL_old[1] != mpsL.get_chiL()) throw except::runtime_error("mpsL changed chiL during bond expansion: {} -> {}", fmw::wrap(dimL_old), fmw::wrap(mpsL.dimensions()));
+    if(dimR_old[2] != mpsR.get_chiR()) throw except::runtime_error("mpsR changed chiR during bond expansion: {} -> {}", fmw::wrap(dimR_old), fmw::wrap(mpsR.dimensions()));
     if constexpr(settings::debug_rexpansion_postopt) mpsL.assert_normalized();
     if constexpr(settings::debug_rexpansion_postopt) mpsR.assert_normalized();
     state.clear_cache();

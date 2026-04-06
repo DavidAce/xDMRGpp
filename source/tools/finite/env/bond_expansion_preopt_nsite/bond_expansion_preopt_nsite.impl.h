@@ -378,8 +378,8 @@ BondExpansionResult<Scalar> tools::finite::env::expand_bond_preopt_nsite(StateFi
         throw except::runtime_error("expand_bond_preopt_nsite: All lengths not equal: state {} | model {} | edges {}", state.get_length(), model.get_length(),
                                     edges.get_length());
     if(not num::all_equal(state.active_sites, model.active_sites, edges.active_sites))
-        throw except::runtime_error("expand_bond_preopt_nsite: All active sites are not equal: state {} | model {} | edges {}", state.active_sites,
-                                    model.active_sites, edges.active_sites);
+        throw except::runtime_error("expand_bond_preopt_nsite: All active sites are not equal: state {} | model {} | edges {}", fmw::wrap(state.active_sites),
+                                    fmw::wrap(model.active_sites), fmw::wrap(edges.active_sites));
     if(state.active_sites.empty()) throw except::logic_error("No active sites for bond expansion");
 
     bool nopreopt = !has_any_flags(bcfg.policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE);

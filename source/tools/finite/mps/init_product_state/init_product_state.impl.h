@@ -12,7 +12,6 @@
 #include "tensors/state/StateFinite.h"
 #include "tools/common/log.h"
 #include <bitset>
-#include <fmt/ranges.h>
 
 /*!
  * There are many ways to generate an initial product state based on the

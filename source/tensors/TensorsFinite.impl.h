@@ -591,8 +591,8 @@ void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &
     // Make sure the active sites are the same everywhere
     auto t_merge = tid::tic_scope("merge");
     if(not num::all_equal(active_sites, state->active_sites, model->active_sites, edges->active_sites))
-        throw except::runtime_error("All active sites are not equal: tensors {} | state {} | model {} | edges {}", active_sites, state->active_sites,
-                                    model->active_sites, edges->active_sites);
+        throw except::runtime_error("All active sites are not equal: tensors {} | state {} | model {} | edges {}", fmw::wrap(active_sites),
+                                    fmw::wrap(state->active_sites), fmw::wrap(model->active_sites), fmw::wrap(edges->active_sites));
     clear_measurements(log_policy);
     tools::finite::mps::merge_multisite_mps(get_state(), multisite_tensor, active_sites, get_position<long>(), mevent, svd_cfg, log_policy);
     normalize_state(svd_cfg, NormPolicy::IFNEEDED);

@@ -4,6 +4,7 @@
 #include "math/tenx.h"
 #include "tools/common/log.h"
 #include <Eigen/Core>
+#include <source_location>
 
 template<typename Derived>
 void assert_allfinite(const Eigen::MatrixBase<Derived> &X, const std::source_location &location = std::source_location::current()) {

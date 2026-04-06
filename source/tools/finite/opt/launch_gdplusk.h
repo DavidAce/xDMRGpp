@@ -1,4 +1,5 @@
 #pragma once
+#include "io/spdlog_setup.h"
 #include "config/enums/OptAlgo.h"
 #include "config/settings.h"
 #include "math/eig/matvec/matvec_mpos.h"

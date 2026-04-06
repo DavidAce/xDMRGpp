@@ -15,122 +15,27 @@
 
 namespace tools::logfmt {
     template<typename T>
-    using bare_t = std::decay_t<T>;
-
-    template<typename T>
-    struct complex_scalar_type {
-        static constexpr bool value = false;
-        using type                  = void;
-    };
-
-    template<typename T>
-    struct complex_scalar_type<std::complex<T>> {
-        static constexpr bool value = true;
-        using type                  = T;
-    };
-
-    template<typename T>
-    concept native_fp_scalar = std::same_as<bare_t<T>, float> || std::same_as<bare_t<T>, double> || std::same_as<bare_t<T>, long double>;
-
-    template<typename T>
-    concept complex_floating_scalar = complex_scalar_type<bare_t<T>>::value && std::floating_point<typename complex_scalar_type<bare_t<T>>::type>;
-
-    template<typename T>
-    concept extended_fp_scalar = std::floating_point<bare_t<T>> && !native_fp_scalar<T>;
-
-    template<typename T>
     concept message_like = std::convertible_to<T, std::string_view>;
 
     template<typename T>
-    concept contiguous_storage = requires(const bare_t<T> &value) {
-        { value.data() };
-        requires std::is_pointer_v<decltype(value.data())>;
-        { value.size() } -> std::convertible_to<std::size_t>;
-    };
+    using adapted_arg_t = fmw::adapted_arg_t<T>;
 
     template<typename T>
-    requires complex_floating_scalar<T>
-    using complex_value_t = typename bare_t<T>::value_type;
-
-    template<typename T>
-    requires contiguous_storage<T>
-    using range_value_t = std::remove_cv_t<std::remove_pointer_t<decltype(std::declval<const bare_t<T> &>().data())>>;
-
-    template<typename T>
-    concept contiguous_floating_range = contiguous_storage<T> && !sfinae::is_text_v<bare_t<T>> && std::floating_point<range_value_t<T>>;
-
-    template<typename T>
-    inline constexpr bool needs_fp_wrapper_v = [] {
-        if constexpr(extended_fp_scalar<T>) {
-            return true;
-        } else if constexpr(complex_floating_scalar<T>) {
-            return extended_fp_scalar<complex_value_t<T>>;
-        } else {
-            return false;
-        }
-    }();
-
-    template<typename T>
-    inline constexpr bool needs_fv_wrapper_v = [] {
-        if constexpr(contiguous_floating_range<T>) {
-            return true;
-        } else {
-            return false;
-        }
-    }();
-
-    // The logger only auto-wraps the known problematic numeric domain:
-    // extended floating-point scalars and contiguous floating-point ranges.
-    // Ranges always go through fv so call sites can keep using fv-style
-    // element formatting such as "{::+9.6f}" without explicit wrappers.
-    // Everything else is forwarded unchanged and must already be formattable by fmt/spdlog.
-    template<typename T>
-    struct adapted_arg {
-        using type = T;
-    };
-
-    template<typename T>
-    requires needs_fp_wrapper_v<T>
-    struct adapted_arg<T> {
-        using type = fp<bare_t<T>>;
-    };
-
-    template<typename T>
-    requires(!needs_fp_wrapper_v<T> && needs_fv_wrapper_v<T>)
-    struct adapted_arg<T> {
-        using type = fv<range_value_t<T>>;
-    };
-
-    template<typename T>
-    using adapted_arg_t = typename adapted_arg<T>::type;
-
-    // Keep the wrapper construction in one place so the formatting policy is easy to audit.
-    template<typename T>
-    requires needs_fp_wrapper_v<T>
-    constexpr auto adapt_arg(T &&value) {
-        static_assert(extended_fp_scalar<T> || complex_floating_scalar<T>,
-                      "fp(...) adaptation is reserved for floating-point scalars and std::complex<floating-point>.");
-        return fp<bare_t<T>>(std::forward<T>(value));
-    }
-
-    template<typename T>
-    requires(!needs_fp_wrapper_v<T> && needs_fv_wrapper_v<T>)
-    constexpr auto adapt_arg(T &&value) {
-        static_assert(contiguous_floating_range<T>, "fv(...) adaptation requires a non-text contiguous range with data() and size().");
-        return fv<range_value_t<T>>(value);
-    }
-
-    template<typename T>
-    requires(!needs_fp_wrapper_v<T> && !needs_fv_wrapper_v<T>)
     constexpr decltype(auto) adapt_arg(T &&value) {
-        return std::forward<T>(value);
+        return fmw::wrap(std::forward<T>(value));
     }
 
     static_assert(std::same_as<adapted_arg_t<double>, double>, "Native floating-point types should be forwarded directly to fmt.");
     static_assert(std::same_as<adapted_arg_t<long double>, long double>, "Native floating-point types should be forwarded directly to fmt.");
-    static_assert(std::same_as<adapted_arg_t<std::complex<double>>, std::complex<double>>,
-                  "Native complex floating-point types should be forwarded directly to fmt.");
-    static_assert(!contiguous_floating_range<std::string>, "Text types must not be treated as numeric ranges.");
+    static_assert(std::same_as<adapted_arg_t<std::complex<double>>, fp<std::complex<double>>>,
+                  "Native complex floating-point types should be wrapped in fp before reaching fmt.");
+    static_assert(std::same_as<adapted_arg_t<std::filesystem::path>, fmtwrap::path_view>,
+                  "filesystem::path should be adapted through the lightweight path formatter.");
+    static_assert(std::same_as<adapted_arg_t<std::optional<double>>, fmtwrap::optional_view<double>>,
+                  "std::optional should be adapted through the lightweight optional formatter.");
+    static_assert(std::same_as<adapted_arg_t<std::vector<size_t>>, fmtwrap::listed_view<std::vector<size_t>>>,
+                  "Iterable ranges should be adapted through the lightweight range formatter.");
+    static_assert(!fmtwrap::contiguous_floating_range<std::string>, "Text types must not be treated as numeric ranges.");
 #if defined(DMRG_USE_FLOAT128) && defined(__STDCPP_FLOAT128_T__)
     static_assert(std::same_as<adapted_arg_t<std::float128_t>, fp<std::float128_t>>,
                   "Extended floating-point types must be wrapped in fp before reaching fmt.");
@@ -159,8 +64,9 @@ namespace tools {
 
         template<typename... Args>
         requires(sizeof...(Args) > 0)
-        void format_impl(spdlog::level::level_enum lvl, spdlog::format_string_t<logfmt::adapted_arg_t<Args>...> fmt, Args &&...args) const {
-            require_logger().log(lvl, fmt, logfmt::adapt_arg(std::forward<Args>(args))...);
+        void format_impl(spdlog::level::level_enum lvl, fmt::string_view fmt_sv, Args &&...args) const {
+            auto rendered = fmt::format(fmt::runtime(fmt_sv), logfmt::adapt_arg(std::forward<Args>(args))...);
+            require_logger().log(lvl, rendered);
         }
 
         public:
@@ -213,7 +119,7 @@ namespace tools {
 
         template<typename... Args>
         requires(sizeof...(Args) > 0)
-        void trace(spdlog::format_string_t<logfmt::adapted_arg_t<Args>...> fmt, Args &&...args) const {
+        void trace(fmt::string_view fmt, Args &&...args) const {
             format_impl(spdlog::level::trace, fmt, std::forward<Args>(args)...);
         }
 
@@ -225,7 +131,7 @@ namespace tools {
 
         template<typename... Args>
         requires(sizeof...(Args) > 0)
-        void debug(spdlog::format_string_t<logfmt::adapted_arg_t<Args>...> fmt, Args &&...args) const {
+        void debug(fmt::string_view fmt, Args &&...args) const {
             format_impl(spdlog::level::debug, fmt, std::forward<Args>(args)...);
         }
 
@@ -237,7 +143,7 @@ namespace tools {
 
         template<typename... Args>
         requires(sizeof...(Args) > 0)
-        void info(spdlog::format_string_t<logfmt::adapted_arg_t<Args>...> fmt, Args &&...args) const {
+        void info(fmt::string_view fmt, Args &&...args) const {
             format_impl(spdlog::level::info, fmt, std::forward<Args>(args)...);
         }
 
@@ -249,7 +155,7 @@ namespace tools {
 
         template<typename... Args>
         requires(sizeof...(Args) > 0)
-        void warn(spdlog::format_string_t<logfmt::adapted_arg_t<Args>...> fmt, Args &&...args) const {
+        void warn(fmt::string_view fmt, Args &&...args) const {
             format_impl(spdlog::level::warn, fmt, std::forward<Args>(args)...);
         }
 
@@ -261,7 +167,7 @@ namespace tools {
 
         template<typename... Args>
         requires(sizeof...(Args) > 0)
-        void error(spdlog::format_string_t<logfmt::adapted_arg_t<Args>...> fmt, Args &&...args) const {
+        void error(fmt::string_view fmt, Args &&...args) const {
             format_impl(spdlog::level::err, fmt, std::forward<Args>(args)...);
         }
 
@@ -273,7 +179,7 @@ namespace tools {
 
         template<typename... Args>
         requires(sizeof...(Args) > 0)
-        void critical(spdlog::format_string_t<logfmt::adapted_arg_t<Args>...> fmt, Args &&...args) const {
+        void critical(fmt::string_view fmt, Args &&...args) const {
             format_impl(spdlog::level::critical, fmt, std::forward<Args>(args)...);
         }
 
@@ -285,7 +191,7 @@ namespace tools {
 
         template<typename... Args>
         requires(sizeof...(Args) > 0)
-        void log(spdlog::level::level_enum lvl, spdlog::format_string_t<logfmt::adapted_arg_t<Args>...> fmt, Args &&...args) const {
+        void log(spdlog::level::level_enum lvl, fmt::string_view fmt, Args &&...args) const {
             format_impl(lvl, fmt, std::forward<Args>(args)...);
         }
     };

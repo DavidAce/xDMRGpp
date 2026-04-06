@@ -24,7 +24,6 @@
 #include "tools/finite/mps.h"
 #include "tools/finite/ops.h"
 #include <config/settings.h>
-#include <fmt/ranges.h>
 #include <utility> // for std::swap
 
 namespace settings {
@@ -76,9 +75,8 @@ void tools::finite::ops::apply_mpos(StateFinite<Scalar> &state, const std::vecto
         tools::log->debug("Entanglement entropy before applying mpos: {}", tools::finite::measure::entanglement_entropies(state));
     }
     if constexpr(settings::debug or settings::debug_projection) {
-        if(tenx::hasNaN(tools::finite::measure::entanglement_entropies(state))) {
+        if(tenx::hasNaN(tools::finite::measure::entanglement_entropies(state)))
             throw except::runtime_error("Entanglement entropy has nans:\n{}", fv(tools::finite::measure::entanglement_entropies(state)));
-        }
     }
     state.clear_measurements();
     for(const auto &[pos, mpo] : iter::enumerate(mpos)) state.template get_mps_site<size_t>(pos).apply_mpo(mpo, adjoint); // Apply all mpo's
@@ -181,9 +179,8 @@ void tools::finite::ops::apply_mpos(StateFinite<Scalar> &state, const std::vecto
         state.clear_cache();
     }
     if constexpr(settings::debug or settings::debug_projection) {
-        if(tenx::hasNaN(tools::finite::measure::entanglement_entropies(state))) {
+        if(tenx::hasNaN(tools::finite::measure::entanglement_entropies(state)))
             throw except::runtime_error("Entanglement entropy has nans:\n{}", fv(tools::finite::measure::entanglement_entropies(state)));
-        }
     }
 }
 

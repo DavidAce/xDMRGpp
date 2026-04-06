@@ -20,7 +20,6 @@
 #include "tools/finite/measure/norm.h"
 #include "tools/finite/measure/truncation.h"
 #include "tools/finite/multisite.h"
-#include <fmt/ranges.h>
 
 template<typename Scalar>
 StateFinite<Scalar>::StateFinite() = default; // Can't initialize lists since we don't know the model size yet

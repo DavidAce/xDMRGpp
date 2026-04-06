@@ -1,4 +1,5 @@
 #include "threading.h"
+#include "debug/exceptions.h"
 #include "math/tenx/threads.h"
 #include "settings.h"
 #include "tools/common/log.h"

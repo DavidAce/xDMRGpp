@@ -16,7 +16,6 @@
 #include "tools/finite/mps.h"
 #include <bit>
 #include <bitset>
-#include <fmt/ranges.h>
 #include <utility>
 using tools::finite::measure::RealScalar;
 

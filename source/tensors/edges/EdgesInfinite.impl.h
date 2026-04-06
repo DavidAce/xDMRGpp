@@ -6,7 +6,6 @@
 #include "tensors/site/env/EnvEne.h"
 #include "tensors/site/env/EnvPair.h"
 #include "tensors/site/env/EnvVar.h"
-#include "tools/common/log.h"
 
 template<typename Scalar>
 EdgesInfinite<Scalar>::EdgesInfinite()
@@ -64,8 +63,8 @@ void EdgesInfinite<Scalar>::eject_edges() {
 template<typename Scalar>
 size_t EdgesInfinite<Scalar>::get_length() const {
     if(not num::all_equal(eneL->get_sites(), eneR->get_sites(), varL->get_sites(), varR->get_sites()))
-        throw except::runtime_error("Site mismatch in edges: eneL {} | eneR {} | varL {} | varR {}", eneL->get_sites(), eneR->get_sites(), varL->get_sites(),
-                                    varR->get_sites());
+        throw except::runtime_error("Site mismatch in edges: eneL {} | eneR {} | varL {} | varR {}", fmw::wrap(eneL->get_sites()),
+                                    fmw::wrap(eneR->get_sites()), fmw::wrap(varL->get_sites()), fmw::wrap(varR->get_sites()));
     return eneL->get_sites() + eneR->get_sites() + 2;
 }
 

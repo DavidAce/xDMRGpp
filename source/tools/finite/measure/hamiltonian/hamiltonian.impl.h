@@ -715,8 +715,8 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
     assert(not model.active_sites.empty());
     assert(not edges.active_sites.empty());
     if(not num::all_equal(model.active_sites, edges.active_sites))
-        throw std::runtime_error(
-            fmt::format("Could not compute energy variance: active sites are not equal: model {} | edges {}", model.active_sites, edges.active_sites));
+        throw std::runtime_error(fmt::format("Could not compute energy variance: active sites are not equal: model {} | edges {}",
+                                             fmw::wrap(model.active_sites), fmw::wrap(edges.active_sites)));
     RealScalar<Scalar> energy = tools::finite::measure::energy_minus_energy_shift<Scalar>(multisite_mps, model, edges, svd_cfg, nullptr);
     RealScalar<Scalar> E2     = energy * energy;
 

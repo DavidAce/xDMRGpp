@@ -11,5 +11,5 @@
     #pragma message "SPDLOG_COMPILED_LIB is not defined. Define it and link libspdlog to speed up compilation"
 #endif
 
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/spdlog.h>
+#include <spdlog/common.h>
+#include <spdlog/logger.h>

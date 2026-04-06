@@ -11,7 +11,6 @@
 #include "tensors/site/env/EnvEne.h"
 #include "tensors/site/env/EnvPair.h"
 #include "tensors/site/env/EnvVar.h"
-#include "tools/common/log.h"
 
 template<typename Scalar>
 EdgesFinite<Scalar>::EdgesFinite() = default; // Can't initialize lists since we don't know the model size yet

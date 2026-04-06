@@ -144,19 +144,18 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_post
     tensors.clear_measurements();
     env::rebuild_edges(state, model, edges);
 
-    if(mpsP.dimensions()[0] * std::min(mpsP.dimensions()[1], mpsP.dimensions()[2]) < std::max(mpsP.dimensions()[1], mpsP.dimensions()[2])) {
-        tools::log->warn("Bond expansion failed: {} -> {}", dimP_old, mpsP.dimensions());
-    }
+    if(mpsP.dimensions()[0] * std::min(mpsP.dimensions()[1], mpsP.dimensions()[2]) < std::max(mpsP.dimensions()[1], mpsP.dimensions()[2]))
+        tools::log->warn("Bond expansion failed: {} -> {}", dimP_old, fmw::wrap(mpsP.dimensions()));
 
-    if(dimL_old[1] != mpsL.get_chiL()) throw except::runtime_error("mpsL changed chiL during bond expansion: {} -> {}", dimL_old, mpsL.dimensions());
-    if(dimR_old[2] != mpsR.get_chiR()) throw except::runtime_error("mpsR changed chiR during bond expansion: {} -> {}", dimR_old, mpsR.dimensions());
+    if(dimL_old[1] != mpsL.get_chiL()) throw except::runtime_error("mpsL changed chiL during bond expansion: {} -> {}", fmw::wrap(dimL_old), fmw::wrap(mpsL.dimensions()));
+    if(dimR_old[2] != mpsR.get_chiR()) throw except::runtime_error("mpsR changed chiR during bond expansion: {} -> {}", fmw::wrap(dimR_old), fmw::wrap(mpsR.dimensions()));
     if constexpr(settings::debug_rexpansion_postopt_rdmp) mpsL.assert_normalized();
     if constexpr(settings::debug_rexpansion_postopt_rdmp) mpsR.assert_normalized();
 
     assert(mpsL.get_chiR() == mpsR.get_chiL());
     if(mpsL.get_chiR() > bcfg.bond_lim) {
-        throw except::logic_error("density_matrix_perturbation_postopt_1site: {}{} - {}{} | bond {} > max bond {}", mpsL.get_tag(), mpsL.dimensions(),
-                                  mpsR.get_tag(), mpsR.dimensions(), mpsL.get_chiR(), bcfg.bond_lim);
+        throw except::logic_error("density_matrix_perturbation_postopt_1site: {}{} - {}{} | bond {} > max bond {}", mpsL.get_tag(),
+                                  fmw::wrap(mpsL.dimensions()), mpsR.get_tag(), fmw::wrap(mpsR.dimensions()), mpsL.get_chiR(), bcfg.bond_lim);
     }
     if(mpsR.get_chiL() > bcfg.bond_lim) {
         throw except::logic_error("density_matrix_perturbation_postopt_1site: {}{} - {}{} | bond {} > max bond {}", mpsL.get_tag(), mpsL.dimensions(),

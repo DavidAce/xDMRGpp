@@ -10,7 +10,6 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tid/tid.h"
 #include <deque>
-#include <h5pp/h5pp.h>
 #include <optional>
 
 class value;
@@ -490,9 +489,8 @@ std::deque<MpsSite<Scalar>> tools::common::split::internal::split_mps_into_Bs(co
      */
     //    if(spin_dims.empty()) throw except::runtime_error("Could not split multisite tensor from the right: spin_dims list is empty");
     if(spin_dims.size() != positions.size())
-        throw except::runtime_error(
-            fmt::format("Could not split multisite tensor from the right: size mismatch in given lists: spin_dims {} != sites {} -- sizes not equal", spin_dims,
-                        positions));
+        throw except::runtime_error("Could not split multisite tensor from the right: size mismatch in given lists: spin_dims {} != sites {} -- sizes not equal",
+                                    spin_dims, positions);
 
     // A special case is when we do one-site tensors. Then we expect
     // this function to receive a "V^dagger" without sites in it ( S*V^dagger will become a center bond).

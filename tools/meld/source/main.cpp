@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
     if(tgt_dir.empty()) throw std::runtime_error("A target directory is required. Pass --tgtdir=<dir>");
 
     tools::logger::setLogLevel(tools::logger::log, verbosity);
-    tools::logger::log->info("Started h5mbl from directory {}", h5pp::fs::current_path());
+    tools::logger::log->info("Started h5mbl from directory {}", h5pp::fs::current_path().string());
     if(src_sims.empty()) throw std::runtime_error("Source directories are required. Pass --srcsims=<pattern1,pattern2...>");
     for(auto &src_dir : src_sims) {
         if(not h5pp::fs::is_directory(src_dir)) throw std::runtime_error(fmt::format("Given source is not a directory: {}", src_dir.string()));
@@ -574,7 +574,7 @@ int main(int argc, char *argv[]) {
 
     // Now id 1 can merge the files into one final file
     if(mpi::world.id == 0) {
-        tools::logger::log->info("Creating main file for external links: {}", tgt_path);
+        tools::logger::log->info("Creating main file for external links: {}", tgt_path.string());
         auto h5_tgt   = h5pp::File(tgt_path, h5pp::FilePermission::REPLACE, verbosity_h5pp);
         auto tgt_stem = h5pp::fs::path(tgt_path).stem().string();
         auto failpath = tgt_dir / "failed.job";

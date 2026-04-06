@@ -11,8 +11,6 @@
 #include "math/tenx.h"
 #include "qm/spin.h"
 #include "tools/common/log.h"
-#include <fmt/ranges.h>
-#include <fmt/std.h>
 #include <h5pp/h5pp.h>
 
 namespace settings {

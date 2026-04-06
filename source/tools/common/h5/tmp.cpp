@@ -3,6 +3,7 @@
 #include "config/settings.h"
 #include "debug/exceptions.h"
 #include "io/fmt_custom.h"
+#include "io/spdlog_setup.h"
 #include "tid/tid.h"
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
@@ -37,7 +38,7 @@ std::string tools::common::h5::tmp::internal::get_tmp_dir() {
 }
 
 const tools::common::h5::tmp::internal::pathpair &tools::common::h5::tmp::internal::register_paths(std::string_view filepath) {
-    if(not fs::path(filepath).has_filename()) throw except::runtime_error("Given output file path has no filename: [{}]", filepath);
+    if(not fs::path(filepath).has_filename()) throw except::runtime_error("Given output file path has no filename: [{}]", fmw::wrap(fs::path(filepath)));
     std::string filename   = fs::path(filepath).filename();
     std::string configname = fs::path(settings::input::config_filename).filename().replace_extension("");
     if(internal::file_register.find(filename) != internal::file_register.end()) return internal::file_register[filename];
@@ -49,7 +50,7 @@ const tools::common::h5::tmp::internal::pathpair &tools::common::h5::tmp::intern
 }
 
 const tools::common::h5::tmp::internal::pathpair &tools::common::h5::tmp::internal::get_paths(std::string_view filepath) {
-    if(not fs::path(filepath).has_filename()) throw except::runtime_error("Given output file path has no filename: [{}]", filepath);
+    if(not fs::path(filepath).has_filename()) throw except::runtime_error("Given output file path has no filename: [{}]", fmw::wrap(fs::path(filepath)));
     std::string filename = fs::path(filepath).filename();
     return internal::file_register[filename];
 }

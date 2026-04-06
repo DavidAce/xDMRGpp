@@ -23,7 +23,6 @@
 #include "tools/finite/mps.h"
 #include "tools/finite/ops.h"
 #include <complex>
-#include <h5pp/h5pp.h>
 #include <unsupported/Eigen/CXX11/Tensor>
 
 template<typename Scalar>
@@ -34,7 +33,7 @@ std::pair<StateFinite<Scalar>, AlgorithmStatus>
     /*!
      * \fn void update_state()
      */
-    tools::log->debug("Starting fLBIT: iter {} | t = {:.2e}", time_index + 1, time_point);
+    tools::log->debug("Starting fLBIT: iter {} | t = {:.2e}", time_index + 1, fp(time_point));
     auto t_step = tid::tic_scope("upd");
 
     // Time evolve from 0 to time_point[iter] here
@@ -54,7 +53,7 @@ template<typename Scalar>
 std::vector<std::vector<qm::SwapGate>> flbit_tmpl<Scalar>::get_time_evolution_gates(const cx128                                  &time_point,
                                                                                     const std::vector<std::vector<qm::SwapGate>> &ham_swap_gates) {
     auto t_upd = tid::tic_scope("gen_swap_gates", tid::level::normal);
-    tools::log->debug("Updating time evolution swap gates to t = {:.2e}", time_point);
+    tools::log->debug("Updating time evolution swap gates to t = {:.2e}", fp(time_point));
     auto time_swap_gates = std::vector<std::vector<qm::SwapGate>>();
     for(const auto &hams : ham_swap_gates) { // ham_swap_gates contain 1body, 2body and 3body hamiltonian terms (each as a layer of swap gates)
         time_swap_gates.emplace_back(qm::lbit::get_time_evolution_swap_gates(time_point, hams));
@@ -70,7 +69,7 @@ StateFinite<Scalar> flbit_tmpl<Scalar>::time_evolve_lbit_state(const StateFinite
     svd_cfg.svd_lib = svd::lib::lapacke;
     svd_cfg.svd_rtn = svd::rtn::geauto;
     auto delta_t    = status.delta_t.to_floating_point<cx128>();
-    tools::log->debug("Applying time evolution swap gates Δt = {:.2e}", delta_t);
+    tools::log->debug("Applying time evolution swap gates Δt = {:.2e}", fp(delta_t));
     auto state_lbit_tevo = state_lbit_init;
     for(const auto &gates : gates_tevo) { tools::finite::mps::apply_swap_gates(state_lbit_tevo, gates, CircuitOp::NONE, GateMove::AUTO, svd_cfg); }
 
@@ -82,7 +81,7 @@ StateFinite<Scalar> flbit_tmpl<Scalar>::time_evolve_lbit_state(const StateFinite
         }
         tools::finite::mps::normalize_state(state_lbit_init_debug, std::nullopt, NormPolicy::IFNEEDED);
         auto overlap = tools::finite::ops::overlap<Scalar>(state_lbit_init, state_lbit_init_debug);
-        tools::log->info("Debug overlap after time evolution: {:.16f}", overlap);
+        tools::log->info("Debug overlap after time evolution: {:.16f}", fp(overlap));
         if(std::abs(overlap - 1.0) > 10 * status.trnc_lim)
             throw except::runtime_error("State overlap after backwards time evolution is not 1: Got {:.16f}", fp(overlap));
     }

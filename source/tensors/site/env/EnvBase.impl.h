@@ -279,7 +279,7 @@ void EnvBase<Scalar>::assert_unique_id(const EnvBase &env, const MpsSite<Scalar>
         throw except::runtime_error("assert_unique_id: {}{}({}): unique id mismatch:\n{}\n"
                                     "Hint: remember to rebuild edges after operations that may modify them, "
                                     "like 1-site merge, move, normalization, projection, etc\n",
-                                    tag, side, get_position(), fmt::join(msg, "\n"));
+                                    tag, side, get_position(), fmw::join(msg, "\n"));
 }
 
 template<typename Scalar>

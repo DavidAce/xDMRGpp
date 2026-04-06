@@ -2,6 +2,7 @@
 #include "math/tenx.h"
 // tenx must appear first
 #include "config/debug.h"
+#include "debug/exceptions.h"
 #include "math/float.h"
 #include "math/hash.h"
 #include "math/linalg/tensor/to_string.h"
@@ -11,7 +12,6 @@
 #include "tools/common/contraction.h"
 #include "tools/common/log.h"
 #include <config/settings.h>
-#include <fmt/ranges.h>
 #include <general/sfinae.h>
 #include <utility>
 

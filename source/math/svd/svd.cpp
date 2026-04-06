@@ -1,8 +1,9 @@
 #include "math/svd.h"
+#include "io/spdlog_setup.h"
 #include "tid/tid.h"
 #include <debug/exceptions.h>
 #include <Eigen/QR>
-#include <fmt/ranges.h>
+#include <fmt/format.h>
 
 #if defined(_OPENMP)
 

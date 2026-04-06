@@ -15,7 +15,6 @@
 #include "debug/info.h"
 #include "general/iter.h"
 #include "io/fmt_custom.h"
-#include "io/spdlog.h"
 #include "math/cast.h"
 #include "math/fit.h"
 #include "math/float.h"
@@ -668,7 +667,7 @@ cx64 qm::lbit::get_lbit_2point_correlator2(const std::vector<std::vector<qm::Gat
     result  = g.trace();
     result /= std::pow(2, g.pos.size()); // Normalize by dividing the trace of each 2x2 identity.
     if constexpr(settings::verbose_circuit) {
-        log.back().append(fmt::format("result = {:.6f}", result));
+        log.back().append(fmt::format("result = {:.6f}", fp(result)));
         for(const auto &[idx, layer] : iter::enumerate_reverse(net)) tools::log->debug("{} | {}", layer, log[idx]);
     }
     return result;
@@ -916,7 +915,7 @@ cx64 qm::lbit::get_lbit_2point_correlator3(const std::vector<std::vector<qm::Gat
     result /= std::pow(2, g.pos.size()); // Normalize by dividing the trace of each 2x2 identity.
     t_olap.toc();
     if constexpr(settings::verbose_circuit) {
-        log.back().append(fmt::format("result = {:.6f} | time {:.3e}", result, t_olap.get_time()));
+        log.back().append(fmt::format("result = {:.6f} | time {:.3e}", fp(result), t_olap.get_time()));
         for(const auto &[idx, layer] : iter::enumerate_reverse(net)) tools::log->debug("{} | {}", layer, log[idx]);
     }
     return result;

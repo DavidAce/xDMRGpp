@@ -29,7 +29,6 @@
 #include "math/tenx.h"
 #include "tools/finite/opt/opt-internal.h"
 #include "tools/finite/opt/report.h"
-#include <h5pp/h5pp.h>
 #include <primme/primme.h>
 
 using namespace tools::finite::opt;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <fmt/format.h>
+#include "io/fmt_custom.h"
 #include <stdexcept>
 
 namespace except {
@@ -8,21 +8,24 @@ namespace except {
         public:
         using std::runtime_error::runtime_error;
         template<typename... Args>
-        runtime_error(fmt::format_string<Args...> fs, Args &&...args) : std::runtime_error(fmt::format(fs, std::forward<Args>(args)...)) {}
+        runtime_error(fmt::format_string<fmw::adapted_arg_t<Args>...> fs, Args &&...args)
+            : std::runtime_error(fmt::format(fs, fmw::wrap(std::forward<Args>(args))...)) {}
     };
 
     class logic_error : public std::logic_error {
         public:
         using std::logic_error::logic_error;
         template<typename... Args>
-        logic_error(fmt::format_string<Args...> fs, Args &&...args) : std::logic_error(fmt::format(fs, std::forward<Args>(args)...)) {}
+        logic_error(fmt::format_string<fmw::adapted_arg_t<Args>...> fs, Args &&...args)
+            : std::logic_error(fmt::format(fs, fmw::wrap(std::forward<Args>(args))...)) {}
     };
 
     class range_error : public std::range_error {
         public:
         using std::range_error::range_error;
         template<typename... Args>
-        range_error(fmt::format_string<Args...> fs, Args &&...args) : std::range_error(fmt::format(fs, std::forward<Args>(args)...)) {}
+        range_error(fmt::format_string<fmw::adapted_arg_t<Args>...> fs, Args &&...args)
+            : std::range_error(fmt::format(fs, fmw::wrap(std::forward<Args>(args))...)) {}
     };
 
     class state_error : public except::runtime_error {

@@ -78,7 +78,7 @@ namespace tools::h5io {
         }
     }
 
-    std::string get_tmp_dirname(std::string_view exename) { return fmt::format("{}.{}", h5pp::fs::path(exename).filename(), getenv("USER")); }
+    std::string get_tmp_dirname(std::string_view exename) { return fmt::format("{}.{}", h5pp::fs::path(exename).filename().string(), getenv("USER")); }
 
     size_t get_num_decimals(double val) {
         auto s       = fmt::format("{}", val);
@@ -215,7 +215,7 @@ namespace tools::h5io {
         std::vector<ModelKey> keys;
         for(const auto &srcKey : srcKeys) {
             auto hamiltonian_path = fmt::format("{}/{}/{}", srcKey.algo, srcKey.model, srcKey.name);
-            auto key              = fmt::format("{}|{}", h5pp::fs::path(h5_src.getFilePath()).parent_path(), hamiltonian_path);
+            auto key              = fmt::format("{}|{}", h5pp::fs::path(h5_src.getFilePath()).parent_path().string(), hamiltonian_path);
             if(srcModelDb.find(key) == srcModelDb.end() and h5_src.linkExists(hamiltonian_path)) {
                 // Copy the model from the attributes in h5_src to a struct ModelId
                 srcModelDb[key]   = ModelId<H, C>();

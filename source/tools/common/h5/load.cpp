@@ -99,8 +99,8 @@ namespace tools::common::h5 {
                 h5file.readTableRecords(status, table_path, h5pp::TableSelection::LAST); // Reads the last entry by default
             }
         } else {
-            throw except::runtime_error("Could not find table [status] for state [{}] in file [{}] at table path [{}]", state_prefix, h5file.getFilePath(),
-                                        table_path);
+            throw except::runtime_error("Could not find table [status] for state [{}] in file [{}] at table path [{}]", state_prefix,
+                                        fmw::wrap(h5file.getFilePath()), table_path);
         }
     }
 
@@ -125,8 +125,8 @@ namespace tools::common::h5 {
                 h5file.readTableRecords(status, table_path, h5pp::TableSelection::LAST); // Reads the last entry by default
             }
         } else {
-            throw except::runtime_error("Could not find table [status] for state [{}] in file [{}] at table path [{}]", state_prefix, h5file.getFilePath(),
-                                        table_path);
+            throw except::runtime_error("Could not find table [status] for state [{}] in file [{}] at table path [{}]", state_prefix,
+                                        fmw::wrap(h5file.getFilePath()), table_path);
         }
     }
 
