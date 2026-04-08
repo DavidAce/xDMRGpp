@@ -14,10 +14,9 @@ if(NOT TARGET xdmrg++-flags)
 endif()
 
 ###  Add optional RELEASE/DEBUG compile to flags
-target_compile_options(xdmrg++-flags INTERFACE $<$<AND:$<CONFIG:DEBUG>,$<CXX_COMPILER_ID:Clang>>: -Wconversion  -Wdouble-promotion -fstandalone-debug>)
-target_compile_options(xdmrg++-flags INTERFACE $<$<AND:$<CONFIG:DEBUG>,$<CXX_COMPILER_ID:GNU>>: -Wconversion  -Wdouble-promotion>)
-target_compile_options(xdmrg++-flags INTERFACE $<$<AND:$<CONFIG:RELWITHDEBINFO>,$<CXX_COMPILER_ID:Clang>>: -Wconversion  -Wdouble-promotion -fstandalone-debug>)
-target_compile_options(xdmrg++-flags INTERFACE $<$<AND:$<CONFIG:RELWITHDEBINFO>,$<CXX_COMPILER_ID:GNU>>: -Wconversion  -Wdouble-promotion>)
+target_compile_options(xdmrg++-flags INTERFACE $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:DEBUG>>:${COMPILER_WFLAGS_DEBUG}>)
+target_compile_options(xdmrg++-flags INTERFACE
+                       $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELWITHDEBINFO>>:${COMPILER_WFLAGS_RELWITHDEBINFO}>)
 target_compile_options(xdmrg++-flags INTERFACE
                        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/W4>
                        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-Wall -Wextra -Wpedantic -Wunused -Wformat>)
@@ -29,18 +28,33 @@ if(COMPILER_PROFILE_BUILD)
     target_compile_options(xdmrg++-flags INTERFACE $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-ftime-trace>)
 endif()
 
-# Settings for sanitizers
+# Settings for sanitizers:
+# - USAN: cheap arithmetic/UB checks suitable for routine debug builds
+# - ASAN: heavier memory/lifetime checks plus expensive pointer/conversion checks
 if(COMPILER_ENABLE_ASAN)
-    set(ASAN_FLAGS -fno-omit-frame-pointer -fsanitize=address)
+    set(ASAN_FLAGS
+        -fno-omit-frame-pointer
+        -fsanitize=address,leak,pointer-compare,pointer-subtract
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        list(APPEND ASAN_FLAGS
+             -fsanitize=implicit-conversion
+        )
+    endif()
     mark_as_advanced(ASAN_FLAGS)
-    target_compile_options(xdmrg++-flags INTERFACE $<$<COMPILE_LANGUAGE:CXX>: ${ASAN_FLAGS}>)
+    target_compile_options(xdmrg++-flags INTERFACE $<$<COMPILE_LANGUAGE:CXX>:${ASAN_FLAGS}>)
     target_link_options(xdmrg++-flags INTERFACE ${ASAN_FLAGS})
 endif()
 if(COMPILER_ENABLE_USAN)
-    set(USAN_FLAGS -fno-omit-frame-pointer -fsanitize-undefined-trap-on-error -fsanitize=undefined,leak,pointer-compare,pointer-subtract,alignment,bounds,return,enum,float-cast-overflow,float-divide-by-zero,signed-integer-overflow)
+    set(USAN_FLAGS
+        -fno-omit-frame-pointer
+        -fsanitize-undefined-trap-on-error
+        -fsanitize=undefined,alignment,bounds,return,enum,float-cast-overflow,float-divide-by-zero,signed-integer-overflow
+    )
     mark_as_advanced(USAN_FLAGS)
     target_compile_options(xdmrg++-flags INTERFACE
-    $<$<COMPILE_LANGUAGE:CXX>:${USAN_FLAGS}>) #  -fno-omit-frame-pointer
+        $<$<COMPILE_LANGUAGE:CXX>:${USAN_FLAGS}>
+    )
     target_link_options(xdmrg++-flags INTERFACE ${USAN_FLAGS})
 endif()
 

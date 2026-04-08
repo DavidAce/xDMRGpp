@@ -157,6 +157,22 @@
       }
     },
     {
+      "name": "warnings-gcc",
+      "hidden": true,
+      "cacheVariables": {
+        "COMPILER_WFLAGS_DEBUG": "-Wsign-conversion;-Wsign-compare;-Wdouble-promotion",
+        "COMPILER_WFLAGS_RELWITHDEBINFO": "-Wsign-conversion;-Wsign-compare;-Wdouble-promotion"
+      }
+    },
+    {
+      "name": "warnings-clang",
+      "hidden": true,
+      "cacheVariables": {
+        "COMPILER_WFLAGS_DEBUG": "-Wsign-conversion;-Wsign-compare;-Wshorten-64-to-32;-Wimplicit-int-conversion;-Wdouble-promotion;-fstandalone-debug",
+        "COMPILER_WFLAGS_RELWITHDEBINFO": "-Wsign-conversion;-Wsign-compare;-Wshorten-64-to-32;-Wimplicit-int-conversion;-Wdouble-promotion;-fstandalone-debug"
+      }
+    },
+    {
       "name": "asan",
       "hidden": true,
       "cacheVariables": {
@@ -167,7 +183,7 @@
       "name": "usan",
       "hidden": true,
       "cacheVariables": {
-        "COMPILER_ENABLE_ASAN": "TRUE"
+        "COMPILER_ENABLE_USAN": "TRUE"
       }
     },
     {
