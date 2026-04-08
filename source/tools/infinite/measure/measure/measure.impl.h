@@ -24,7 +24,10 @@ template<typename Scalar>
 RealScalar<Scalar> tools::infinite::measure::norm(const StateInfinite<Scalar> &state) {
     if(state.measurements.norm) return state.measurements.norm.value();
     auto norm    = tenx::norm(state.get_2site_mps());
-    auto normTol = std::numeric_limits<RealScalar<Scalar>>::epsilon() * settings::precision::max_norm_slack;
+    using Real   = RealScalar<Scalar>;
+    auto slack   = static_cast<Real>(settings::precision::max_norm_slack);
+    auto eps     = std::numeric_limits<RealScalar<Scalar>>::epsilon();
+    auto normTol = slack * eps;
     auto normErr = std::abs(norm - RealScalar<Scalar>{1});
     if(normErr > normTol) tools::log->debug("norm: far from unity: {:.5e}", normErr);
     state.measurements.norm = std::abs(norm);

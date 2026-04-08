@@ -29,7 +29,7 @@ void solver_lobpcg<Scalar>::shift_blocks_right(Eigen::Ref<MatrixType> matrix, Ei
 
 template<typename Scalar>
 void solver_lobpcg<Scalar>::roll_blocks_left(Eigen::Ref<MatrixType> matrix, Eigen::Index offset, Eigen::Index extent) {
-    for(int k = extent - 1; k > 0; --k) {
+    for(Eigen::Index k = extent - 1; k > 0; --k) {
         // Takes [M0 | M1 | M2 | M3] to [M0 | M0 | M1| M2 ] So that we can overwrite M0 (the oldest)
         auto K0 = matrix.middleCols((offset + k + 0) * b, b);
         auto K1 = matrix.middleCols((offset + k - 1) * b, b);

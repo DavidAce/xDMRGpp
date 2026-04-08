@@ -97,15 +97,15 @@ namespace Eigen {
                 if(n >= 2) {
                     RealScalar Sx = 0, Sxx = 0, Sy = 0, Sxy = 0;
                     for(size_t j = 0; j < n; ++j) {
-                        RealScalar x  = j;    // iteration index as RealScalar
+                        RealScalar x  = static_cast<RealScalar>(j);    // iteration index as RealScalar
                         RealScalar y  = a[j]; // eta_k value
                         Sx           += x;
                         Sxx          += x * x;
                         Sy           += y;
                         Sxy          += x * y;
                     }
-                    RealScalar den = n * Sxx - Sx * Sx;
-                    if(den != 0) { slope = (n * Sxy - Sx * Sy) / den; }
+                    RealScalar den = static_cast<RealScalar>(n) * Sxx - Sx * Sx;
+                    if(den != 0) { slope = (static_cast<RealScalar>(n) * Sxy - Sx * Sy) / den; }
                 }
 
                 return {avg, sdv, sdv / std::max(RealScalar{eps}, std::abs(avg)), slope};

@@ -135,15 +135,15 @@ namespace rnd {
     }
     template<typename out_t>
     out_t uniform(out_t a, out_t b) {
-        if constexpr(std::is_arithmetic_v<out_t>) {
-            std::uniform_real_distribution<out_t> distribution(a, b);
-            return internal::with_rng64_lock([&](auto &rng) { return distribution(rng); });
-        } else if constexpr(std::is_same_v<out_t, fp128>) {
+        if constexpr(sfinae::is_extended_float<out_t>) {
             __extension__ typedef __uint128_t __uint128;
             auto rndval = internal::with_rng128_lock(
                 [](auto &rng) { return static_cast<fp128>(rng()) / static_cast<fp128>(std::numeric_limits<__uint128>::max()); }
             );
             return (rndval * (b - a)) + a;
+        } else if constexpr(std::is_arithmetic_v<out_t>) {
+            std::uniform_real_distribution<out_t> distribution(a, b);
+            return internal::with_rng64_lock([&](auto &rng) { return distribution(rng); });
         }
     }
     template float  uniform(float mean, float std);
@@ -155,16 +155,16 @@ namespace rnd {
         constexpr out_t two_pi = std::numbers::pi_v<out_t> * 2;
         out_t           u1 = 0, u2 = uniform<out_t>(0, 1);
         while(u1 == 0) u1 = uniform<out_t>(0, 1);
-        return sigma * sqrt<out_t>(-2 * log<out_t>(u1)) * cos<out_t>(two_pi * u2) + mu;
+        return sigma * std::sqrt(-2 * std::log(u1)) * std::cos(two_pi * u2) + mu;
     }
 
     template<typename out_t>
     out_t normal(out_t mean, out_t std) {
-        if constexpr(std::is_arithmetic_v<out_t>) {
+        if constexpr(sfinae::is_extended_float<out_t>) {
+            return normal_box_muller(mean, std);
+        } else if constexpr(std::is_arithmetic_v<out_t>) {
             std::normal_distribution<out_t> distribution(mean, std);
             return internal::with_rng64_lock([&](auto &rng) { return distribution(rng); });
-        } else if constexpr(std::is_same_v<out_t, fp128>) {
-            return normal_box_muller(mean, std);
         }
     }
     template fp32  normal(fp32 mean, fp32 std);
@@ -173,12 +173,12 @@ namespace rnd {
 
     template<typename out_t>
     out_t log_normal(out_t mean, out_t std) {
-        if constexpr(std::is_arithmetic_v<out_t>) {
-            std::lognormal_distribution<out_t> distribution(mean, std);
-            return internal::with_rng64_lock([&](auto &rng) { return distribution(rng); });
-        } else if constexpr(std::is_same_v<out_t, fp128>) {
+        if constexpr(sfinae::is_extended_float<out_t>) {
             auto n = std * normal_box_muller<out_t>(0, 1) + mean;
             return std::exp(n);
+        } else if constexpr(std::is_arithmetic_v<out_t>) {
+            std::lognormal_distribution<out_t> distribution(mean, std);
+            return internal::with_rng64_lock([&](auto &rng) { return distribution(rng); });
         }
     }
     template float   log_normal(float mean, float std);
@@ -233,16 +233,27 @@ namespace rnd {
 
     template<typename out_t>
     out_t random(dist d, out_t mean, out_t width) {
-        switch(d) {
-            case dist::uniform: return uniform<out_t>(mean - width / static_cast<out_t>(2), mean + width / static_cast<out_t>(2));
-            case dist::normal: return normal<out_t>(mean, width);
-            case dist::lognormal: return log_normal<out_t>(mean, width);
-            default: throw std::runtime_error("Invalid distribution");
+        using real_t = sfinae::Real<out_t>;
+        if constexpr(!std::is_same_v<out_t, real_t>) {
+            return out_t{
+                random<real_t>(d, std::real(mean), std::real(width)),
+                random<real_t>(d, std::imag(mean), std::imag(width)),
+            };
+        } else {
+            switch(d) {
+                case dist::uniform: return uniform<out_t>(mean - width / static_cast<out_t>(2), mean + width / static_cast<out_t>(2));
+                case dist::normal: return normal<out_t>(mean, width);
+                case dist::lognormal: return log_normal<out_t>(mean, width);
+                default: throw std::runtime_error("Invalid distribution");
+            }
         }
     }
     template float  random<float>(dist d, float mean, float width);
     template double random<double>(dist d, double mean, double width);
     template fp128  random<fp128>(dist d, fp128 mean, fp128 width);
+    template cx32   random<cx32>(dist d, cx32 mean, cx32 width);
+    template cx64   random<cx64>(dist d, cx64 mean, cx64 width);
+    template cx128  random<cx128>(dist d, cx128 mean, cx128 width);
     template<typename out_t>
     out_t random(std::string_view distribution, out_t mean, out_t width) {
         return random<out_t>(sv2enum(distribution), mean, width);
@@ -250,26 +261,39 @@ namespace rnd {
     template float  random<float>(std::string_view d, float mean, float width);
     template double random<double>(std::string_view d, double mean, double width);
     template fp128  random<fp128>(std::string_view d, fp128 mean, fp128 width);
+    template cx32   random<cx32>(std::string_view d, cx32 mean, cx32 width);
+    template cx64   random<cx64>(std::string_view d, cx64 mean, cx64 width);
+    template cx128  random<cx128>(std::string_view d, cx128 mean, cx128 width);
 
     template<typename out_t>
     std::vector<out_t> random(dist d, out_t mean, out_t width, size_t num) {
-        if constexpr(std::is_arithmetic_v<out_t>) {
+        using real_t = sfinae::Real<out_t>;
+        if constexpr(!std::is_same_v<out_t, real_t>) {
+            auto rndvec_real = random<real_t>(d, std::real(mean), std::real(width), num);
+            auto rndvec_imag = random<real_t>(d, std::imag(mean), std::imag(width), num);
+            auto rndvec      = std::vector<out_t>(num);
+            for(size_t i = 0; i < num; ++i) rndvec[i] = out_t{rndvec_real[i], rndvec_imag[i]};
+            return rndvec;
+        } else if constexpr(sfinae::is_extended_float<out_t>) {
+            std::vector<fp128> rndvec(num);
+            for(auto &r : rndvec) r = random<out_t>(d, mean, width);
+            return rndvec;
+        } else if constexpr(std::is_arithmetic_v<out_t>) {
             switch(d) {
                 case dist::uniform: return random<out_t>(std::uniform_real_distribution<out_t>(mean - width / 2, mean + width / 2), num);
                 case dist::normal: return random<out_t>(std::normal_distribution<out_t>(mean, width), num);
                 case dist::lognormal: return random<out_t>(std::lognormal_distribution<out_t>(mean, width), num);
                 default: throw std::runtime_error("Invalid distribution");
             }
-        } else if(std::is_same_v<out_t, fp128>) {
-            std::vector<fp128> rndvec(num);
-            for(auto &r : rndvec) r = random<out_t>(d, mean, width);
-            return rndvec;
         } else
             throw std::runtime_error("rnd::random: unrecognized type");
     }
     template std::vector<float>  random<float>(dist d, float mean, float width, size_t num);
     template std::vector<double> random<double>(dist d, double mean, double width, size_t num);
     template std::vector<fp128>  random<fp128>(dist d, fp128 mean, fp128 width, size_t num);
+    template std::vector<cx32>   random<cx32>(dist d, cx32 mean, cx32 width, size_t num);
+    template std::vector<cx64>   random<cx64>(dist d, cx64 mean, cx64 width, size_t num);
+    template std::vector<cx128>  random<cx128>(dist d, cx128 mean, cx128 width, size_t num);
 
     template<typename out_t>
     std::vector<out_t> random(dist d, out_t mean, out_t width, const std::vector<out_t> &weights) {
@@ -277,6 +301,9 @@ namespace rnd {
         for(size_t i = 0; i < weights.size(); ++i) rndvec[i] *= weights[i];
         return rndvec;
     }
+    template std::vector<cx32>   random<cx32>(dist d, cx32 mean, cx32 width, const std::vector<cx32> &weights);
+    template std::vector<cx64>   random<cx64>(dist d, cx64 mean, cx64 width, const std::vector<cx64> &weights);
+    template std::vector<cx128>  random<cx128>(dist d, cx128 mean, cx128 width, const std::vector<cx128> &weights);
     template std::vector<float>  random<float>(dist d, float mean, float width, const std::vector<float> &weights);
     template std::vector<double> random<double>(dist d, double mean, double width, const std::vector<double> &weights);
     template std::vector<fp128>  random<fp128>(dist d, fp128 mean, fp128 width, const std::vector<fp128> &weights);
@@ -288,6 +315,9 @@ namespace rnd {
     template std::vector<float>  random<float>(std::string_view d, float mean, float width, size_t num);
     template std::vector<double> random<double>(std::string_view d, double mean, double width, size_t num);
     template std::vector<fp128>  random<fp128>(std::string_view d, fp128 mean, fp128 width, size_t num);
+    template std::vector<cx32>   random<cx32>(std::string_view d, cx32 mean, cx32 width, size_t num);
+    template std::vector<cx64>   random<cx64>(std::string_view d, cx64 mean, cx64 width, size_t num);
+    template std::vector<cx128>  random<cx128>(std::string_view d, cx128 mean, cx128 width, size_t num);
 
     template<typename out_t>
     std::vector<out_t> random(std::string_view distribution, out_t mean, out_t width, const std::vector<out_t> &weights) {
@@ -296,5 +326,8 @@ namespace rnd {
     template std::vector<float>  random<float>(std::string_view d, float mean, float width, const std::vector<float> &weights);
     template std::vector<double> random<double>(std::string_view d, double mean, double width, const std::vector<double> &weights);
     template std::vector<fp128>  random<fp128>(std::string_view d, fp128 mean, fp128 width, const std::vector<fp128> &weights);
+    template std::vector<cx32>   random<cx32>(std::string_view d, cx32 mean, cx32 width, const std::vector<cx32> &weights);
+    template std::vector<cx64>   random<cx64>(std::string_view d, cx64 mean, cx64 width, const std::vector<cx64> &weights);
+    template std::vector<cx128>  random<cx128>(std::string_view d, cx128 mean, cx128 width, const std::vector<cx128> &weights);
 
 }

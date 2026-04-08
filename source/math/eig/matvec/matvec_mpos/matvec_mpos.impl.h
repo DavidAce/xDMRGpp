@@ -359,7 +359,7 @@ Scalar MatVecMPOS<Scalar>::get_matrix_element(long I, long J, const std::vector<
 
     if(fullsystem and mpo_i.size() == 1) {
         if(mpo_i.coeff(0) != Scalar{0.0} and shouldBeZero) {
-            auto valmsg = fmt::format("{:.16f}{:+.16f}i", std::real(mpo_i.coeff(0)), std::imag(mpo_i.coeff(0)));
+            auto valmsg = fmt::format("{:.16f}{:+.16f}i", fp(std::real(mpo_i.coeff(0))), fp(std::imag(mpo_i.coeff(0))));
             eig::log->info("({}, {}) = < {} | {} > = {}", I, J, irxs, icxs, valmsg);
         }
         return mpo_i.coeff(0);
@@ -493,14 +493,12 @@ typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::get_diagonal_block(l
                 auto                block    = Eigen::Tensor<Scalar, 2>(ext_blk2);
                 if(envl_.dimension(0) <= envr_.dimension(0)) {
                     Eigen::Tensor<Scalar, 5> temp(ext_envl[0], ext_envl[1], ext_envr[2], ext_mpos[2], ext_mpos[3]);
-                    temp.device(*threads->dev) =
-                        envl_.slice(off_envl, ext_envl).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}));
+                    temp.device(*threads->dev) = envl_.slice(off_envl, ext_envl).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}));
                     block.device(*threads->dev) =
                         temp.contract(envr_.slice(off_envr, ext_envr), tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5}).reshape(ext_blk2);
                 } else {
                     Eigen::Tensor<Scalar, 5> temp(ext_envr[0], ext_envr[1], ext_envl[2], ext_mpos[2], ext_mpos[3]);
-                    temp.device(*threads->dev) =
-                        envr_.slice(off_envr, ext_envr).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}));
+                    temp.device(*threads->dev) = envr_.slice(off_envr, ext_envr).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}));
                     block.device(*threads->dev) =
                         temp.contract(envl_.slice(off_envl, ext_envl), tenx::idx({2}, {2})).shuffle(tenx::array6{2, 4, 0, 3, 5, 1}).reshape(ext_blk2);
                 }
@@ -617,14 +615,12 @@ typename MatVecMPOS<Scalar>::MatrixType
                 auto                block    = Eigen::Tensor<Scalar, 2>(ext_blk2);
                 if(envl_.dimension(0) <= envr_.dimension(0)) {
                     Eigen::Tensor<Scalar, 5> temp(ext_envl[0], ext_envl[1], ext_envr[2], ext_mpos[2], ext_mpos[3]);
-                    temp.device(*threads->dev) =
-                        envl_.slice(off_envl, ext_envl).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}));
+                    temp.device(*threads->dev) = envl_.slice(off_envl, ext_envl).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {0}));
                     block.device(*threads->dev) =
                         temp.contract(envr_.slice(off_envr, ext_envr), tenx::idx({2}, {2})).shuffle(tenx::array6{2, 0, 4, 3, 1, 5}).reshape(ext_blk2);
                 } else {
                     Eigen::Tensor<Scalar, 5> temp(ext_envr[0], ext_envr[1], ext_envl[2], ext_mpos[2], ext_mpos[3]);
-                    temp.device(*threads->dev) =
-                        envr_.slice(off_envr, ext_envr).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}));
+                    temp.device(*threads->dev) = envr_.slice(off_envr, ext_envr).contract(mpos_.front().slice(off_mpos, ext_mpos), tenx::idx({2}, {1}));
                     block.device(*threads->dev) =
                         temp.contract(envl_.slice(off_envl, ext_envl), tenx::idx({2}, {2})).shuffle(tenx::array6{2, 4, 0, 3, 5, 1}).reshape(ext_blk2);
                 }
@@ -1908,9 +1904,7 @@ typename MatVecMPOS<Scalar>::SparseType MatVecMPOS<Scalar>::get_sparse_matrix() 
         for(long J = 0; J < size_mps; J++) {
             for(long I = J; I < size_mps; I++) {
                 auto elem = get_matrix_element(I, J, mpos_A, envL_A, envR_A);
-                if(std::abs(elem) > std::numeric_limits<RealScalar>::epsilon()) {
-                    trip_local.emplace_back(Eigen::Triplet<Scalar, long>{I, J, elem});
-                }
+                if(std::abs(elem) > std::numeric_limits<RealScalar>::epsilon()) { trip_local.emplace_back(Eigen::Triplet<Scalar, long>{I, J, elem}); }
             }
         }
 #pragma omp critical

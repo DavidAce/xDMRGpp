@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <cassert>
 #include <complex>
 #include <cstring>
@@ -150,7 +151,8 @@ struct f128_base {
     using value_type     = Scalar;
     f128_base()          = default;
     template<typename T>
-    f128_base(const T &v) : val(v) {}
+    requires std::constructible_from<Scalar, T>
+    f128_base(const T &v) : val(static_cast<Scalar>(v)) {}
     operator Scalar() const { return val; }
     // operator double() const { return static_cast<double>(val); }
     [[nodiscard]] Scalar value() const { return val; }
@@ -220,8 +222,10 @@ struct c128_t : std::complex<f128_t> {
 #elif defined(DMRG_USE_FLOAT128)
 struct f128_t : f128_base<fp128> {
     using f128_base::f128_base;
+    f128_t(const char *c) : f128_t(std::string_view(c)) {}
+    template<size_t N>
+    f128_t(const char (&c)[N]) : f128_t(std::string_view(c, N - 1)) {}
     f128_t(std::string_view s) {
-        std::from_chars(s.data(), s.data() + s.size(), val);
         auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), val);
         if(ec == std::errc::invalid_argument) throw std::runtime_error("f128_t(std::string_view s): invalid_argument");
         if(ec == std::errc::result_out_of_range) throw std::runtime_error("f128_t(std::string_view s): result_out_of_range");

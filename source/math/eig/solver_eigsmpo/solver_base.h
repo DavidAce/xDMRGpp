@@ -377,7 +377,7 @@ class solver_base {
      * Triggers the Lanczos recurrence breakdown. */
     [[nodiscard]] RealScalar bNormTol(const RealScalar B_norm) const noexcept {
         auto scale = std::max({status.max_eval_estimate(), B_norm, RealScalar{1}}); //  H_norm tracks A norms already
-        return N * eps * scale;
+        return static_cast<RealScalar>(N) * eps * scale;
     }
     /*! Norm tolerance of B-matrices.
      * Triggers the Lanczos recurrence breakdown. */

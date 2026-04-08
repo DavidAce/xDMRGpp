@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../matvec_mpos.h"
+#include "math/rnd.h"
 #include "tools/common/contraction/contraction_policy.h"
 #include <Eigen/Eigenvalues>
 #include <cmath>
@@ -36,7 +37,19 @@ typename MatVecMPOS<Scalar>::RealScalar MatVecMPOS<Scalar>::get_op_norm(Eigen::I
     auto                     v_map = Eigen::Map<VecType>(vt.data(), size_mps);
     auto                     w_map = Eigen::Map<VecType>(wt.data(), size_mps);
 
-    VecType v = VecType::Random(size_mps).normalized();
+    auto make_random_unit_vector = [](Eigen::Index size) {
+        auto samples = []<typename T>(Eigen::Index n) {
+            if constexpr(std::is_same_v<T, Real>)
+                return rnd::random<T>("uniform", Real{0}, Real{2}, static_cast<size_t>(n));
+            else
+                return rnd::random<T>("uniform", T{Real{0}, Real{0}}, T{Real{2}, Real{2}}, static_cast<size_t>(n));
+        }.template operator()<Scalar>(size);
+        VecType vec = Eigen::Map<const VecType>(samples.data(), size);
+        vec.normalize();
+        return vec;
+    };
+
+    VecType v = make_random_unit_vector(size_mps);
 
     Real         lambda    = Real{0};
     Eigen::Index krylovdim = 3;

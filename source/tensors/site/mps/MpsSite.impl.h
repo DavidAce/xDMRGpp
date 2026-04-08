@@ -131,7 +131,7 @@ bool MpsSite<Scalar>::is_normalized(RealScalar tol) const {
     if(!std::isfinite(tol)) {
         static constexpr auto eps   = std::numeric_limits<RealScalar>::epsilon();
         const auto            slack = settings ::precision::max_norm_slack;
-        tol                         = eps * slack;
+        tol                         = eps * static_cast<RealScalar>(slack);
     }
     return get_norm_error() < tol;
 }

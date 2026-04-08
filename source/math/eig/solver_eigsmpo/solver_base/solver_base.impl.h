@@ -342,7 +342,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::chebyshevFilter(co
     if(Qref.cols() == 0) { return Qref; }
     if(degree == 0) { return Qref; }
 
-    int N = Qref.rows();
+    Eigen::Index N = Qref.rows();
 
     // Map spectrum [λ_min, λ_max] to [-1,1]
     RealScalar av = (lambda_max + lambda_min) / RealScalar{2};
@@ -1872,7 +1872,7 @@ void solver_base<Scalar>::orthonormalize_Z(Eigen::Ref<MatrixType> Z, const Eigen
         auto       es   = Eigen::SelfAdjointEigenSolver<MatrixType>(G);
         VectorReal D    = es.eigenvalues();
         MatrixType U    = es.eigenvectors();
-        RealScalar cut  = 100 * eps * D.size() * D.cwiseAbs().maxCoeff();
+        RealScalar cut  = 100 * eps * static_cast<RealScalar>(D.size()) * D.cwiseAbs().maxCoeff();
         RealScalar cut2 = cut * cut;
         for(Eigen::Index j = 0; j < D.size(); ++j) {
             if(D(j) < cut2) {
@@ -1898,7 +1898,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
     // Column-wise orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
 
     m.mask = VectorIdxT::Ones(Y.cols());
-    if(std::isnan(m.maskTol)) m.maskTol = normTol * Y.cols(); // * get_op_norm_estimate();
+    if(std::isnan(m.maskTol)) m.maskTol = normTol * static_cast<RealScalar>(Y.cols()); // * get_op_norm_estimate();
 
     auto handle_masked_columns = [&]() {
         if(m.mask.sum() != Y.cols()) {

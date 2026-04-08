@@ -99,10 +99,10 @@ void eig::solver_spectra<MatrixType>::eigs() {
         result.meta.rows           = matrix.rows();
         result.meta.cols           = eigvecs_spectra.cols();
         result.meta.nev            = nev_internal;
-        result.meta.nev_converged  = eigvals.size(); // Holds the number of converged eigenpairs on exit
+        result.meta.nev_converged  = static_cast<int>(eigvals.size()); // Holds the number of converged eigenpairs on exit
         result.meta.ncv            = ncv_internal;
         result.meta.tol            = static_cast<double>(tol);
-        result.meta.iter           = sol.num_iterations() + sol.num_operations();
+        result.meta.iter           = safe_cast<int>(sol.num_iterations() + sol.num_operations());
         result.meta.num_mv         = matrix.num_mv;
         result.meta.num_pc         = matrix.num_pc;
         result.meta.num_op         = matrix.num_op;

@@ -11,11 +11,11 @@
 #include "debug/info.h"
 #include "general/iter.h"
 #include "io/hdf5_types.h"
+#include "math/eig/enums.h"
 #include "tid/tid.h"
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
-#include <math/eig/enums.h>
 #include <string>
 
 namespace tools::common::h5 {

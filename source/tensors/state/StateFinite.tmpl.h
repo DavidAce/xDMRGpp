@@ -130,7 +130,7 @@ Eigen::Tensor<T, 3> StateFinite<Scalar>::get_multisite_mps(const std::vector<siz
         using RealT   = decltype(std::real(std::declval<T>()));
         RealT norm    = tenx::norm(multisite_mps);
         RealT normErr = std::abs(norm - RealT{1});
-        RealT normTol = std::numeric_limits<RealT>::epsilon() * settings::precision::max_norm_slack;
+        RealT normTol = std::numeric_limits<RealT>::epsilon() * static_cast<RealT>(settings::precision::max_norm_slack);
         if constexpr(debug_state) tools::log->trace("get_multisite_mps<{}>({}): norm ⟨ψ|ψ⟩ = {:.16f}", sfinae::type_name<T>(), sites, norm);
         if(normErr > normTol) {
             tools::log->warn("get_multisite_mps<{}>({}): norm error |1-⟨ψ|ψ⟩| = {:.2e} > normTol {:.2e}", sfinae::type_name<T>(), sites, normErr, normTol);

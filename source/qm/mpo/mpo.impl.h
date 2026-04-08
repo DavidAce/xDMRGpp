@@ -91,7 +91,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     Eigen::Tensor<Scalar, 3> Ledge(1, 1, 2); // The left  edge
     Eigen::Tensor<Scalar, 3> Redge(1, 1, 2); // The right edge
     Ledge(0, 0, 0) = RealScalar{0.5};        // 0.5;
-    Ledge(0, 0, 1) = RealScalar{0.5} * sign;
+    Ledge(0, 0, 1) = RealScalar{0.5} * static_cast<RealScalar>(sign);
     Redge(0, 0, 0) = RealScalar{1};
     Redge(0, 0, 1) = RealScalar{1};
 
@@ -138,7 +138,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
         auto flip_idx = rnd::uniform_integer_box<size_t>(0, sites - 1);
         assert(flip_idx < binary.size());
         binary[flip_idx] *= -1;
-        sum = std::accumulate(binary.begin(), binary.end(), 0);
+        sum               = std::accumulate(binary.begin(), binary.end(), 0);
         if((num::mod<size_t>(sites, 2) == 0 and sum == 0) or (num::mod<size_t>(sites, 2) == 1 and sum == 1)) break;
     }
 
@@ -213,7 +213,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
         auto flip_idx = rnd::uniform_integer_box<size_t>(0, sites - 1);
         assert(flip_idx < binary.size());
         binary[flip_idx] *= -1;
-        sum = std::accumulate(binary.begin(), binary.end(), 0);
+        sum               = std::accumulate(binary.begin(), binary.end(), 0);
         if((num::mod<size_t>(sites, 2) == 0 and sum == 0) or (num::mod<size_t>(sites, 2) == 1 and sum == 1)) break;
     }
     if(binary.size() != sites) throw except::logic_error("Size mismatch");
@@ -272,15 +272,15 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     if(paulimatrices.empty()) throw except::runtime_error("List of pauli matrices is empty");
     if(sites == 0) throw except::logic_error("Expected sites > 0");
     assert(sites > 0);
-    long                     num_paulis = safe_cast<long>(paulimatrices.size());
-    long                     spin_dim   = 2;
+    long num_paulis = safe_cast<long>(paulimatrices.size());
+    long spin_dim   = 2;
     for(const auto &paulimatrix : paulimatrices) {
         if(paulimatrix.rows() != spin_dim or paulimatrix.cols() != spin_dim)
             throw except::logic_error("Expected {}x{} pauli matrices, got {}x{}", spin_dim, spin_dim, paulimatrix.rows(), paulimatrix.cols());
     }
-    auto                     I          = Eigen::MatrixXcd::Identity(spin_dim, spin_dim).eval();
-    std::array<long, 4>      extent4    = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
-    std::array<long, 2>      extent2    = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
+    auto                     I       = Eigen::MatrixXcd::Identity(spin_dim, spin_dim).eval();
+    std::array<long, 4>      extent4 = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
+    std::array<long, 2>      extent2 = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
     Eigen::Tensor<Scalar, 4> MPO_S(num_paulis, num_paulis, spin_dim, spin_dim);
     Eigen::Tensor<Scalar, 4> MPO_I(num_paulis, num_paulis, spin_dim, spin_dim);
     MPO_S.setZero();
@@ -299,7 +299,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
         auto flip_idx = rnd::uniform_integer_box<size_t>(0, sites - 1);
         assert(flip_idx < binary.size());
         binary[flip_idx] *= -1;
-        sum                                                     = std::accumulate(binary.begin(), binary.end(), 0);
+        sum               = std::accumulate(binary.begin(), binary.end(), 0);
         if((num::mod<size_t>(sites, 2) == 0 and sum == 0) or (num::mod<size_t>(sites, 2) == 1 and sum == 1)) break;
     }
     if(binary.size() != sites) throw except::logic_error("Size mismatch");
@@ -307,7 +307,7 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     // Generate the list
     std::vector<Eigen::Tensor<Scalar, 4>> mpos;
     mpos.reserve(sites);
-    std::vector<std::string>              mpos_str;
+    std::vector<std::string> mpos_str;
     for(auto &val : binary) {
         if(val < 0) {
             mpos.push_back(MPO_S);
@@ -377,18 +377,18 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     }
     using RealScalar = decltype(std::real(std::declval<Scalar>()));
     if(paulimatrices.empty()) throw except::runtime_error("List of pauli matrices is empty");
-    long                spin_dim = 2;
+    long spin_dim = 2;
     for(const auto &paulimatrix : paulimatrices) {
         if(paulimatrix.rows() != spin_dim or paulimatrix.cols() != spin_dim)
             throw except::logic_error("Expected {}x{} pauli matrices, got {}x{}", spin_dim, spin_dim, paulimatrix.rows(), paulimatrix.cols());
     }
-    std::array<long, 4> extent4  = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
-    std::array<long, 2> extent2  = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
-    std::array<long, 4> offset4  = {0, 0, 0, 0};
+    std::array<long, 4> extent4 = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
+    std::array<long, 2> extent2 = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
+    std::array<long, 4> offset4 = {0, 0, 0, 0};
 
     std::vector<Eigen::Tensor<Scalar, 4>> mpos;
     mpos.reserve(sites);
-    auto                                  pauli_idx = num::range<size_t>(0, paulimatrices.size(), 1);
+    auto pauli_idx = num::range<size_t>(0, paulimatrices.size(), 1);
 
     for(size_t site = 0; site < sites; site++) {
         Eigen::Tensor<Scalar, 4> mpo;
@@ -476,14 +476,14 @@ std::tuple<std::vector<Eigen::Tensor<Scalar, 4>>, Eigen::Tensor<Scalar, 3>, Eige
     using RealScalar = decltype(std::real(std::declval<Scalar>()));
     if(paulimatrices.empty()) throw except::runtime_error("List of pauli matrices is empty");
     if(paulimatrices.size() != uniform_dist_widths.size()) throw except::runtime_error("List size mismatch: paulimatrices and uniform_dist_widths");
-    long                num_paulis = safe_cast<long>(paulimatrices.size());
-    long                spin_dim   = 2;
+    long num_paulis = safe_cast<long>(paulimatrices.size());
+    long spin_dim   = 2;
     for(const auto &paulimatrix : paulimatrices) {
         if(paulimatrix.rows() != spin_dim or paulimatrix.cols() != spin_dim)
             throw except::logic_error("Expected {}x{} pauli matrices, got {}x{}", spin_dim, spin_dim, paulimatrix.rows(), paulimatrix.cols());
     }
-    std::array<long, 4> extent4    = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
-    std::array<long, 2> extent2    = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
+    std::array<long, 4> extent4 = {1, 1, spin_dim, spin_dim}; /*!< Extent of pauli matrices in a rank-4 tensor */
+    std::array<long, 2> extent2 = {spin_dim, spin_dim};       /*!< Extent of pauli matrices in a rank-2 tensor */
 
     std::vector<Eigen::Tensor<Scalar, 4>> mpos;
     mpos.reserve(sites);
