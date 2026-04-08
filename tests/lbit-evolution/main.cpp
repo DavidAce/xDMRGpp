@@ -26,7 +26,9 @@
 #include <fmt/format.h>
 #include <h5pp/h5pp.h>
 
-using flbit_t = flbit<cx128>;
+using flbit_t      = flbit<cx64>;
+using state_scalar = cx64;
+using StateVector  = Eigen::Matrix<state_scalar, Eigen::Dynamic, 1>;
 
 auto get_hamiltonian(const flbit_t &f) -> Eigen::Matrix<cx128, Eigen::Dynamic, Eigen::Dynamic> {
     //    for(const auto &field : f.tensors.model->get_parameter("J1_rand"))
@@ -82,7 +84,12 @@ size_t assert_lbit_evolution(const flbit_t &f) {
      *
      *
      */
-    for(const auto &mps : f.state_lbit->mps_sites) mps->assert_normalized();
+    using RealScalar = flbit_t::RealScalar;
+    static constexpr auto eps     = std::numeric_limits<RealScalar>::epsilon();
+    const auto            slack   = safe_cast<RealScalar>(settings::precision::max_norm_slack);
+    auto                  normtol = eps * slack;
+
+    for(const auto &mps : f.state_lbit->mps_sites) mps->assert_normalized(normtol);
     f.state_lbit->assert_validity();
     bool has_time_swap_gates = not f.time_swap_gates_Lbody.empty();
     bool has_time_slow_gates = not f.time_gates_Lbody.empty();
@@ -123,7 +130,7 @@ size_t assert_lbit_evolution(const flbit_t &f) {
                                 static_cast<double>(std::abs(f.status.delta_t.to_floating_point<cx128>().imag())),
                             });
 #endif
-    double max_norm_error = settings::precision::max_norm_error;
+    double max_norm_error = static_cast<double>(normtol);
     double max_untary_err = 10 * epsilon_d;
 
     tools::log->info("H_exact: {}", linalg::matrix::to_string(H_exact.diagonal().transpose().real(), digits10_t));
@@ -156,20 +163,20 @@ size_t assert_lbit_evolution(const flbit_t &f) {
     if(not unitarymatrix.isUnitary()) throw except::logic_error("unitarymatrix is not unitary");
     if(not exp_lbit_iHdt.isUnitary()) throw except::logic_error("exp_lbit_iHdt is not unitary");
 
-    auto             psi_real_init = tools::finite::mps::mps2tensor<cx128>(*f.state_real_init);
-    auto             psi_lbit_init = tools::finite::mps::mps2tensor<cx128>(*f.state_lbit_init);
-    auto             psi_fp128ebd  = tools::finite::mps::mps2tensor<cx128>(*f.tensors.state);
-    auto             psi_lbit_tebd = tools::finite::mps::mps2tensor<cx128>(*f.state_lbit);
-    Eigen::VectorXcd vec_real_init = tenx::VectorMap(psi_real_init);
-    Eigen::VectorXcd vec_lbit_init = tenx::VectorMap(psi_lbit_init);
-    Eigen::VectorXcd vec_fp128ebd  = tenx::VectorMap(psi_fp128ebd);
-    Eigen::VectorXcd vec_lbit_tebd = tenx::VectorMap(psi_lbit_tebd);
-    Eigen::VectorXcd vec_lbit_levo = exp_lbit_iHdt * vec_lbit_init;                           // From lbit
-    Eigen::VectorXcd vec_lbit_revo = exp_lbit_iHdt * unitarymatrix.adjoint() * vec_real_init; // From real
-    Eigen::VectorXcd vec_lbit_devo = exp_lbit_iHdt.conjugate() * vec_lbit_tebd;               // From real
-    Eigen::VectorXcd vec_real_levo = unitarymatrix * exp_lbit_iHdt * vec_lbit_init;
-    Eigen::VectorXcd vec_real_revo = unitarymatrix * exp_lbit_iHdt * unitarymatrix.adjoint() * vec_real_init;
-    Eigen::VectorXcd vec_real_back = unitarymatrix * vec_lbit_init; // Returns the initial lbit state to real basis
+    auto        psi_real_init = tools::finite::mps::mps2tensor<state_scalar>(*f.state_real_init);
+    auto        psi_lbit_init = tools::finite::mps::mps2tensor<state_scalar>(*f.state_lbit_init);
+    auto        psi_fp128ebd  = tools::finite::mps::mps2tensor<state_scalar>(*f.tensors.state);
+    auto        psi_lbit_tebd = tools::finite::mps::mps2tensor<state_scalar>(*f.state_lbit);
+    StateVector vec_real_init = tenx::VectorMap(psi_real_init);
+    StateVector vec_lbit_init = tenx::VectorMap(psi_lbit_init);
+    StateVector vec_fp128ebd  = tenx::VectorMap(psi_fp128ebd);
+    StateVector vec_lbit_tebd = tenx::VectorMap(psi_lbit_tebd);
+    StateVector vec_lbit_levo = exp_lbit_iHdt * vec_lbit_init;                           // From lbit
+    StateVector vec_lbit_revo = exp_lbit_iHdt * unitarymatrix.adjoint() * vec_real_init; // From real
+    StateVector vec_lbit_devo = exp_lbit_iHdt.conjugate() * vec_lbit_tebd;               // From real
+    StateVector vec_real_levo = unitarymatrix * exp_lbit_iHdt * vec_lbit_init;
+    StateVector vec_real_revo = unitarymatrix * exp_lbit_iHdt * unitarymatrix.adjoint() * vec_real_init;
+    StateVector vec_real_back = unitarymatrix * vec_lbit_init; // Returns the initial lbit state to real basis
 
     auto overlap_lbit_levo_tebd = vec_lbit_levo.dot(vec_lbit_tebd); // One if time evo works independently of U
     auto overlap_lbit_revo_tebd = vec_lbit_revo.dot(vec_lbit_tebd); // One if time evo and U both work
@@ -250,10 +257,10 @@ size_t assert_lbit_evolution(const flbit_t &f) {
 }
 
 size_t assert_lbit_evolution(const flbit_t &f1, const flbit_t &f2) {
-    auto overlap_real_init = tools::finite::ops::overlap(*f1.state_real_init, *f2.state_real_init);
-    auto overlap_lbit_init = tools::finite::ops::overlap(*f1.state_lbit_init, *f2.state_lbit_init);
-    auto overlap_fp128evo  = tools::finite::ops::overlap(*f1.tensors.state, *f2.tensors.state);
-    auto overlap_lbit_tevo = tools::finite::ops::overlap(*f1.state_lbit, *f2.state_lbit);
+    auto overlap_real_init = tools::finite::ops::overlap<state_scalar>(*f1.state_real_init, *f2.state_real_init);
+    auto overlap_lbit_init = tools::finite::ops::overlap<state_scalar>(*f1.state_lbit_init, *f2.state_lbit_init);
+    auto overlap_fp128evo  = tools::finite::ops::overlap<state_scalar>(*f1.tensors.state, *f2.tensors.state);
+    auto overlap_lbit_tevo = tools::finite::ops::overlap<state_scalar>(*f1.state_lbit, *f2.state_lbit);
     tools::log->info("overlap_real_init : {:.16f} | {:.16f} |", overlap_real_init, std::abs(overlap_real_init));
     tools::log->info("overlap_lbit_init : {:.16f} | {:.16f} |", overlap_lbit_init, std::abs(overlap_lbit_init));
     tools::log->info("overlap_fp128evo : {:.16f} | {:.16f} |", overlap_fp128evo, std::abs(overlap_fp128evo));
@@ -323,7 +330,7 @@ int main(int argc, char *argv[]) {
     tools::log->info("fp128 max_dig: {}", FLT128_DIG);
 #elif defined(DMRG_USE_FLOAT128)
     tools::log->info("fp128 epsilon: {:.4e}", std::numeric_limits<fp128>::epsilon());
-    tools::log->info(" __float128 max_dig: {}", std::numeric_limits<fp128>::max_digits10());
+    tools::log->info(" __float128 max_dig: {}", std::numeric_limits<fp128>::max_digits10);
 #endif
     // Initialize the flbit algorithm
     auto flbit_swap = flbit_t(nullptr); // Will evolve with swap gates on

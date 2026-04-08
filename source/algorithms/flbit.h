@@ -15,6 +15,7 @@ template<typename Scalar> struct flbit_tmpl;
 enum class flbit_task;
 template<typename Scalar>
 class flbit : public AlgorithmFinite<Scalar> {
+    public:
     using RealScalar = typename AlgorithmFinite<Scalar>::RealScalar;
     using OptMeta    = typename AlgorithmFinite<Scalar>::OptMeta;
     using VecType    = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
@@ -23,12 +24,16 @@ class flbit : public AlgorithmFinite<Scalar> {
     using MatType    = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
     using MatReal    = Eigen::Matrix<RealScalar, Eigen::Dynamic, Eigen::Dynamic>;
     using MatCplx    = Eigen::Matrix<std::complex<RealScalar>, Eigen::Dynamic, Eigen::Dynamic>;
-    using flbit_tmpl = ::flbit_tmpl<Scalar>;
 
-    using AlgorithmFinite<Scalar>::AlgorithmFinite;
     using AlgorithmFinite<Scalar>::status;
     using AlgorithmFinite<Scalar>::h5file;
     using AlgorithmFinite<Scalar>::tensors;
+
+    private:
+    using flbit_tmpl = ::flbit_tmpl<Scalar>;
+
+    using AlgorithmFinite<Scalar>::AlgorithmFinite;
+
     using AlgorithmFinite<Scalar>::initialize_model;
     using AlgorithmFinite<Scalar>::initialize_state;
     using AlgorithmFinite<Scalar>::init_bond_dimension_limits;
