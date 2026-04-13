@@ -24,7 +24,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> qm::lbit::merge_unitary_mpo_layers(const s
     cfg.rank_max         = settings::flbit::cls::mpo_circuit_svd_bondlim;
     cfg.truncation_limit = settings::flbit::cls::mpo_circuit_svd_trnclim;
     cfg.switchsize_gesdd = settings::precision::svd_switchsize_bdc;
-    cfg.svd_lib          = svd::lib::lapacke;
+    cfg.svd_lib          = svd::lib::lapack;
     cfg.svd_rtn          = svd::rtn::geauto;
     auto  svd            = svd::solver(cfg);
     auto &threads        = tenx::threads::get();
@@ -105,7 +105,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> qm::lbit::merge_unitary_mpo_layers(const s
     cfg.rank_max         = settings::flbit::cls::mpo_circuit_svd_bondlim;
     cfg.truncation_limit = settings::flbit::cls::mpo_circuit_svd_trnclim;
     cfg.switchsize_gesdd = settings::precision::svd_switchsize_bdc;
-    cfg.svd_lib          = svd::lib::lapacke;
+    cfg.svd_lib          = svd::lib::lapack;
     cfg.svd_rtn          = svd::rtn::geauto;
     auto  svd            = svd::solver(cfg);
     auto &threads        = tenx::threads::get();

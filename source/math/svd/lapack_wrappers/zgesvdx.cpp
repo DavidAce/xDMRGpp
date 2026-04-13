@@ -26,15 +26,15 @@ namespace svd::internal::lapack_wrappers {
         rwork.resize(static_cast<size_t>(lrwork));
         iwork.resize(static_cast<size_t>(liwork));
 
-        int info = LAPACKE_zgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', sel.range, ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, sel.vl, sel.vu, sel.il, sel.iu, &ns,
-                                        ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(), ctx.ldvt, cwork.data(), -1, rwork.data(), iwork.data());
+        int info = DMRG_zgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', sel.range, ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, sel.vl, sel.vu, sel.il, sel.iu, &ns,
+                                     ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(), ctx.ldvt, cwork.data(), -1, rwork.data(), iwork.data());
         if(info != 0) return info;
 
         lcwork = safe_cast<int>(std::real(cwork[0]));
         cwork.resize(safe_cast<size_t>(std::max(1, lcwork)));
 
-        info = LAPACKE_zgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', 'V', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, sel.vl, sel.vu, sel.il, sel.iu, &ns,
-                                    ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(), ctx.ldvt, cwork.data(), lcwork, rwork.data(), iwork.data());
+        info = DMRG_zgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', 'V', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, sel.vl, sel.vu, sel.il, sel.iu, &ns,
+                                 ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(), ctx.ldvt, cwork.data(), lcwork, rwork.data(), iwork.data());
         if(info != 0) return info;
 
         ctx.U  = ctx.U.leftCols(ns).eval();

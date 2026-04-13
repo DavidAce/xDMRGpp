@@ -20,8 +20,8 @@ namespace svd::internal::lapack_wrappers {
         rwork.resize(1ul);
         iwork.resize(1ul);
 
-        int info = LAPACKE_zgejsv_work(LAPACK_COL_MAJOR, 'F', 'U', 'V', 'N', 'T', 'N', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(),
-                                       ctx.ldu, ctx.V.data(), ctx.ldv, cwork.data(), -1, rwork.data(), -1, iwork.data());
+        int info = DMRG_zgejsv_work(LAPACK_COL_MAJOR, 'F', 'U', 'V', 'N', 'T', 'N', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(),
+                                    ctx.ldu, ctx.V.data(), ctx.ldv, cwork.data(), -1, rwork.data(), -1, iwork.data());
         if(info != 0) return info;
 
         int lcwork = safe_cast<int>(std::real(cwork[0]));
@@ -31,8 +31,8 @@ namespace svd::internal::lapack_wrappers {
         rwork.resize(safe_cast<size_t>(std::max({7, 2 * ctx.rowsA, lrwork})));
         iwork.resize(safe_cast<size_t>(std::max({1, ctx.rowsA + ctx.colsA, liwork})));
 
-        info = LAPACKE_zgejsv_work(LAPACK_COL_MAJOR, 'F', 'U', 'V', 'N', 'T', 'N', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(),
-                                   ctx.ldu, ctx.V.data(), ctx.ldv, cwork.data(), lcwork, rwork.data(), lrwork, iwork.data());
+        info = DMRG_zgejsv_work(LAPACK_COL_MAJOR, 'F', 'U', 'V', 'N', 'T', 'N', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(),
+                                ctx.ldu, ctx.V.data(), ctx.ldv, cwork.data(), lcwork, rwork.data(), lrwork, iwork.data());
         if(info != 0) return info;
 
         ctx.VT = ctx.V.adjoint();

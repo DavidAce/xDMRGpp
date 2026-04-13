@@ -23,15 +23,15 @@ namespace svd::internal::lapack_wrappers {
         rwork.resize(safe_cast<size_t>(lrwork));
         iwork.resize(safe_cast<size_t>(liwork));
 
-        int info = LAPACKE_sgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', sel.range, ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, sel.vl, sel.vu, sel.il, sel.iu, &ns,
-                                        ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(), ctx.ldvt, rwork.data(), -1, iwork.data());
+        int info = DMRG_sgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', sel.range, ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, sel.vl, sel.vu, sel.il, sel.iu, &ns,
+                                     ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(), ctx.ldvt, rwork.data(), -1, iwork.data());
         if(info != 0) return info;
 
         lrwork = safe_cast<int>(std::real(rwork[0]));
         rwork.resize(safe_cast<size_t>(std::max(1, lrwork)));
 
-        info = LAPACKE_sgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', 'V', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, sel.vl, sel.vu, sel.il, sel.iu, &ns,
-                                    ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(), ctx.ldvt, rwork.data(), lrwork, iwork.data());
+        info = DMRG_sgesvdx_work(LAPACK_COL_MAJOR, 'V', 'V', 'V', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, sel.vl, sel.vu, sel.il, sel.iu, &ns,
+                                 ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(), ctx.ldvt, rwork.data(), lrwork, iwork.data());
         if(info != 0) return info;
 
         ctx.U  = ctx.U.leftCols(ns).eval();

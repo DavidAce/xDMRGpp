@@ -16,8 +16,8 @@ namespace svd::internal::lapack_wrappers {
         int lrwork = std::max(6, ctx.rowsA + ctx.colsA);
         rwork.resize(safe_cast<size_t>(lrwork));
 
-        int info = LAPACKE_dgesvj_work(LAPACK_COL_MAJOR, 'G', 'U', 'V', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.ldv, ctx.V.data(),
-                                       ctx.ldv, rwork.data(), lrwork);
+        int info = DMRG_dgesvj_work(LAPACK_COL_MAJOR, 'G', 'U', 'V', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.ldv, ctx.V.data(), ctx.ldv,
+                                    rwork.data(), lrwork);
         if(info != 0) return info;
 
         ctx.U  = std::move(ctx.A);

@@ -66,7 +66,7 @@ StateFinite<Scalar> flbit_tmpl<Scalar>::time_evolve_lbit_state(const StateFinite
                                                                const std::vector<std::vector<qm::SwapGate>> &gates_tevo, const AlgorithmStatus &status) {
     auto t_evo      = tid::tic_scope("time_evo", tid::level::normal);
     auto svd_cfg    = svd::config(status.bond_lim, status.trnc_lim);
-    svd_cfg.svd_lib = svd::lib::lapacke;
+    svd_cfg.svd_lib = svd::lib::lapack;
     svd_cfg.svd_rtn = svd::rtn::geauto;
     auto delta_t    = status.delta_t.to_floating_point<cx128>();
     tools::log->debug("Applying time evolution swap gates Δt = {:.2e}", fp(delta_t));
@@ -92,7 +92,7 @@ StateFinite<Scalar> flbit_tmpl<Scalar>::transform_to_real_basis(const StateFinit
                                                                 const std::vector<std::vector<qm::Gate>> &unitary_circuit, const AlgorithmStatus &status) {
     assert(unitary_circuit.size() == settings::model::lbit::u_depth);
     auto svd_cfg    = svd::config(status.bond_lim, status.trnc_lim);
-    svd_cfg.svd_lib = svd::lib::lapacke;
+    svd_cfg.svd_lib = svd::lib::lapack;
     svd_cfg.svd_rtn = svd::rtn::geauto;
     return qm::lbit::transform_to_real_basis(state_lbit, unitary_circuit, svd_cfg);
 }

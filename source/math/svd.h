@@ -37,9 +37,9 @@ namespace svd {
             long       rank_min         = -1;
             double     truncation_lim   = -1.0;
             double     truncation_error = -1.0;
-            size_t     switchsize_gejsv = -1ul;
-            size_t     switchsize_gesvd = -1ul;
-            size_t     switchsize_gesdd = -1ul;
+            long       switchsize_gejsv = -1;
+            long       switchsize_gesvd = -1;
+            long       switchsize_gesdd = -1;
             svd::lib   svd_lib;
             svd::rtn   svd_rtn;
             svd::save  svd_save;
@@ -62,10 +62,10 @@ namespace svd {
                                                                            truncation_lim < norm(lambda_i) */
 
         // Switch sizes for automatic algorithm promotion (only used with svd::rtn::geauto)
-        size_t                       switchsize_gejsv = 1;  /*!< Default jacobi algorithm (gesjsv) when min(rows,cols) >= swtichsize_gejsv, otherwise gesvj */
-        size_t                       switchsize_gesvd = 32; /*!< Default preconditioned QR bidiagonalization (gesvd) when min(rows,cols) >= maxsize_gesvd */
-        size_t                       switchsize_gesdd = 64; /*!< Default bidiagonal divide and conquer when  min(rows,cols) >= switchsize_gesdd */
-        svd::lib                     svd_lib          = svd::lib::lapacke;
+        long                         switchsize_gejsv = 1;  /*!< Default jacobi algorithm (gesjsv) when min(rows,cols) >= swtichsize_gejsv, otherwise gesvj */
+        long                         switchsize_gesvd = 32; /*!< Default preconditioned QR bidiagonalization (gesvd) when min(rows,cols) >= maxsize_gesvd */
+        long                         switchsize_gesdd = 64; /*!< Default bidiagonal divide and conquer when  min(rows,cols) >= switchsize_gesdd */
+        svd::lib                     svd_lib          = svd::lib::lapack;
         svd::rtn                     svd_rtn          = svd::rtn::geauto;
         svd::save                    svd_save         = svd::save::NONE;
         std::optional<svdx_select_t> svdx_select      = std::nullopt;
@@ -73,7 +73,7 @@ namespace svd {
 
         private:
         template<typename Scalar>
-        std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_lapacke(const Scalar *mat_ptr, long rows, long cols) const;
+        std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_lapack(const Scalar *mat_ptr, long rows, long cols) const;
 
         template<typename Scalar>
         std::tuple<MatrixType<Scalar>, VectorType<Scalar>, MatrixType<Scalar>> do_svd_eigen(const Scalar *mat_ptr, long rows, long cols) const;

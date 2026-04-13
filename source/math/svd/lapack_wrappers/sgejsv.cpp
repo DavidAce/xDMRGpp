@@ -21,8 +21,8 @@ namespace svd::internal::lapack_wrappers {
         rwork.resize(safe_cast<size_t>(lrwork));
         iwork.resize(safe_cast<size_t>(liwork));
 
-        int info = LAPACKE_sgejsv_work(LAPACK_COL_MAJOR, 'F', 'U', 'V', 'N', 'T', 'N', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(),
-                                       ctx.ldu, ctx.V.data(), ctx.ldv, rwork.data(), lrwork, iwork.data());
+        int info = DMRG_sgejsv_work(LAPACK_COL_MAJOR, 'F', 'U', 'V', 'N', 'T', 'N', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(),
+                                    ctx.ldu, ctx.V.data(), ctx.ldv, rwork.data(), lrwork, iwork.data());
         if(info != 0) return info;
 
         ctx.VT = ctx.V.adjoint();

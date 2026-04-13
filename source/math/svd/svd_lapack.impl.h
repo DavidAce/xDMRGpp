@@ -63,10 +63,9 @@ std::vector<long> get_valid_cols(const Eigen::MatrixBase<T> &m) {
 }
 
 template<typename Scalar>
-std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Scalar>> svd::solver::do_svd_lapacke(const Scalar *mat_ptr, long rows,
-                                                                                                                  long cols) const {
-    static_assert(svd::internal::lapack_wrappers::lapacke_scalar<Scalar>,
-                  "svd::solver::do_svd_lapacke requires a LAPACKE-backed scalar type");
+std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Scalar>> svd::solver::do_svd_lapack(const Scalar *mat_ptr, long rows,
+                                                                                                                 long cols) const {
+    static_assert(svd::internal::lapack_wrappers::lapack_scalar<Scalar>, "svd::solver::do_svd_lapack requires a LAPACK-backed scalar type");
 
     // Setup useful sizes
     int rowsA = safe_cast<int>(rows);
@@ -90,12 +89,12 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         assert(A.cols() > 0);
 
         //        t_adj.toc();
-        auto [U, S, VT] = do_svd_lapacke(A.data(), A.rows(), A.cols());
+        auto [U, S, VT] = do_svd_lapack(A.data(), A.rows(), A.cols());
         assert(U.rows() == A.rows());
         assert(VT.cols() == A.cols());
         return std::make_tuple(VT.adjoint(), S, U.adjoint());
     }
-    //    auto t_lpk = tid::tic_scope("lapacke", tid::highest);
+    //    auto t_lpk = tid::tic_scope("lapack", tid::highest);
 
     MatrixType<Scalar> A    = Eigen::Map<const MatrixType<Scalar>>(mat_ptr, rows, cols); // gets destroyed in some routines
     auto               dump = internal::DumpSVD<Scalar>();
@@ -109,7 +108,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     VectorType<RealScalar<Scalar>> S;
     MatrixType<Scalar>             V;
     MatrixType<Scalar>             VT;
-    log->trace("Starting SVD with lapacke | rows {} | cols {}", rows, cols);
+    log->trace("Starting SVD with lapack | rows {} | cols {}", rows, cols);
 
     int info   = 0;
     int rowsU  = rowsA;
@@ -131,7 +130,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     try {
         // Sanity checks
         if constexpr(!ndebug) { // We usually get a negative "info" value if there are nans anyway.
-            if(A.isZero()) log->warn("Lapacke SVD: A is a zero matrix");
+            if(A.isZero()) log->warn("Lapack SVD: A is a zero matrix");
             if(not A.allFinite()) {
                 print_matrix(A.data(), A.rows(), A.cols(), "A");
                 throw std::runtime_error("A has inf's or nan's");
@@ -240,7 +239,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
             dump.truncation_error = truncation_error;
             dump.info             = info;
         }
-        throw except::runtime_error("Lapacke SVD error \n"
+        throw except::runtime_error("Lapack SVD error \n"
                                     "  Singular values  = {::.5e}\n"
                                     "  Truncation Error = {:.4e}\n"
                                     "  Rank             = {}\n"

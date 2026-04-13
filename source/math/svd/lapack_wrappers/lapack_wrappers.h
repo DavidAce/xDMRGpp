@@ -1,39 +1,18 @@
 #pragma once
 
 #include "../../svd.h"
+#include "lapack_interface.h"
 #include <algorithm>
 #include <cmath>
 #include <complex>
 #include <concepts>
 #include <vector>
 
-#ifndef lapack_complex_float
-    #define lapack_complex_float std::complex<float>
-#endif
-#ifndef lapack_complex_double
-    #define lapack_complex_double std::complex<double>
-#endif
-
-// complex must be included before lapacke!
-#if defined(_LAPACKE_H_)
-    #pragma message "LAPACKE header was already included elsewhere"
-#endif
-
-#if defined(MKL_AVAILABLE)
-    #include <mkl_lapacke.h>
-#elif defined(OPENBLAS_AVAILABLE)
-    #include <openblas/lapacke.h>
-#elif defined(FLEXIBLAS_AVAILABLE)
-    #include <flexiblas/lapacke.h>
-#else
-    #include <lapacke.h>
-#endif
-
 namespace svd::internal::lapack_wrappers {
     template<typename Scalar>
-    concept lapacke_scalar = std::same_as<Scalar, fp32> || std::same_as<Scalar, fp64> || std::same_as<Scalar, cx32> || std::same_as<Scalar, cx64>;
+    concept lapack_scalar = std::same_as<Scalar, fp32> || std::same_as<Scalar, fp64> || std::same_as<Scalar, cx32> || std::same_as<Scalar, cx64>;
 
-    template<lapacke_scalar Scalar>
+    template<lapack_scalar Scalar>
     struct Workspace {
         // Kept separate from the wrapper implementation so the call site can later
         // switch from stack-local vectors to a thread-local cache without changing
@@ -43,7 +22,7 @@ namespace svd::internal::lapack_wrappers {
         std::vector<svd::RealScalar<Scalar>> rwork;
     };
 
-    template<lapacke_scalar Scalar>
+    template<lapack_scalar Scalar>
     struct Context {
         using real_type = svd::RealScalar<Scalar>;
 
@@ -122,7 +101,7 @@ namespace svd::internal::lapack_wrappers {
             , svdx_select(svdx_select_) {}
     };
 
-    template<lapacke_scalar Scalar>
+    template<lapack_scalar Scalar>
     constexpr char type_prefix() {
         if constexpr(std::same_as<Scalar, fp32>) return 's';
         if constexpr(std::same_as<Scalar, fp64>) return 'd';
@@ -130,15 +109,15 @@ namespace svd::internal::lapack_wrappers {
         return 'z';
     }
 
-    template<lapacke_scalar Scalar>
+    template<lapack_scalar Scalar>
     constexpr std::string_view error_prefix() {
-        if constexpr(std::same_as<Scalar, fp32>) return "Lapacke SVD s";
-        if constexpr(std::same_as<Scalar, fp64>) return "Lapacke SVD d";
+        if constexpr(std::same_as<Scalar, fp32>) return "Lapack SVD s";
+        if constexpr(std::same_as<Scalar, fp64>) return "Lapack SVD d";
         if constexpr(std::same_as<Scalar, cx32>) return "c";
         return "z";
     }
 
-    template<lapacke_scalar Scalar>
+    template<lapack_scalar Scalar>
     struct GesvdxSelection {
         svd::RealScalar<Scalar> vl;
         svd::RealScalar<Scalar> vu;
@@ -147,7 +126,7 @@ namespace svd::internal::lapack_wrappers {
         char                    range;
     };
 
-    template<lapacke_scalar Scalar>
+    template<lapack_scalar Scalar>
     inline GesvdxSelection<Scalar> make_gesvdx_selection(const Context<Scalar> &ctx, svd::RealScalar<Scalar> vl_default,
                                                          svd::RealScalar<Scalar> vu_default) {
         auto vl    = vl_default;

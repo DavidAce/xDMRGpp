@@ -1,4 +1,4 @@
-add_source_target(xdmrg++-math-eig-lapacke
+add_source_target(xdmrg++-math-eig-lapack
         TARGET_SOURCES
         sgeev.cpp   # Standard problems
         ssyevd.cpp  # Standard problems

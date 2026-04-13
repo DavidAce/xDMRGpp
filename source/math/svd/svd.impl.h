@@ -33,9 +33,9 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     // Resolve geauto
     if(svd_cfg.svd_rtn == svd::rtn::geauto or svd_rtn == svd::rtn::geauto) {
         svd_rtn = svd::rtn::gesvj;
-        if(switchsize_gejsv != -1ul and std::cmp_greater_equal(sizeS, switchsize_gejsv)) svd_rtn = svd::rtn::gejsv;
-        if(switchsize_gesvd != -1ul and std::cmp_greater_equal(sizeS, switchsize_gesvd)) svd_rtn = svd::rtn::gesvd;
-        if(switchsize_gesdd != -1ul and std::cmp_greater_equal(sizeS, switchsize_gesdd)) svd_rtn = svd::rtn::gesdd;
+        if(switchsize_gejsv >= 0 and sizeS >= switchsize_gejsv) svd_rtn = svd::rtn::gejsv;
+        if(switchsize_gesvd >= 0 and sizeS >= switchsize_gesvd) svd_rtn = svd::rtn::gesvd;
+        if(switchsize_gesdd >= 0 and sizeS >= switchsize_gesdd) svd_rtn = svd::rtn::gesdd;
 
         if(svd_rtn != rtn::gesdd and rows * cols >= 256) svd_rtn = rtn::gesdd; // If it's a large problem, do gesdd anyway.
         if(svd_rtn == rtn::gesdd) {
@@ -49,11 +49,11 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         //        log->info("sizeS = {} | lim {} | {} {} {} | {} ", sizeS, rank_lim, switchsize_gejsv, switchsize_gesvd, switchsize_gesdd,
         //        enum2sv(svd_rtn));
     }
-    constexpr bool lapacke_supported = sfinae::is_any_v<Scalar, fp32, fp64, cx32, cx64>;
-    if constexpr(!lapacke_supported) svd_lib = svd::lib::eigen; // Eigen handles long double and fp128
+    constexpr bool lapack_supported = sfinae::is_any_v<Scalar, fp32, fp64, cx32, cx64>;
+    if constexpr(!lapack_supported) svd_lib = svd::lib::eigen; // Eigen handles long double and fp128
 #pragma omp atomic
     count++;
-    if constexpr(!lapacke_supported) {
+    if constexpr(!lapack_supported) {
         try {
             if(svd_rtn == svd::rtn::gersvd)
                 return do_svd_rsvd(mat_ptr, rows, cols);
@@ -64,26 +64,26 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                 throw except::runtime_error("{} {} failed to perform SVD: {} | No other libraries to try with quadruple precision", enum2sv(svd_lib),
                                             enum2sv(svd_rtn), std::string_view(ex.what()));
             } else {
-                throw except::runtime_error("{} {} failed to perform SVD: {} | No LAPACKE routine available for type {}", enum2sv(svd_lib), enum2sv(svd_rtn),
+                throw except::runtime_error("{} {} failed to perform SVD: {} | No LAPACK routine available for type {}", enum2sv(svd_lib), enum2sv(svd_rtn),
                                             std::string_view(ex.what()), sfinae::type_name<Scalar>());
             }
         }
     } else {
         switch(svd_lib) {
-            case svd::lib::lapacke: {
+            case svd::lib::lapack: {
                 try {
                     if(svd_rtn == svd::rtn::gersvd)
                         return do_svd_rsvd(mat_ptr, rows, cols);
                     else
-                        return do_svd_lapacke(mat_ptr, rows, cols);
+                        return do_svd_lapack(mat_ptr, rows, cols);
                 } catch(const std::exception &ex) {
-                    log->warn("{} {} failed to perform SVD: {} | Trying Lapacke gejsv", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
+                    log->warn("{} {} failed to perform SVD: {} | Trying LAPACK gejsv", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
                     try {
                         auto svd_rtn_backup = svd_rtn; // Restore after
                         auto svd_log_level  = log->level();
                         log->set_level(spdlog::level::trace);
                         svd_rtn         = rtn::gejsv;
-                        auto [U, S, VT] = do_svd_lapacke(mat_ptr, rows, cols);
+                        auto [U, S, VT] = do_svd_lapack(mat_ptr, rows, cols);
                         svd_rtn         = svd_rtn_backup;
                         log->set_level(svd_log_level);
                         return {U, S, VT};
@@ -113,7 +113,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
                                                     enum2sv(svd_rtn), std::string_view(ex.what()));
                     } else {
                         log->warn("{} {} failed to perform SVD: {} | Trying Lapack", enum2sv(svd_lib), enum2sv(svd_rtn), std::string_view(ex.what()));
-                        return do_svd_lapacke(mat_ptr, rows, cols);
+                        return do_svd_lapack(mat_ptr, rows, cols);
                     }
                 }
                 break;

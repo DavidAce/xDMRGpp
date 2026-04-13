@@ -331,7 +331,7 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::get_unitary_mpo_layer(const std::v
     auto t_mpolayer = tid::tic_scope("mpo-layer");
     auto mpos       = std::vector<Eigen::Tensor<cx64, 4>>(ulayer.size() + 1); // L-1 gates in the unitary circuit
     if(not cfg.has_value()) cfg = svd::config();
-    if(not cfg->svd_lib) cfg->svd_lib = svd::lib::lapacke;
+    if(not cfg->svd_lib) cfg->svd_lib = svd::lib::lapack;
     if(not cfg->svd_rtn) cfg->svd_rtn = svd::rtn::geauto;
     if(not cfg->rank_max) cfg->rank_max = settings::flbit::cls::mpo_circuit_svd_bondlim;
     if(not cfg->truncation_limit) cfg->truncation_limit = settings::flbit::cls::mpo_circuit_svd_trnclim;
@@ -1280,7 +1280,7 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<s
     svd_cfg.truncation_limit = tol;
     svd_cfg.switchsize_gesdd = settings::precision::svd_switchsize_bdc;
     svd_cfg.rank_max         = 8;
-    svd_cfg.svd_lib          = svd::lib::lapacke;
+    svd_cfg.svd_lib          = svd::lib::lapack;
     svd_cfg.svd_rtn          = svd::rtn::geauto;
 
     auto flipbit = [](size_t n, const size_t pos) -> size_t { return n ^= static_cast<size_t>(1) << pos; };

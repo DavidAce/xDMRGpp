@@ -28,7 +28,8 @@ endif ()
 find_package(Threads                      REQUIRED BYPASS_PROVIDER)
 find_package(OpenMP                       REQUIRED BYPASS_PROVIDER COMPONENTS CXX)
 find_package(gfortran                     REQUIRED BYPASS_PROVIDER OPTIONAL_COMPONENTS quadmath)
-find_package(Lapacke                      REQUIRED BYPASS_PROVIDER MODULE)
+find_package(BLAS                         REQUIRED BYPASS_PROVIDER)
+find_package(LAPACK                       REQUIRED BYPASS_PROVIDER)
 find_package(pcg-cpp                      REQUIRED)
 find_package(Eigen3       5.0.0...5.1.0   REQUIRED)                                         # Eigen3 numerical library
 find_package(h5pp         1.11.0...1.11.3 REQUIRED)                                         # h5pp for writing to file binary in format
@@ -41,10 +42,15 @@ find_package(tomlplusplus 3.4.0           REQUIRED)
 #find_package(arpack++   2.3.0  REQUIRED)                                          # C++ frontend for arpack-ng. Custom find module.
 #find_package(mpfr       4.1.0  REQUIRED)
 
-include(cmake/CheckCompile.cmake)
-check_compile(Lapacke lapacke::lapacke REQUIRED)
+if(BLAS_FOUND AND NOT TARGET BLAS::BLAS)
+    add_library(BLAS::BLAS INTERFACE IMPORTED)
+    target_link_libraries(BLAS::BLAS INTERFACE ${BLAS_LIBRARIES})
+endif()
 
-
+if(LAPACK_FOUND AND NOT TARGET LAPACK::LAPACK)
+    add_library(LAPACK::LAPACK INTERFACE IMPORTED)
+    target_link_libraries(LAPACK::LAPACK INTERFACE ${LAPACK_LIBRARIES})
+endif()
 
 # Install dependencies that need manual installation
 include(cmake/cmake_dependency_provider/PKGInstall.cmake)
@@ -77,7 +83,9 @@ target_link_libraries(xdmrg++-deps INTERFACE
             Eigen3::Eigen
             fmt::fmt
             spdlog::spdlog
-            lapacke::lapacke
+            BLAS::BLAS
+            LAPACK::LAPACK
+            gfortran::gfortran
             arpack++::arpack++
             arpack-ng::arpack-ng
             primme::primme

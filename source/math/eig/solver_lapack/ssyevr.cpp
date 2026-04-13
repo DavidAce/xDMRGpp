@@ -1,19 +1,4 @@
-#include <complex>
-
-#ifndef lapack_complex_float
-    #define lapack_complex_float std::complex<float>
-#endif
-#ifndef lapack_complex_double
-    #define lapack_complex_double std::complex<double>
-#endif
-
-#if defined(MKL_AVAILABLE)
-    #include <mkl_lapacke.h>
-#elif defined(OPENBLAS_AVAILABLE)
-    #include <openblas/lapacke.h>
-#else
-    #include <lapacke.h>
-#endif
+#include "lapack_interface.h"
 #include "../log.h"
 #include "../solver.h"
 #include "math/cast.h"
@@ -47,9 +32,9 @@ int eig::solver::ssyevr(fp32 *matrix /*!< gets destroyed */, size_type L, char r
     if(config.compute_eigvecs == Vecs::ON) {
         eigvecs.resize(static_cast<size_t>(ldz * m_req)); // Docs claim ldz * m, but it segfaults when 'V' finds more than m eigvals
     }
-    info = LAPACKE_ssyevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', lda, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_slamch('S'), &m_found, eigvals.data(),
+    info = DMRG_ssyevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', lda, matrix, lda, vl, vu, il, iu, 2 * DMRG_slamch('S'), &m_found, eigvals.data(),
                                eigvecs.data(), ldz, isuppz.data(), lwork_query, -1, iwork_query, -1);
-    if(info < 0) throw std::runtime_error("LAPACKE_dsyevr_work query: info" + std::to_string(info));
+    if(info < 0) throw std::runtime_error("DMRG_ssyevr_work query: info" + std::to_string(info));
 
     int lwork  = safe_cast<int>(lwork_query[0]);
     int liwork = safe_cast<int>(iwork_query[0]);
@@ -60,9 +45,9 @@ int eig::solver::ssyevr(fp32 *matrix /*!< gets destroyed */, size_type L, char r
     std::vector<fp32> work(static_cast<size_t>(lwork));
     std::vector<int>  iwork(static_cast<size_t>(liwork));
     auto              t_prep = std::chrono::high_resolution_clock::now();
-    info = LAPACKE_ssyevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', n, matrix, lda, vl, vu, il, iu, 2 * LAPACKE_slamch('S'), &m_found, eigvals.data(),
+    info = DMRG_ssyevr_work(LAPACK_COL_MAJOR, jobz, range, 'U', n, matrix, lda, vl, vu, il, iu, 2 * DMRG_slamch('S'), &m_found, eigvals.data(),
                                eigvecs.data(), ldz, isuppz.data(), work.data(), lwork, iwork.data(), liwork);
-    if(info < 0) throw std::runtime_error("LAPACKE_ssyevr_work: info" + std::to_string(info));
+    if(info < 0) throw std::runtime_error("DMRG_ssyevr_work: info" + std::to_string(info));
     /* From the MKL manual:
         abstol
         If jobz = 'V', the eigenvalues and eigenvectors output have residual norms bounded by abstol,
@@ -78,7 +63,7 @@ int eig::solver::ssyevr(fp32 *matrix /*!< gets destroyed */, size_type L, char r
         eig::log->trace("Found {} eigenvalues", m_found);
         eigvals.resize(static_cast<size_t>(m_found));
         eigvecs.resize(static_cast<size_t>(ldz * m_found));
-        // result.meta.residual_norms = std::vector<fp32>(2 * LAPACKE_dlamch('S'), m_found);
+        // result.meta.residual_norms = std::vector<fp32>(2 * DMRG_dlamch('S'), m_found);
         result.meta.eigvecsR_found = m_found > 0;
         result.meta.eigvals_found  = m_found > 0;
         result.meta.rows           = L;
@@ -91,7 +76,7 @@ int eig::solver::ssyevr(fp32 *matrix /*!< gets destroyed */, size_type L, char r
         result.meta.time_prep      = std::chrono::duration<double>(t_prep - t_start).count();
         result.meta.time_total     = std::chrono::duration<double>(t_total - t_start).count();
     } else {
-        throw std::runtime_error("LAPACK dsyevr failed with error: " + std::to_string(info));
+        throw std::runtime_error("LAPACK ssyevr failed with error: " + std::to_string(info));
     }
     return info;
 }

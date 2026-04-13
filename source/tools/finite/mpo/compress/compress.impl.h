@@ -26,7 +26,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_svdcompressed_mpos
     // Eigen Jacobi becomes ?gesvd (i.e. using QR) with the BLAS backend.
     // See here: https://eigen.tuxfamily.org/bz/show_bug.cgi?id=1732
     auto svd_cfg             = svd::config();
-    svd_cfg.svd_lib          = svd::lib::lapacke;
+    svd_cfg.svd_lib          = svd::lib::lapack;
     svd_cfg.svd_rtn          = svd::rtn::gejsv;
     svd_cfg.truncation_limit = std::numeric_limits<double>::epsilon();
 

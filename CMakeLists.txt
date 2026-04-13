@@ -108,6 +108,7 @@ include(cmake/SetupPaths.cmake)
 
 ### Find or install all the dependencies
 include(cmake/SetupDependencies.cmake)
+include(cmake/SetupLapackFortranInterface.cmake)
 
 ###  Add all source files
 add_subdirectory(source)

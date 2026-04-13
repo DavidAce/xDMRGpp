@@ -71,7 +71,7 @@ TEST_CASE("Singular value decomposition in Eigen and Lapacke", "[svd]") {
         svd::config svd_settings;
         svd_settings.truncation_limit = 1e-8;
         svd_settings.loglevel         = 0;
-        svd_settings.svd_lib        = svd::lib::lapacke;
+        svd_settings.svd_lib        = svd::lib::lapack;
         size_t      h5pp_logLevel   = 2;
         svd::solver svd(svd_settings);
 

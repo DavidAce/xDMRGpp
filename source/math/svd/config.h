@@ -5,7 +5,7 @@
 #include <variant>
 
 namespace svd {
-    enum class lib { eigen, lapacke }; /*!< Library */
+    enum class lib { eigen, lapack }; /*!< Library */
 
     /*! \brief SVD routine. In Eigen gesvd, gejsv, gesvj, are just JacobiSVD, while gesdd is BDSVD
      * Links to disussions:
@@ -43,7 +43,7 @@ namespace svd {
     constexpr inline std::string_view enum2sv(svd::lib lib) {
         switch(lib) {
             case svd::lib::eigen: return "eigen";
-            case svd::lib::lapacke: return "lapacke";
+            case svd::lib::lapack: return "lapack";
             default: throw std::logic_error("Could not match svd::lib");
         }
     }
@@ -73,9 +73,9 @@ namespace svd {
         std::optional<long>          rank_max         = std::nullopt;
         std::optional<long>          rank_min         = std::nullopt; /*!< Keep this many singular values even if they are smaller than truncation_lim */
         std::optional<double>        truncation_limit = std::nullopt;
-        std::optional<size_t>        switchsize_gejsv = std::nullopt;
-        std::optional<size_t>        switchsize_gesvd = std::nullopt;
-        std::optional<size_t>        switchsize_gesdd = std::nullopt;
+        std::optional<long>          switchsize_gejsv = std::nullopt;
+        std::optional<long>          switchsize_gesvd = std::nullopt;
+        std::optional<long>          switchsize_gesdd = std::nullopt;
         std::optional<svdx_select_t> svdx_select      = std::nullopt;
         std::optional<int>           loglevel         = std::nullopt;
         std::optional<svd::lib>      svd_lib          = std::nullopt;

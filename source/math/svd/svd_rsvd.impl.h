@@ -32,7 +32,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     // These are more expensive debugging operations
     if(not mat.allFinite()) throw std::runtime_error("SVD error: matrix has inf's or nan's");
     if(mat.isZero(0)) throw std::runtime_error("SVD error: matrix is all zeros");
-    if(mat.isZero()) log->warn("Lapacke SVD Warning\n\t Given matrix elements are all close to zero (prec 1e-12)");
+    if(mat.isZero()) log->warn("Lapack SVD Warning\n\t Given matrix elements are all close to zero (prec 1e-12)");
 #endif
 
     // Randomized SVD

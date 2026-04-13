@@ -1,19 +1,4 @@
-#include <complex>
-
-#ifndef lapack_complex_float
-    #define lapack_complex_float std::complex<float>
-#endif
-#ifndef lapack_complex_double
-    #define lapack_complex_double std::complex<double>
-#endif
-
-#if defined(MKL_AVAILABLE)
-    #include <mkl_lapacke.h>
-#elif defined(OPENBLAS_AVAILABLE)
-    #include <openblas/lapacke.h>
-#else
-    #include <lapacke.h>
-#endif
+#include "lapack_interface.h"
 
 #include "../log.h"
 #include "../solver.h"
@@ -44,12 +29,12 @@ int eig::solver::zgeev(cx64 *matrix, size_type L) {
     auto              lwork_query_ptr = reinterpret_cast<lapack_complex_double *>(&lwork_query);
     char              jobz            = config.compute_eigvecs == Vecs::ON ? 'V' : 'N';
 
-    info = LAPACKE_zgeev_work(LAPACK_COL_MAJOR, jobz, jobz, safe_cast<int>(L), matrix_ptr, safe_cast<int>(L), eigvals_ptr, eigvecsL_ptr, safe_cast<int>(L),
+    info = DMRG_zgeev_work(LAPACK_COL_MAJOR, jobz, jobz, safe_cast<int>(L), matrix_ptr, safe_cast<int>(L), eigvals_ptr, eigvecsL_ptr, safe_cast<int>(L),
                               eigvecsR_ptr, Lint, lwork_query_ptr, -1, rwork.data());
     int                                lwork = (int) std::real(2.0 * lwork_query); // Make it twice as big for performance.
     std::vector<lapack_complex_double> work((unsigned long) lwork);
     auto                               t_prep = std::chrono::high_resolution_clock::now();
-    info = LAPACKE_zgeev_work(LAPACK_COL_MAJOR, jobz, jobz, safe_cast<int>(L), matrix_ptr, safe_cast<int>(L), eigvals_ptr, eigvecsL_ptr, safe_cast<int>(L),
+    info = DMRG_zgeev_work(LAPACK_COL_MAJOR, jobz, jobz, safe_cast<int>(L), matrix_ptr, safe_cast<int>(L), eigvals_ptr, eigvecsL_ptr, safe_cast<int>(L),
                               eigvecsR_ptr, Lint, work.data(), lwork, rwork.data());
     auto t_total = std::chrono::high_resolution_clock::now();
     if(info == 0) {

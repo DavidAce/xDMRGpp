@@ -74,7 +74,7 @@ std::pair<Eigen::Tensor<Scalar, 4>, Eigen::Tensor<Scalar, 4>> tools::finite::mpo
     Eigen::Tensor<Scalar, 6> swapped_mpo = mpoL.contract(mpoR, tenx::idx({1}, {0})).shuffle(tenx::array6{0, 4, 5, 3, 1, 2}); // swap
     auto                     svd_cfg     = svd::config();
     svd_cfg.truncation_limit             = 1e-16;
-    svd_cfg.svd_lib                      = svd::lib::lapacke;
+    svd_cfg.svd_lib                      = svd::lib::lapack;
     svd_cfg.svd_rtn                      = svd::rtn::gejsv;
 
     auto svd = svd::solver(svd_cfg);

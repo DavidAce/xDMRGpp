@@ -20,15 +20,15 @@ namespace svd::internal::lapack_wrappers {
         rwork.resize(safe_cast<size_t>(lrwork));
         iwork.resize(safe_cast<size_t>(liwork));
 
-        int info = LAPACKE_dgesdd_work(LAPACK_COL_MAJOR, 'S', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(),
-                                       ctx.ldvt, rwork.data(), -1, iwork.data());
+        int info = DMRG_dgesdd_work(LAPACK_COL_MAJOR, 'S', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(),
+                                    ctx.ldvt, rwork.data(), -1, iwork.data());
         if(info != 0) return info;
 
         lrwork = safe_cast<int>(rwork[0]);
         rwork.resize(safe_cast<size_t>(std::max(1, lrwork)));
 
-        return LAPACKE_dgesdd_work(LAPACK_COL_MAJOR, 'S', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(),
-                                   ctx.ldvt, rwork.data(), lrwork, iwork.data());
+        return DMRG_dgesdd_work(LAPACK_COL_MAJOR, 'S', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.U.data(), ctx.ldu, ctx.VT.data(),
+                                ctx.ldvt, rwork.data(), lrwork, iwork.data());
     }
 
     template int dgesdd<fp64>(Context<fp64> &ctx);

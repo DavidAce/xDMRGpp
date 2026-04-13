@@ -1,4 +1,4 @@
-add_source_target(xdmrg++-math-svd-lapacke
+add_source_target(xdmrg++-math-svd-lapack
         TARGET_SOURCES
         lapack_wrappers/sgesvd.cpp
         lapack_wrappers/dgesvd.cpp
@@ -21,7 +21,7 @@ add_source_target(xdmrg++-math-svd-lapacke
         lapack_wrappers/cgesvdx.cpp
         lapack_wrappers/zgesvdx.cpp
         INST_TEMPLATE_FILES
-        inst/svd_lapacke.inst.cpp.in
+        inst/svd_lapack.inst.cpp.in
         INST_SCALARS
         fp32 fp64 cx32 cx64
         OBJECT_LINK_LIBRARIES
@@ -41,5 +41,5 @@ add_source_target(xdmrg++-math-svd
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        xdmrg++-tid xdmrg++-math-svd-lapacke
+        xdmrg++-tid xdmrg++-math-svd-lapack
         )

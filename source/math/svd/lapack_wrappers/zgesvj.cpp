@@ -20,8 +20,8 @@ namespace svd::internal::lapack_wrappers {
         cwork.resize(static_cast<size_t>(lcwork));
         rwork.resize(static_cast<size_t>(lrwork));
 
-        int info = LAPACKE_zgesvj_work(LAPACK_COL_MAJOR, 'G', 'U', 'V', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.ldv, ctx.V.data(), ctx.ldv,
-                                       cwork.data(), lcwork, rwork.data(), lrwork);
+        int info = DMRG_zgesvj_work(LAPACK_COL_MAJOR, 'G', 'U', 'V', ctx.rowsA, ctx.colsA, ctx.A.data(), ctx.lda, ctx.S.data(), ctx.ldv, ctx.V.data(), ctx.ldv,
+                                    cwork.data(), lcwork, rwork.data(), lrwork);
         if(info != 0) return info;
 
         ctx.U  = std::move(ctx.A);

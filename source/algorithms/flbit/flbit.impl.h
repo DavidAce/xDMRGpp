@@ -38,6 +38,7 @@
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/h5.h"
+#include <limits>
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
 #include "tools/finite/h5.h"
@@ -243,7 +244,7 @@ template<typename Scalar> void flbit<Scalar>::run_preprocessing() {
             // We know that we should get back to the initial state in the real basis, if we apply
             // the unitary transformation on the lbit state : Ψ = U|Ψ'⟩
             auto svd_cfg           = svd::config(status.bond_lim, status.trnc_lim);
-            svd_cfg.svd_lib        = svd::lib::lapacke;
+            svd_cfg.svd_lib        = svd::lib::lapack;
             svd_cfg.svd_rtn        = svd::rtn::geauto;
             StateFinite state_real = tensors.get_state();
             if(settings::flbit::use_mpo_circuit) {
@@ -363,7 +364,7 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
     tensors.clear_cache();
     tensors.clear_measurements();
     auto svd_cfg             = svd::config();
-    svd_cfg.svd_lib          = svd::lib::lapacke;
+    svd_cfg.svd_lib          = svd::lib::lapack;
     svd_cfg.svd_rtn          = svd::rtn::geauto;
     svd_cfg.switchsize_gejsv = 0;
     svd_cfg.switchsize_gesvd = 1;
@@ -382,12 +383,17 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
     {
         const auto mpos = tensors.model->get_mpo_tensors(0, MposWithEdges::ON, MpoCompress::AUTO);
         //        const auto mpos = tensors.model->get_mpos(MposWithEdges::ON);
-        auto t_ham      = tid::tic_scope("ham");
-        auto num_states = static_cast<Eigen::Index>(std::pow(2, sites.size()));
+        auto t_ham = tid::tic_scope("ham");
+        if(sites.size() >= std::numeric_limits<size_t>::digits)
+            throw except::logic_error("Too many sites to enumerate basis states exactly: {} >= {}", sites.size(), std::numeric_limits<size_t>::digits);
+        auto num_states = size_t{1} << sites.size();
+        if(num_states > static_cast<size_t>(std::numeric_limits<Eigen::Index>::max()))
+            throw except::logic_error("Too many basis states for Eigen::Index: 2^{} = {}", sites.size(), num_states);
+        auto eigen_num_states = static_cast<Eigen::Index>(num_states);
         auto bitseqs    = std::vector<size_t>();
-        bitseqs.reserve(static_cast<size_t>(num_states) / 2);
+        bitseqs.reserve(num_states);
         for(auto b : num::range<size_t>(0, num_states)) { bitseqs.emplace_back(b); }
-        hamiltonian_eff_diagonal.resize(static_cast<long>(bitseqs.size()));
+        hamiltonian_eff_diagonal.resize(eigen_num_states);
 #pragma omp                      parallel for schedule(dynamic, 16)
         for(size_t idx = 0; idx < bitseqs.size(); ++idx) {
             if(u_mbl.size() != settings::model::lbit::u_depth) throw except::logic_error("u_mbl.size() != u_depth. Has u_mbl been initialized?");
@@ -399,12 +405,13 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
             tools::finite::mps::init::set_product_state_on_axis_using_pattern(state_i, StateInitType::REAL, "z", pattern);
             tools::finite::mps::apply_circuit(state_i, u_and, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_circuit(state_i, u_mbl, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
-            hamiltonian_eff_diagonal[static_cast<long>(idx)] = tools::finite::measure::expectation_value<Scalar>(state_i, state_i, mpos);
+            auto eigen_idx                              = static_cast<Eigen::Index>(idx);
+            hamiltonian_eff_diagonal[eigen_idx]         = tools::finite::measure::expectation_value<Scalar>(state_i, state_i, mpos);
             if(num::mod<size_t>(idx, bitseqs.size() / 64) == 0)
                 tools::log->info("{0:>6}/{1} {2} {3:.3e} s (thread {4:<2}/{5}): ⟨Ψ_i U_and† U_mbl H' U_mbl† U_and |Ψ_i⟩ = {6:.16f}{7:+.16f}", idx,
                                                       bitseqs.size(), pattern, t_eff->get_time(), omp_get_thread_num(), omp_get_num_threads(),
-                                                      static_cast<double>(hamiltonian_eff_diagonal[static_cast<long>(idx)].real()),
-                                                      static_cast<double>(hamiltonian_eff_diagonal[static_cast<long>(idx)].imag()));
+                                                      static_cast<double>(hamiltonian_eff_diagonal[eigen_idx].real()),
+                                                      static_cast<double>(hamiltonian_eff_diagonal[eigen_idx].imag()));
         }
         tools::log->info("Finished calculating hamiltonian_eff_diagonal: {:.3e} s", t_eff->get_last_interval());
                          }
@@ -803,7 +810,7 @@ template<typename Scalar>
 void flbit<Scalar>::time_evolve_lbit_state() {
     auto t_evo          = tid::tic_scope("time_evo");
     auto svd_cfg        = svd::config(status.bond_lim, status.trnc_lim);
-    svd_cfg.svd_lib     = svd::lib::lapacke;
+    svd_cfg.svd_lib     = svd::lib::lapack;
     svd_cfg.svd_rtn     = svd::rtn::geauto;
     bool has_swap_gates = not time_swap_gates_1body.empty() or not time_swap_gates_2body.empty() or not time_swap_gates_3body.empty();
     bool has_slow_gates = not time_gates_1body.empty() or not time_gates_2body.empty() or not time_gates_3body.empty();
@@ -854,7 +861,7 @@ void flbit<Scalar>::transform_to_real_basis() {
     if(unitary_gates_2site_layers.size() != settings::model::lbit::u_depth) create_unitary_circuit_gates();
     auto t_map      = tid::tic_scope("l2r");
     auto svd_cfg    = svd::config(status.bond_lim, status.trnc_lim);
-    svd_cfg.svd_lib = svd::lib::lapacke;
+    svd_cfg.svd_lib = svd::lib::lapack;
     svd_cfg.svd_rtn = svd::rtn::geauto;
     if(not tensors.state) tensors.state = std::make_unique<StateFinite<Scalar>>(*state_lbit);
     if(settings::flbit::use_mpo_circuit) {
@@ -874,7 +881,7 @@ void flbit<Scalar>::transform_to_lbit_basis() {
     if(unitary_gates_2site_layers.size() != settings::model::lbit::u_depth) create_unitary_circuit_gates();
     auto t_map      = tid::tic_scope("r2l");
     auto svd_cfg    = svd::config(status.bond_lim, status.trnc_lim);
-    svd_cfg.svd_lib = svd::lib::lapacke;
+    svd_cfg.svd_lib = svd::lib::lapack;
     svd_cfg.svd_rtn = svd::rtn::geauto;
     if(not state_lbit) state_lbit = std::make_unique<StateFinite<Scalar>>(tensors.get_state());
     if(settings::flbit::use_mpo_circuit) {
@@ -1012,7 +1019,7 @@ void flbit<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_po
     if(num_rps > 0 and h5file and storage_event == StorageEvent::MODEL) {
         auto length     = safe_cast<long>(settings::model::model_size);
         auto svd_cfg    = svd::config(8192, 1e-12);
-        svd_cfg.svd_lib = svd::lib::lapacke;
+        svd_cfg.svd_lib = svd::lib::lapack;
         svd_cfg.svd_rtn = svd::rtn::gejsv;
         using namespace qm::spin::half::tensor;
         using op_t       = tools::finite::measure::LocalObservableOp<cx64>;

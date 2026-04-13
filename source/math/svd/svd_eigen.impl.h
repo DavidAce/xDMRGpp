@@ -44,7 +44,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
             throw std::runtime_error("SVD error: matrix has inf's or nan's");
         }
         if(mat.isZero(0)) throw std::runtime_error("SVD error: matrix is all zeros");
-        if(mat.isZero()) log->warn("Lapacke SVD Warning\n\t Given matrix elements are all close to zero");
+        if(mat.isZero()) log->warn("Lapack SVD Warning\n\t Given matrix elements are all close to zero");
     }
 
     auto dump     = internal::DumpSVD<Scalar>();
@@ -110,7 +110,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
     auto t_suffix = benchmark ? fmt::format("{}", num::next_multiple<long>(minRC, 5l)) : "";
     auto svd_info =
         fmt::format("| {} x {} | rank_max {} | truncation limit {:.4e} | switchsize bdc {}", rows, cols, rank_max, truncation_lim, switchsize_gesdd);
-    const long switch_eff = switchsize_gesdd == -1ul ? minRC : safe_cast<long>(switchsize_gesdd);
+    const long switch_eff = switchsize_gesdd < 0 ? minRC : switchsize_gesdd;
     const bool use_jacobi = minRC < switch_eff;
     const long rank_lim   = rank_max > 0 ? std::min(minRC, rank_max) : minRC;
 
@@ -129,7 +129,7 @@ std::tuple<svd::MatrixType<Scalar>, svd::VectorType<Scalar>, svd::MatrixType<Sca
         Eigen::BDCSVD<MatrixType<Scalar>, Eigen::ComputeThinU | Eigen::ComputeThinV> SVD;
 
         // Set up
-        if(switchsize_gesdd == -1ul) {
+        if(switchsize_gesdd < 0) {
             SVD.setSwitchSize(safe_cast<int>(minRC));
         } else {
             SVD.setSwitchSize(safe_cast<int>(switchsize_gesdd));

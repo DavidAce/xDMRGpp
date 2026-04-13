@@ -41,7 +41,7 @@ namespace svd::internal {
         file.writeAttribute(info, group_name, "info");
         file.writeAttribute(truncation_error, group_name, "truncation_error");
 
-        if(svd_lib == svd::lib::lapacke) {
+        if(svd_lib == svd::lib::lapack) {
 #if defined(SVD_SAVE_OPENBLAS_ATTRIBUTES)
             file.writeAttribute(OPENBLAS_VERSION, "OPENBLAS_VERSION", group_name);
             file.writeAttribute(openblas_get_num_threads(), "openblas_get_num_threads", group_name);

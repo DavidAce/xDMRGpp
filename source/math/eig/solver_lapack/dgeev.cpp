@@ -1,19 +1,4 @@
-#include <complex>
-
-#ifndef lapack_complex_float
-    #define lapack_complex_float std::complex<float>
-#endif
-#ifndef lapack_complex_double
-    #define lapack_complex_double std::complex<double>
-#endif
-
-#if defined(MKL_AVAILABLE)
-    #include <mkl_lapacke.h>
-#elif defined(OPENBLAS_AVAILABLE)
-    #include <openblas/lapacke.h>
-#else
-    #include <lapacke.h>
-#endif
+#include "lapack_interface.h"
 
 #include "../log.h"
 #include "../solver.h"
@@ -35,12 +20,12 @@ int eig::solver::dgeev(fp64 *matrix, size_type L) {
     double lwork_query;
     char   jobz = config.compute_eigvecs == Vecs::ON ? 'V' : 'N';
 
-    info = LAPACKE_dgeev_work(LAPACK_COL_MAJOR, jobz, jobz, Lint, matrix, safe_cast<int>(L), eigvals_real.data(), eigvals_imag.data(), eigvecsL_tmp.data(),
+    info = DMRG_dgeev_work(LAPACK_COL_MAJOR, jobz, jobz, Lint, matrix, safe_cast<int>(L), eigvals_real.data(), eigvals_imag.data(), eigvecsL_tmp.data(),
                               Lint, eigvecsR_tmp.data(), safe_cast<int>(L), &lwork_query, -1);
     int                 lwork = (int) std::real(2.0 * lwork_query); // Make it twice as big for performance.
     std::vector<double> work(safe_cast<size_t>(lwork));
     auto                t_prep = std::chrono::high_resolution_clock::now();
-    info = LAPACKE_dgeev_work(LAPACK_COL_MAJOR, jobz, jobz, Lint, matrix, safe_cast<int>(L), eigvals_real.data(), eigvals_imag.data(), eigvecsL_tmp.data(),
+    info = DMRG_dgeev_work(LAPACK_COL_MAJOR, jobz, jobz, Lint, matrix, safe_cast<int>(L), eigvals_real.data(), eigvals_imag.data(), eigvecsL_tmp.data(),
                               Lint, eigvecsR_tmp.data(), safe_cast<int>(L), work.data(), lwork);
     auto t_total = std::chrono::high_resolution_clock::now();
     if(info == 0) {

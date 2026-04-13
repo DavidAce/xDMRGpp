@@ -510,7 +510,7 @@ void xdmrg<Scalar>::update_state() {
             auto                mpos1      = tensors.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
             auto                mpos2      = tensors.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
             auto                svdcfg     = svd::config(8192, 1e-20);
-            svdcfg.svd_lib                 = svd::lib::lapacke;
+            svdcfg.svd_lib                 = svd::lib::lapack;
             svdcfg.svd_rtn                 = svd::rtn::gesdd;
             tools::finite::ops::apply_mpos_general(tmp_state1, mpos1, svdcfg);
             tools::finite::ops::apply_mpos_general(tmp_state2, mpos2, svdcfg);
