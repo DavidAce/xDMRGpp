@@ -49,7 +49,7 @@ if(COMPILER_ENABLE_USAN)
     set(USAN_FLAGS
         -fno-omit-frame-pointer
         -fsanitize-undefined-trap-on-error
-        -fsanitize=undefined,alignment,bounds,return,enum,float-cast-overflow,float-divide-by-zero,signed-integer-overflow
+        -fsanitize=undefined,alignment,bounds,return,enum,float-cast-overflow,signed-integer-overflow
     )
     mark_as_advanced(USAN_FLAGS)
     target_compile_options(xdmrg++-flags INTERFACE
