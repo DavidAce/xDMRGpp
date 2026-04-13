@@ -38,6 +38,9 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Upgrade Python tooling
+        run: python -m pip install --upgrade pip setuptools wheel
+
       - name: Update apt
         run: sudo apt-get update
 
@@ -91,7 +94,15 @@ jobs:
       - name: Install conan
         if: matrix.manager == 'conan'
         run: |
-          pip install conan
+          python -m pip install --upgrade conan
+          mkdir -p ~/.conan2
+          {
+            echo "core.net.http:timeout=90"
+            echo "core.download:retry=5"
+            echo "core.download:retry_wait=5"
+            echo "tools.files.download:retry=5"
+            echo "tools.files.download:retry_wait=5"
+          } >> ~/.conan2/global.conf
           conan profile detect --force
           conan remote add conan-dmrg https://neumann.theophys.kth.se/artifactory/api/conan/conan-dmrg --force
 
