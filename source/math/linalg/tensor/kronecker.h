@@ -33,10 +33,11 @@ namespace linalg::tensor {
                 2  3       3 4 5         2 3 7 8 9           5 6 7 8 9
             \endverbatim
          */
-        constexpr Eigen::Index                  topA  = static_cast<Eigen::Index>(rankA) / 2;
-        constexpr Eigen::Index                  topB  = static_cast<Eigen::Index>(rankB) / 2;
-        constexpr Eigen::Index                  topAB = topA + topB;
-        std::array<Eigen::Index, rankA + rankB> shf{};
+        constexpr Eigen::Index           topA   = static_cast<Eigen::Index>(rankA) / 2;
+        constexpr Eigen::Index           topB   = static_cast<Eigen::Index>(rankB) / 2;
+        constexpr Eigen::Index           topAB  = topA + topB;
+        constexpr size_t                 rankAB = static_cast<size_t>(rankA + rankB);
+        std::array<Eigen::Index, rankAB> shf{};
         for(size_t i = 0; i < shf.size(); i++) {
             if(i < topAB) {
                 if(i < topA)

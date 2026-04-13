@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <utility>
 #include <vector>
 template<typename Scalar> class StateFinite;

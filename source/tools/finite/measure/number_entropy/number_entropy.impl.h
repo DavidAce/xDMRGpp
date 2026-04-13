@@ -15,6 +15,7 @@
 #include "tools/common/log.h"
 #include "tools/finite/mps.h"
 #include <bit>
+#include <limits>
 #include <bitset>
 #include <utility>
 using tools::finite::measure::RealScalar;
@@ -315,16 +316,18 @@ inline size_t nextGreaterWithSameSetBit(size_t n) {
 }
 
 // function to find the position of rightmost set bit. Returns -1 if there are no set bits
+inline constexpr size_t bitpos_not_found = std::numeric_limits<size_t>::max();
+
 inline size_t getFirstSetBitPos(size_t n) {
-    if(n == 0) return -1ul;
-    return std::countr_zero(n);
+    if(n == 0) return bitpos_not_found;
+    return static_cast<size_t>(std::countr_zero(n));
 }
 // inline size_t getFirstSetBitPos(size_t n) { return safe_cast<size_t>((std::log2(n & -n) + 1) - 1); }
 
 // function to find the next greater integer
 inline size_t nextGreaterWithOneMoreSetBit(size_t n) {
     const size_t pos = getFirstSetBitPos(~n);
-    if(pos == -1ul) return (n << 1) + 1; // no unset bits
+    if(pos == bitpos_not_found) return (n << 1) + 1; // no unset bits
     return (1ul << pos) | n;
 }
 // inline size_t nextGreaterWithOneMoreSetBit(size_t n) {

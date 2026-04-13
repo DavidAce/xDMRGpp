@@ -45,15 +45,17 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
 
     MatVecMPOS<T> H1 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
     MatVecMPOS<T> H2 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
+    using IdxT       = Eigen::Index;
     using R          = decltype(std::real(std::declval<T>()));
     using MatrixT    = typename MatVecMPOS<T>::MatrixType;
     // using MatrixR     = Eigen::Matrix<R, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorR    = Eigen::Matrix<R, Eigen::Dynamic, 1>;
-    auto nonZeroCols = std::vector<long>();
+    auto nonZeroCols = std::vector<IdxT>();
 
-    const auto mps_size     = H1.get_size();
-    const auto mps_shape    = H1.get_shape_mps();
-    const long requestedNcv = std::clamp(bcfg.nkrylov, 3ul, 256ul);
+    const auto mps_size      = H1.get_size();
+    const auto mps_shape     = H1.get_shape_mps();
+    const auto requested_ncv = std::clamp<size_t>(bcfg.nkrylov, size_t{3}, size_t{256});
+    const auto requestedNcv  = static_cast<IdxT>(requested_ncv);
 
     auto H1V = MatrixT();
     auto H2V = MatrixT();
@@ -68,7 +70,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
     V.col(0) = tenx::asScalarType<T>(tenx::VectorCast(res.mixed_blk));
 
     R                  optVal = std::numeric_limits<R>::quiet_NaN();
-    long               optIdx = 0;
+    IdxT               optIdx = 0;
     R                  tol    = static_cast<R>(settings::precision::eigs_abstol_max);
     R                  absTol = std::numeric_limits<R>::epsilon() * 100;
     R                  relTol = R{1e-4f};
@@ -217,8 +219,8 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
         snorm              = static_cast<R>(evals.cwiseAbs().maxCoeff());
         V                  = (V * evecs.real()).eval(); // Keep the current Krylov basis width after mixing
         VectorR mixedNorms = V.colwise().norm();        // New state norms after mixing cols of V according to cols of evecs
-        auto    mixedColOk = std::vector<long>();       // New states with acceptable norm and eigenvalue
-        mixedColOk.reserve(static_cast<size_t>(mixedNorms.size()));
+        auto    mixedColOk = std::vector<IdxT>();       // New states with acceptable norm and eigenvalue
+        mixedColOk.reserve(static_cast<typename std::vector<IdxT>::size_type>(mixedNorms.size()));
         auto normTol = std::numeric_limits<R>::epsilon() * safe_cast<R>(settings::precision::max_norm_slack);
         for(long i = 0; i < mixedNorms.size(); ++i) {
             if(std::abs(mixedNorms(i) - R{1}) > normTol) continue;
@@ -265,7 +267,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
         }
         // tools::log->debug("evals                  : \n{}\n", linalg::matrix::to_string(evals, 8));
         // Eigenvalues are sorted in ascending order.
-        long colIdx = 0;
+        IdxT colIdx = 0;
         switch(ritz_internal) {
             case OptRitz::SR: {
                 evals(mixedColOk).minCoeff(&colIdx);
@@ -289,7 +291,8 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
                 (evals(mixedColOk).array() - static_cast<R>(res.ene_old)).cwiseAbs().minCoeff(&colIdx);
             }
         }
-        optIdx = mixedColOk[colIdx];
+        auto udx = static_cast<typename std::vector<IdxT>::size_type>(colIdx);
+        optIdx   = mixedColOk[udx];
 
         auto oldVal = optVal;
         optVal      = evals(optIdx);

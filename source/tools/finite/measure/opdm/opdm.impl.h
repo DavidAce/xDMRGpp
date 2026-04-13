@@ -1,6 +1,6 @@
 #pragma once
-#include "../opdm.h"
 #include "../expectation_value.h"
+#include "../opdm.h"
 #include "config/enums/ModelType.h"
 #include "math/eig.h"
 #include "math/float.h"
@@ -84,18 +84,21 @@ Eigen::Tensor<Scalar, 2> tools::finite::measure::opdm_general(const StateFinite<
         return s;
     };
 
-    std::vector<opstring_t> cd(L), c_(L);
+    std::vector<opstring_t> cd(static_cast<size_t>(L)), c_(static_cast<size_t>(L));
     for(long i = 0; i < L; ++i) {
-        cd[i] = make_cd(i);
-        c_[i] = make_c_(i);
+        auto i_ = static_cast<size_t>(i);
+        cd[i_]  = make_cd(i);
+        c_[i_]  = make_c_(i);
     }
 
     for(long pos_i = 0; pos_i < L; ++pos_i) {
-        const auto &cd_i = cd[pos_i]; // make_cd(pos_i);
-        const auto &c__i = c_[pos_i]; // make_c_(pos_i);
+        auto        pos_i_ = static_cast<size_t>(pos_i);
+        const auto &cd_i   = cd[pos_i_]; // make_cd(pos_i);
+        const auto &c__i   = c_[pos_i_]; // make_c_(pos_i);
         for(long pos_j = pos_i; pos_j < L; ++pos_j) {
-            const auto &cd_j = cd[pos_j]; // make_cd(pos_j);
-            const auto &c__j = c_[pos_j]; // make_c_(pos_j);
+            auto        pos_j_ = static_cast<size_t>(pos_j);
+            const auto &cd_j   = cd[pos_j_]; // make_cd(pos_j);
+            const auto &c__j   = c_[pos_j_]; // make_c_(pos_j);
 
             auto opp = cd_i;
             auto opm = cd_i;
@@ -221,8 +224,8 @@ Eigen::Tensor<RealScalar<Scalar>, 1> tools::finite::measure::opdm_spectrum(const
         // solver.eig<eig::Form::SYMM>(opdm_cx64.data(), opdm.dimension(0), eig::Vecs::OFF);
         // Eigen::Tensor<fp64, 1> opdm_spectrum_fp64 = tenx::TensorCast(eig::view::get_eigvals<fp64>(solver.result));
         // state.measurements.opdm_spectrum          = tenx::asScalarType<RealScalar<Scalar>>(opdm_spectrum_fp64);
-        using RealT  = decltype(std::real(std::declval<Scalar>()));
-        auto  solver = eig::solver();
+        using RealT = decltype(std::real(std::declval<Scalar>()));
+        auto solver = eig::solver();
         solver.eig<eig::Form::SYMM>(opdm.data(), opdm.dimension(0), eig::Vecs::OFF);
         Eigen::Tensor<RealT, 1> opdm_spectrum     = tenx::TensorCast(eig::view::get_eigvals<RealT>(solver.result));
         auto                    opdm_spectrum_vec = tenx::VectorMap(opdm_spectrum);

@@ -24,10 +24,10 @@ namespace x2 {
 
         Ptr base = nullptr;
 
-        std::array<Index, rank> dims{};
-        std::array<Index, rank> stride{};
-        std::array<int, rank>   row_axes{};
-        std::array<int, rank>   col_axes{};
+        x2_detail::index_array<rank> dims{};
+        x2_detail::index_array<rank> stride{};
+        x2_detail::axes_array<rank>  row_axes{};
+        x2_detail::axes_array<rank>  col_axes{};
         int                     row_rank = 0;
         int                     col_rank = 0;
 
@@ -51,7 +51,7 @@ namespace x2 {
             for(int t = 0; t < col_rank; ++t) assert(0 <= col_axes[static_cast<size_t>(t)] && col_axes[static_cast<size_t>(t)] < rank);
 
             // row_axes and col_axes should be disjoint and cover all axes exactly once for a pure reshape
-            std::array<int, rank> seen{};
+            x2_detail::axes_array<rank> seen{};
             seen.fill(0);
             for(int t = 0; t < row_rank; ++t) seen[static_cast<size_t>(row_axes[static_cast<size_t>(t)])] += 1;
             for(int t = 0; t < col_rank; ++t) seen[static_cast<size_t>(col_axes[static_cast<size_t>(t)])] += 1;
@@ -67,7 +67,7 @@ namespace x2 {
 
         Index offset(Index r, Index c) const {
             // Decode r into indices along row_axes
-            std::array<Index, rank> idx{};
+            x2_detail::index_array<rank> idx{};
             {
                 Index tmp = r;
                 for(int t = 0; t < row_rank; ++t) {
@@ -165,7 +165,7 @@ namespace x2 {
     namespace internal {
         template<typename Scalar, int rank, x2::Access A>
         inline x2::TensorAsMatrixViewT<Scalar, rank, A> make_view(typename x2::TensorAsMatrixViewT<Scalar, rank, A>::Ptr data,
-                                                                  const Eigen::array<Eigen::Index, rank> &dims, std::initializer_list<int> row_axes,
+                                                                  const x2_detail::index_array<rank> &dims, std::initializer_list<int> row_axes,
                                                                   std::initializer_list<int> col_axes) {
             x2::TensorAsMatrixViewT<Scalar, rank, A> V;
             V.base = data;
@@ -178,13 +178,13 @@ namespace x2 {
         }
     }
     template<typename Scalar, int rank>
-    inline TensorAsMatrixView<Scalar, rank> as_matrix(Scalar *data, const Eigen::array<Eigen::Index, rank> &dims, std::initializer_list<int> row_axes,
+    inline TensorAsMatrixView<Scalar, rank> as_matrix(Scalar *data, const x2_detail::index_array<rank> &dims, std::initializer_list<int> row_axes,
                                                       std::initializer_list<int> col_axes) {
         return internal::make_view<Scalar, rank, Access::ReadWrite>(data, dims, row_axes, col_axes);
     }
 
     template<typename Scalar, int rank>
-    inline ConstTensorAsMatrixView<Scalar, rank> as_const_matrix(const Scalar *const data, const Eigen::array<Eigen::Index, rank> &dims,
+    inline ConstTensorAsMatrixView<Scalar, rank> as_const_matrix(const Scalar *const data, const x2_detail::index_array<rank> &dims,
                                                                  std::initializer_list<int> row_axes, std::initializer_list<int> col_axes) {
         return internal::make_view<Scalar, rank, Access::ReadOnly>(data, dims, row_axes, col_axes);
     }

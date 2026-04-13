@@ -50,6 +50,12 @@ namespace x2 {
 }
 
 namespace x2_detail {
+    template<int rank>
+    using index_array = std::array<Eigen::Index, static_cast<std::size_t>(rank)>;
+
+    template<int rank>
+    using axes_array = std::array<int, static_cast<std::size_t>(rank)>;
+
 
     template<typename Scalar>
     using RealT                                   = decltype(std::real(std::declval<Scalar>()));
@@ -212,22 +218,22 @@ namespace x2_detail {
     }
 
     template<int rank>
-    EIGEN_STRONG_INLINE static std::array<Eigen::Index, rank> to_array_dims(const Eigen::DSizes<Eigen::Index, rank> &d) {
-        std::array<Eigen::Index, rank> out{};
+    EIGEN_STRONG_INLINE static index_array<rank> to_array_dims(const Eigen::DSizes<Eigen::Index, rank> &d) {
+        index_array<rank> out{};
         for(int i = 0; i < rank; ++i) out[static_cast<size_t>(i)] = d[static_cast<size_t>(i)];
         return out;
     }
 
     template<int rank>
-    EIGEN_STRONG_INLINE static std::array<Eigen::Index, rank> colmajor_strides(const std::array<Eigen::Index, rank> &dims) {
-        std::array<Eigen::Index, rank> s{};
+    EIGEN_STRONG_INLINE static index_array<rank> colmajor_strides(const index_array<rank> &dims) {
+        index_array<rank> s{};
         s[0] = 1;
         for(int ax = 1; ax < rank; ++ax) s[static_cast<size_t>(ax)] = s[static_cast<size_t>(ax - 1)] * dims[static_cast<size_t>(ax - 1)];
         return s;
     }
 
     template<int rank>
-    EIGEN_STRONG_INLINE static void fill_axes(std::array<int, rank> &dst, int &count, std::initializer_list<int> axes) {
+    EIGEN_STRONG_INLINE static void fill_axes(axes_array<rank> &dst, int &count, std::initializer_list<int> axes) {
         assert(static_cast<int>(axes.size()) <= rank);
         count = 0;
         for(int ax : axes) {

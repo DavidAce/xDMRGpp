@@ -18,7 +18,7 @@
  * without hurting the precision of the pre-expansion MPS.
  */
 template<typename Scalar>
-void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar> &tensors, long posP, long pos0, const BondExpansionConfig &bcfg) {
+void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar> &tensors, size_t posP, size_t pos0, const BondExpansionConfig &bcfg) {
     [[maybe_unused]] auto &state = tensors.get_state();
     [[maybe_unused]] auto &model = tensors.get_model();
     [[maybe_unused]] auto &edges = tensors.get_edges();
@@ -33,7 +33,7 @@ void tools::finite::env::internal::run_expansion_term_mixer(TensorsFinite<Scalar
     const auto active_sites_backup = tensors.active_sites;
     // Re-optimize the site that was zero-padded during the bond expansion step so the
     // one-step eigensolve can populate the newly added local basis directions.
-    tensors.activate_sites(std::vector<size_t>{safe_cast<size_t>(pos0)});
+    tensors.activate_sites(std::vector<size_t>{pos0});
     rebuild_edges(state, model, edges);
 
     // Run one step of the DMRG optimizer

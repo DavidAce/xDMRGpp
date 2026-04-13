@@ -153,9 +153,9 @@ class solver_base {
         std::deque<VectorReal>    eigVals_history;
         std::deque<Eigen::Index>  matvecs_history;
         size_t                    max_history_size        = 5;
-        size_t                    saturation_count_eigVal = 0;
-        size_t                    saturation_count_rNorm  = 0;
-        size_t                    saturation_count_max    = 10;
+        Eigen::Index              saturation_count_eigVal = 0;
+        Eigen::Index              saturation_count_rNorm  = 0;
+        Eigen::Index              saturation_count_max    = 10;
         std::vector<Eigen::Index> nonZeroCols; // Nonzero Gram Schmidt columns
         Eigen::Index              numZeroRows   = 0;
         std::vector<std::string>  stopMessage   = {};
@@ -413,7 +413,8 @@ class solver_base {
     void         set_jcbOverlapSize(Eigen::Index jcbOverlapSize);
     void         set_jcbNumPasses(Eigen::Index jcbNumPasses);
     void         set_preconditioner_type(eig::Preconditioner preconditioner_type_);
-    void         set_preconditioner_params(Eigen::Index maxiters = 1000, RealScalar initialTol = RealScalar{0.25f}, Eigen::Index jcbMaxBlockSize = -1ul);
+    void         set_preconditioner_params(Eigen::Index maxiters = 1000, RealScalar initialTol = RealScalar{0.25f},
+                                           Eigen::Index jcbMaxBlockSize = Eigen::Index{-1});
     void         set_chebyshevFilterRelGapThreshold(RealScalar threshold);
     void         set_chebyshevFilterLambdaCutBias(RealScalar bias);
     void         set_chebyshevFilterDegree(Eigen::Index degree);

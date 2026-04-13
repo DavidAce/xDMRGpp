@@ -370,7 +370,8 @@ BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionO
     bcfg.maxiter       = settings::strategy::dmrg_bond_expansion::preopt::maxiter;
     bcfg.nkrylov       = settings::strategy::dmrg_bond_expansion::preopt::nkrylov;
     bcfg.bond_factor   = order == BondExpansionOrder::PREOPT ? settings::strategy::dmrg_bond_expansion::preopt::bond_factor : 1.0f;
-    bcfg.bond_lim      = static_cast<long>(std::ceil(bcfg.bond_factor * static_cast<float>(status.bond_lim)));
+    auto bond_lim_new  = std::ceil(static_cast<double>(bcfg.bond_factor) * static_cast<double>(status.bond_lim));
+    bcfg.bond_lim      = safe_cast<long>(bond_lim_new);
     bcfg.trnc_lim      = status.trnc_min;
     bcfg.blocksize     = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_BONDEXP) ? static_cast<size_t>(dmrg_blocksize) : 1ul;
     bcfg.mixing_factor = status.mixing_factor;
@@ -1009,7 +1010,9 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
 
         blocksize = std::ceil(blocksize);
 
-        dmrg_blocksize = std::clamp<size_t>(static_cast<size_t>(blocksize), dmrg_min_blocksize, dmrg_max_blocksize);
+        if(not std::isfinite(blocksize)) throw except::logic_error("Blocksize is not finite: {}", blocksize);
+        auto blocksize_clamped = std::clamp(blocksize, static_cast<double>(dmrg_min_blocksize), static_cast<double>(dmrg_max_blocksize));
+        dmrg_blocksize         = safe_cast<size_t>(blocksize_clamped);
         tools::log->info("Set INFO{} blocksize {} -> {}: icom = {:.3f}: {}", tag, old_bsize, dmrg_blocksize, info, has_no_status ? "" : flag2str(reasons));
     } else {
         dmrg_blocksize = dmrg_min_blocksize;

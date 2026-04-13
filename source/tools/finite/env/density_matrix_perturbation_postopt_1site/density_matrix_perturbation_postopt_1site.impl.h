@@ -112,7 +112,7 @@ BondExpansionResult<Scalar> tools::finite::env::density_matrix_perturbation_post
     decltype(auto) N            = mps0.template get_M_bare_as<Scalar>();
     Scalar         pad_value_N0 = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
     Scalar         pad_value_LC = Scalar{0}; // mpsL.get_LC().coeff(mpsL.get_LC().size() - 1) * Scalar{1e-1f};
-    const auto     bond_lim     = -1ul;      // Keep the full temporary expansion; the mixer/SVD compresses it later.
+    const Eigen::Index bond_lim = Eigen::Index{-1}; // Keep the full temporary expansion; the mixer/SVD compresses it later.
     if(state.get_direction() > 0) {
         // [M Λc, N] are [A(i)Λc, B(i+1)]
         assert_orthonormal<2>(M); // A(i) should be left-orthonormal

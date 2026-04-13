@@ -37,7 +37,7 @@ namespace tenx {
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
 
     template<Eigen::Index rank>
-    using array = std::array<Eigen::Index, rank>;
+    using array = std::array<Eigen::Index, static_cast<std::size_t>(rank)>;
 
     template<typename Scalar>
     using RealScalar = Eigen::NumTraits<Scalar>::Real;
@@ -155,7 +155,7 @@ namespace tenx {
     }
 
     template<typename TensorL, typename TensorM, typename TensorR>
-    void asDiagonalContract(TensorR &R, const TensorL &L, const TensorM &M, long Mdim) {
+    void asDiagonalContract(TensorR &R, const TensorL &L, const TensorM &M, Eigen::Index Mdim) {
         using ScalarL = typename TensorL::Scalar;
         using ScalarM = typename TensorM::Scalar;
         using ScalarR = typename TensorR::Scalar;
@@ -163,20 +163,20 @@ namespace tenx {
         static_assert(std::is_convertible_v<ScalarM, ScalarR>);
         static_assert(TensorM::NumDimensions == TensorR::NumDimensions);
 
+        assert(Mdim >= 0 && Mdim < TensorM::NumDimensions);
         assert(M.dimension(Mdim) == L.size());
-        assert(Mdim < TensorM::NumDimensions);
         assert(R.dimensions() == M.dimensions());
         // for(long i = 0; i < L.size(); ++i) {
         //     R.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarM { return v * static_cast<ScalarM>(L(i)); }).template cast<ScalarR>();
         // }
-        for(long i = 0; i < L.size(); ++i) {
+        for(Eigen::Index i = 0; i < L.size(); ++i) {
             const ScalarM li = static_cast<ScalarM>(L(i));
             const auto    Mi = M.chip(i, Mdim);
             R.chip(i, Mdim)  = (Mi * Mi.constant(li)).template cast<ScalarR>();
         }
     }
     template<typename TensorL, typename TensorM, typename TensorR>
-    void asDiagonalInverseContract(TensorR &R, const TensorL &L, const TensorM &M, long Mdim) {
+    void asDiagonalInverseContract(TensorR &R, const TensorL &L, const TensorM &M, Eigen::Index Mdim) {
         using ScalarL = typename TensorL::Scalar;
         using ScalarM = typename TensorM::Scalar;
         using ScalarR = typename TensorR::Scalar;
@@ -184,13 +184,13 @@ namespace tenx {
         static_assert(std::is_convertible_v<ScalarM, ScalarR>);
         static_assert(TensorM::NumDimensions == TensorR::NumDimensions);
 
-        assert(M.dimension(Mdim) == L.size());
-        assert(Mdim < TensorM::NumDimensions);
+        assert(Mdim >= 0 && Mdim < TensorM::NumDimensions);
+        assert(M.dimension(static_cast<size_t>(Mdim)) == L.size());
         assert(R.dimensions() == M.dimensions());
         // for(long i = 0; i < L.size(); ++i) {
         // R.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarM { return v / static_cast<ScalarM>(L(i)); }).template cast<ScalarR>();
         // }
-        for(long i = 0; i < L.size(); ++i) {
+        for(Eigen::Index i = 0; i < L.size(); ++i) {
             const ScalarM li = ScalarM{1} / static_cast<ScalarM>(L(i));
             const auto    Mi = M.chip(i, Mdim);
             R.chip(i, Mdim)  = (Mi * Mi.constant(li)).template cast<ScalarR>();
@@ -198,7 +198,7 @@ namespace tenx {
     }
 
     template<typename TensorL, typename TensorM>
-    [[nodiscard]] auto asDiagonalContract(const TensorL &L, const TensorM &M, long Mdim) {
+    [[nodiscard]] auto asDiagonalContract(const TensorL &L, const TensorM &M, Eigen::Index Mdim) {
         using ScalarM                     = typename TensorM::Scalar;
         constexpr auto               rank = TensorM::NumDimensions;
         Eigen::Tensor<ScalarM, rank> R(M.dimensions());
@@ -206,7 +206,7 @@ namespace tenx {
         return R;
     }
     template<typename TensorL, typename TensorM>
-    [[nodiscard]] auto asDiagonalInverseContract(const TensorL &L, const TensorM &M, long Mdim) {
+    [[nodiscard]] auto asDiagonalInverseContract(const TensorL &L, const TensorM &M, Eigen::Index Mdim) {
         using ScalarM                     = typename TensorM::Scalar;
         constexpr auto               rank = TensorM::NumDimensions;
         Eigen::Tensor<ScalarM, rank> R(M.dimensions());
@@ -440,11 +440,11 @@ namespace tenx {
     }
     template<typename Derived, typename... Dims>
     [[nodiscard]] auto TensorMap(Eigen::PlainObjectBase<Derived> &matrix, const Dims... dims) {
-        return TensorMap(matrix, std::array<long, static_cast<long>(sizeof...(Dims))>{dims...});
+        return TensorMap(matrix, std::array<long, sizeof...(Dims)>{dims...});
     }
     template<typename Derived, typename... Dims>
     [[nodiscard]] auto TensorMap(const Eigen::PlainObjectBase<Derived> &matrix, const Dims... dims) {
-        return TensorMap(matrix, std::array<long, static_cast<long>(sizeof...(Dims))>{dims...});
+        return TensorMap(matrix, std::array<long, sizeof...(Dims)>{dims...});
     }
     template<typename Derived>
     [[nodiscard]] auto TensorMap(Eigen::PlainObjectBase<Derived> &matrix) {

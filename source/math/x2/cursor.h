@@ -10,16 +10,16 @@ namespace x2_detail {
         using Index = Eigen::Index;
 
         int                     axes_rank = 0;
-        std::array<Index, rank> dim{};   // dim[t] for t in [0,axes_rank)
-        std::array<Index, rank> st{};    // stride[t] for t in [0,axes_rank)
-        std::array<Index, rank> wrap{};  // st[t] * dim[t]
-        std::array<Index, rank> idx{};   // current coord (only first axes_rank used)
+        index_array<rank>       dim{};   // dim[t] for t in [0,axes_rank)
+        index_array<rank>       st{};    // stride[t] for t in [0,axes_rank)
+        index_array<rank>       wrap{};  // st[t] * dim[t]
+        index_array<rank>       idx{};   // current coord (only first axes_rank used)
         Index                   off = 0; // current offset contribution
 
         AxisCursorCore() = default;
 
         template<class View>
-        AxisCursorCore(const View &v, const std::array<int, rank> &axes, int ar) {
+        AxisCursorCore(const View &v, const axes_array<rank> &axes, int ar) {
             axes_rank = ar;
             for(int t = 0; t < axes_rank; ++t) {
                 const int   ax  = axes[size_t(t)];
@@ -76,14 +76,14 @@ namespace x2 {
         struct MatrixCursorState {
             using Index = Eigen::Index;
 
-            std::array<Index, rank> dims{};
-            std::array<Index, rank> stride{};
-            std::array<int, rank>   row_axes{};
-            std::array<int, rank>   col_axes{};
+            x2_detail::index_array<rank> dims{};
+            x2_detail::index_array<rank> stride{};
+            x2_detail::axes_array<rank>  row_axes{};
+            x2_detail::axes_array<rank>  col_axes{};
             int                     row_rank = 0;
             int                     col_rank = 0;
 
-            std::array<Index, rank> coord{}; // current tensor coordinates for each axis
+            x2_detail::index_array<rank> coord{}; // current tensor coordinates for each axis
             Index                   off = 0; // current linear offset (col-major)
 
             EIGEN_STRONG_INLINE void init_from_linear(Index r, Index c) {
@@ -120,7 +120,7 @@ namespace x2 {
             }
 
             // increment along a mixed-radix counter for the given axes, updating off
-            EIGEN_STRONG_INLINE void step_axes(const std::array<int, rank> &axes, int axes_rank) {
+            EIGEN_STRONG_INLINE void step_axes(const x2_detail::axes_array<rank> &axes, int axes_rank) {
                 for(int t = 0; t < axes_rank; ++t) {
                     const int   ax  = axes[size_t(t)];
                     auto       &cv  = coord[size_t(ax)];

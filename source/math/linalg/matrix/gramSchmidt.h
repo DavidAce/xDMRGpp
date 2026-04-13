@@ -47,7 +47,8 @@ namespace linalg::matrix {
         RealScalar AsqrtSize = std::abs(std::sqrt<RealScalar>(A.cols()));
         RealScalar eps       = std::numeric_limits<RealScalar>::epsilon();
 
-        m.nonZeroCols.reserve(A.cols());
+        auto capacity = static_cast<typename decltype(m.nonZeroCols)::size_type>(A.cols());
+        m.nonZeroCols.reserve(capacity);
 
         for(long i = 0; i < m.Q.cols(); ++i) {
             const auto colNorm = m.Q.col(i).norm();
@@ -115,7 +116,8 @@ namespace linalg::matrix {
         m.initColNorms       = A.colwise().norm();
         RealScalar AsqrtSize = std::abs(std::sqrt(static_cast<RealScalar>(A.cols())));
         RealScalar eps       = std::numeric_limits<RealScalar>::epsilon();
-        m.nonZeroCols.reserve(A.cols());
+        auto capacity = static_cast<typename decltype(m.nonZeroCols)::size_type>(A.cols());
+        m.nonZeroCols.reserve(capacity);
 
         for(long i = 0; i < m.Q.cols(); ++i) {
             const auto colNorm = m.Q.col(i).norm();

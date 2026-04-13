@@ -321,7 +321,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_std(const opt_mps<Scalar>       &in
     solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<CalcReal>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.max_matvecs    = -1ul; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
     solver.set_jcbMaxBlockSize(jcb_max_block_size);
     solver.set_jcbOverlapSize(jcb_overlap_size);
     solver.set_jcbNumPasses(jcb_num_passes);
@@ -573,7 +573,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
     solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<CalcReal>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.max_matvecs    = -1ul; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
     solver.set_jcbMaxBlockSize(jcb_max_block_size);
     solver.set_jcbOverlapSize(jcb_overlap_size);
     solver.set_jcbNumPasses(jcb_num_passes);
@@ -790,7 +790,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
     solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
     solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.max_matvecs    = -1ul; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
     solver.set_jcbMaxBlockSize(jcb_max_block_size);
     solver.set_jcbOverlapSize(jcb_overlap_size);
     solver.set_jcbNumPasses(jcb_num_passes);

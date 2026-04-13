@@ -141,9 +141,12 @@ class IterativeLinearSolverPreconditioner {
         if(blocks->empty()) return;
         auto t_jcb   = tid::tic_scope("jcb", tid::level::higher);
         auto t_start = std::chrono::high_resolution_clock::now();
+        assert(config->jacobi.jcbMaxMultiplicity > 0);
         auto pass    = [&](Eigen::Index color, const VectorType &in, VectorType &out) {
+            auto start_idx    = static_cast<size_t>(color);
+            auto multiplicity = static_cast<size_t>(config->jacobi.jcbMaxMultiplicity);
 #pragma omp parallel for schedule(static)
-            for(std::size_t idx = static_cast<size_t>(color); idx < blocks->size(); idx += config->jacobi.jcbMaxMultiplicity) {
+            for(size_t idx = start_idx; idx < blocks->size(); idx += multiplicity) {
                 const auto &[offset, sign, solver] = blocks->at(idx);
                 const long extent                  = solver->rows();
 

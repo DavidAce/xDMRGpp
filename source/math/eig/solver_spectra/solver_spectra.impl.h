@@ -87,12 +87,14 @@ void eig::solver_spectra<MatrixType>::eigs() {
             sol.compute(sort, maxiter, Real{1e20f}); // Should succeed due to high tol
         }
         if(sol.info() != Spectra::CompInfo::Successful) throw except::runtime_error("Spectra failed to converge");
-        auto eigvecs_spectra = sol.eigenvectors(nev_internal);
-        auto eigvals_spectra = sol.eigenvalues();
-        eigvecs.resize(eigvecs_spectra.size());
-        eigvals.resize(eigvals_spectra.size());
-        std::copy(eigvecs_spectra.data(), eigvecs_spectra.data() + eigvecs_spectra.size(), eigvecs.data());
-        std::copy(eigvals_spectra.data(), eigvals_spectra.data() + eigvals_spectra.size(), eigvals.data());
+        auto   eigvecs_spectra = sol.eigenvectors(nev_internal);
+        auto   eigvals_spectra = sol.eigenvalues();
+        size_t eigvecs_size    = static_cast<size_t>(eigvecs_spectra.size());
+        size_t eigvals_size    = static_cast<size_t>(eigvals_spectra.size());
+        eigvecs.resize(eigvecs_size);
+        eigvals.resize(eigvals_size);
+        std::copy_n(eigvecs_spectra.data(), eigvecs_size, eigvecs.data());
+        std::copy_n(eigvals_spectra.data(), eigvals_size, eigvals.data());
 
         result.meta.eigvecsR_found = true; // We can use partial results
         result.meta.eigvals_found  = true; // We can use partial results

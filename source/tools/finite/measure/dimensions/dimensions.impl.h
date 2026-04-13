@@ -2,7 +2,7 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
-
+#include <cstddef>
 template<typename Scalar>
 long tools::finite::measure::bond_dimension_current(const StateFinite<Scalar> &state) {
     if(state.measurements.bond_dim) return state.measurements.bond_dim.value();

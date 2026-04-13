@@ -469,12 +469,14 @@ typename solver_base<Scalar>::VectorReal solver_base<Scalar>::get_standard_devia
     auto       cols   = static_cast<Eigen::Index>(v.size());
     auto       rows   = static_cast<Eigen::Index>(v.front().size());
     MatrixReal matrix = MatrixReal::Zero(rows, cols);
-    for(size_t idx = 0; idx < v.size(); ++idx) {
-        if(v[idx].size() < rows) { throw except::runtime_error("v has unequal size vectors"); }
+    using history_size_type = typename std::deque<VectorReal>::size_type;
+    for(Eigen::Index idx = 0; idx < cols; ++idx) {
+        auto udx = static_cast<history_size_type>(idx);
+        if(v[udx].size() < rows) { throw except::runtime_error("v has unequal size vectors"); }
         if(apply_log10)
-            matrix.col(idx) = v[idx].topRows(rows).array().log10();
+            matrix.col(idx) = v[udx].topRows(rows).array().log10();
         else
-            matrix.col(idx) = v[idx].topRows(rows).array();
+            matrix.col(idx) = v[udx].topRows(rows).array();
     }
     VectorReal means  = matrix.rowwise().mean();
     VectorReal stddev = (((matrix.colwise() - means).array().square().rowwise().sum()) / static_cast<RealScalar>((matrix.cols() - 1))).sqrt();
@@ -499,10 +501,12 @@ typename solver_base<Scalar>::VectorReal solver_base<Scalar>::get_slopes(const s
     auto       n = static_cast<Eigen::Index>(v.front().size());
     VectorReal x = VectorReal::LinSpaced(m, RealScalar(0), RealScalar(m - 1));
     VectorReal slopes(n);
+    using history_size_type = typename std::deque<VectorReal>::size_type;
     for(Eigen::Index j = 0; j < n; ++j) {
         VectorReal y(m);
         for(Eigen::Index i = 0; i < m; ++i) {
-            const VectorReal &eigVals_i = v.at(i);
+            auto udx = static_cast<history_size_type>(i);
+            const VectorReal &eigVals_i = v.at(udx);
             assert(eigVals_i.size() == n);
             y(i) = eigVals_i[j];
         }
@@ -518,8 +522,8 @@ typename solver_base<Scalar>::VectorReal solver_base<Scalar>::get_slopes(const s
 template<typename Scalar>
 bool solver_base<Scalar>::rNorms_have_saturated() {
     // Check if there is less than 1% fluctuation in the (order of magnitude of) latest residual norms.
-    Eigen::Index min_history_size = std::min<Eigen::Index>(status.max_history_size, 2);
-    if(status.iter < min_history_size) return false;
+    const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
+    if(status.iter < static_cast<Eigen::Index>(min_history_size)) return false;
     if(status.rNorms_history.size() < static_cast<size_t>(min_history_size)) return false;
 
     VectorReal &vals           = status.rNorms;
@@ -533,8 +537,8 @@ bool solver_base<Scalar>::rNorms_have_saturated() {
 template<typename Scalar>
 bool solver_base<Scalar>::eigVals_have_saturated() {
     // Check if there is less than 1% fluctuation in the latest eigVals.
-    Eigen::Index min_history_size = std::min<Eigen::Index>(status.max_history_size, 2);
-    if(status.iter < min_history_size) return false;
+    const auto min_history_size = std::min<size_t>(status.max_history_size, size_t{2});
+    if(status.iter < static_cast<Eigen::Index>(min_history_size)) return false;
     if(status.eigVals_history.size() < static_cast<size_t>(min_history_size)) return false;
     VectorReal vals             = status.eigVal.cwiseAbs().array() + eps;
     VectorReal stds             = get_standard_deviations(status.eigVals_history, false);
@@ -1022,7 +1026,8 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
 
             // Build exvals = T_evals \ {th}
             std::vector<RealScalar> exvals;
-            exvals.reserve(T_evals.size() - 1);
+            auto eval_count = static_cast<typename std::vector<RealScalar>::size_type>(T_evals.size());
+            exvals.reserve(eval_count > 0 ? eval_count - 1 : 0);
             exvals.assign(T_evals.data(), T_evals.data() + T_evals.size());
 
             exvals.erase(exvals.begin() + k); // Remove the closest (k points to the active theta)
@@ -1398,7 +1403,8 @@ void solver_base<Scalar>::compress_col_blocks(MatrixType       &X,   // (N, ycol
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_columns;
-    active_columns.reserve(n_blocks_x * b);
+    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x * b);
+    active_columns.reserve(active_capacity);
     for(Eigen::Index j = 0; j < n_blocks_x; ++j) {
         if(mask(j) == 1) {
             for(Eigen::Index k = 0; k < b; ++k) active_columns.push_back(j * b + k);
@@ -1420,7 +1426,8 @@ void solver_base<Scalar>::compress_cols(MatrixType       &X,   // (N, ycols)
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_columns;
-    active_columns.reserve(X.cols());
+    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(X.cols());
+    active_columns.reserve(active_capacity);
     for(Eigen::Index j = 0; j < X.cols(); ++j) {
         if(mask(j) == 1) { active_columns.push_back(j); }
     }
@@ -1439,7 +1446,8 @@ void solver_base<Scalar>::compress_row_blocks(VectorReal       &X,   // (, ycols
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_rows;
-    active_rows.reserve(n_blocks_x);
+    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x);
+    active_rows.reserve(active_capacity);
     for(Eigen::Index j = 0; j < n_blocks_x; ++j) {
         if(mask(j) == 1) { active_rows.push_back(j); }
     }
@@ -1459,7 +1467,8 @@ void solver_base<Scalar>::compress_rows(VectorReal       &X,   // (, ycols)
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_rows;
-    active_rows.reserve(X.rows());
+    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(X.rows());
+    active_rows.reserve(active_capacity);
     for(Eigen::Index j = 0; j < X.rows(); ++j) {
         if(mask(j) == 1) { active_rows.push_back(j); }
     }
@@ -1482,7 +1491,8 @@ void solver_base<Scalar>::compress_rows_and_cols(MatrixType       &X,   // (N, y
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_indices;
-    active_indices.reserve(n_blocks_x * b);
+    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x * b);
+    active_indices.reserve(active_capacity);
     for(Eigen::Index j = 0; j < n_blocks_x; ++j) {
         if(mask(j) == 1) {
             for(Eigen::Index k = 0; k < b; ++k) active_indices.push_back(j * b + k);
@@ -1564,7 +1574,8 @@ void solver_base<Scalar>::balance_columns_sweep(Eigen::Ref<MatrixType>          
         if(minn > RealScalar(0) && maxn / minn <= target_ratio) break;
 
         // Order indices by norm ascending
-        std::vector<Index> idx(m);
+        auto idx_size = static_cast<typename std::vector<Index>::size_type>(m);
+        std::vector<Index> idx(idx_size);
         std::iota(idx.begin(), idx.end(), Index(0));
         std::sort(idx.begin(), idx.end(), [&](Index i, Index j) { return cn(i) < cn(j); });
 
@@ -1573,8 +1584,10 @@ void solver_base<Scalar>::balance_columns_sweep(Eigen::Ref<MatrixType>          
         if(max_pairs_per_sweep >= 0) pairs = std::min<Index>(pairs, max_pairs_per_sweep);
 
         for(Index k = 0; k < pairs; ++k) {
-            Index i = idx[k];         // small
-            Index j = idx[m - 1 - k]; // large
+            auto ik = static_cast<typename std::vector<Index>::size_type>(k);
+            auto jk = static_cast<typename std::vector<Index>::size_type>(m - 1 - k);
+            Index i = idx[ik]; // small
+            Index j = idx[jk]; // large
             if(i == j) break;
 
             balance_pair(Y, H2Y, i, j);

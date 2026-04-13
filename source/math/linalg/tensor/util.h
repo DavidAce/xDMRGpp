@@ -57,7 +57,8 @@ namespace linalg::tensor {
         if constexpr(rank <= 2)
             return tensor;
         else {
-            std::array<Eigen::Index, rank> shf_idx{};
+            constexpr size_t               rank_sz = static_cast<size_t>(rank);
+            std::array<Eigen::Index, rank_sz> shf_idx{};
             for(size_t i = 0; i < static_cast<size_t>(rank); i++) { shf_idx[i] = static_cast<Eigen::Index>(i); }
             std::reverse(shf_idx.begin(), shf_idx.begin() + rank / 2);
             std::reverse(shf_idx.begin() + rank / 2, shf_idx.end());
@@ -70,7 +71,8 @@ namespace linalg::tensor {
         if constexpr(rank <= 2)
             return idx_pair;
         else {
-            std::array<Eigen::Index, rank> shf_idx{};
+            constexpr size_t               rank_sz = static_cast<size_t>(rank);
+            std::array<Eigen::Index, rank_sz> shf_idx{};
             for(size_t i = 0; i < static_cast<size_t>(rank); i++) { shf_idx[i] = static_cast<Eigen::Index>(i); }
             std::reverse(shf_idx.begin(), shf_idx.begin() + rank / 2);
             std::reverse(shf_idx.begin() + rank / 2, shf_idx.end());

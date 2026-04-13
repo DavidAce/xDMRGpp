@@ -34,13 +34,13 @@ namespace linalg::matrix {
                     result = std::to_chars(buffer, buffer + sizeof(buffer), v, fmtType, f.precision);
                     if(result.ec != std::errc{}) { throw std::system_error{static_cast<int>(result.ec), std::system_category()}; }
 
-                    // Create a string_view for the converted result.
-                    return std::string(buffer, result.ptr - buffer);
+                    auto size = static_cast<std::string::size_type>(result.ptr - buffer);
+                    return std::string(buffer, size);
                 };
 
                 std::string s;
                 std::string fmt          = "%." + std::to_string(f.precision) + "Qf";
-                auto        probablesize = m.derived().size() * std::max<size_t>(64, static_cast<size_t>(f.precision) + 34);
+                auto        probablesize = static_cast<std::size_t>(m.derived().size()) * std::max<std::size_t>(64, static_cast<std::size_t>(f.precision) + 34);
                 s.reserve(probablesize);
                 s += f.matPrefix;
                 for(long i = 0; i < m.derived().rows(); ++i) {
@@ -109,13 +109,13 @@ namespace linalg::matrix {
                 result = std::to_chars(buffer, buffer + sizeof(buffer), v, fmtType, f.precision);
                 if(result.ec != std::errc{}) { throw std::system_error{static_cast<int>(result.ec), std::system_category()}; }
 
-                // Create a string_view for the converted result.
-                return std::string(buffer, result.ptr - buffer);
+                auto size = static_cast<std::string::size_type>(result.ptr - buffer);
+                return std::string(buffer, size);
             };
 
             std::string s;
             std::string fmt          = "%." + std::to_string(f.precision) + "Qf";
-            auto        probablesize = m.derived().size() * std::max<size_t>(64, static_cast<size_t>(f.precision) + 34);
+            auto        probablesize = static_cast<std::size_t>(m.derived().size()) * std::max<std::size_t>(64, static_cast<std::size_t>(f.precision) + 34);
             s.reserve(probablesize);
             s += f.matPrefix;
             for(long i = 0; i < m.derived().rows(); ++i) {
@@ -135,7 +135,7 @@ namespace linalg::matrix {
         else if constexpr(std::is_same_v<Scalar, fp128>) {
             std::string s;
             std::string fmt          = "%." + std::to_string(f.precision) + "Qf";
-            auto        probablesize = m.derived().size() * std::max<size_t>(64, static_cast<size_t>(f.precision) + 34);
+            auto        probablesize = static_cast<std::size_t>(m.derived().size()) * std::max<std::size_t>(64, static_cast<std::size_t>(f.precision) + 34);
             s.reserve(probablesize);
             s += f.matPrefix;
             for(long i = 0; i < m.derived().rows(); ++i) {

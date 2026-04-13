@@ -12,7 +12,11 @@
 #include <general/sfinae.h>
 
 int eig::getBasisSize(long L, int nev, std::optional<int> basisSize) {
-    if(not basisSize.has_value() or basisSize.value() <= 0) { basisSize = nev * safe_cast<int>(std::ceil(std::log2(L))); }
+    if(L <= 0) throw except::runtime_error("eig::getBasisSize requires L > 0, got {}", L);
+    if(not basisSize.has_value() or basisSize.value() <= 0) {
+        auto log2L = std::ceil(std::log2(static_cast<double>(L)));
+        basisSize = nev * safe_cast<int>(log2L);
+    }
     return std::clamp(basisSize.value(), 2 * nev, safe_cast<int>(L));
 }
 

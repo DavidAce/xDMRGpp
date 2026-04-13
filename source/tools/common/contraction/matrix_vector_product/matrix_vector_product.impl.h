@@ -50,7 +50,7 @@ namespace tools::common::contraction::internal {
 
     auto get_size(const auto &dims) -> Eigen::Index {
         Eigen::Index size = 1;
-        for(Eigen::Index i = 0; i < static_cast<Eigen::Index>(dims.size()); ++i) size *= dims[i];
+        for(size_t udx = 0; udx < dims.size(); ++udx) size *= dims[udx];
         return size;
     }
 

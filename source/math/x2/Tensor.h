@@ -5,6 +5,11 @@
 #include <cassert>
 
 namespace x2 {
+    template<int rank>
+    using index_array = std::array<Eigen::Index, static_cast<std::size_t>(rank)>;
+
+    template<int rank>
+    using axes_array = std::array<int, static_cast<std::size_t>(rank)>;
 
     template<typename Scalar_, int rank>
     class Tensor {
@@ -33,7 +38,7 @@ namespace x2 {
         public:
         Tensor() = default;
 
-        Tensor(const Eigen::array<Eigen::Index, rank> &dims) {
+        Tensor(const index_array<rank> &dims) {
             hi_.resize(dims);
             lo_.resize(dims);
         }
@@ -86,7 +91,7 @@ namespace x2 {
             invalidate_cache_();
             return *this;
         }
-        void resize(const Eigen::array<Eigen::Index, rank> &dims) {
+        void resize(const index_array<rank> &dims) {
             hi_.resize(dims);
             lo_.resize(dims);
             invalidate_cache_();
@@ -127,15 +132,16 @@ namespace x2 {
 
         Eigen::Index size() const { return hi_.size(); }
 
-        Eigen::array<Eigen::Index, rank> dimensions() const {
+        index_array<rank> dimensions() const {
             assert(hi_.dimensions() == lo_.dimensions());
             return hi_.dimensions();
         }
 
         Eigen::Index dimension(Eigen::Index n) const {
-            assert(static_cast<int>(n) >= 0 && static_cast<int>(n) < rank);
-            assert(hi_.dimension(n) == lo_.dimension(n));
-            return hi_.dimension(n);
+            assert(n >= 0 && n < rank);
+            auto udx = static_cast<size_t>(n);
+            assert(hi_.dimension(udx) == lo_.dimension(udx));
+            return hi_.dimension(udx);
         }
 
         void setZero() {
@@ -188,7 +194,7 @@ namespace x2 {
             x2_detail::renorm(hi_.data(), lo_.data(), size());
         }
 
-        void shuffle(const Eigen::array<int, rank> &perm) {
+        void shuffle(const axes_array<rank> &perm) {
             invalidate_cache_();
             hi_ = TensorType(hi_.shuffle(perm));
             lo_ = TensorType(lo_.shuffle(perm));
@@ -222,7 +228,7 @@ namespace x2 {
         Eigen::TensorMap<TensorType> lo;
 
         public:
-        TensorMap(Scalar *hi_ptr, Scalar *lo_ptr, const Eigen::array<Eigen::Index, rank> &dims) : hi(hi_ptr, dims), lo(lo_ptr, dims) {}
+        TensorMap(Scalar *hi_ptr, Scalar *lo_ptr, const index_array<rank> &dims) : hi(hi_ptr, dims), lo(lo_ptr, dims) {}
 
         TensorMap(x2::Tensor<Scalar, rank> &t) : hi(t.hi_data(), t.dimensions()), lo(t.lo_data(), t.dimensions()) {}
 
@@ -243,14 +249,16 @@ namespace x2 {
 
         Eigen::Index size() const { return hi.size(); }
 
-        Eigen::array<Eigen::Index, rank> dimensions() const {
+        index_array<rank> dimensions() const {
             assert(hi.dimensions() == lo.dimensions());
             return hi.dimensions();
         }
 
         Eigen::Index dimension(Eigen::Index n) const {
-            assert(hi.dimension(n) == lo.dimension(n));
-            return hi.dimension(n);
+            assert(n >= 0 && n < rank);
+            auto udx = static_cast<size_t>(n);
+            assert(hi.dimension(udx) == lo.dimension(udx));
+            return hi.dimension(udx);
         }
 
         RealScalar norm() const {
@@ -271,7 +279,7 @@ namespace x2 {
         Eigen::TensorMap<const TensorType> lo;
 
         public:
-        ConstTensorMap(const Scalar *hi_ptr, const Scalar *lo_ptr, const Eigen::array<Eigen::Index, rank> &dims) : hi(hi_ptr, dims), lo(lo_ptr, dims) {}
+        ConstTensorMap(const Scalar *hi_ptr, const Scalar *lo_ptr, const index_array<rank> &dims) : hi(hi_ptr, dims), lo(lo_ptr, dims) {}
 
         ConstTensorMap(const x2::Tensor<Scalar, rank> &t) : hi(t.hi_data(), t.dimensions()), lo(t.lo_data(), t.dimensions()) {}
 
@@ -280,14 +288,16 @@ namespace x2 {
 
         Eigen::Index size() const { return hi.size(); }
 
-        Eigen::array<Eigen::Index, rank> dimensions() const {
+        index_array<rank> dimensions() const {
             assert(hi.dimensions() == lo.dimensions());
             return hi.dimensions();
         }
 
         Eigen::Index dimension(Eigen::Index n) const {
-            assert(hi.dimension(n) == lo.dimension(n));
-            return hi.dimension(n);
+            assert(n >= 0 && n < rank);
+            auto udx = static_cast<size_t>(n);
+            assert(hi.dimension(udx) == lo.dimension(udx));
+            return hi.dimension(udx);
         }
 
         RealScalar norm() const {

@@ -165,8 +165,10 @@ int MatVecMPOS<Scalar>::cols() const {
 
 template<typename Scalar>
 std::vector<long> MatVecMPOS<Scalar>::get_offset(long x, long rank, long size) const {
-    std::vector<long> indices(rank);
-    for(int i = 0; i < rank; i++) {
+    assert(rank >= 0);
+    auto              rank_ul = static_cast<size_t>(rank);
+    std::vector<long> indices(rank_ul);
+    for(size_t i = 0; i < rank_ul; i++) {
         indices[i]  = x % size;
         x          /= size;
     }
@@ -186,7 +188,9 @@ constexpr std::array<long, rank> MatVecMPOS<Scalar>::get_offset(long flatindex, 
 
 template<typename Scalar>
 std::vector<long> MatVecMPOS<Scalar>::get_offset(long flatindex, size_t rank, const std::vector<long> &dimensions) const {
-    std::vector<long> indices(rank);
+    assert(rank >= 0);
+    auto              rank_ul = static_cast<size_t>(rank);
+    std::vector<long> indices(rank_ul);
     for(size_t i = 0; i < rank; i++) {
         indices[i]  = flatindex % (dimensions[i]);
         flatindex  /= (dimensions[i]);

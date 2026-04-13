@@ -170,7 +170,7 @@ auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchs
         const auto fraclist = std::array<RealScalar, 6>{0.0001f, 0.001f, 0.01f, 0.1f, 0.2f, 1.0f};
         // Large case: approximate from truncated SVD (PSD => singular values = eigenvalues)
         const auto eps = std::numeric_limits<CalcType>::epsilon();
-        const auto tol = eps * 10000.0f; // the criterion
+        const auto tol = eps * CalcType{10000}; // the criterion
 
         bool         got_any       = false;
         Eigen::Index last_rank_max = 0;
