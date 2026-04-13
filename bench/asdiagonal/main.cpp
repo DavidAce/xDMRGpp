@@ -1,7 +1,7 @@
 #define ANKERL_NANOBENCH_IMPLEMENT
 #include "env/environment.h"
 #include "math/float.h"
-#include "math/linalg/tensor.h"
+#include "math/linalg/tensor/to_string.h"
 #include "math/tenx.h"
 #include "nanobench.h"
 #include <fmt/core.h>

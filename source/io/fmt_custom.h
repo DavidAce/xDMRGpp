@@ -37,13 +37,13 @@ class fv {
     fv(const T *bgn, const T *end) noexcept : ptr_{reinterpret_cast<const fp<T> *>(bgn)}, len_{static_cast<std::size_t>(std::distance(bgn, end))} {}
 
     template<template<typename, auto...> typename V, auto... Args>
-    fv(const V<T, Args...> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(v.size()) {}
+    fv(const V<T, Args...> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(static_cast<std::size_t>(v.size())) {}
 
     template<template<typename, auto, auto, typename> typename V, auto a, auto b, typename c>
-    fv(const V<T, a, b, c> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(v.size()) {}
+    fv(const V<T, a, b, c> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(static_cast<std::size_t>(v.size())) {}
 
     template<template<typename, typename> typename V, typename A>
-    fv(const V<T, A> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(v.size()) {}
+    fv(const V<T, A> &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(static_cast<std::size_t>(v.size())) {}
 
     template<typename V>
     fv(const V &v) noexcept : ptr_(reinterpret_cast<const fp<T> *>(v.data())), len_(static_cast<size_t>(v.size())) {}
@@ -75,13 +75,13 @@ class fpv {
     fpv(const T *bgn, const T *end) noexcept : ptr_{bgn}, len_{static_cast<std::size_t>(std::distance(bgn, end))} {}
 
     template<template<typename, auto...> typename V, auto... Args>
-    fpv(const V<T, Args...> &v) noexcept : ptr_(v.data()), len_(v.size()) {}
+    fpv(const V<T, Args...> &v) noexcept : ptr_(v.data()), len_(static_cast<std::size_t>(v.size())) {}
 
     template<template<typename, auto, auto, typename> typename V, auto a, auto b, typename c>
-    fpv(const V<T, a, b, c> &v) noexcept : ptr_(v.data()), len_(v.size()) {}
+    fpv(const V<T, a, b, c> &v) noexcept : ptr_(v.data()), len_(static_cast<std::size_t>(v.size())) {}
 
     template<template<typename, typename> typename V, typename A>
-    fpv(const V<T, A> &v) noexcept : ptr_(v.data()), len_(v.size()) {}
+    fpv(const V<T, A> &v) noexcept : ptr_(v.data()), len_(static_cast<std::size_t>(v.size())) {}
 
     template<typename V>
     fpv(const V &v) noexcept : ptr_(v.data()), len_(static_cast<size_t>(v.size())) {}
@@ -387,7 +387,8 @@ struct fmt::formatter<fp<T>> {
             else result = std::to_chars(buffer + offset, buffer + sizeof(buffer), v, fmt_type);
 
             if(result.ec != std::errc{}) throw std::system_error{static_cast<int>(result.ec), std::system_category()};
-            return std::string(buffer, result.ptr - buffer);
+            auto size = static_cast<std::string::size_type>(result.ptr - buffer);
+            return std::string(buffer, size);
         };
 
         std::string value_string;
@@ -549,8 +550,9 @@ struct fmt::formatter<fmtwrap::indexed_view<Range>> {
     auto format(const fmtwrap::indexed_view<Range> &value, format_context &ctx) const {
         auto out       = ctx.out();
         auto elem_spec = fmtwrap::element_spec(spec_);
+        using index_type = std::remove_cvref_t<decltype(value.range.size())>;
         out            = fmt::format_to(out, "[");
-        for(std::size_t idx = 0; idx < static_cast<std::size_t>(value.range.size()); ++idx) {
+        for(index_type idx = 0, size = value.range.size(); idx < size; ++idx) {
             if(idx != 0) out = fmt::format_to(out, ", ");
             out = fmt::format_to(out, "{}", fmtwrap::format_one(value.range[idx], elem_spec));
         }

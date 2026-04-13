@@ -257,16 +257,17 @@ struct f128_t : f128_base<fp128> {
         assert(std::cmp_less(length, std::numeric_limits<int>::max()));
         int padLen = static_cast<int>(width - length); // Calc Padding length
         if(padLen < 0) padLen = 0;                     // Avoid negative length
+        size_t padLen_ul = static_cast<size_t>(padLen);
         if(padLen == 0) {
             std::snprintf(str.data(), str.size() + 1, "%s%s", sgn.c_str(), buf); // No Padding
         } else if(align.find('<') != std::string_view::npos or align.find('-') != std::string_view::npos) {
             // Pad on right side
-            std::string padding(padLen, ' ');
+            std::string padding(padLen_ul, ' ');
             std::snprintf(str.data(), str.size() + 1, "%s%s%*.*s", sgn.c_str(), buf, padLen, padLen, padding.c_str()); // RIGHT Padding
 
         } else {
             // pad on the left side
-            std::string padding(padLen, ' ');
+            std::string padding(padLen_ul, ' ');
             std::snprintf(str.data(), str.size() + 1, "%*.*s%s%s", padLen, padLen, padding.c_str(), sgn.c_str(), buf); // LEFT Padding
         }
         return str;

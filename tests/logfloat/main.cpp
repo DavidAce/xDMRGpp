@@ -9,6 +9,12 @@
 #include <stdfloat>
 #include <unsupported/Eigen/CXX11/Tensor>
 
+#if defined(__clang__)
+int main() {
+    fmt::print("Skipping std::float128_t logfloat test on Clang\n");
+    return 0;
+}
+#else
 int main() {
     // Example quad-precision value.
     std::float128_t               a = -1234567890123456789012345678901234.1234567890123456789012345678901234f128;
@@ -42,3 +48,4 @@ int main() {
 
     return 0;
 }
+#endif

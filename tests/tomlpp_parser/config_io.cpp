@@ -5,7 +5,7 @@
 #include <complex>
 #include <fmt/core.h>
 #include <string>
-#include <toml.hpp>
+#include <toml++/toml.hpp>
 #include <tuple>
 #include <type_traits>
 #include <vector>
