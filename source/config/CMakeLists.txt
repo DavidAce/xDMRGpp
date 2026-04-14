@@ -53,22 +53,37 @@ add_custom_target(xdmrg++-config-enums-generate
                   DEPENDS
                       ${XDMRG_CONFIG_GENERATED_CPPS})
 
+add_source_target(xdmrg++-config-enums
+                  TARGET_SOURCES
+                  ${XDMRG_CONFIG_GENERATED_CPPS}
+                  OBJECT_LINK_LIBRARIES
+                  xdmrg++-deps xdmrg++-flags)
+
 add_source_target(xdmrg++-config
                   TARGET_SOURCES
+                  blas_backend.cpp
                   loader.cpp
                   settings.cpp
                   parse.cpp
                   threading.cpp
-                  ${XDMRG_CONFIG_GENERATED_CPPS}
                   OBJECT_LINK_LIBRARIES
+                  xdmrg++-config-enums
                   xdmrg++-math-tenx
                   xdmrg++-deps xdmrg++-flags
                   INTERFACE_LINK_LIBRARIES
                   xdmrg++-tools-common-log
                   )
 
+add_dependencies(xdmrg++-config-enums-o xdmrg++-config-enums-generate)
+add_dependencies(xdmrg++-config-enums xdmrg++-config-enums-generate)
 add_dependencies(xdmrg++-config-o xdmrg++-config-enums-generate)
 add_dependencies(xdmrg++-config xdmrg++-config-enums-generate)
+target_include_directories(xdmrg++-config-enums-o PRIVATE ${CMAKE_BINARY_DIR}/source)
+target_include_directories(xdmrg++-config-enums INTERFACE ${CMAKE_BINARY_DIR}/source)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/blas_backend.cpp PROPERTIES COMPILE_DEFINITIONS ${DMRG_BLAS_BACKEND_DEFINE})
 target_include_directories(xdmrg++-config-o PRIVATE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-config INTERFACE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-flags INTERFACE ${CMAKE_BINARY_DIR}/source)
+if(DMRG_BLAS_BACKEND_INCLUDE_DIRS)
+    target_include_directories(xdmrg++-config-o PRIVATE ${DMRG_BLAS_BACKEND_INCLUDE_DIRS})
+endif()

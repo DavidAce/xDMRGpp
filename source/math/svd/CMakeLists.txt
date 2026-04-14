@@ -41,5 +41,5 @@ add_source_target(xdmrg++-math-svd
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        xdmrg++-tid xdmrg++-math-svd-lapack
+        xdmrg++-config xdmrg++-tid xdmrg++-math-svd-lapack
         )

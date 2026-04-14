@@ -4,7 +4,7 @@ project(pert VERSION 1.0.0 DESCRIPTION "Calculates the variance of non-interacti
 include(${CMAKE_SOURCE_DIR}/cmake/environment.cmake)
 
 # Create an executable
-add_executable(pert
+add_executable(pert EXCLUDE_FROM_ALL
                source/main.cpp
                )
 target_include_directories(pert PRIVATE source)
@@ -31,6 +31,5 @@ target_link_libraries(pert PUBLIC Backward::Backward)
 # Print summary of CMake configuration
 include(${CMAKE_SOURCE_DIR}/cmake/PrintTargetInfo.cmake)
 print_project_summary(pert)
-
 
 

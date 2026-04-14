@@ -4,7 +4,7 @@ project(fill VERSION 1.0.0 DESCRIPTION "Add missing data to hdf5 files")
 include(${CMAKE_SOURCE_DIR}/cmake/environment.cmake)
 
 # Create an executable
-add_executable(fill
+add_executable(fill EXCLUDE_FROM_ALL
                source/main.cpp
                source/parse.cpp
                source/mpi/mpi-tools.cpp
@@ -34,6 +34,5 @@ target_link_libraries(fill PRIVATE MPI::MPI_CXX)
 # Print summary of CMake configuration
 include(${CMAKE_SOURCE_DIR}/cmake/PrintTargetInfo.cmake)
 print_project_summary(fill)
-
 
 

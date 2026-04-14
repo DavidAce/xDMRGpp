@@ -254,6 +254,10 @@ namespace rnd {
     template cx32   random<cx32>(dist d, cx32 mean, cx32 width);
     template cx64   random<cx64>(dist d, cx64 mean, cx64 width);
     template cx128  random<cx128>(dist d, cx128 mean, cx128 width);
+#if defined(DMRG_USE_FLOAT128) || defined(DMRG_USE_QUADMATH)
+    template fp80   random<fp80>(dist d, fp80 mean, fp80 width);
+    template cx80   random<cx80>(dist d, cx80 mean, cx80 width);
+#endif
     template<typename out_t>
     out_t random(std::string_view distribution, out_t mean, out_t width) {
         return random<out_t>(sv2enum(distribution), mean, width);
@@ -264,6 +268,10 @@ namespace rnd {
     template cx32   random<cx32>(std::string_view d, cx32 mean, cx32 width);
     template cx64   random<cx64>(std::string_view d, cx64 mean, cx64 width);
     template cx128  random<cx128>(std::string_view d, cx128 mean, cx128 width);
+#if defined(DMRG_USE_FLOAT128) || defined(DMRG_USE_QUADMATH)
+    template fp80   random<fp80>(std::string_view d, fp80 mean, fp80 width);
+    template cx80   random<cx80>(std::string_view d, cx80 mean, cx80 width);
+#endif
 
     template<typename out_t>
     std::vector<out_t> random(dist d, out_t mean, out_t width, size_t num) {
@@ -294,6 +302,10 @@ namespace rnd {
     template std::vector<cx32>   random<cx32>(dist d, cx32 mean, cx32 width, size_t num);
     template std::vector<cx64>   random<cx64>(dist d, cx64 mean, cx64 width, size_t num);
     template std::vector<cx128>  random<cx128>(dist d, cx128 mean, cx128 width, size_t num);
+#if defined(DMRG_USE_FLOAT128) || defined(DMRG_USE_QUADMATH)
+    template std::vector<fp80>   random<fp80>(dist d, fp80 mean, fp80 width, size_t num);
+    template std::vector<cx80>   random<cx80>(dist d, cx80 mean, cx80 width, size_t num);
+#endif
 
     template<typename out_t>
     std::vector<out_t> random(dist d, out_t mean, out_t width, const std::vector<out_t> &weights) {
@@ -307,6 +319,10 @@ namespace rnd {
     template std::vector<float>  random<float>(dist d, float mean, float width, const std::vector<float> &weights);
     template std::vector<double> random<double>(dist d, double mean, double width, const std::vector<double> &weights);
     template std::vector<fp128>  random<fp128>(dist d, fp128 mean, fp128 width, const std::vector<fp128> &weights);
+#if defined(DMRG_USE_FLOAT128) || defined(DMRG_USE_QUADMATH)
+    template std::vector<fp80>   random<fp80>(dist d, fp80 mean, fp80 width, const std::vector<fp80> &weights);
+    template std::vector<cx80>   random<cx80>(dist d, cx80 mean, cx80 width, const std::vector<cx80> &weights);
+#endif
 
     template<typename out_t>
     std::vector<out_t> random(std::string_view distribution, out_t mean, out_t width, size_t num) {
@@ -318,6 +334,10 @@ namespace rnd {
     template std::vector<cx32>   random<cx32>(std::string_view d, cx32 mean, cx32 width, size_t num);
     template std::vector<cx64>   random<cx64>(std::string_view d, cx64 mean, cx64 width, size_t num);
     template std::vector<cx128>  random<cx128>(std::string_view d, cx128 mean, cx128 width, size_t num);
+#if defined(DMRG_USE_FLOAT128) || defined(DMRG_USE_QUADMATH)
+    template std::vector<fp80>   random<fp80>(std::string_view d, fp80 mean, fp80 width, size_t num);
+    template std::vector<cx80>   random<cx80>(std::string_view d, cx80 mean, cx80 width, size_t num);
+#endif
 
     template<typename out_t>
     std::vector<out_t> random(std::string_view distribution, out_t mean, out_t width, const std::vector<out_t> &weights) {
@@ -329,5 +349,9 @@ namespace rnd {
     template std::vector<cx32>   random<cx32>(std::string_view d, cx32 mean, cx32 width, const std::vector<cx32> &weights);
     template std::vector<cx64>   random<cx64>(std::string_view d, cx64 mean, cx64 width, const std::vector<cx64> &weights);
     template std::vector<cx128>  random<cx128>(std::string_view d, cx128 mean, cx128 width, const std::vector<cx128> &weights);
+#if defined(DMRG_USE_FLOAT128) || defined(DMRG_USE_QUADMATH)
+    template std::vector<fp80>   random<fp80>(std::string_view d, fp80 mean, fp80 width, const std::vector<fp80> &weights);
+    template std::vector<cx80>   random<cx80>(std::string_view d, cx80 mean, cx80 width, const std::vector<cx80> &weights);
+#endif
 
 }

@@ -10,6 +10,7 @@ add_source_target(xdmrg++-qm-gate
         swap.cpp
         circuit.cpp
         OBJECT_LINK_LIBRARIES
+        xdmrg++-config-enums
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
         xdmrg++-math-tenx

@@ -49,7 +49,7 @@ add_executable(${PROJECT_NAME}
                simulation_preview.cpp
                ${TOMLPP_PARSER_PARSE_CPP})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE tomlplusplus::tomlplusplus xdmrg++-deps xdmrg++-flags)
+target_link_libraries(${PROJECT_NAME} PRIVATE tomlplusplus::tomlplusplus xdmrg++-config-enums xdmrg++-deps xdmrg++-flags)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/source)
 target_include_directories(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCE_DIR})
 target_include_directories(${PROJECT_NAME} PRIVATE ${TOMLPP_PARSER_GENERATED_DIR})

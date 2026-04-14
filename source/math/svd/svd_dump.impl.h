@@ -1,6 +1,7 @@
 
 #pragma once
 #include "../svd.h"
+#include "config/blas_backend.h"
 #include "config/settings.h"
 #include <Eigen/src/Core/util/Macros.h>
 #include <h5pp/h5pp.h>
@@ -42,27 +43,8 @@ namespace svd::internal {
         file.writeAttribute(truncation_error, group_name, "truncation_error");
 
         if(svd_lib == svd::lib::lapack) {
-#if defined(SVD_SAVE_OPENBLAS_ATTRIBUTES)
-            file.writeAttribute(OPENBLAS_VERSION, "OPENBLAS_VERSION", group_name);
-            file.writeAttribute(openblas_get_num_threads(), "openblas_get_num_threads", group_name);
-            file.writeAttribute(openblas_get_parallel(), "openblas_parallel_mode", group_name);
-            file.writeAttribute(openblas_get_corename(), "openblas_get_corename", group_name);
-            file.writeAttribute(openblas_get_config(), "openblas_get_config()", group_name);
-            file.writeAttribute(OPENBLAS_GEMM_MULTITHREAD_THRESHOLD, "OPENBLAS_GEMM_MULTITHREAD_THRESHOLD", group_name);
-#endif
-
-#if defined(SVD_SAVE_MKL_ATTRIBUTES)
-            MKLVersion Version;
-            mkl_get_version(&Version);
-            file.writeAttribute(Version.MajorVersion, "Intel-MKL-MajorVersion", group_name);
-            file.writeAttribute(Version.MinorVersion, "Intel-MKL-MinorVersion", group_name);
-            file.writeAttribute(Version.UpdateVersion, "Intel-MKL-UpdateVersion", group_name);
-#endif
-#if defined(SVD_SAVE_FLEXIBLAS_ATTRIBUTES)
-            file.writeAttribute(FLEXIBLAS_DEFAULT_LIB_PATH, group_name, "FLEXIBLAS_DEFAULT_LIB_PATH");
-            file.writeAttribute(FLEXIBLAS_VERSION, group_name, "FLEXIBLAS_VERSION");
-#endif
-
+            file.writeAttribute(std::string(::config::blas::backend_name()), group_name, "blas_backend");
+            file.writeAttribute(::config::blas::description(), group_name, "blas_backend_description");
         } else if(svd_lib == svd::lib::eigen) {
             auto eigen_version = fmt::format("{}.{}.{}", EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
             file.writeAttribute(eigen_version, group_name, "Eigen Version");

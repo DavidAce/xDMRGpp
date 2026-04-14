@@ -3,6 +3,20 @@ project(external-spectra)
 if(INIT_CACHE_FILE)
     set(INIT_CACHE_ARG -C${INIT_CACHE_FILE})
 endif()
+set(spectra_cmake_args
+        ${INIT_CACHE_ARG}
+        -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+        -DCMAKE_INSTALL_MESSAGE=NEVER
+        )
+if(Eigen3_DIR)
+    list(APPEND spectra_cmake_args -DEigen3_DIR:PATH=${Eigen3_DIR})
+endif()
+if(Eigen3_ROOT)
+    list(APPEND spectra_cmake_args -DEigen3_ROOT:PATH=${Eigen3_ROOT})
+endif()
+if(CMAKE_PREFIX_PATH)
+    list(APPEND spectra_cmake_args -DCMAKE_PREFIX_PATH:PATH=${CMAKE_PREFIX_PATH})
+endif()
 include(ExternalProject)
 ExternalProject_Add(external_spectra
         URL  https://github.com/yixuan/spectra/archive/refs/tags/v1.1.0.tar.gz
@@ -20,8 +34,6 @@ ExternalProject_Add(external_spectra
 
         BUILD_ALWAYS TRUE
         CMAKE_ARGS
-        ${INIT_CACHE_ARG}
-        -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-        -DCMAKE_INSTALL_MESSAGE=NEVER
+        ${spectra_cmake_args}
         # spectra flags
         )

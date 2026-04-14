@@ -1,4 +1,5 @@
 #include "threading.h"
+#include "blas_backend.h"
 #include "debug/exceptions.h"
 #include "math/tenx/threads.h"
 #include "settings.h"
@@ -8,17 +9,6 @@
     #include <omp.h>
 #endif
 #include <optional>
-
-#if defined(MKL_AVAILABLE)
-    #include <mkl_service.h>
-#elif defined(OPENBLAS_AVAILABLE)
-    #include <openblas/cblas.h>
-    #include <openblas/openblas_config.h>
-#elif defined(FLEXIBLAS_AVAILABLE)
-    #include <flexiblas/flexiblas_api.h>
-#elif __has_include(<cblas.h>) && __has_include(<openblas_config.h>)
-    #include <cblas.h>
-#endif
 
 namespace settings {
 
@@ -78,32 +68,10 @@ namespace settings {
 #endif
         tools::log->info("Eigen3 | omp_threads {} | cxx11_threads {} | max_threads {}{}", Eigen::nbThreads(), tenx::threads::getNumThreads(),
                          settings::threading::max_threads, eigen_msg);
-#if defined(OPENBLAS_AVAILABLE)
-        auto envcoretype = get_env("OPENBLAS_CORETYPE");
-        if(envcoretype) tools::log->info("Detected environment variable: OPENBLAS_CORETYPE={}", envcoretype.value());
-        auto        openblas_parallel_mode = openblas_get_parallel();
-        std::string openblas_parallel_str;
-        if(openblas_parallel_mode == 0) openblas_parallel_str = "sequential";
-        if(openblas_parallel_mode == 1) openblas_parallel_str = "threads";
-        if(openblas_parallel_mode == 2) openblas_parallel_str = "openmp";
-        if(openblas_parallel_mode == 1) openblas_set_num_threads(safe_cast<int>(num_threads)); // Use this for blas-related threading
-        tools::log->info("{} NUM_THREADS={} | parallel_mode={} | corename={}", openblas_get_config(), openblas_get_num_threads(), openblas_parallel_str,
-                         openblas_get_corename());
-#endif
-#if defined(MKL_AVAILABLE)
-        tools::log->info("Intel MKL | max_threads {}", mkl_get_max_threads());
-#endif
-#if defined(FLEXIBLAS_AVAILABLE)
-
-        char buffer[32] = {0};
-        int  size       = flexiblas_current_backend(buffer, 32);
-        if(size > 0) {
-            tools::log->info("Flexiblas backend [{}] | num_threads {}", buffer, flexiblas_get_num_threads());
-        } else {
-            tools::log->info("Flexiblas backend read failed: size {}", size);
-        }
-
-#endif
+        if(auto envcoretype = get_env("OPENBLAS_CORETYPE"); envcoretype)
+            tools::log->info("Detected environment variable: OPENBLAS_CORETYPE={}", envcoretype.value());
+        config::blas::set_num_threads(static_cast<int>(settings::threading::num_threads));
+        tools::log->info("{}", config::blas::description());
         if(settings::threading::show_threads) exit(0);
     }
 }

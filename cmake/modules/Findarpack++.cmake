@@ -29,7 +29,7 @@ function(find_arpackpp)
         endif()
     endforeach()
     if(NOT lapack_target_name)
-        message(FATAL_ERROR "Findarpack++: Could not find target for LAPACK dependency. Checked: ${lapack_target_candidates}")
+        message(FATAL_ERROR "Findarpack++: Could not find a CMake target for LAPACK. Checked: ${lapack_target_candidates}")
     endif()
 
     list(APPEND blas_target_candidates BLAS::BLAS blas)

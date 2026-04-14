@@ -18,6 +18,7 @@ add_source_target(xdmrg++-tools-common-contraction
         INTERFACE_LINK_LIBRARIES
         xdmrg++-tid
         xdmrg++-math-tenx
+        xdmrg++-tensors-env
         xdmrg++-tools-common-log
         )
 

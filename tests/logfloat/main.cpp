@@ -6,12 +6,22 @@
 #include <Eigen/Core>
 #include <fmt/format.h>
 #include <fmt/std.h>
-#include <stdfloat>
 #include <unsupported/Eigen/CXX11/Tensor>
 
-#if defined(__clang__)
+#if defined(__has_include)
+    #if __has_include(<stdfloat>)
+        #include <stdfloat>
+        #define XDMRG_TEST_HAS_STDFLOAT 1
+    #else
+        #define XDMRG_TEST_HAS_STDFLOAT 0
+    #endif
+#else
+    #define XDMRG_TEST_HAS_STDFLOAT 0
+#endif
+
+#if defined(__clang__) || !XDMRG_TEST_HAS_STDFLOAT
 int main() {
-    fmt::print("Skipping std::float128_t logfloat test on Clang\n");
+    fmt::print("Skipping std::float128_t logfloat test on this toolchain\n");
     return 0;
 }
 #else

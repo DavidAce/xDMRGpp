@@ -17,6 +17,7 @@ add_source_target(xdmrg++-tools-finite-env
         INTERFACE_LINK_LIBRARIES
         xdmrg++-tid
         xdmrg++-config
+        xdmrg++-tools-finite-opt
         xdmrg++-math-svd
         xdmrg++-math-tenx
         xdmrg++-tensors-finite

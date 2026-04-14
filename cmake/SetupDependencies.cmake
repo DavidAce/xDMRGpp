@@ -28,11 +28,12 @@ endif ()
 find_package(Threads                      REQUIRED BYPASS_PROVIDER)
 find_package(OpenMP                       REQUIRED BYPASS_PROVIDER COMPONENTS CXX)
 find_package(gfortran                     REQUIRED BYPASS_PROVIDER OPTIONAL_COMPONENTS quadmath)
-find_package(BLAS                         REQUIRED BYPASS_PROVIDER)
-find_package(LAPACK                       REQUIRED BYPASS_PROVIDER)
+find_package(BLAS                         REQUIRED MODULE BYPASS_PROVIDER)
+find_package(LAPACK                       REQUIRED MODULE BYPASS_PROVIDER)
 find_package(pcg-cpp                      REQUIRED)
 find_package(Eigen3       5.0.0...5.1.0   REQUIRED)                                         # Eigen3 numerical library
 find_package(h5pp         1.11.0...1.11.3 REQUIRED)                                         # h5pp for writing to file binary in format
+find_package(ZLIB                         REQUIRED BYPASS_PROVIDER)
 find_package(spdlog       1.11.0...1.16.0 REQUIRED)
 find_package(fmt          11.0.0...12.9.0 REQUIRED)
 find_package(CLI11        2.4.1...2.6.0   REQUIRED)                                         # Command line argument parser
@@ -42,15 +43,7 @@ find_package(tomlplusplus 3.4.0           REQUIRED)
 #find_package(arpack++   2.3.0  REQUIRED)                                          # C++ frontend for arpack-ng. Custom find module.
 #find_package(mpfr       4.1.0  REQUIRED)
 
-if(BLAS_FOUND AND NOT TARGET BLAS::BLAS)
-    add_library(BLAS::BLAS INTERFACE IMPORTED)
-    target_link_libraries(BLAS::BLAS INTERFACE ${BLAS_LIBRARIES})
-endif()
-
-if(LAPACK_FOUND AND NOT TARGET LAPACK::LAPACK)
-    add_library(LAPACK::LAPACK INTERFACE IMPORTED)
-    target_link_libraries(LAPACK::LAPACK INTERFACE ${LAPACK_LIBRARIES})
-endif()
+include(cmake/SetupBlasBackend.cmake)
 
 # Install dependencies that need manual installation
 include(cmake/cmake_dependency_provider/PKGInstall.cmake)
@@ -80,6 +73,7 @@ target_link_libraries(xdmrg++-deps INTERFACE
             CLI11::CLI11
             pcg-cpp::pcg-cpp
             h5pp::h5pp
+            ZLIB::ZLIB
             Eigen3::Eigen
             fmt::fmt
             spdlog::spdlog
