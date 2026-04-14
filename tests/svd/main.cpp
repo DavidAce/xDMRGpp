@@ -5,17 +5,8 @@
 #ifdef _OPENMP
     #include <omp.h>
 #endif
+#include "config/blas_backend.h"
 #include <math/tenx.h>
-
-#ifdef OpenBLAS_AVAILABLE
-    #include <cblas.h>
-    #include <openblas_config.h>
-#endif
-
-#ifdef MKL_AVAILABLE
-    #include <mkl.h>
-    #include <mkl_service.h>
-#endif
 #include "math/svd.h"
 #include <Eigen/Core>
 #include <h5pp/h5pp.h>
@@ -94,19 +85,9 @@ int main(int argc, char **argv) {
     omp_set_num_threads(num_threads);
     Eigen::setNbThreads(num_threads);
     tenx::threads::setNumThreads(num_threads);
-    #ifdef OpenBLAS_AVAILABLE
-    openblas_set_num_threads(num_threads);
-    std::cout << OPENBLAS_VERSION << " compiled with parallel mode " << openblas_get_parallel() << " for target " << openblas_get_corename() << " with config "
-              << openblas_get_config() << " with multithread threshold " << OPENBLAS_GEMM_MULTITHREAD_THRESHOLD << ". Running with "
-              << openblas_get_num_threads() << " thread(s)" << std::endl;
-    #endif
-
-    #ifdef MKL_AVAILABLE
-    mkl_set_num_threads(num_threads);
-    std::cout << "Using Intel MKL with " << mkl_get_max_threads() << " threads" << std::endl;
-    #endif
-
 #endif
+    config::blas::set_num_threads(num_threads);
+    std::cout << config::blas::description() << '\n';
 
     return Catch::Session().run(argc, argv);
 }

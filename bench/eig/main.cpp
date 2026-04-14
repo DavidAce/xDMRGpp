@@ -1,4 +1,5 @@
 #include <general/iter.h>
+#include <config/blas_backend.h>
 #include <h5pp/h5pp.h>
 #include <math/eig.h>
 #include <math/eig/matvec/matvec_mpo.h>
@@ -9,18 +10,6 @@
 #include <tools/common/log.h>
 #include <tools/common/prof.h>
 #include <tools/finite/opt_mps.h>
-
-#if defined(OPENBLAS_AVAILABLE)
-    #include <openblas/cblas.h>
-    #include <openblas/openblas_config.h>
-#endif
-
-#if defined(MKL_AVAILABLE)
-    #define MKL_Complex8  std::complex<float>
-    #define MKL_Complex16 std::complex<double>
-    #include <mkl.h>
-    #include <mkl_service.h>
-#endif
 
 template<typename MatrixProductType>
 void simps_preconditioner(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, int *ierr) {
@@ -75,7 +64,7 @@ std::string solve(const eig::settings &config, const h5pp::File &h5file, std::st
         FMT_STRING("Result: method {:<32} | {:^10} | nev {:>3} | ncv {:>3} | tol {:8.2e} | iter {:>5} | op {:>5} | mv {:>7} | Found {:<5} | "
                                    "rnorm {:8.2e} | var {:>12.6e} | time {:>10.3f} s | t/op {:>10.3f} ms | t/mv {:>10.3f} ms | dims {}"),
         eig::MethodToString(config.primme_method.value()), group, s.config.maxNev.value(), s.config.maxNcv.value(), s.config.tol.value(),
-        s.result.meta.iter, s.result.meta.num_op, s.result.meta.num_mv, s.result.meta.eigvecsR_found, rnorm, s.result.get_eigvals()[0],
+        s.result.meta.iter, s.result.meta.num_op, s.result.meta.num_mv, s.result.meta.eigvecsR_found, rnorm, s.result.get_eigvals<fp64>()[0],
         s.result.meta.time_total, s.result.meta.time_total * 1000.0 / static_cast<double>(s.result.meta.num_op),
         s.result.meta.time_total * 1000.0 / static_cast<double>(s.result.meta.num_mv), dims);
 
@@ -116,19 +105,8 @@ int main() {
     //    omp_set_max_active_levels(1);
     tools::log->info("Using OpenMP with {} threads and {} active levels", omp_get_max_threads(), omp_get_max_active_levels());
 #endif
-#if defined(OPENBLAS_AVAILABLE)
-    auto        openblas_parallel_mode = openblas_get_parallel();
-    std::string openblas_parallel_str;
-    if(openblas_parallel_mode == 0) openblas_parallel_str = "seq";
-    if(openblas_parallel_mode == 1) openblas_parallel_str = "threads";
-    if(openblas_parallel_mode == 2) openblas_parallel_str = "openmp";
-    if(openblas_parallel_mode == 1) openblas_set_num_threads(threading::omp_threads); // Use the omp_threads level for blas-related threading
-    tools::log->info("{} compiled with parallel mode [{}] for target {} with config {} | multithread threshold {} | running with {} threads", OPENBLAS_VERSION,
-                     openblas_parallel_str, openblas_get_corename(), openblas_get_config(), OPENBLAS_GEMM_MULTITHREAD_THRESHOLD, openblas_get_num_threads());
-#endif
-#if defined(MKL_AVAILABLE)
-    tools::log->info("Using Intel MKL with {} threads", mkl_get_max_threads());
-#endif
+    config::blas::set_num_threads(threading::omp_threads);
+    tools::log->info("{}", config::blas::description());
 
     std::vector<eig::settings> configs(1);
     // https://www.cs.wm.edu/~andreas/software/doc/appendix.html#c.primme_params.eps

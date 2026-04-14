@@ -5,20 +5,11 @@
 #ifdef _OPENMP
     #include <omp.h>
 #endif
+#include "config/blas_backend.h"
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tid/tid.h"
 #include "tools/common/split.h"
-
-#ifdef OPENBLAS_AVAILABLE
-    #include <cblas.h>
-    #include <openblas_config.h>
-#endif
-
-#ifdef MKL_AVAILABLE
-    #include <mkl.h>
-    #include <mkl_service.h>
-#endif
 #include "math/svd.h"
 #include <Eigen/Core>
 #include <h5pp/h5pp.h>
@@ -51,12 +42,12 @@ TEST_CASE("Singular value decomposition in Eigen and Lapacke", "[svd]") {
                     svd_settings.svd_lib = svd::lib::eigen;
                     svd_settings.svd_rtn = svd::rtn::gersvd;
                     auto t_eig           = tid::tic_scope("eig");
-                    auto mps_list_eig    = tools::common::split::split_mps(multisite_tensor, spin_dims, positions, center_position, svd_settings);
+                    auto mps_list_eig    = tools::common::split::split_mps<cx64>(multisite_tensor, spin_dims, positions, center_position, svd_settings);
                 }
                 {
-                    svd_settings.svd_lib = svd::lib::lapacke;
+                    svd_settings.svd_lib = svd::lib::lapack;
                     auto t_eig           = tid::tic_scope("lpk");
-                    auto mps_list_lpk    = tools::common::split::split_mps(multisite_tensor, spin_dims, positions, center_position, svd_settings);
+                    auto mps_list_lpk    = tools::common::split::split_mps<cx64>(multisite_tensor, spin_dims, positions, center_position, svd_settings);
                 }
 
                 // Test what happens if center_position is now the same as positions.front()
@@ -65,12 +56,12 @@ TEST_CASE("Singular value decomposition in Eigen and Lapacke", "[svd]") {
                     svd_settings.svd_lib = svd::lib::eigen;
                     svd_settings.svd_rtn = svd::rtn::gersvd;
                     auto t_eig           = tid::tic_scope("eigA");
-                    auto mps_list_eig    = tools::common::split::split_mps(multisite_tensor, spin_dims, positions, center_position, svd_settings);
+                    auto mps_list_eig    = tools::common::split::split_mps<cx64>(multisite_tensor, spin_dims, positions, center_position, svd_settings);
                 }
                 {
-                    svd_settings.svd_lib = svd::lib::lapacke;
+                    svd_settings.svd_lib = svd::lib::lapack;
                     auto t_eig           = tid::tic_scope("lpkA");
-                    auto mps_list_lpk    = tools::common::split::split_mps(multisite_tensor, spin_dims, positions, center_position, svd_settings);
+                    auto mps_list_lpk    = tools::common::split::split_mps<cx64>(multisite_tensor, spin_dims, positions, center_position, svd_settings);
                 }
 
                 // Test what happens if center_position is now the same as positions.back()
@@ -79,12 +70,12 @@ TEST_CASE("Singular value decomposition in Eigen and Lapacke", "[svd]") {
                     svd_settings.svd_lib = svd::lib::eigen;
                     svd_settings.svd_rtn = svd::rtn::gersvd;
                     auto t_eig           = tid::tic_scope("eigB");
-                    auto mps_list_eig    = tools::common::split::split_mps(multisite_tensor, spin_dims, positions, center_position, svd_settings);
+                    auto mps_list_eig    = tools::common::split::split_mps<cx64>(multisite_tensor, spin_dims, positions, center_position, svd_settings);
                 }
                 {
-                    svd_settings.svd_lib = svd::lib::lapacke;
+                    svd_settings.svd_lib = svd::lib::lapack;
                     auto t_eig           = tid::tic_scope("lpkB");
-                    auto mps_list_lpk    = tools::common::split::split_mps(multisite_tensor, spin_dims, positions, center_position, svd_settings);
+                    auto mps_list_lpk    = tools::common::split::split_mps<cx64>(multisite_tensor, spin_dims, positions, center_position, svd_settings);
                 }
 
                 tools::log->info("eig +{:8.2e} {:8.2e} | lpk +{:8.2e} {:8.2e} | eigA +{:8.2e} {:8.2e} | lpkA +{:8.2e} {:8.2e} | eigB +{:8.2e} {:8.2e} | lpkB "
@@ -135,20 +126,8 @@ int main(int argc, char **argv) {
     tools::log->info("OpenMP | threads {} | max active levels {}", omp_get_max_threads(), omp_get_max_active_levels());
 #endif
 
-#if defined(OPENBLAS_AVAILABLE)
-    auto        openblas_parallel_mode = openblas_get_parallel();
-    std::string openblas_parallel_str;
-    if(openblas_parallel_mode == 0) openblas_parallel_str = "seq";
-    if(openblas_parallel_mode == 1) openblas_parallel_str = "threads";
-    if(openblas_parallel_mode == 2) openblas_parallel_str = "openmp";
-    if(openblas_parallel_mode == 1) openblas_set_num_threads(threading::omp_threads); // Use the omp_threads level for blas-related threading
-    tools::log->info("{} threads {} | parallel mode [{}:{}] | core type {} | config {} | multithread threshold {}", OPENBLAS_VERSION,
-                     openblas_get_num_threads(), openblas_parallel_mode, openblas_parallel_str, openblas_get_corename(), openblas_get_config(),
-                     OPENBLAS_GEMM_MULTITHREAD_THRESHOLD);
-#endif
-#if defined(MKL_AVAILABLE)
-    tools::log->info("Intel MKL | threads {}", mkl_get_max_threads());
-#endif
+    config::blas::set_num_threads(threading::omp_threads);
+    tools::log->info("{}", config::blas::description());
 
 #if defined(EIGEN_USE_MKL_ALL)
     tools::log->info("Eigen3 | threads {} | EIGEN_USE_MKL_ALL", Eigen::nbThreads());

@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
     fmt::print("Compiler flags {}\n", env::build::compiler_flags);
 
     auto                      h5svd = h5pp::File(filepath, h5pp::FileAccess::READONLY);
-    StateFinite               state;
+    StateFinite<cx64>         state;
     AlgorithmStatus           status;
     std::vector<qm::SwapGate> gates;
 

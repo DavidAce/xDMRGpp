@@ -10,16 +10,16 @@
 
 template<typename ScalarL, typename ScalarR, auto rank>
 auto asDiagonalProduct1(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<ScalarR, rank> M, long Mdim) {
-    assert(M.dimension(dim) == L.size());
-    assert(dim < rank);
+    assert(M.dimension(static_cast<size_t>(Mdim)) == L.size());
+    assert(Mdim < rank);
     for(long i = 0; i < L.size(); ++i) { M.chip(i, Mdim) = M.chip(i, Mdim) * static_cast<ScalarR>(L(i)); }
     return M;
 }
 
 template<typename ScalarL, typename ScalarR, auto rank>
 auto asDiagonalProduct2(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<ScalarR, rank> M, long Mdim) {
-    assert(M.dimension(dim) == L.size());
-    assert(dim < rank);
+    assert(M.dimension(static_cast<size_t>(Mdim)) == L.size());
+    assert(Mdim < rank);
     for(long i = 0; i < L.size(); ++i) {
         M.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarR { return v * static_cast<ScalarR>(L[i]); });
     }
@@ -28,8 +28,8 @@ auto asDiagonalProduct2(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<Scalar
 
 template<typename ScalarL, typename ScalarR, auto rank>
 auto asDiagonalProduct3(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<ScalarR, rank> M, long Mdim) {
-    assert(M.dimension(dim) == L.size());
-    assert(dim < rank);
+    assert(M.dimension(static_cast<size_t>(Mdim)) == L.size());
+    assert(Mdim < rank);
     for(long i = 0; i < L.size(); ++i) {
         M.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarR { return v * static_cast<ScalarR>(L[i]); });
     }
@@ -38,8 +38,8 @@ auto asDiagonalProduct3(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<Scalar
 
 template<typename ScalarL, typename ScalarR, auto rank>
 auto asDiagonalProduct2omp(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<ScalarR, rank> M, long Mdim) {
-    assert(M.dimension(dim) == L.size());
-    assert(dim < rank);
+    assert(M.dimension(static_cast<size_t>(Mdim)) == L.size());
+    assert(Mdim < rank);
 #pragma omp parallel for
     for(long i = 0; i < L.size(); ++i) {
         M.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarR { return v * static_cast<ScalarR>(L[i]); });
@@ -49,8 +49,8 @@ auto asDiagonalProduct2omp(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<Sca
 
 template<typename ScalarL, typename ScalarR, auto rank>
 auto asDiagonalProduct3omp(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<ScalarR, rank> M, long Mdim) {
-    assert(M.dimension(dim) == L.size());
-    assert(dim < rank);
+    assert(M.dimension(static_cast<size_t>(Mdim)) == L.size());
+    assert(Mdim < rank);
 #pragma omp parallel for
     for(long i = 0; i < L.size(); ++i) {
         M.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarR { return v * static_cast<ScalarR>(L[i]); });
@@ -60,8 +60,8 @@ auto asDiagonalProduct3omp(const Eigen::Tensor<ScalarL, 1> &L, Eigen::Tensor<Sca
 
 template<typename ScalarL, typename ScalarR, auto rank>
 void asDiagonalProduct3alloc(const Eigen::Tensor<ScalarL, 1> &L, const Eigen::Tensor<ScalarR, rank> &M, long Mdim, Eigen::Tensor<ScalarR, rank> &R) {
-    assert(M.dimension(dim) == L.size());
-    assert(dim < rank);
+    assert(M.dimension(static_cast<size_t>(Mdim)) == L.size());
+    assert(Mdim < rank);
     R.resize(M.dimensions());
     for(long i = 0; i < L.size(); ++i) {
         R.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarR { return v * static_cast<ScalarR>(L[i]); });
@@ -77,9 +77,8 @@ auto asDiagonalContractMap(const TensorL &L, const TensorM &M, long Mdim, Tensor
     static_assert(std::is_convertible_v<ScalarM, ScalarR>);
     static_assert(TensorM::NumDimensions == TensorR::NumDimensions);
 
-    assert(M.dimension(dim) == L.size());
-    assert(dim < rank);
-    assert(R.dimesions() == M.dimensions());
+    assert(M.dimension(Mdim) == L.size());
+    assert(R.dimensions() == M.dimensions());
     for(long i = 0; i < L.size(); ++i) {
         R.chip(i, Mdim) = M.chip(i, Mdim).unaryExpr([&](const auto &v) -> ScalarM { return v * static_cast<ScalarM>(L(i)); }).template cast<ScalarR>();
     }

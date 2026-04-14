@@ -1,0 +1,9 @@
+#include "wrap_format.h"
+
+#include <string>
+
+namespace fmtab {
+    std::string wrap_unit_@FMTAB_UNIT_INDEX@() {
+        return render_wrap_report(@FMTAB_UNIT_INDEX@);
+    }
+}

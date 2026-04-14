@@ -3,6 +3,7 @@ project(xdmrg++-test-svd)
 enable_testing()
 add_executable(${PROJECT_NAME} main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE
+                      xdmrg++-config
                       xdmrg++-tid
                       xdmrg++-math-svd
                       xdmrg++-math-tenx

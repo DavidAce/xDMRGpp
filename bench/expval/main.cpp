@@ -1,9 +1,12 @@
 #define ANKERL_NANOBENCH_IMPLEMENT
 #include "config/settings.h"
 #include "config/threading.h"
+#include "debug/exceptions.h"
 #include "env/environment.h"
 #include "math/tenx.h"
 #include "nanobench.h"
+#include "tools/common/contraction/contraction_tblis.h"
+#include "tools/common/contraction/expectation_value.h"
 #include "tools/common/log.h"
 #include <fmt/core.h>
 #include <fmt/ranges.h>
@@ -14,37 +17,23 @@
 
 #if defined(DMRG_ENABLE_TBLIS)
     #include <tblis/tblis.h>
-    #include <tblis/util/thread.h>
-    #include <tci/tci_config.h>
 #endif
 
 using namespace tools::common::contraction;
 
 #if defined(DMRG_ENABLE_TBLIS)
 template<typename ea_type, typename eb_type, typename ec_type>
-void contract_tblis(const TensorRead<ea_type> &ea, const TensorRead<eb_type> &eb, TensorWrite<ec_type> &ec, const tblis::label_vector &la,
-                    const tblis::label_vector &lb, const tblis::label_vector &lc, const tblis::tblis_config_s *tblis_cntx) {
+void contract_tblis(const TensorRead<ea_type> &ea, const TensorRead<eb_type> &eb, TensorWrite<ec_type> &ec, std::string_view la, std::string_view lb,
+                    std::string_view lc, const tblis::tblis_config *tblis_cntx) {
     const auto &ea_ref = static_cast<const ea_type &>(ea);
     const auto &eb_ref = static_cast<const eb_type &>(eb);
     auto       &ec_ref = static_cast<ec_type &>(ec);
 
-    tblis::len_vector da, db, dc;
-    da.assign(ea_ref.dimensions().begin(), ea_ref.dimensions().end());
-    db.assign(eb_ref.dimensions().begin(), eb_ref.dimensions().end());
-    dc.assign(ec_ref.dimensions().begin(), ec_ref.dimensions().end());
-
-    auto                     ta    = tblis::varray_view<const typename ea_type::Scalar>(da, ea_ref.data(), tblis::COLUMN_MAJOR);
-    auto                     tb    = tblis::varray_view<const typename eb_type::Scalar>(db, eb_ref.data(), tblis::COLUMN_MAJOR);
-    auto                     tc    = tblis::varray_view<typename ec_type::Scalar>(dc, ec_ref.data(), tblis::COLUMN_MAJOR);
-    typename ea_type::Scalar alpha = 1.0;
-    typename ec_type::Scalar beta  = 0.0;
-
-    tblis::tblis_tensor A_s(alpha, ta);
-    tblis::tblis_tensor B_s(tb);
-    tblis::tblis_tensor C_s(beta, tc);
-
-    // tblis_tensor_mult(nullptr, tblis_cntx, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
-    tblis_tensor_mult(nullptr, tblis_cntx, &A_s, la.c_str(), &B_s, lb.c_str(), &C_s, lc.c_str());
+    dimlist da(ea_ref.dimensions().begin(), ea_ref.dimensions().end());
+    dimlist db(eb_ref.dimensions().begin(), eb_ref.dimensions().end());
+    dimlist dc(ec_ref.dimensions().begin(), ec_ref.dimensions().end());
+    tools::common::contraction::contract_tblis(ea_ref.data(), std::move(da), eb_ref.data(), std::move(db), ec_ref.data(), std::move(dc), la, lb, lc,
+                                               tblis_cntx);
 }
 
 template<typename res_type, typename mps_type, typename env_type>
@@ -52,7 +41,8 @@ void mps_enL_tblis(TensorWrite<res_type> &res_, const TensorRead<mps_type> &mps_
     auto                         res          = tenx::asEval(res_);
     auto                         mps          = tenx::asEval(mps_);
     auto                         enL          = tenx::asEval(enL_);
-    const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(arch.data());
+    [[maybe_unused]] auto        arch_name    = arch;
+    const tblis::tblis_config   *tblis_config = nullptr;
     #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
     tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
     #endif
@@ -75,7 +65,8 @@ void matrix_vector_product_tblis(TensorWrite<res_type> &res_, const TensorRead<m
     auto enL = tenx::asEval(enL_);
     auto enR = tenx::asEval(enR_);
 
-    const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(arch.data());
+    [[maybe_unused]] auto        arch_name    = arch;
+    const tblis::tblis_config   *tblis_config = nullptr;
     #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
     tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
     #endif
@@ -124,7 +115,7 @@ void matrix_vector_product(Scalar *res_ptr, const Scalar *const mps_ptr, std::ar
 #if defined(DMRG_ENABLE_TBLIS)
     if constexpr(std::is_same_v<Scalar, fp64>) {
         // auto                         arch         = get_arch();
-        const tblis::tblis_config_s *tblis_config = nullptr; // tblis::tblis_get_config(arch.data());
+        const tblis::tblis_config   *tblis_config = nullptr; // tblis::tblis_get_config(arch.data());
         // #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
         // tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
         // #endif
@@ -232,7 +223,7 @@ void matrix_vector_product_custom(Scalar *res_ptr, const Scalar *const mps_ptr, 
 
 // Contract left to right
 #if defined(DMRG_ENABLE_TBLIS)
-    const tblis::tblis_config_s *tblis_config = tblis::tblis_get_config(get_arch().data());
+    const tblis::tblis_config   *tblis_config = nullptr;
     #if defined(TCI_USE_OPENMP_THREADS) && defined(_OPENMP)
     tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads()));
     #endif

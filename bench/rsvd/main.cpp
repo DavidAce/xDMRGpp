@@ -1,6 +1,6 @@
 
 #include "math/fit.h"
-#include "math/linalg/matrix.h"
+#include "math/linalg/matrix/to_string.h"
 #include "math/rnd.h"
 #include "math/stat.h"
 #include "math/svd.h"
@@ -43,7 +43,7 @@ void bench() {
             double gersvdErr  = 0;
             double gersvdNorm = 0;
             {
-                svd_settings.svd_lib = svd::lib::lapacke;
+                svd_settings.svd_lib = svd::lib::lapack;
                 svd_settings.svd_rtn = svd::rtn::gesdd;
                 omp_set_num_threads(16);
                 svd::solver svd(svd_settings);
@@ -58,7 +58,7 @@ void bench() {
             }
             {
                 omp_set_num_threads(16);
-                svd_settings.svd_lib  = svd::lib::lapacke;
+                svd_settings.svd_lib  = svd::lib::lapack;
                 svd_settings.svd_rtn  = svd::rtn::gersvd;
                 svd_settings.rank_max = static_cast<long>(static_cast<double>(rank_max) * 0.10); // TODO: TESTING!
                 auto        t_rsvd    = tid::tic_scope("rsvd");

@@ -1,0 +1,48 @@
+cmake_minimum_required(VERSION 3.15)
+project(xdmrg++-test-fmtab)
+enable_testing()
+
+set(FMTAB_UNIT_COUNT 15)
+set(FMTAB_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${FMTAB_GENERATED_DIR})
+
+set(FMTAB_STD_SOURCES)
+set(FMTAB_WRAP_SOURCES)
+foreach(FMTAB_UNIT_INDEX RANGE 0 ${FMTAB_UNIT_COUNT})
+    configure_file(std_unit.cpp.in ${FMTAB_GENERATED_DIR}/fmtab_std_${FMTAB_UNIT_INDEX}.cpp @ONLY)
+    configure_file(wrap_unit.cpp.in ${FMTAB_GENERATED_DIR}/fmtab_wrap_${FMTAB_UNIT_INDEX}.cpp @ONLY)
+    list(APPEND FMTAB_STD_SOURCES ${FMTAB_GENERATED_DIR}/fmtab_std_${FMTAB_UNIT_INDEX}.cpp)
+    list(APPEND FMTAB_WRAP_SOURCES ${FMTAB_GENERATED_DIR}/fmtab_wrap_${FMTAB_UNIT_INDEX}.cpp)
+endforeach()
+
+add_library(fmtab-std STATIC std_runner.cpp ${FMTAB_STD_SOURCES})
+target_include_directories(fmtab-std PRIVATE ${CMAKE_CURRENT_LIST_DIR} ${FMTAB_GENERATED_DIR})
+target_link_libraries(fmtab-std PRIVATE fmt::fmt)
+target_compile_features(fmtab-std PRIVATE cxx_std_23)
+
+add_library(fmtab-wrap STATIC wrap_runner.cpp ${FMTAB_WRAP_SOURCES})
+target_include_directories(fmtab-wrap PRIVATE ${CMAKE_CURRENT_LIST_DIR} ${FMTAB_GENERATED_DIR})
+target_link_libraries(fmtab-wrap PRIVATE fmt::fmt)
+target_compile_features(fmtab-wrap PRIVATE cxx_std_23)
+
+add_executable(xdmrg++-test-fmtab compare_main.cpp)
+target_include_directories(xdmrg++-test-fmtab PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_link_libraries(xdmrg++-test-fmtab PRIVATE fmtab-std fmtab-wrap fmt::fmt)
+target_compile_features(xdmrg++-test-fmtab PRIVATE cxx_std_23)
+
+if(COMPILER_PROFILE_BUILD)
+    target_compile_options(fmtab-std PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-ftime-trace>)
+    target_compile_options(fmtab-wrap PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-ftime-trace>)
+    target_compile_options(xdmrg++-test-fmtab PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-ftime-trace>)
+endif()
+
+if(DMRG_ENABLE_COVERAGE)
+    target_compile_options(fmtab-std PRIVATE --coverage)
+    target_link_options(fmtab-std PRIVATE --coverage)
+    target_compile_options(fmtab-wrap PRIVATE --coverage)
+    target_link_options(fmtab-wrap PRIVATE --coverage)
+    target_compile_options(xdmrg++-test-fmtab PRIVATE --coverage)
+    target_link_options(xdmrg++-test-fmtab PRIVATE --coverage)
+endif()
+
+add_test(NAME test-fmtab COMMAND xdmrg++-test-fmtab)

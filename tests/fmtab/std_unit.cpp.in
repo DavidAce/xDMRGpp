@@ -1,0 +1,9 @@
+#include "std_format.h"
+
+#include <string>
+
+namespace fmtab {
+    std::string std_unit_@FMTAB_UNIT_INDEX@() {
+        return render_std_report(@FMTAB_UNIT_INDEX@);
+    }
+}
