@@ -394,8 +394,8 @@ void tools::finite::h5::save::number_probabilities(h5pp::File &h5file, const Sto
     auto attrs = tools::common::h5::save::get_save_attrs(h5file, dset_path);
     if(attrs == sinfo) return;
     if(not attrs.link_exists) {
-        auto                 rows = static_cast<hsize_t>(state.measurements.number_probabilities->dimension(0));
-        auto                 cols = static_cast<hsize_t>(state.measurements.number_probabilities->dimension(1));
+        auto                 rows = safe_cast<hsize_t>(state.measurements.number_probabilities->dimension(0));
+        auto                 cols = safe_cast<hsize_t>(state.measurements.number_probabilities->dimension(1));
         std::vector<hsize_t> dims = {rows, cols, 0};
         std::vector<hsize_t> chnk = {rows, cols, settings::storage::dataset::number_probabilities::chunksize};
         using Real                = typename MeasurementsStateFinite<Scalar>::RealScalar;

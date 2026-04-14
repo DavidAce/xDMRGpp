@@ -82,12 +82,12 @@ namespace tools::common::h5 {
         auto table_path = fmt::format("{}/status", state_prefix);
         if(h5file.linkExists(table_path)) {
             tools::log->info("Loading status from table: [{}]", table_path);
-            if(info.iter != -1ul or info.step != -1ul or info.event != StorageEvent::NONE) {
+            if(info.iter != storage_idx_undefined or info.step != storage_idx_undefined or info.event != StorageEvent::NONE) {
                 // Load the whole table and find the right entry
                 auto recs = h5file.readTableField<std::vector<StatusTriplet>>(table_path, {"iter", "step", "event"}, h5pp::TableSelection::ALL);
                 for(const auto &[offset, rec] : iter::enumerate_reverse(recs)) {
-                    if(info.iter != 1ul and rec.iter != info.iter) continue;
-                    if(info.step != 1ul and rec.step != info.step) continue;
+                    if(info.iter != storage_idx_undefined and rec.iter != info.iter) continue;
+                    if(info.step != storage_idx_undefined and rec.step != info.step) continue;
                     if(info.event != StorageEvent::NONE and rec.event != info.event) continue;
                     // We have a match!
                     h5file.readTableRecords(status, table_path, offset); // Reads the last entry by default
@@ -109,12 +109,12 @@ namespace tools::common::h5 {
         auto table_path = fmt::format("{}/status", state_prefix);
         if(h5file.linkExists(table_path)) {
             tools::log->info("Loading status from table: [{}]", table_path);
-            if(info.iter != -1ul or info.step != -1ul or info.event != StorageEvent::NONE) {
+            if(info.iter != storage_idx_undefined or info.step != storage_idx_undefined or info.event != StorageEvent::NONE) {
                 // Load the whole table and find the right entry
                 auto statusRecords = h5file.readTableRecords<std::vector<AlgorithmStatus>>(table_path, h5pp::TableSelection::ALL);
                 for(const auto &statusRecord : iter::reverse(statusRecords)) {
-                    if(info.iter != 1ul and statusRecord.iter != info.iter) continue;
-                    if(info.step != 1ul and statusRecord.step != info.step) continue;
+                    if(info.iter != storage_idx_undefined and statusRecord.iter != info.iter) continue;
+                    if(info.step != storage_idx_undefined and statusRecord.step != info.step) continue;
                     if(info.event != StorageEvent::NONE and statusRecord.event != info.event) continue;
                     // We have a match!
                     status = statusRecord;

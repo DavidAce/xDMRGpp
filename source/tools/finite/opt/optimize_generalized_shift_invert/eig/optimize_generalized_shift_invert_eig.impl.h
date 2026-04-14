@@ -72,7 +72,8 @@ void optimize_generalized_shift_invert_eig_executor(const TensorsFinite<Scalar> 
     using R      = decltype(std::real(std::declval<CalcType>()));
     auto matrixA = tensors.template get_effective_hamiltonian<CalcType>();
     auto matrixB = tensors.template get_effective_hamiltonian_squared<CalcType>();
-    auto nev     = std::min<int>(static_cast<int>(matrixA.dimension(0)), meta.eigs_nev.value_or(1));
+    auto dim     = safe_cast<int>(matrixA.dimension(0));
+    auto nev     = std::min<int>(dim, meta.eigs_nev.value_or(1));
     switch(meta.optRitz) {
         case OptRitz::SR: {
             auto il = 1;
@@ -82,8 +83,8 @@ void optimize_generalized_shift_invert_eig_executor(const TensorsFinite<Scalar> 
             break;
         }
         case OptRitz::LR: {
-            auto il = static_cast<int>(matrixA.dimension(0) - (nev - 1));
-            auto iu = static_cast<int>(matrixA.dimension(0));
+            auto il = safe_cast<int>(matrixA.dimension(0) - (nev - 1));
+            auto iu = dim;
             solver.eig(matrixA.data(), matrixB.data(), matrixA.dimension(0), 'I', il, iu, R{0}, R{1});
             extract_results<CalcType>(tensors, initial_mps, meta, solver, results, true);
             break;

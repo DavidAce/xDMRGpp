@@ -652,8 +652,8 @@ void flbit<Scalar>::create_hamiltonian_gates() {
             tools::log->debug("Generating {}-body hamiltonian on sites {}", nbody, sites);
             ham_swap_gates_1body.emplace_back(tensors.model->get_multisite_ham_t({pos}, nbody), sites, spins);
         }
-        auto J2_ctof = std::min(settings::model::lbit::J2_span,
-                                L - 1); // Max distance |i-j| to the furthest interacting site L-1
+        auto J2_ctof = settings::model::lbit::J2_span < 0 ? L - 1 : std::min(safe_cast<size_t>(settings::model::lbit::J2_span),
+                                                                              L - 1); // Max distance |i-j| to the furthest interacting site L-1
         for(auto posL : list_2body) {
             auto maxR = std::min<size_t>(posL + J2_ctof, L - 1);
             if(maxR == posL) continue;
@@ -710,8 +710,8 @@ void flbit<Scalar>::create_hamiltonian_gates() {
         }
         tensors.model->clear_cache();
 
-        auto J2_ctof = std::min(settings::model::lbit::J2_span,
-                                L - 1); // Max distance |i-j| to the furthest interacting site L-1
+        auto J2_ctof = settings::model::lbit::J2_span < 0 ? L - 1 : std::min(safe_cast<size_t>(settings::model::lbit::J2_span),
+                                                                              L - 1); // Max distance |i-j| to the furthest interacting site L-1
         for(auto posL : list_2body) {
             auto posR = posL + J2_ctof;
             if(J2_ctof == 0) break;

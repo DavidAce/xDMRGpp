@@ -103,7 +103,7 @@ class h5tb_lbit : public h5tb_base<h5tb_lbit> {
         double                         J1_wdth  = 0;  /*!< Width of the distribution J1 */
         double                         J2_wdth  = 0;  /*!< Width of the distribution J2 */
         double                         J3_wdth  = 0;  /*!< Width of the distribution J3 */
-        size_t                         J2_span  = 0;  /*!< Maximum range for pairwise interactions, |i-j| <= J2_span. */
+        long                           J2_span  = 0;  /*!< Maximum range for pairwise interactions, |i-j| <= J2_span. */
         size_t                         J2_ctof  = 0;  /*!< Effective range for pairwise interactions, |i-j| <= std::min(J2_span, model_size-1). */
         double                         xi_Jcls  = 0;  /*!< Exp. decay rate of two-body interactions: exp(-|i-j|/xi_Jcls) * J2_rand */
         long                           spin_dim = 2;  /*!< Spin dimension */

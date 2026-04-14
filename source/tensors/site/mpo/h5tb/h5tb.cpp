@@ -205,7 +205,7 @@ void h5tb_lbit::register_table_type() const {
     H5Tinsert(h5_type, "J1_wdth", HOFFSET(table, J1_wdth), H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "J2_wdth", HOFFSET(table, J2_wdth), H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "J3_wdth", HOFFSET(table, J3_wdth), H5T_NATIVE_DOUBLE);
-    H5Tinsert(h5_type, "J2_span", HOFFSET(table, J2_span), H5T_NATIVE_ULONG);
+    H5Tinsert(h5_type, "J2_span", HOFFSET(table, J2_span), H5T_NATIVE_LONG);
     H5Tinsert(h5_type, "J2_ctof", HOFFSET(table, J2_ctof), H5T_NATIVE_ULONG);
     H5Tinsert(h5_type, "xi_Jcls", HOFFSET(table, xi_Jcls), H5T_NATIVE_DOUBLE);
     H5Tinsert(h5_type, "spin_dim", HOFFSET(table, spin_dim), H5T_NATIVE_LONG);
@@ -235,7 +235,7 @@ std::string h5tb_lbit::fmt_value(std::string_view p) const {
         if(p == "J2_wdth")     return fmt::format("{:<7.4f}",  param.J2_wdth);
         if(p == "J3_wdth")     return fmt::format("{:<7.4f}",  param.J3_wdth);
         if(p == "xi_Jcls")     return fmt::format("{:<7.4f}",  param.xi_Jcls);
-        if(p == "J2_span")     return fmt::format("{:>7}",     param.J2_span == -1ul ? -1l : safe_cast<long>(param.J2_span));
+        if(p == "J2_span")     return fmt::format("{:>7}",     param.J2_span);
         if(p == "J2_ctof")     return fmt::format("{:>7}",     param.J2_ctof);
         if(p == "spin_dim")    return fmt::format("{:>8}",     param.spin_dim);
         if(p == "distribution")return fmt::format("{:<12}", static_cast<std::string_view>(param.distribution));

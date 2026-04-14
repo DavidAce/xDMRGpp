@@ -542,9 +542,10 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
     auto L = mpos_shf.size();
 
     auto mpodimprod = [&](size_t fr, size_t to) -> long {
+        constexpr auto npos = std::numeric_limits<size_t>::max();
         long prod = 1;
-        if(fr == -1ul) fr = 0;
-        if(to == 0 or to == -1ul) return prod;
+        if(fr == npos) fr = 0;
+        if(to == 0 or to == npos) return prod;
         for(size_t idx = fr; idx < to; ++idx) {
             if(idx >= mpos_shf.size()) break;
             prod *= mpos_shf[idx].dimension(1);

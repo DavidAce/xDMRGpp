@@ -716,13 +716,13 @@ void TensorsFinite<Scalar>::move_site_mps_to_pos(const size_t site, const long t
         if(posR < 0 or posR >= get_length<long>()) break;
         tools::log->debug("swapping mps sites {} <--> {}", posL, posR);
         // Move the MPS site
-        tools::finite::mps::swap_sites(get_state(), safe_cast<size_t>(posL), static_cast<size_t>(posR), sites_mps, GateMove::OFF);
+        tools::finite::mps::swap_sites(get_state(), safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mps, GateMove::OFF);
     }
     if(new_pos) {
         if(new_pos.value() != std::clamp(new_pos.value(), 0l, get_length<long>()))
             throw except::runtime_error("move_site: expected new_pos in range [0,{}]. Got {}", get_length<long>(), new_pos.value());
         move_center_point_to_pos(new_pos.value());
-        activate_sites(std::vector<size_t>{static_cast<size_t>(new_pos.value())});
+        activate_sites(std::vector<size_t>{safe_cast<size_t>(new_pos.value())});
     }
 
     tools::log->debug("Sites mps: {}", sites_mps);
@@ -757,7 +757,7 @@ void TensorsFinite<Scalar>::move_site_mpo_to_pos(const size_t site, const long t
         if(posR < 0 or posR >= get_length<long>()) break;
         tools::log->debug("swapping mpo sites {} <--> {}", posL, posR);
         // Move the MPO site
-        tools::finite::mpo::swap_sites(get_model(), static_cast<size_t>(posL), static_cast<size_t>(posR), sites_mpo);
+        tools::finite::mpo::swap_sites(get_model(), safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mpo);
     }
     tools::log->debug("Sites mpo: {}", sites_mpo);
     clear_cache();

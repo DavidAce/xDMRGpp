@@ -2,15 +2,17 @@
 #include "config/enums/AlgorithmStop.h"
 #include "config/enums/AlgorithmType.h"
 #include "config/enums/StorageEvent.h"
+#include <limits>
 #include <string>
 #include <string_view>
 class AlgorithmStatus;
 enum class ModelType;
 enum class StoragePolicy;
+inline constexpr size_t storage_idx_undefined = std::numeric_limits<size_t>::max();
 struct StorageInfo {
     public:
-    size_t        iter      = -1ul;
-    size_t        step      = -1ul;
+    size_t        iter      = storage_idx_undefined;
+    size_t        step      = storage_idx_undefined;
     long          position  = -1;
     long          direction = 0;
     long          bond_lim  = -1;
@@ -36,8 +38,8 @@ struct StorageInfo {
 
 // Metadata needed to uniquely identify a save point for a given HDF5 link
 struct StorageAttrs {
-    size_t       iter          = -1ul;
-    size_t       step          = -1ul;
+    size_t       iter          = storage_idx_undefined;
+    size_t       step          = storage_idx_undefined;
     long         bond_lim      = -1;
     long         bond_max      = -1;
     double       trnc_lim      = -1;

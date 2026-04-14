@@ -23,6 +23,7 @@
 #include "math/rnd.h"
 #include "math/stat.h"
 #include "math/svd.h"
+#include <limits>
 #include "math/tenx.h"
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
@@ -777,47 +778,49 @@ cx64 qm::lbit::get_lbit_2point_correlator3(const std::vector<std::vector<qm::Gat
         return width;
     };
     auto slayer_diagl = [&]() -> size_t {
-        size_t lb = -1ul; // left bottom position
-        size_t rb = -1ul; // right bottom position
-        size_t lt = -1ul; // left  top position
-        size_t rt = -1ul; // right top position
+        std::optional<size_t> lb; // left bottom position
+        std::optional<size_t> rb; // right bottom position
+        std::optional<size_t> lt; // left  top position
+        std::optional<size_t> rt; // right top position
         for(const auto &us : unitary_slayers) {
             if(not us.empty()) {
-                if(lb == -1ul) lb = us.front().pos.front();
-                if(rb == -1ul) rb = us.front().pos.back();
-                lb = std::min(lb, us.front().pos.front());
+                if(not lb) lb = us.front().pos.front();
+                if(not rb) rb = us.front().pos.back();
+                lb = std::min(lb.value(), us.front().pos.front());
             }
         }
         for(const auto &us : iter::reverse(unitary_slayers)) {
             if(not us.empty()) {
-                if(rt == -1ul) rt = us.front().pos.back();
-                if(lt == -1ul) lt = us.front().pos.front();
-                rt = std::max(rt, us.back().pos.back());
+                if(not rt) rt = us.front().pos.back();
+                if(not lt) lt = us.front().pos.front();
+                rt = std::max(rt.value(), us.back().pos.back());
             }
         }
-        return std::max(rb - lb, rt - lt) + 1;
+        if(not lb or not rb or not lt or not rt) return 0;
+        return std::max(rb.value() - lb.value(), rt.value() - lt.value()) + 1;
     };
 
     auto slayer_diagr = [&]() -> size_t {
-        size_t lb = -1ul; // left bottom position
-        size_t rb = -1ul; // right bottom position
-        size_t lt = -1ul; // left  top position
-        size_t rt = -1ul; // right top position
+        std::optional<size_t> lb; // left bottom position
+        std::optional<size_t> rb; // right bottom position
+        std::optional<size_t> lt; // left  top position
+        std::optional<size_t> rt; // right top position
         for(const auto &us : unitary_slayers) {
             if(not us.empty()) {
-                if(lb == -1ul) lb = us.back().pos.front();
-                if(rb == -1ul) rb = us.back().pos.back();
-                rb = std::max(rb, us.back().pos.back());
+                if(not lb) lb = us.back().pos.front();
+                if(not rb) rb = us.back().pos.back();
+                rb = std::max(rb.value(), us.back().pos.back());
             }
         }
         for(const auto &us : iter::reverse(unitary_slayers)) {
             if(not us.empty()) {
-                if(rt == -1ul) rt = us.back().pos.back();
-                if(lt == -1ul) lt = us.back().pos.front();
-                lt = std::min(lt, us.front().pos.front());
+                if(not rt) rt = us.back().pos.back();
+                if(not lt) lt = us.back().pos.front();
+                lt = std::min(lt.value(), us.front().pos.front());
             }
         }
-        return std::max(rb - lb, rt - lt) + 1;
+        if(not lb or not rb or not lt or not rt) return 0;
+        return std::max(rb.value() - lb.value(), rt.value() - lt.value()) + 1;
     };
 
     auto width = slayer_width();
@@ -1295,8 +1298,12 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<s
     };
 
     auto state            = StateFinite<fp64>(AlgorithmType::fLBIT, sites, 0, 2);
-    auto num_states       = static_cast<Eigen::Index>(std::pow(2, sites));
-    auto ssites           = static_cast<Eigen::Index>(sites);
+    if(sites >= std::numeric_limits<size_t>::digits)
+        throw except::logic_error("Too many sites to enumerate basis states exactly: {} >= {}", sites, std::numeric_limits<size_t>::digits);
+    auto num_states = size_t{1} << sites;
+    if(num_states > static_cast<size_t>(std::numeric_limits<Eigen::Index>::max()))
+        throw except::logic_error("Too many basis states for Eigen::Index: 2^{} = {}", sites, num_states);
+    auto ssites = safe_cast<Eigen::Index>(sites);
     auto szi              = tenx::TensorCast(qm::spin::half::sz.real());
     auto szj              = tenx::TensorCast(qm::spin::half::sz.real());
     auto lbit_corrmat_vec = std::vector<Eigen::Tensor<fp64, 2>>();
@@ -1306,7 +1313,7 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<s
     lbit_corrmat_avg.setZero();
     auto bitseqs = std::vector<size_t>();
 
-    bitseqs.reserve(static_cast<size_t>(num_states) / 2);
+    bitseqs.reserve(num_states / 2);
     for(auto b : num::range<size_t>(0, num_states)) {
         auto it1 = std::find(bitseqs.begin(), bitseqs.end(), b);
         auto it2 = std::find(bitseqs.begin(), bitseqs.end(), flipall(b, sites));
@@ -1350,9 +1357,9 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<s
                     // we can save computation by checking if the matrix element (i,1) has already been computed for the state with flipped spin.
                     auto bflp = flipbit(b, static_cast<size_t>(j));
                     long bidx = findidx(bitseqs, bflp); // r index where we might find a precomputed value for this entry in lbit_corrmat_vec
-                    if(bidx >= 0 and static_cast<size_t>(bidx) < lbit_corrmat_vec.size()) {
+                    if(bidx >= 0 and safe_cast<size_t>(bidx) < lbit_corrmat_vec.size()) {
                         // Found a precomputed value!
-                        lbit_corrmat(i, j) = lbit_corrmat_vec.at(static_cast<size_t>(bidx))(i, j);
+                        lbit_corrmat(i, j) = lbit_corrmat_vec.at(safe_cast<size_t>(bidx))(i, j);
                         t_j.toc();
                         num_caches++;
                         continue;

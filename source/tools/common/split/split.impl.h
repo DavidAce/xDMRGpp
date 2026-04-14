@@ -185,7 +185,8 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
             auto [U3, S1, V3] = svd.schmidt_multisite(multisite_mps, 1, d0, d1, d2, svd_cfg.value());
             auto mps_site     = MpsSite<Scalar>(V3, positions.front(), "B"); // Single site
             if(static_cast<long>(pos) == center_position + 1) {
-                mps_site.stash_C(S1, svd.get_truncation_error(), static_cast<size_t>(center_position)); // The site to the left is a center, S1 belongs to it
+                if(center_position < 0) throw except::logic_error("split: invalid center position {} for single-site B stash", center_position);
+                mps_site.stash_C(S1, svd.get_truncation_error(), safe_cast<size_t>(center_position)); // The site to the left is a center, S1 belongs to it
             } else {
                 mps_site.stash_S(S1, svd.get_truncation_error(), pos - 1); // The site to the left is a B, S1 belongs to it
             }

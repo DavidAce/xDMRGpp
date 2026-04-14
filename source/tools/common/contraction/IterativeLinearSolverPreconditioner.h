@@ -3,6 +3,7 @@
 #include "tid/tid.h"
 #include <chrono>
 #include <Eigen/Core>
+#include <stdexcept>
 
 namespace settings {
 #if defined(NDEBUG)
@@ -95,8 +96,10 @@ class IterativeLinearSolverPreconditioner {
         RealScalar   gamma    = RealScalar{0.1f}; // we want a ~10× reduction per precond application
         Eigen::Index m        = degree;
         if(m <= 0) {
-            Eigen::Index m_auto = static_cast<Eigen::Index>(std::ceil(std::log(RealScalar{2} / gamma) / (RealScalar{2} * std::acosh(RealScalar{1} / rho))));
-            m                   = std::clamp<Eigen::Index>(m_auto, 1, 20);
+            auto m_auto_real = std::ceil(std::log(RealScalar{2} / gamma) / (RealScalar{2} * std::acosh(RealScalar{1} / rho)));
+            if(!std::isfinite(m_auto_real)) throw std::runtime_error("Chebyshev degree selection produced a non-finite value");
+            auto m_auto = static_cast<Eigen::Index>(std::clamp(m_auto_real, RealScalar{1}, RealScalar{20}));
+            m           = std::clamp<Eigen::Index>(m_auto, 1, 20);
         }
         if(m != degree and m_iterations == 0) { std::printf("m %ld -> %ld\n", degree, m); }
 

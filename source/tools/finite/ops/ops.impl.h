@@ -197,7 +197,7 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
     auto                    &threads    = tenx::threads::get();
 
     for(long pos = 0; pos <= pos_center; ++pos) {
-        auto  udx      = static_cast<size_t>(pos);
+        auto  udx      = safe_cast<size_t>(pos);
         auto &mps_site = state.get_mps_site(pos);
 
         auto &mps = mps_site.get_M();
@@ -238,7 +238,7 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
 
         if(pos < pos_center) {
             auto [U, S, V] = svd.decompose_multisite(mpo_mps, d0, 1l, d1, d2);
-            auto dst = static_cast<size_t>(pos + 1);
+            auto dst = safe_cast<size_t>(pos + 1);
             mps_site.set_M(U);
             mps_site.stash_S(S, svd.get_truncation_error(), dst);
             mps_site.stash_V(V, dst);
@@ -248,7 +248,7 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
     }
 
     for(long pos = length - 1; pos > pos_center; --pos) {
-        auto  udx      = static_cast<size_t>(pos);
+        auto  udx      = safe_cast<size_t>(pos);
         auto &mps_site = state.get_mps_site(pos);
         auto &mps      = mps_site.get_M();
         auto &mpo      = mpos[udx];
@@ -288,7 +288,7 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
 
         if(pos > pos_center + 1) {
             auto [U, S, V] = svd.decompose_multisite(mpo_mps, 1l, d0, d1, d2);
-            auto dst = static_cast<size_t>(pos - 1);
+            auto dst = safe_cast<size_t>(pos - 1);
             mps_site.set_M(V);
             mps_site.stash_U(U, dst);
             mps_site.stash_S(S, svd.get_truncation_error(), dst);

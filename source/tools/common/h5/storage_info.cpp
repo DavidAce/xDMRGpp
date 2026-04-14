@@ -10,8 +10,8 @@
 #include <string>
 void StorageInfo::assert_well_defined() const {
     std::string msg;
-    if(iter == -1ul) msg.append(" iter\n");
-    if(step == -1ul) msg.append(" step\n");
+    if(iter == storage_idx_undefined) msg.append(" iter\n");
+    if(step == storage_idx_undefined) msg.append(" step\n");
     if(position == -1) msg.append(" position\n");
     if(direction == 0) msg.append(" direction\n");
     if(bond_lim == -1) msg.append(" bond_lim\n");

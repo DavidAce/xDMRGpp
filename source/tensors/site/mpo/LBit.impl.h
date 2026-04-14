@@ -55,12 +55,12 @@ LBit<Scalar>::LBit(ModelType model_type_, size_t position_) : MpoSite<Scalar>(mo
     h5tb.param.J1_wdth  = settings::model::lbit::J1_wdth;
     h5tb.param.J2_wdth  = settings::model::lbit::J2_wdth;
     h5tb.param.J3_wdth  = settings::model::lbit::J3_wdth;
-    h5tb.param.J2_span  = settings::model::lbit::J2_span; // Can be 0. If -1ul = MAX then this means we want the cutoff to be full system range
+    h5tb.param.J2_span  = settings::model::lbit::J2_span; // Can be 0. If negative then this means we want the cutoff to be full system range
     h5tb.param.xi_Jcls  = settings::model::lbit::xi_Jcls;
     h5tb.param.spin_dim = settings::model::lbit::spin_dim;
 
     // Adjust J2_span, it doesn't make sense to have it larger than the system size anyway, so we use a cutoff
-    h5tb.param.J2_ctof      = std::min(h5tb.param.J2_span, settings::model::model_size - 1); // Range unsigned long
+    h5tb.param.J2_ctof      = h5tb.param.J2_span < 0 ? settings::model::model_size - 1 : std::min(safe_cast<size_t>(h5tb.param.J2_span), settings::model::model_size - 1);
     h5tb.param.distribution = settings::model::lbit::distribution;
     extent4                 = {1, 1, h5tb.param.spin_dim, h5tb.param.spin_dim};
     extent2                 = {h5tb.param.spin_dim, h5tb.param.spin_dim};
@@ -92,7 +92,7 @@ void LBit<Scalar>::set_parameters(const TableMap &parameters) {
     h5tb.param.spin_dim     = std::any_cast<decltype(h5tb.param.spin_dim)>(parameters.at("spin_dim"));
     h5tb.param.distribution = std::any_cast<decltype(h5tb.param.distribution)>(parameters.at("distribution"));
     // Adjust J2_span, it doesn't make sense to have it larger than the system size anyway, so we use a cutoff
-    h5tb.param.J2_ctof               = std::min(h5tb.param.J2_span, settings::model::model_size - 1); // Range unsigned long
+    h5tb.param.J2_ctof               = h5tb.param.J2_span < 0 ? settings::model::model_size - 1 : std::min(safe_cast<size_t>(h5tb.param.J2_span), settings::model::model_size - 1);
     all_mpo_parameters_have_been_set = true;
 }
 

@@ -28,14 +28,15 @@ void optimize_folded_spectrum_eig_executor(const TensorsFinite<Scalar> &tensors,
     eig::solver solver;
     using R     = decltype(std::real(std::declval<CalcType>()));
     auto matrix = tensors.template get_effective_hamiltonian_squared<CalcType>();
-    auto nev    = std::min<int>(static_cast<int>(matrix.dimension(0)), meta.eigs_nev.value_or(1));
+    auto dim    = safe_cast<int>(matrix.dimension(0));
+    auto nev    = std::min<int>(dim, meta.eigs_nev.value_or(1));
     auto il     = 1;
     auto iu     = nev;
     switch(meta.optRitz) {
         case OptRitz::LR: [[fallthrough]];
         case OptRitz::LM: {
-            il = static_cast<int>(matrix.dimension(0) - (nev - 1));
-            iu = static_cast<int>(matrix.dimension(0));
+            il = safe_cast<int>(matrix.dimension(0) - (nev - 1));
+            iu = dim;
             break;
         }
         default: break;

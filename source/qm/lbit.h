@@ -1,5 +1,6 @@
 #pragma once
 #include "gate.h"
+#include "math/cast.h"
 #include "math/svd/config.h"
 #include <array>
 #include <complex>
@@ -103,13 +104,13 @@ namespace qm::lbit {
             corroff.setZero();
         }
         lbitSupportAnalysis(size_t ndpth, size_t nfmix, size_t nlambda, size_t nweight, size_t nmatrix, size_t nreps, size_t nsize) : lbitSupportAnalysis() {
-            auto idpth   = static_cast<Eigen::Index>(ndpth);
-            auto ifmix   = static_cast<Eigen::Index>(nfmix);
-            auto ilambda = static_cast<Eigen::Index>(nlambda);
-            auto iweight = static_cast<Eigen::Index>(nweight);
-            auto imatrix = static_cast<Eigen::Index>(nmatrix);
-            auto ireps   = static_cast<Eigen::Index>(nreps);
-            auto isize   = static_cast<Eigen::Index>(nsize);
+            auto idpth   = safe_cast<Eigen::Index>(ndpth);
+            auto ifmix   = safe_cast<Eigen::Index>(nfmix);
+            auto ilambda = safe_cast<Eigen::Index>(nlambda);
+            auto iweight = safe_cast<Eigen::Index>(nweight);
+            auto imatrix = safe_cast<Eigen::Index>(nmatrix);
+            auto ireps   = safe_cast<Eigen::Index>(nreps);
+            auto isize   = safe_cast<Eigen::Index>(nsize);
             cls_avg_fit.resize(idpth, ifmix, ilambda, iweight, imatrix);
             cls_avg_rms.resize(idpth, ifmix, ilambda, iweight, imatrix);
             cls_avg_rsq.resize(idpth, ifmix, ilambda, iweight, imatrix);

@@ -21,8 +21,8 @@ namespace tools::common::h5 {
     /* clang-format off */
     struct MpsInfo{
         std::string pfx;
-        size_t iter = -1ul;
-        size_t step = -1ul;
+        size_t iter = storage_idx_undefined;
+        size_t step = storage_idx_undefined;
         StorageEvent event = StorageEvent::NONE;
     };
 
@@ -34,7 +34,7 @@ namespace tools::common::h5 {
         extern std::optional<size_t>                              extract_state_number        (std::string_view  state_prefix);
         extern std::string                                        extract_state_name          (std::string_view  state_prefix);
         extern std::vector<std::string>                           find_state_prefixes         (const h5pp::File &h5file, AlgorithmType algo_type, std::string_view name);
-        extern std::vector<std::string>                           find_resumable_states       (const h5pp::File & h5file, AlgorithmType algo_type, std::string_view name = "", size_t iter = -1ul);
+        extern std::vector<std::string>                           find_resumable_states       (const h5pp::File & h5file, AlgorithmType algo_type, std::string_view name = "", size_t iter = storage_idx_undefined);
         extern std::vector<MpsInfo>                               find_fully_stored_mps       (const h5pp::File & h5file, std::string_view state_prefix);
         extern std::optional<AlgorithmStop>                       find_algorithm_stop_reason  (const h5pp::File & h5file, std::string_view state_prefix);
         extern bool                                               check_algorithm_can_resume  (const h5pp::File & h5file, std::string_view state_prefix);

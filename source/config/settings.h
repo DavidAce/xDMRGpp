@@ -108,7 +108,7 @@ namespace settings {
             inline double      J1_wdth       = 1.0;                                    /*!< Distribution width for onsite terms */
             inline double      J2_wdth       = 1.0;                                    /*!< Distribution width for nearest-neighbor interactions (st.dev. for normal distribution) */
             inline double      J3_wdth       = 1.0;                                    /*!< Distribution width for next-nearest-neighbor interactions */
-            inline size_t      J2_span       = -1ul;                                   /*!< Maximum allowed range for pairwise interactions, |i-j| <= J2_span. Use -1 for infinite. Note that J2_span + 1 MPOs are used */
+            inline long        J2_span       = -1;                                     /*!< Maximum allowed range for pairwise interactions, |i-j| <= J2_span. Use -1 for infinite. Note that J2_span + 1 MPOs are used */
             inline double      xi_Jcls       = 1.0;                                    /*!< The characteristic length-scale xi of the exponentially decaying interactions: J = exp(-|i-j|/xi_Jcls) * Random(i,j) */
             inline long        spin_dim      = 2;                                      /*!< Spin dimension */
             inline std::string distribution  = "normal";                               /*!< Random distribution used for the l-bit couplings */
