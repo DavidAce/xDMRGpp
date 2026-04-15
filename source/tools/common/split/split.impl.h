@@ -184,11 +184,15 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
         } else if(dR == spin_dims.front()) {
             auto [U3, S1, V3] = svd.schmidt_multisite(multisite_mps, 1, d0, d1, d2, svd_cfg.value());
             auto mps_site     = MpsSite<Scalar>(V3, positions.front(), "B"); // Single site
-            if(static_cast<long>(pos) == center_position + 1) {
-                if(center_position < 0) throw except::logic_error("split: invalid center position {} for single-site B stash", center_position);
+            if(center_position >= 0 and static_cast<long>(pos) == center_position + 1) {
                 mps_site.stash_C(S1, svd.get_truncation_error(), safe_cast<size_t>(center_position)); // The site to the left is a center, S1 belongs to it
             } else {
-                mps_site.stash_S(S1, svd.get_truncation_error(), pos - 1); // The site to the left is a B, S1 belongs to it
+                // center_position == -1 means that the resulting state has no
+                // center at all (all sites are B). In that case there is no
+                // left center site to receive a C stash, so keep these
+                // singular values as a regular edge stash and let them drop at
+                // the boundary after the merge.
+                mps_site.stash_S(S1, svd.get_truncation_error(), pos - 1); // The site to the left is a B, or there is no center site at the edge.
             }
             mps_site.stash_U(U3, pos - 1);
             return {mps_site};
@@ -249,7 +253,7 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
             }
         }
 
-        if(pos == center_position + 1 and S_stash) { // The stash in S becomes the LC for the site on the left
+        if(center_position >= 0 and pos == center_position + 1 and S_stash) { // The stash in S becomes the LC for the site on the left
             mps.stash_C(S_stash->data, S_stash->error, safe_cast<size_t>(center_position));
             S_stash.reset();
         } else if(U_stash) {
