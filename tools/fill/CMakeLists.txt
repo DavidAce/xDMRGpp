@@ -12,8 +12,8 @@ add_executable(fill EXCLUDE_FROM_ALL
 target_include_directories(fill PRIVATE source)
 
 target_link_libraries(fill PRIVATE
-                      xdmrg++-debug
-                      xdmrg++-stacktrace
+                      xdmrg++-debug-info
+                      xdmrg++-debug-stacktrace
                       xdmrg++-tools-common-log
                       xdmrg++-tools-finite-h5
                       xdmrg++-tools-finite-measure
@@ -34,5 +34,4 @@ target_link_libraries(fill PRIVATE MPI::MPI_CXX)
 # Print summary of CMake configuration
 include(${CMAKE_SOURCE_DIR}/cmake/PrintTargetInfo.cmake)
 print_project_summary(fill)
-
 

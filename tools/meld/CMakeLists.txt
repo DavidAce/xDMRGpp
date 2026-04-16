@@ -22,8 +22,8 @@ add_executable(meld
 target_include_directories(meld PRIVATE source)
 
 target_link_libraries(meld PRIVATE
-                      xdmrg++-debug
-                      xdmrg++-stacktrace
+                      xdmrg++-debug-info
+                      xdmrg++-debug-stacktrace
                       xdmrg++-tensors-mpo-h5tb # To read the hamiltonian table
                       xdmrg++-qm-lbit-h5tb  # To read the circuit table
                       xdmrg++-tid)
@@ -42,6 +42,5 @@ target_link_libraries(meld PUBLIC Backward::Backward)
 # Print summary of CMake configuration
 include(${CMAKE_SOURCE_DIR}/cmake/PrintTargetInfo.cmake)
 print_project_summary(meld)
-
 
 

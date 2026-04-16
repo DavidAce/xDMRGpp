@@ -5,7 +5,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
                       xdmrg++-config
                       xdmrg++-tid
                       xdmrg++-math
-                      xdmrg++-debug
+                      xdmrg++-debug-info
                       xdmrg++-tools-common-log
                       xdmrg++-tools-common-contraction
                       )

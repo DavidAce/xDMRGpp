@@ -1,7 +1,14 @@
-add_source_target(xdmrg++-debug
+add_source_target(xdmrg++-debug-info
         TARGET_SOURCES
 #        exceptions.cxx
         info.cpp
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        )
+
+add_source_target(xdmrg++-debug-affinity
+        TARGET_SOURCES
+        affinity.cpp
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         )
@@ -12,7 +19,7 @@ if(DW_LIBRARY)
     set(BACKWARD_REDEFINE_DW BACKWARD_REDEFINE_DW=1)
 endif()
 
-add_source_target(xdmrg++-stacktrace
+add_source_target(xdmrg++-debug-stacktrace
         TARGET_SOURCES
         stacktrace.cpp
         OBJECT_LINK_LIBRARIES

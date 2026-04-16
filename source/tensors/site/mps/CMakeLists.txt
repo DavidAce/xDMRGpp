@@ -5,7 +5,7 @@ add_source_target(xdmrg++-tensors-mps
                   xdmrg++-deps xdmrg++-flags
                   INTERFACE_LINK_LIBRARIES
                   xdmrg++-tid
-                  xdmrg++-debug
+                  xdmrg++-debug-info
                   xdmrg++-math-tenx
                   xdmrg++-math-hash
                   xdmrg++-tools-common-contraction

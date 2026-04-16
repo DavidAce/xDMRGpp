@@ -15,7 +15,7 @@ add_source_target(xdmrg++-tensors-mpo
                   INTERFACE_LINK_LIBRARIES
                   xdmrg++-tensors-mpo-h5tb
                   xdmrg++-config
-                  xdmrg++-debug
+                  xdmrg++-debug-info
                   xdmrg++-math-hash
                   xdmrg++-math-rnd
                   xdmrg++-math-tenx

@@ -10,8 +10,8 @@ add_executable(pert EXCLUDE_FROM_ALL
 target_include_directories(pert PRIVATE source)
 
 target_link_libraries(pert PRIVATE
-                      xdmrg++-debug
-                      xdmrg++-stacktrace
+                      xdmrg++-debug-info
+                      xdmrg++-debug-stacktrace
                       xdmrg++-tools-common-log
                       xdmrg++-tools-finite-h5
                       xdmrg++-tools-finite-measure
@@ -31,5 +31,4 @@ target_link_libraries(pert PUBLIC Backward::Backward)
 # Print summary of CMake configuration
 include(${CMAKE_SOURCE_DIR}/cmake/PrintTargetInfo.cmake)
 print_project_summary(pert)
-
 

@@ -2,6 +2,7 @@
 #include "config/parse.h"
 #include "config/settings.h"
 #include "config/threading.h"
+#include "debug/affinity.h"
 #include "debug/info.h"
 #include "debug/stacktrace.h"
 #include "env/environment.h"
@@ -35,6 +36,9 @@ int main(int argc, char *argv[]) {
 
     // Set up the number of openmp and std threads for Eigen Tensor
     settings::configure_threads();
+
+    // Sanity check affinity in this environment (warn on pathological affinity)
+    debug::affinity::log_sanity();
 
     // Seed with random::device initially (This also takes care of srand used by Eigen)
     // This is to make reproducible simulations

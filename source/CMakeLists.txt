@@ -14,8 +14,9 @@ target_link_libraries(xdmrg++-main PUBLIC xdmrg++-deps xdmrg++-flags)
 target_link_libraries(xdmrg++-main INTERFACE
         xdmrg++-algorithms
         xdmrg++-config
-        xdmrg++-debug
-        xdmrg++-stacktrace
+        xdmrg++-debug-affinity
+        xdmrg++-debug-info
+        xdmrg++-debug-stacktrace
         xdmrg++-io
         xdmrg++-math
         xdmrg++-qm

@@ -1,2 +1,2 @@
 set(test_inc)
-set(test_lnk xdmrg++-debug)
+set(test_lnk xdmrg++-debug-info)

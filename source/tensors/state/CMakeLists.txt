@@ -9,7 +9,7 @@ add_source_target(xdmrg++-tensors-state-finite
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        xdmrg++-debug
+        xdmrg++-debug-info
         xdmrg++-tensors-mps
         xdmrg++-math-tenx
         xdmrg++-tools-finite-measure
@@ -27,7 +27,7 @@ add_source_target(xdmrg++-tensors-state-infinite
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        xdmrg++-debug
+        xdmrg++-debug-info
         xdmrg++-math-tenx
         xdmrg++-tensors-mps
         xdmrg++-tools-common-contraction

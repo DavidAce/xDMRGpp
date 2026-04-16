@@ -13,8 +13,8 @@ add_source_target(xdmrg++-algorithms-base
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
         xdmrg++-config
-        xdmrg++-debug
-        xdmrg++-stacktrace
+        xdmrg++-debug-info
+        xdmrg++-debug-stacktrace
         xdmrg++-algorithms-status
         xdmrg++-tools-common-h5
         xdmrg++-tools-common-log
@@ -29,8 +29,8 @@ add_source_target(xdmrg++-algorithms-finite
         INTERFACE_LINK_LIBRARIES
         xdmrg++-tid
         xdmrg++-config
-        xdmrg++-debug
-        xdmrg++-stacktrace
+        xdmrg++-debug-info
+        xdmrg++-debug-stacktrace
         xdmrg++-qm-spin
         xdmrg++-tensors-state-finite
         xdmrg++-tensors-model-finite
@@ -54,7 +54,7 @@ add_source_target(xdmrg++-algorithms-infinite
         INTERFACE_LINK_LIBRARIES
         xdmrg++-tid
         xdmrg++-config
-        xdmrg++-debug
+        xdmrg++-debug-info
         xdmrg++-algorithms-status
         xdmrg++-algorithms-base
         xdmrg++-tensors-state-finite
