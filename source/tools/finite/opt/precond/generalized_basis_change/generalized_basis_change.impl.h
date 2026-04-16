@@ -29,6 +29,20 @@ namespace settings {
 using namespace tools::finite::opt::precond::generalized;
 using namespace tools::finite::opt::precond::common;
 
+namespace {
+    template<typename Scalar>
+    using MatrixMapConst = Eigen::Map<const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>>;
+
+    template<typename Scalar>
+    [[nodiscard]] MatrixMapConst<Scalar> map_rank3_slice(const Eigen::Tensor<Scalar, 3> &tensor, Eigen::Index idx) {
+        assert(idx >= 0);
+        assert(idx < tensor.dimension(2));
+        const auto rows = tensor.dimension(0);
+        const auto cols = tensor.dimension(1);
+        return {tensor.data() + idx * rows * cols, rows, cols};
+    }
+}
+
 template<typename Scalar> env_pair<const EnvEne<Scalar> &> tools::finite::opt::precond::generalized::GeneralizedBasisChange<Scalar>::get_enve_pair() const {
     return {bc_enveL, bc_enveR};
 }
@@ -124,9 +138,16 @@ auto GeneralizedBasisChange<Scalar>::get_env_weights(const Eigen::Tensor<Scalar,
             Eigen::Tensor<Scalar, 1> envL_traced = envL.trace(std::array<Eigen::Index, 2>{0, 1});
             Eigen::Tensor<Scalar, 1> envR_traced = envR.trace(std::array<Eigen::Index, 2>{0, 1});
 
-            // Contract the traced mpo with the traced environments to get the weights
-            wL = envR_traced.contract(mpo_traced, tenx::idx({0}, {1}));
-            wR = envL_traced.contract(mpo_traced, tenx::idx({0}, {0}));
+            // These are plain matrix-vector products, but spelling them as tensor
+            // contractions triggers GCC 15 false positives inside Eigen.
+            auto mpo_map        = MapConstMatType(mpo_traced.data(), mpo_traced.dimension(0), mpo_traced.dimension(1));
+            auto envL_traced_map = MapConstVecType(envL_traced.data(), envL_traced.size());
+            auto envR_traced_map = MapConstVecType(envR_traced.data(), envR_traced.size());
+            auto wL_map         = Eigen::Map<VectorType>(wL.data(), wL.size());
+            auto wR_map         = Eigen::Map<VectorType>(wR.data(), wR.size());
+
+            wL_map.noalias() = mpo_map * envR_traced_map;
+            wR_map.noalias() = mpo_map.transpose() * envL_traced_map;
 
             break;
         }
@@ -369,11 +390,7 @@ EtaStats<Scalar> compute_eta(const Eigen::Tensor<Scalar, 3>                     
 
     for(Eigen::Index mu = 0; mu < m; ++mu) {
         // Extract A = env2L(:,:,μ)
-        // Use your helper if available; else map via chip:
-        // A = tenx::MatrixCast(env2L.chip(mu, 2), n, n);  // if you have this
-        // Portable fallback:
-        Eigen::Tensor<Scalar, 2> slice = env.chip(mu, 2); // rank-2 tensor view [n,n]
-        auto                     A     = Eigen::Map<const Matrix>(slice.data(), n, n);
+        auto A = map_rank3_slice(env, mu);
 
         // Transform: B = U_L^H * A * U_L
         Matrix B = U.adjoint() * A * U;
@@ -550,9 +567,8 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
                 assert(w.size() == env_zip.dimension(2));
                 D.setZero(env_zip.dimension(0));
                 for(Eigen::Index b = 0; b < env_zip.dimension(2); ++b) {
-                    auto env2_b      = Eigen::Tensor<Scalar, 2>(env_zip.chip(b, 2));
-                    auto env2_b_map  = MapMatType(env2_b.data(), env2_b.dimension(0), env2_b.dimension(1));
-                    D               += (w(b) * (U.adjoint() * env2_b_map * U).diagonal()).real();
+                    auto env2_b_map = map_rank3_slice(env_zip, b);
+                    D += (w(b) * (U.adjoint() * env2_b_map * U).diagonal()).real();
                 }
                 break;
             }
@@ -626,8 +642,7 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms([[maybe_unused]]
             assert(w2.size() == env2.dimension(2));
             D.setZero(env2.dimension(0));
             for(Eigen::Index b = 0; b < env2.dimension(2); ++b) {
-                auto env2_b     = Eigen::Tensor<Scalar, 2>(env2.chip(b, 2));
-                auto env2_b_map = MapMatType(env2_b.data(), env2_b.dimension(0), env2_b.dimension(1));
+                auto env2_b_map = map_rank3_slice(env2, b);
                 // D += (w2(b) * (U.adjoint() * matrix_norm(A_b) * U).diagonal()).real();
                 // if(!is_hermitian_matrix(A_b)) continue;
                 // RealScalar tr = std::abs(A_b.trace());
