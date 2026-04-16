@@ -188,7 +188,6 @@ constexpr std::array<long, rank> MatVecMPOS<Scalar>::get_offset(long flatindex, 
 
 template<typename Scalar>
 std::vector<long> MatVecMPOS<Scalar>::get_offset(long flatindex, size_t rank, const std::vector<long> &dimensions) const {
-    assert(rank >= 0);
     auto              rank_ul = static_cast<size_t>(rank);
     std::vector<long> indices(rank_ul);
     for(size_t i = 0; i < rank; i++) {
