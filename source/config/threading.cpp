@@ -1,5 +1,6 @@
 #include "threading.h"
 #include "blas_backend.h"
+#include "cuda.h"
 #include "debug/exceptions.h"
 #include "math/tenx/threads.h"
 #include "settings.h"
@@ -72,6 +73,7 @@ namespace settings {
             tools::log->info("Detected environment variable: OPENBLAS_CORETYPE={}", envcoretype.value());
         config::blas::set_num_threads(static_cast<int>(settings::threading::num_threads));
         tools::log->info("{}", config::blas::description());
+        config::cuda::initialize();
         if(settings::threading::show_threads) exit(0);
     }
 }

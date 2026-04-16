@@ -21,14 +21,3 @@ template void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Sc
                                                                 const std::vector<Eigen::Tensor<Scalar, 4>> &mpo,  //
                                                                 const x2::Tensor<Scalar, 3>                 &envL, //
                                                                 const x2::Tensor<Scalar, 3>                 &envR);
-
-template void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3>       &res,  //
-                                                                const Eigen::Tensor<Scalar, 3> &mps,  //
-                                                                const Eigen::Tensor<Scalar, 4> &mpo,  //
-                                                                const EnvEne<Scalar>           &envL, //
-                                                                const EnvEne<Scalar>           &envR);
-template void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3>       &res,  //
-                                                                const Eigen::Tensor<Scalar, 3> &mps,  //
-                                                                const Eigen::Tensor<Scalar, 4> &mpo,  //
-                                                                const EnvVar<Scalar>           &envL, //
-                                                                const EnvVar<Scalar>           &envR);

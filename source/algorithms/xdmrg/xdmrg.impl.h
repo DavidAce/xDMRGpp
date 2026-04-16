@@ -328,7 +328,7 @@ void xdmrg<Scalar>::run_algorithm() {
     auto t_run       = tid::tic_scope("run");
     status.algo_stop = AlgorithmStop::NONE;
 
-    auto get_backend = [&]() {
+    auto get_precision = [&]() {
         auto       position = tensors.template get_position<long>();
         RealScalar h2norm   = H_norm_estimate * H_norm_estimate;
         RealScalar quot     = std::numeric_limits<RealScalar>::quiet_NaN();
@@ -339,22 +339,22 @@ void xdmrg<Scalar>::run_algorithm() {
             quot = vh2v / h2norm; // Assume the state is normalized (vv = 1)
         }
         if(quot < eps * 1000 or !std::isfinite(vh2v)) {
-            tools::log->info("Switched to X2 backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", vh2v, h2norm, quot);
-            return ContractionBackend::X2;
+            tools::log->info("Switched to X2 precision: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", vh2v, h2norm, quot);
+            return ContractionPrecision::X2;
         } else {
             tools::log->debug("Selected TBLIS backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} > 1000 * eps", vh2v, h2norm, quot);
-            return ContractionBackend::TBLIS;
+            return ContractionPrecision::SAME;
         }
     };
 
     while(true) {
-        auto backend = get_backend();
-        auto h1info  = SetH1MvInfo(ContractionBackend::X2);
-        auto h2info  = SetH2MvInfo(ContractionBackend::X2);
-        auto envinfo = SetEnvInfo(ContractionBackend::X2);
+        auto precision = get_precision();
+        auto h1info    = SetH1MvInfo(precision);
+        auto h2info    = SetH2MvInfo(precision);
+        auto envinfo   = SetEnvInfo(precision);
 
-        tools::log->trace("Starting step {}, iter {}, pos {}, dir {}, backend:{}", status.step, status.iter, status.position, status.direction,
-                          enum2sv(backend));
+        tools::log->trace("Starting step {}, iter {}, pos {}, dir {}, precision:{}", status.step, status.iter, status.position, status.direction,
+                          enum2sv(precision));
         // Apply end-of-half-sweep actions
         // Updating bond dimension must go first since it decides based on truncation error, but a projection+normalize resets truncation.
         update_bond_dimension_limit();   // Updates the bond dimension if the state precision is being limited by bond dimension
@@ -399,7 +399,7 @@ void xdmrg<Scalar>::update_state() {
     {
         auto h1info      = SetH1MvInfo(ContractionBackend::TBLIS);
         auto h2info      = SetH2MvInfo(ContractionBackend::TBLIS);
-        auto envinfo     = SetEnvInfo(ContractionBackend::X2);
+        auto envinfo     = SetEnvInfo(ContractionPrecision::X2);
         auto bexp_result = expand_bonds(BondExpansionOrder::PREOPT);
     }
 
@@ -538,9 +538,9 @@ void xdmrg<Scalar>::update_state() {
             using Scalar128     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalar128>, RealScalar128>;
 
             auto tensorsL = tensors.template cast<ScalarL>();
-            auto envi     = SetEnvInfo(ContractionBackend::X2);
-            auto mv1i     = SetH1MvInfo(ContractionBackend::X2);
-            auto mv2i     = SetH2MvInfo(ContractionBackend::X2);
+            auto envi     = SetEnvInfo(ContractionPrecision::X2);
+            auto mv1i     = SetH1MvInfo(ContractionPrecision::X2);
+            auto mv2i     = SetH2MvInfo(ContractionPrecision::X2);
             tensorsL.get_model().build_mpo();
             tensorsL.get_model().build_mpo_squared();
             tensorsL.get_edges().eject_edges_all();
@@ -712,8 +712,8 @@ void xdmrg<Scalar>::update_state() {
                 tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
             }
             {
-                auto h1info = SetH1MvInfo(ContractionBackend::X2, mpo1.dimensions());
-                auto h2info = SetH2MvInfo(ContractionBackend::X2, mpo2.dimensions());
+                auto h1info = SetH1MvInfo(ContractionPrecision::X2, mpo1.dimensions());
+                auto h2info = SetH2MvInfo(ContractionPrecision::X2, mpo2.dimensions());
                 tools::log->info("contracting with x2");
                 tools::common::contraction::matrix_vector_product(H1tx2, mps, mpo1, enve.L, enve.R);
                 tools::common::contraction::matrix_vector_product(H2tx2, mps, mpo2, envv.L, envv.R);
@@ -808,8 +808,8 @@ void xdmrg<Scalar>::update_state() {
                 tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
             }
             {
-                auto h1info = SetH1MvInfo(ContractionBackend::X2, mpo1.dimensions());
-                auto h2info = SetH2MvInfo(ContractionBackend::X2, mpo2.dimensions());
+                auto h1info = SetH1MvInfo(ContractionPrecision::X2, mpo1.dimensions());
+                auto h2info = SetH2MvInfo(ContractionPrecision::X2, mpo2.dimensions());
                 tools::log->info("contracting with x2");
                 tools::common::contraction::matrix_vector_product(H1tx2, mps, mpo1, enve.L, enve.R);
                 tools::common::contraction::matrix_vector_product(H2tx2, mps, mpo2, envv.L, envv.R);

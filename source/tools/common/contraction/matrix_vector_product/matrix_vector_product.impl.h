@@ -1,12 +1,14 @@
 #pragma once
+#include "config/cuda.h"
+#include "config/settings.h"
 #include "../contraction_policy.h"
 #include "../contraction_tblis.h"
+#include "../contraction_cutensor.h"
 #include "../matrix_vector_product.h"
 #include "math/tenx.h"
 #include "math/x2/gemm.h"
-#include "tensors/site/env/EnvEne.h"
-#include "tensors/site/env/EnvVar.h"
 #include "tid/tid.h"
+#include <initializer_list>
 #if defined(DMRG_ENABLE_TBLIS)
     #include <tblis.h>
     #include <tblis_config.h>
@@ -163,7 +165,7 @@ namespace tools::common::contraction::internal {
         info.ST3                = get_norm(res.data(), res.dimensions());
         auto Smax               = std::max({info.mps_norm, info.mpo_norm, info.envL_norm, info.envR_norm, info.ST1, info.ST2});
         info.cancelation_factor = Smax / info.ST3;
-        tools::log->info("Contracted with eigen: cf: {:.3e} | type {}", info.cancelation_factor, sfinae::type_name<Scalar>());
+        // tools::log->info("Contracted with eigen: cf: {:.3e} | type {}", info.cancelation_factor, sfinae::type_name<Scalar>());
         return info;
     }
 
@@ -276,6 +278,30 @@ namespace tools::common::contraction::internal {
                              info.envL_norm, info.envR_norm, info.ST1, info.ST2, info.ST3, info.cancelation_factor);
         return info;
     }
+
+    template<typename Scalar>
+    void fill_cutensor_stats(StatsMv<Scalar> &info, const auto &res, const auto &mps, const auto &mpo, const auto &envL, const auto &envR) {
+        info.contract_left = false;
+        info.mps_norm      = get_norm(mps.data(), mps.dimensions());
+        info.mpo_norm      = get_norm(mpo.data(), mpo.dimensions());
+        info.envL_norm     = get_norm(envL.data(), envL.dimensions());
+        info.envR_norm     = get_norm(envR.data(), envR.dimensions());
+        info.ST3           = get_norm(res.data(), res.dimensions());
+    }
+
+    inline ContractionBackend get_matvec_backend(const std::array<long, 4> &mpo_dims, const InfoH1Mv &h1info, const InfoH2Mv &h2info) {
+        if(mpo_dims == h1info.H1_local_dims) return h1info.backend;
+        if(mpo_dims == h2info.H2_local_dims) return h2info.backend;
+        return ContractionBackend::AUTO;
+    }
+
+    inline ContractionPrecision get_matvec_precision(const std::array<long, 4> &mpo_dims, const InfoH1Mv &h1info, const InfoH2Mv &h2info) {
+        if(mpo_dims == h1info.H1_local_dims) return h1info.precision;
+        if(mpo_dims == h2info.H2_local_dims) return h2info.precision;
+        return ContractionPrecision::X2_AS_NEEDED;
+    }
+
+    inline bool use_x2_environment(ContractionPrecision precision) { return precision == ContractionPrecision::X2; }
 }
 
 template<typename Scalar>
@@ -309,35 +335,77 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
     internal::StatsMv<Scalar>    info;
     [[maybe_unused]] std::string msg;
 
-    const internal::InfoH1Mv h1info         = internal::get_info_h1mv();
-    const internal::InfoH2Mv h2info         = internal::get_info_h2mv();
-    ContractionBackend       backend_active = ContractionBackend::AUTO;
+    const internal::InfoH1Mv h1info            = internal::get_info_h1mv();
+    const internal::InfoH2Mv h2info            = internal::get_info_h2mv();
+    const ContractionBackend backend_active    = internal::get_matvec_backend(mpo_dims, h1info, h2info);
+    const ContractionPrecision precision_active = internal::get_matvec_precision(mpo_dims, h1info, h2info);
 
-    if(mpo_dims == h1info.H1_local_dims)
-        backend_active = h1info.backend;
-    else if(mpo_dims == h2info.H2_local_dims)
-        backend_active = h2info.backend;
-
-    switch(backend_active) {
-        case ContractionBackend::X2: {
-            info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
-            // info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
-
-            // TODO: compare with eigen
-            break;
-        }
-        case ContractionBackend::EIGEN: info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR); break;
-        case ContractionBackend::TBLIS: {
-            if constexpr(use_tblis) {
-                info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
-                break;
-            } else {
-                tools::log->debug("matrix_vector_product: Detected ContractionBackend::TBLIS, but use_tblis==false. Switching to Eigen.");
+    auto try_backend = [&](ContractionBackend backend) -> bool {
+        switch(backend) {
+            case ContractionBackend::EIGEN:
                 info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
-                break;
-            }
+                return true;
+            case ContractionBackend::TBLIS:
+                if constexpr(use_tblis) {
+                    info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
+                    return true;
+                } else {
+                    tools::log->debug("matrix_vector_product: TBLIS is unavailable for scalar type {}. Skipping.", sfinae::type_name<Scalar>());
+                    return false;
+                }
+            case ContractionBackend::CUTENSOR:
+                if constexpr(internal::cutensor_supported_v<Scalar>) {
+                    if(not config::cuda::available()) return false;
+
+                    if(not internal::cutensor_can_fit<Scalar>(mps, mpo, envL, envR)) {
+                        if(backend_active == ContractionBackend::CUTENSOR)
+                            tools::log->debug("matrix_vector_product: CUTENSOR requested, but the current operation does not fit comfortably on the active GPU. "
+                                              "Trying the CPU backends.");
+                        return false;
+                    }
+                    try {
+                        internal::contract_with_cutensor<Scalar>(res, mps, mpo, envL, envR);
+                        internal::fill_cutensor_stats(info, res, mps, mpo, envL, envR);
+                        return true;
+                    } catch(const std::exception &ex) {
+                        tools::log->warn("matrix_vector_product: {} failed: {}. Trying the next backend.", enum2sv(backend), ex.what());
+                        return false;
+                    }
+                } else {
+                    tools::log->debug("matrix_vector_product: cuTENSOR is unavailable for scalar type {}. Skipping.", sfinae::type_name<Scalar>());
+                    return false;
+                }
+            case ContractionBackend::AUTO: return false;
+            default: return false;
         }
-        case ContractionBackend::FP80: {
+    };
+
+    auto run_in_order = [&](std::initializer_list<ContractionBackend> order) {
+        for(auto backend : order)
+            if(try_backend(backend)) return true;
+        return false;
+    };
+
+    auto run_backend_policy = [&]() -> bool {
+        switch(backend_active) {
+            case ContractionBackend::EIGEN: return run_in_order({ContractionBackend::EIGEN});
+            case ContractionBackend::TBLIS: return run_in_order({ContractionBackend::TBLIS, ContractionBackend::EIGEN});
+            case ContractionBackend::CUTENSOR: return run_in_order({ContractionBackend::CUTENSOR, ContractionBackend::TBLIS, ContractionBackend::EIGEN});
+            case ContractionBackend::AUTO:
+                if(mps.size() >= static_cast<Eigen::Index>(settings::cuda::gpu_switchsize) and try_backend(ContractionBackend::CUTENSOR)) return true;
+                return run_in_order({ContractionBackend::TBLIS, ContractionBackend::EIGEN});
+            default: return false;
+        }
+    };
+
+    switch(precision_active) {
+        case ContractionPrecision::SAME:
+            if(not run_backend_policy()) throw std::runtime_error("matrix_vector_product: No supported contraction backend is available");
+            break;
+        case ContractionPrecision::X2:
+            info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+            break;
+        case ContractionPrecision::FP80: {
             using ScalarL = std::conditional_t<std::is_floating_point_v<Scalar>, long double, std::complex<long double>>;
             Eigen::Tensor<ScalarL, 3> res_fp(mps.dimensions());
             Eigen::Tensor<ScalarL, 3> mps_fp  = mps.template cast<ScalarL>();
@@ -348,13 +416,13 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
             res                               = res_fp.template cast<Scalar>();
             break;
         }
-        case ContractionBackend::AUTO: {
+        case ContractionPrecision::X2_AS_NEEDED: {
             auto get_op_norm = [&]() -> RealScalar {
                 using namespace internal;
                 if(mpo_dims == h1info.H1_local_dims and std::isfinite(h1info.H1_local_norm)) return static_cast<RealScalar>(h1info.H1_local_norm);
                 if(mpo_dims == h2info.H2_local_dims and std::isfinite(h2info.H2_local_norm)) return static_cast<RealScalar>(h2info.H2_local_norm);
-                if constexpr(settings::debug_contraction) { tools::log->debug("matrix_vector_product: no registered norms for local H1 or H2: using envs"); }
-                auto env_max_norm = std::max({get_norm(envL.data(), envL.dimensions()), get_norm(envR.data(), envR.dimensions())});
+                if constexpr(settings::debug_contraction) tools::log->debug("matrix_vector_product: no registered norms for local H1 or H2: using envs");
+                auto env_max_norm = std::max({internal::get_norm(envL.data(), envL.dimensions()), internal::get_norm(envR.data(), envR.dimensions())});
                 return env_max_norm;
             };
 
@@ -382,8 +450,9 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
                 resv.setZero();
                 return;
             }
+
             if(use_x2) {
-                info                    = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+                info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
                 const Scalar     xAx    = mpsv.dot(resv);
                 const RealScalar denom  = std::abs(xAx);
                 const RealScalar Axnorm = resv.norm();
@@ -394,14 +463,10 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
                     tools::log->debug("Switched matvec to x2:  opnorm={:.4e} xnorm={:.4e} q0={:.4e} q2={:.4e} q4={:.4e} q0Tol {:.4e} q2Tol {:.4e}", opnorm,
                                       xnorm, q0, q2, q4, q0Tol, q2Tol);
             } else {
-                if constexpr(use_tblis) {
-                    info = internal::contract_with_tblis<Scalar>(res, mps, mpo, envL, envR);
-                } else {
-                    info = internal::contract_with_eigen<Scalar>(res, mps, mpo, envL, envR);
-                }
+                if(not run_backend_policy()) throw std::runtime_error("matrix_vector_product: No supported contraction backend is available");
 
                 // Decide redo: If |A|/(xAx/xx) is too large, there is catastrophic cancellation in the matvec.
-                // Then we better switch to ContractionBackend::X2 (more precise) if the backend is AUTO.
+                // Then we better switch to x2 if the precision policy allows redo.
                 const Scalar     xAx    = mpsv.dot(resv);
                 const RealScalar denom  = std::abs(xAx);
                 const RealScalar Axnorm = resv.norm();
@@ -433,7 +498,7 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
             }
             break;
         }
-        default: throw std::runtime_error("matrix_vector_product: Unknown ContractionBackend");
+        default: throw std::runtime_error("matrix_vector_product: Unknown ContractionPrecision");
     }
 
     if constexpr(settings::debug_contraction)
@@ -457,16 +522,11 @@ void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3> 
     assert(envR.dimension(2) == mpo.dimension(1));
     assert(mpo.dimension(3) == mps.dimension(0));
 
-    const internal::InfoH1Mv h1info         = internal::get_info_h1mv();
-    const internal::InfoH2Mv h2info         = internal::get_info_h2mv();
-    ContractionBackend       backend_active = ContractionBackend::AUTO;
+    const internal::InfoH1Mv         h1info            = internal::get_info_h1mv();
+    const internal::InfoH2Mv         h2info            = internal::get_info_h2mv();
+    const ContractionPrecision precision_active = internal::get_matvec_precision(mpo.dimensions(), h1info, h2info);
 
-    if(mpo.dimensions() == h1info.H1_local_dims)
-        backend_active = h1info.backend;
-    else if(mpo.dimensions() == h2info.H2_local_dims)
-        backend_active = h2info.backend;
-
-    if(backend_active == ContractionBackend::X2) {
+    if(internal::use_x2_environment(precision_active)) {
         internal::StatsMv<Scalar>    info;
         [[maybe_unused]] std::string msg;
         info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
@@ -476,42 +536,6 @@ void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3> 
                                  msg);
     } else {
         matrix_vector_product(res, mps, mpo, envL.to_EigenTensor(), envR.to_EigenTensor());
-    }
-}
-
-template<typename Scalar>
-requires(sfinae::is_any_v<typename Eigen::NumTraits<Scalar>::Real, fp32, fp64, fp128>)
-void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3>       &res,  //
-                                                       const Eigen::Tensor<Scalar, 3> &mps,  //
-                                                       const Eigen::Tensor<Scalar, 4> &mpo,  //
-                                                       const EnvEne<Scalar>           &envL, //
-                                                       const EnvEne<Scalar>           &envR) {
-    const internal::InfoH1Mv h1info         = internal::get_info_h1mv();
-    ContractionBackend       backend_active = ContractionBackend::AUTO;
-
-    if(mpo.dimensions() == h1info.H1_local_dims) backend_active = h1info.backend;
-    if(backend_active == ContractionBackend::X2) {
-        matrix_vector_product(res, mps, mpo, envL.template get_blkx2_as<Scalar>(), envR.template get_blkx2_as<Scalar>());
-    } else {
-        matrix_vector_product(res, mps, mpo, envL.template get_block_as<Scalar>(), envR.template get_block_as<Scalar>());
-    }
-}
-
-template<typename Scalar>
-requires(sfinae::is_any_v<typename Eigen::NumTraits<Scalar>::Real, fp32, fp64, fp128>)
-void tools::common::contraction::matrix_vector_product(Eigen::Tensor<Scalar, 3>       &res,  //
-                                                       const Eigen::Tensor<Scalar, 3> &mps,  //
-                                                       const Eigen::Tensor<Scalar, 4> &mpo,  //
-                                                       const EnvVar<Scalar>           &envL, //
-                                                       const EnvVar<Scalar>           &envR) {
-    const internal::InfoH2Mv h2info         = internal::get_info_h2mv();
-    ContractionBackend       backend_active = ContractionBackend::AUTO;
-
-    if(mpo.dimensions() == h2info.H2_local_dims) backend_active = h2info.backend;
-    if(backend_active == ContractionBackend::X2) {
-        matrix_vector_product(res, mps, mpo, envL.template get_blkx2_as<Scalar>(), envR.template get_blkx2_as<Scalar>());
-    } else {
-        matrix_vector_product(res, mps, mpo, envL.template get_block_as<Scalar>(), envR.template get_block_as<Scalar>());
     }
 }
 

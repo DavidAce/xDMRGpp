@@ -24,10 +24,10 @@ namespace tools::common::contraction::internal {
     static std::atomic<double> g_H1_global_norm{std::numeric_limits<double>::quiet_NaN()};
     static std::atomic<double> g_H2_global_norm{std::numeric_limits<double>::quiet_NaN()};
 
-    void set_global_norm_h1mv(double v) { g_H1_global_norm.store(v, std::memory_order_release); }
-    void set_global_norm_h2mv(double v) { g_H2_global_norm.store(v, std::memory_order_release); }
+    void set_H1_global_norm(double v) { g_H1_global_norm.store(v, std::memory_order_release); }
+    void set_H2_global_norm(double v) { g_H2_global_norm.store(v, std::memory_order_release); }
 
-    double get_global_norm_h1mv() { return g_H1_global_norm.load(std::memory_order_acquire); }
-    double get_global_norm_h2mv() { return g_H2_global_norm.load(std::memory_order_acquire); }
+    double get_H1_global_norm() { return g_H1_global_norm.load(std::memory_order_acquire); }
+    double get_H2_global_norm() { return g_H2_global_norm.load(std::memory_order_acquire); }
 
-}
+} 

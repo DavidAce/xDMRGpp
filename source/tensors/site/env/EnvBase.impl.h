@@ -358,7 +358,7 @@ void EnvBase<Scalar>::set_edge_dims(const Eigen::Tensor<Scalar, 3> &MPS, const E
     has_nan_cached = std::nullopt;
     *blkx2         = newblock;
     auto envinfo   = tools::common::contraction::internal::get_info_env();
-    if(envinfo.backend == ContractionBackend::X2) { blkx2->renorm(); }
+    if(envinfo.precision == ContractionPrecision::X2) { blkx2->renorm(); }
 }
 
 template<typename Scalar>

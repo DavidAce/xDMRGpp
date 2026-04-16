@@ -19,6 +19,7 @@ option(DMRG_ENABLE_CX32             "Build explicit instantiations for cx32"    
 option(DMRG_ENABLE_CX64             "Build explicit instantiations for cx64"                            ON)
 option(DMRG_ENABLE_CX128            "Build explicit instantiations for cx128 aliases"                   ON)
 option(DMRG_ENABLE_TBLIS            "Use TBLIS for faster tensor contractions (FP64) instead of Eigen3" FALSE)
+option(DMRG_ENABLE_CUTENSOR         "Use cuTENSOR for selected tensor contractions on CUDA GPUs"       FALSE)
 option(DMRG_ENABLE_TESTS            "Enable unit testing with ctest"                                    FALSE)
 option(DMRG_BUILD_EXAMPLES          "Build examples"                                                    FALSE)
 option(DMRG_BUILD_TOOLS             "Build tools"                                                       FALSE)

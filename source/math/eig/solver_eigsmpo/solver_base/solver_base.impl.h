@@ -1855,8 +1855,8 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &H1Y
 
     // Compress or randomize
     handle_masked_columns();
-    auto h1info = SetH1MvInfo(ContractionBackend::X2); // Use high-precision matvec
-    auto h2info = SetH2MvInfo(ContractionBackend::X2); // Use high-precision matvec
+    auto h1info = SetH1MvInfo(ContractionPrecision::X2); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionPrecision::X2); // Use high-precision matvec
     H1Y         = MultH1(Y);
     H2Y         = MultH2(Y);
     assert_l2_orthonormal(Y, m);
@@ -1969,8 +1969,8 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
 
     // Compress or randomize
     handle_masked_columns();
-    auto h1info = SetH1MvInfo(ContractionBackend::X2); // Use high-precision matvec
-    auto h2info = SetH2MvInfo(ContractionBackend::X2); // Use high-precision matvec
+    auto h1info = SetH1MvInfo(ContractionPrecision::X2); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionPrecision::X2); // Use high-precision matvec
     HY          = MultH(Y);
     assert_l2_orthonormal(Y, m);
 }
@@ -2073,8 +2073,8 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType
     if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
-    auto h1info                = SetH1MvInfo(ContractionBackend::X2); // Use more accurate matvec
-    auto h2info                = SetH2MvInfo(ContractionBackend::X2); // Use more accurate matvec
+    auto h1info                = SetH1MvInfo(ContractionPrecision::X2); // Use more accurate matvec
+    auto h2info                = SetH2MvInfo(ContractionPrecision::X2); // Use more accurate matvec
     auto handle_masked_columns = [&]() {
         if(m.mask.sum() != Y.cols()) {
             MatrixType GI = m.Gram - MatrixType::Identity(m.Gram.rows(), m.Gram.cols());
@@ -2363,8 +2363,8 @@ void solver_base<Scalar>::block_h2_orthonormalize_eig(MatrixType &Y, MatrixType 
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
     assert(m.maskPolicy == MaskPolicy::COMPRESS); // This operation does not preserve column order
 
-    auto h1info = SetH1MvInfo(ContractionBackend::X2); // Use high-precision matvec
-    auto h2info = SetH2MvInfo(ContractionBackend::X2); // Use high-precision matvec
+    auto h1info = SetH1MvInfo(ContractionPrecision::X2); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionPrecision::X2); // Use high-precision matvec
 
     // Orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
     m.analyze_h2_orthonormality(Y, H2Y);
@@ -2463,8 +2463,8 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
     if(X.cols() == 0 || Y.cols() == 0) return;
     if(m.mask.size() > 0 && m.mask.sum() == 0) return;
     assert(algo == OptAlgo::GDMRG and use_h2_inner_product && "block_h2_orthogonalize is for H2 inner product");
-    auto h1info = SetH1MvInfo(ContractionBackend::X2); // Use high-precision matvec
-    auto h2info = SetH2MvInfo(ContractionBackend::X2); // Use high-precision matvec
+    auto h1info = SetH1MvInfo(ContractionPrecision::X2); // Use high-precision matvec
+    auto h2info = SetH2MvInfo(ContractionPrecision::X2); // Use high-precision matvec
     assert_allFinite(X);
     assert_allFinite(H1X);
     assert_allFinite(H2X);

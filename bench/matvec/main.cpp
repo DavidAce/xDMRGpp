@@ -43,14 +43,14 @@ namespace {
 #endif
 
         run("matvec x2", [&] {
-            auto h1info = SetH1MvInfo(ContractionBackend::X2, mpo.dimensions());
+            auto h1info = SetH1MvInfo(ContractionPrecision::X2, mpo.dimensions());
             matrix_vector_product(res, mps, mpo, envL, envR);
         });
 
         auto envL_x2 = x2::Tensor<Scalar, 3>(envL);
         auto envR_x2 = x2::Tensor<Scalar, 3>(envR);
         run("matvec x2 env-x2", [&] {
-            auto h1info = SetH1MvInfo(ContractionBackend::X2, mpo.dimensions());
+            auto h1info = SetH1MvInfo(ContractionPrecision::X2, mpo.dimensions());
             matrix_vector_product(res, mps, mpo, envL_x2, envR_x2);
         });
     }

@@ -184,7 +184,7 @@ void EnvVar<Scalar>::set_block(const Eigen::Tensor<Scalar, 3> &blk, const EnvVar
     *blkx2 = blk;
 
     auto envinfo = tools::common::contraction::internal::get_info_env();
-    if(envinfo.backend == ContractionBackend::X2) {
+    if(envinfo.precision == ContractionPrecision::X2) {
         blkx2->renorm();
         unique_id = std::nullopt;
     }
@@ -217,7 +217,7 @@ void EnvVar<Scalar>::set_blkx2(const x2::Tensor<Scalar, 3> &blk, const EnvVar &e
     *blkx2 = blk;
 
     auto envinfo = tools::common::contraction::internal::get_info_env();
-    if(envinfo.backend == ContractionBackend::X2) {
+    if(envinfo.precision == ContractionPrecision::X2) {
         blkx2->renorm();
         unique_id = std::nullopt;
     }
@@ -237,7 +237,7 @@ void EnvVar<Scalar>::set_block_raw(const Eigen::Tensor<Scalar, 3> &blk) {
     *blkx2 = blk;
 
     auto envinfo = tools::common::contraction::internal::get_info_env();
-    if(envinfo.backend == ContractionBackend::X2) {
+    if(envinfo.precision == ContractionPrecision::X2) {
         blkx2->renorm();
         unique_id = std::nullopt;
     }

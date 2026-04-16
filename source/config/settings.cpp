@@ -99,6 +99,9 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("threading::num_threads"                       , threading::num_threads);
 
     dmrg_config.load_parameter("input::seed"                                  , input::seed);
+    dmrg_config.load_parameter("cuda::device"                                 , cuda::device);
+    dmrg_config.load_parameter("cuda::gpu_switchsize"                         , cuda::gpu_switchsize);
+    dmrg_config.load_parameter("cuda::gpu_max_alloc_fraction"                 , cuda::gpu_max_alloc_fraction);
 
     dmrg_config.load_parameter("storage::output_filepath"                                       , storage::output_filepath);
     dmrg_config.load_parameter("storage::output_append_seed"                                    , storage::output_append_seed);

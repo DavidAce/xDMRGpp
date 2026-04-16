@@ -48,6 +48,13 @@ namespace settings {
 //        inline int stl_threads = 1;                                              /*!< Number of threads for c++11 threading. Used in Eigen::Tensor. stl_threads <= 0 will try to use as many as possible */
     }
 
+    /*! \namespace settings::cuda Settings for optional CUDA/cuTENSOR contractions */
+    namespace cuda {
+        inline int    device                 = -1;      /*!< CUDA device id. Use -1 for auto-selection of the first working GPU. */
+        inline size_t gpu_switchsize         = 131072;  /*!< Prefer GPU matvec only when the effective linear problem size reaches this threshold. */
+        inline double gpu_max_alloc_fraction = 0.80;    /*!< Refuse GPU matvec when the estimated allocation exceeds this fraction of currently free device memory. */
+    }
+
     /*!  \namespace settings::input Settings for initialization */
     namespace input{
         inline long        seed                                 = 1;                            /*!< Main seed for the random number generator. */

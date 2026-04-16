@@ -101,6 +101,12 @@ if(DMRG_ENABLE_TBLIS)
     target_link_libraries(xdmrg++-deps INTERFACE TBLIS::tblis)
 endif()
 
+if(DMRG_ENABLE_CUTENSOR)
+    find_package(CUDAToolkit REQUIRED BYPASS_PROVIDER)
+    find_package(cuTENSOR REQUIRED MODULE BYPASS_PROVIDER)
+    target_link_libraries(xdmrg++-deps INTERFACE CUDA::cudart cuTENSOR::cuTENSOR)
+endif()
+
 # Configure Eigen
 if(TARGET Eigen3::Eigen)
     set_property(TARGET Eigen3::Eigen APPEND PROPERTY INTERFACE_COMPILE_OPTIONS $<$<CXX_COMPILER_ID:GNU>:-Wno-psabi>) # Silence ABI warnings

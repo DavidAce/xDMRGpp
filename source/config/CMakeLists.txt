@@ -59,18 +59,28 @@ add_source_target(xdmrg++-config-enums
                   OBJECT_LINK_LIBRARIES
                   xdmrg++-deps xdmrg++-flags)
 
-add_source_target(xdmrg++-config
+add_source_target(xdmrg++-config-runtime
                   TARGET_SOURCES
                   blas_backend.cpp
-                  loader.cpp
-                  settings.cpp
-                  parse.cpp
+                  cuda.cpp
                   threading.cpp
                   OBJECT_LINK_LIBRARIES
-                  xdmrg++-config-enums
                   xdmrg++-math-tenx
                   xdmrg++-deps xdmrg++-flags
                   INTERFACE_LINK_LIBRARIES
+                  xdmrg++-tools-common-log
+                  )
+
+add_source_target(xdmrg++-config
+                  TARGET_SOURCES
+                  loader.cpp
+                  settings.cpp
+                  parse.cpp
+                  OBJECT_LINK_LIBRARIES
+                  xdmrg++-config-enums
+                  xdmrg++-deps xdmrg++-flags
+                  INTERFACE_LINK_LIBRARIES
+                  xdmrg++-config-runtime
                   xdmrg++-tools-common-log
                   )
 
@@ -80,10 +90,14 @@ add_dependencies(xdmrg++-config-o xdmrg++-config-enums-generate)
 add_dependencies(xdmrg++-config xdmrg++-config-enums-generate)
 target_include_directories(xdmrg++-config-enums-o PRIVATE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-config-enums INTERFACE ${CMAKE_BINARY_DIR}/source)
+target_include_directories(xdmrg++-config-runtime-o PRIVATE ${CMAKE_BINARY_DIR}/source)
+target_include_directories(xdmrg++-config-runtime INTERFACE ${CMAKE_BINARY_DIR}/source)
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/blas_backend.cpp PROPERTIES COMPILE_DEFINITIONS ${DMRG_BLAS_BACKEND_DEFINE})
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/cuda.cpp PROPERTIES COMPILE_DEFINITIONS "$<$<BOOL:${DMRG_ENABLE_CUTENSOR}>:DMRG_ENABLE_CUTENSOR>")
 target_include_directories(xdmrg++-config-o PRIVATE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-config INTERFACE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-flags INTERFACE ${CMAKE_BINARY_DIR}/source)
 if(DMRG_BLAS_BACKEND_INCLUDE_DIRS)
+    target_include_directories(xdmrg++-config-runtime-o PRIVATE ${DMRG_BLAS_BACKEND_INCLUDE_DIRS})
     target_include_directories(xdmrg++-config-o PRIVATE ${DMRG_BLAS_BACKEND_INCLUDE_DIRS})
 endif()

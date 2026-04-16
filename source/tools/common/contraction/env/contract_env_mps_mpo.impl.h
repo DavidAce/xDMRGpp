@@ -383,7 +383,7 @@ void tools::common::contraction::contract_envL_mps_mpo(x2::Tensor<Scalar, 3>    
                                                        const Eigen::Tensor<Scalar, 4> &mpo) {
     using Real   = Eigen::NumTraits<Scalar>::Real;
     auto envinfo = internal::get_info_env();
-    if(envinfo.backend == ContractionBackend::X2) {
+    if(envinfo.precision == ContractionPrecision::X2) {
         res.resize(mps.dimension(2), mps.dimension(2), mpo.dimension(1));
         internal::env_x2::contract_envL_with_gemm_x2<Scalar>(res, env, mps, mpo);
         if constexpr(settings::debug_contract_env_x2) {
@@ -419,7 +419,7 @@ void tools::common::contraction::contract_envR_mps_mpo(x2::Tensor<Scalar, 3>    
                                                        const Eigen::Tensor<Scalar, 4> &mpo) {
     using Real   = Eigen::NumTraits<Scalar>::Real;
     auto envinfo = internal::get_info_env();
-    if(envinfo.backend == ContractionBackend::X2) {
+    if(envinfo.precision == ContractionPrecision::X2) {
         res.resize(mps.dimension(1), mps.dimension(1), mpo.dimension(0));
         internal::env_x2::contract_envR_with_gemm_x2<Scalar>(res, env, mps, mpo);
         if constexpr(settings::debug_contract_env_x2) {
