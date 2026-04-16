@@ -126,7 +126,6 @@ int main(int argc, char **argv) {
     tools::log->info("OpenMP | threads {} | max active levels {}", omp_get_max_threads(), omp_get_max_active_levels());
 #endif
 
-    config::blas::set_num_threads(threading::omp_threads);
     tools::log->info("{}", config::blas::description());
 
 #if defined(EIGEN_USE_MKL_ALL)

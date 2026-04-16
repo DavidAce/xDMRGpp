@@ -69,9 +69,7 @@ namespace settings {
 #endif
         tools::log->info("Eigen3 | omp_threads {} | cxx11_threads {} | max_threads {}{}", Eigen::nbThreads(), tenx::threads::getNumThreads(),
                          settings::threading::max_threads, eigen_msg);
-        if(auto envcoretype = get_env("OPENBLAS_CORETYPE"); envcoretype)
-            tools::log->info("Detected environment variable: OPENBLAS_CORETYPE={}", envcoretype.value());
-        config::blas::set_num_threads(static_cast<int>(settings::threading::num_threads));
+        if(auto envcoretype = get_env("OPENBLAS_CORETYPE"); envcoretype) tools::log->info("Detected environment variable: OPENBLAS_CORETYPE={}", envcoretype.value());
         tools::log->info("{}", config::blas::description());
         config::cuda::initialize();
         if(settings::threading::show_threads) exit(0);

@@ -33,6 +33,9 @@ execute_process(COMMAND ${Python3_EXECUTABLE}
                         ${XDMRG_CONFIG_GENERATED_DIR}
                         ${XDMRG_CONFIG_ENUM_HEADERS}
                 COMMAND_ERROR_IS_FATAL ANY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/blas_backend_info.h.in
+               ${CMAKE_BINARY_DIR}/source/config/blas_backend_info.h
+               @ONLY)
 
 add_custom_command(
     OUTPUT
@@ -92,12 +95,7 @@ target_include_directories(xdmrg++-config-enums-o PRIVATE ${CMAKE_BINARY_DIR}/so
 target_include_directories(xdmrg++-config-enums INTERFACE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-config-runtime-o PRIVATE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-config-runtime INTERFACE ${CMAKE_BINARY_DIR}/source)
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/blas_backend.cpp PROPERTIES COMPILE_DEFINITIONS ${DMRG_BLAS_BACKEND_DEFINE})
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/cuda.cpp PROPERTIES COMPILE_DEFINITIONS "$<$<BOOL:${DMRG_ENABLE_CUTENSOR}>:DMRG_ENABLE_CUTENSOR>")
 target_include_directories(xdmrg++-config-o PRIVATE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-config INTERFACE ${CMAKE_BINARY_DIR}/source)
 target_include_directories(xdmrg++-flags INTERFACE ${CMAKE_BINARY_DIR}/source)
-if(DMRG_BLAS_BACKEND_INCLUDE_DIRS)
-    target_include_directories(xdmrg++-config-runtime-o PRIVATE ${DMRG_BLAS_BACKEND_INCLUDE_DIRS})
-    target_include_directories(xdmrg++-config-o PRIVATE ${DMRG_BLAS_BACKEND_INCLUDE_DIRS})
-endif()

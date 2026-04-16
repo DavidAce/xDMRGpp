@@ -105,7 +105,6 @@ int main() {
     //    omp_set_max_active_levels(1);
     tools::log->info("Using OpenMP with {} threads and {} active levels", omp_get_max_threads(), omp_get_max_active_levels());
 #endif
-    config::blas::set_num_threads(threading::omp_threads);
     tools::log->info("{}", config::blas::description());
 
     std::vector<eig::settings> configs(1);

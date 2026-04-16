@@ -86,7 +86,6 @@ int main(int argc, char **argv) {
     Eigen::setNbThreads(num_threads);
     tenx::threads::setNumThreads(num_threads);
 #endif
-    config::blas::set_num_threads(num_threads);
     std::cout << config::blas::description() << '\n';
 
     return Catch::Session().run(argc, argv);
