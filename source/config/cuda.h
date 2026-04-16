@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/enums/GpuPolicy.h"
 #include <cstddef>
 #include <string>
 
@@ -16,7 +17,8 @@ namespace config::cuda {
     void               initialize();
     bool               available();
     MemoryStatus       query_memory(std::size_t required_bytes = 0);
-    int                requested_device() noexcept;
-    int                active_device();
+    GpuPolicy          gpu_policy() noexcept;
+    int                requested_gpu_id() noexcept;
+    int                active_gpu_id();
     const std::string &description();
 }

@@ -6,8 +6,35 @@
 #include "config/enums/OptType.h"
 #include "config/enums/OptWhen.h"
 #include "debug/exceptions.h"
-
+#include "tools/common/contraction/contraction_policy.h"
+#include "tools/common/contraction/contraction_tblis.h"
 namespace tools::finite::opt {
+    namespace {
+        [[nodiscard]] bool opt_type_supports_tblis(OptType type) {
+            switch(type) {
+                case OptType::FP32:
+                case OptType::FP64:
+                case OptType::CX32:
+                case OptType::CX64: return settings::tblis_enabled;
+                case OptType::FP128:
+                case OptType::CX128: return false;
+            }
+            return false;
+        }
+
+        [[nodiscard]] bool opt_type_supports_cutensor(OptType type) {
+            switch(type) {
+                case OptType::FP32:
+                case OptType::FP64:
+                case OptType::CX32:
+                case OptType::CX64: return true;
+                case OptType::FP128:
+                case OptType::CX128: return false;
+            }
+            return false;
+        }
+    }
+
     OptMeta::OptMeta()
         : optAlgo(OptAlgo::DMRG), optRitz(OptRitz::SR), optSolver(OptSolver::EIGS), optType(OptType::CX64), optWhen(OptWhen::ALWAYS), optExit(OptExit::NONE) {}
 
@@ -44,6 +71,8 @@ namespace tools::finite::opt {
         res += fmt::format(" | type {}", enum2sv(optType));
         res += fmt::format(" | ritz {}", enum2sv(optRitz));
         res += fmt::format(" | algo {}", enum2sv(optAlgo));
+        res += fmt::format(" | ctr {}", tools::common::contraction::get_h1_contraction_summary(problem_size, opt_type_supports_tblis(optType),
+                                                                                               opt_type_supports_cutensor(optType)));
         if(eigv_target) res += fmt::format(" (tgt: {:.3e})", eigv_target.value());
         if(eigs_nev) res += fmt::format(" | nev {}", eigs_nev.value());
         if(eigs_ncv) res += fmt::format(" | ncv {}", eigs_ncv.value());

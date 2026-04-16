@@ -3,6 +3,7 @@
 #include <array>
 #include <concepts>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <utility>
 enum class ContractionBackend { EIGEN, TBLIS, CUTENSOR, AUTO };
@@ -186,3 +187,7 @@ struct SetEnvInfo {
     SetEnvInfo(const SetEnvInfo &)            = delete;
     SetEnvInfo &operator=(const SetEnvInfo &) = delete;
 };
+
+namespace tools::common::contraction {
+    [[nodiscard]] std::string get_h1_contraction_summary(long problem_size, bool tblis_supported, bool cutensor_supported);
+}

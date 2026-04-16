@@ -16,6 +16,7 @@
 #include "config/enums/GainPolicy.h"
 #include "config/enums/GateMove.h"
 #include "config/enums/GateOp.h"
+#include "config/enums/GpuPolicy.h"
 #include "config/enums/LbitCircuitGateMatrixKind.h"
 #include "config/enums/LbitCircuitGateWeightKind.h"
 #include "config/enums/LogPolicy.h"

@@ -12,13 +12,13 @@
 #include <h5pp/h5pp.h>
 
 namespace {
-    int parse_gpuid(std::string value) {
+    int parse_gpu_id(std::string value) {
         std::ranges::transform(value, value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if(value == "auto") return -1;
         std::size_t pos = 0;
         int         dev = std::stoi(value, &pos);
-        if(pos != value.size()) throw CLI::ValidationError("--gpuid", "expected 'auto', -1, or a non-negative integer");
-        if(dev < -1) throw CLI::ValidationError("--gpuid", "expected 'auto', -1, or a non-negative integer");
+        if(pos != value.size()) throw CLI::ValidationError("--gpu-id", "expected 'auto', -1, or a non-negative integer");
+        if(dev < -1) throw CLI::ValidationError("--gpu-id", "expected 'auto', -1, or a non-negative integer");
         return dev;
     }
 }
@@ -120,7 +120,8 @@ int settings::parse(int argc, char **argv) {
     auto s2e_log     = mapStr2Enum<spdlog::level::level_enum>("trace", "debug", "info");
     auto s2e_logh5pp = mapStr2Enum<h5pp::LogLevel>("trace", "debug", "info");
     auto s2e_model   = mapEnum2Str<ModelType>(ModelType::ising_tf_rf, ModelType::ising_sdual, ModelType::ising_majorana, ModelType::lbit);
-    auto gpuid_text  = settings::cuda::device < 0 ? std::string{"auto"} : std::to_string(settings::cuda::device);
+    auto s2e_gpu_policy = mapEnum2Str<GpuPolicy>(GpuPolicy::ON, GpuPolicy::OFF, GpuPolicy::TRY);
+    auto gpu_id_text    = settings::cuda::gpu_id < 0 ? std::string{"auto"} : std::to_string(settings::cuda::gpu_id);
     int  dummy       = 0;
 
     auto preload = [&argc, &argv, &s2e_log]() -> int {
@@ -164,7 +165,8 @@ int settings::parse(int argc, char **argv) {
     app.add_option("-o,--outfile"                      , storage::output_filepath       , "Path to the output file. The seed number gets appended by default (see -x)");
     app.add_option("-s,--seed"                         , input::seed                    , "Positive number seeds the random number generator");
     app.add_option("-t,--threads"                      , threading::num_threads         , "Total number of threads (omp + std threads). Use env OMP_NUM_THREADS to control omp.");
-    app.add_option("--gpuid"                           , gpuid_text                     , "CUDA device id. Use auto or -1 to select the first working GPU");
+    app.add_option("--gpu-policy"                      , cuda::gpu_policy               , "GPU contraction policy [ON | OFF | TRY]")->transform(CLI::CheckedTransformer(s2e_gpu_policy, CLI::ignore_case))->type_name("ENUM");
+    app.add_option("--gpu-id"                          , gpu_id_text                    , "CUDA device id. Use auto or -1 to select the first working GPU");
     app.add_option("--gpu-switchsize"                  , cuda::gpu_switchsize           , "Minimum linear problem size before AUTO matvec may switch to the GPU");
     app.add_option("--gpu-max-alloc-fraction"          , cuda::gpu_max_alloc_fraction   , "Refuse GPU matvec when the estimated device allocation exceeds this fraction of free memory")->check(CLI::Range(0.0, 1.0));
     app.add_flag("--show-threads"                      , threading::show_threads        , "Show information about threading and exit immediately");
@@ -184,7 +186,7 @@ int settings::parse(int argc, char **argv) {
     /* clang-format on */
 
     app.parse(argc, argv);
-    settings::cuda::device = parse_gpuid(gpuid_text);
+    settings::cuda::gpu_id = parse_gpu_id(gpu_id_text);
 
     if(app.count("--resume") > 0 or app.count("--resume-iter") > 0 or app.count("--resume-name") > 0) {
         tools::log->info("Resuming from iter {}", storage::file_resume_iter);

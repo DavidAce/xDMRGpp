@@ -14,6 +14,7 @@
 #include <cctype>
 #include <chrono>
 #include <limits>
+#include <map>
 #include <ranges>
 #include <stdexcept>
 #include <string>
@@ -31,11 +32,30 @@
 #endif
 
 namespace {
+    int parse_gpu_id(std::string value) {
+        std::ranges::transform(value, value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if(value == "auto") return -1;
+        std::size_t pos = 0;
+        int         dev = std::stoi(value, &pos);
+        if(pos != value.size()) throw CLI::ValidationError("--gpu-id", "expected 'auto', -1, or a non-negative integer");
+        if(dev < -1) throw CLI::ValidationError("--gpu-id", "expected 'auto', -1, or a non-negative integer");
+        return dev;
+    }
+
     template<typename Scalar>
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
 
     bool has_backend(const std::vector<std::string> &backends, std::string_view needle) {
         return std::ranges::find(backends, needle) != backends.end();
+    }
+
+    std::string_view gpu_policy_name(GpuPolicy policy) {
+        switch(policy) {
+            case GpuPolicy::ON: return "ON";
+            case GpuPolicy::OFF: return "OFF";
+            case GpuPolicy::TRY: return "TRY";
+        }
+        return "UNKNOWN";
     }
 
     double to_mib(std::size_t bytes) { return static_cast<double>(bytes) / 1024.0 / 1024.0; }
@@ -142,8 +162,8 @@ namespace {
             std::size_t required_bytes = 0;
             if constexpr(tools::common::contraction::internal::cutensor_supported_v<Scalar>) required_bytes = get_cutensor_operation_bytes<Scalar>(mps, mpo, envL, envR);
             const auto memory_status = config::cuda::query_memory(required_bytes);
-            fmt::print("problem size {} | gpu_switchsize {} | gpuid {} | {}\n", mps.size(), settings::cuda::gpu_switchsize, settings::cuda::device,
-                       config::cuda::description());
+            fmt::print("problem size {} | gpu_policy {} | gpu_id {} | gpu_switchsize {} | {}\n", mps.size(), gpu_policy_name(settings::cuda::gpu_policy),
+                       settings::cuda::gpu_id, settings::cuda::gpu_switchsize, config::cuda::description());
             if(required_bytes > 0) {
                 fmt::print("cutensor MiB {:.2f} | free {:.2f} | usable {:.2f} | fits {}\n", to_mib(required_bytes), to_mib(memory_status.free_bytes),
                            to_mib(memory_status.usable_bytes), memory_status.fits ? "yes" : "no");
@@ -208,8 +228,9 @@ int main(int argc, char **argv) {
     long        wR         = 12;
     std::size_t epochs     = 5;
     std::size_t iterations = 50;
-    std::string dtype      = "fp64";
-    std::string gpuid      = "auto";
+    std::string           dtype      = "fp64";
+    std::string           gpu_id     = "auto";
+    std::map<std::string, GpuPolicy, std::less<>> gpu_policy_map{{"ON", GpuPolicy::ON}, {"OFF", GpuPolicy::OFF}, {"TRY", GpuPolicy::TRY}};
     std::vector<std::string> backends {"auto", "eigen", "tblis", "x2", "cutensor"};
     bool                     profile_tblis         = false;
     bool                     show_openmp_placement = false;
@@ -227,16 +248,18 @@ int main(int argc, char **argv) {
     app.add_flag("--profile-tblis", profile_tblis, "Print the three internal TBLIS stage timings once");
     app.add_flag("--show-openmp-placement", show_openmp_placement, "Print the CPU placement of one OpenMP parallel region");
     app.add_flag("--check-affinity-only", check_affinity_only, "Print affinity diagnostics, warn on restricted or oversubscribed CPU masks, and exit");
-    app.add_option("--gpuid", gpuid, "CUDA device id, or auto");
+    app.add_option("--gpu-policy", settings::cuda::gpu_policy, "GPU contraction policy [ON | OFF | TRY]")
+        ->transform(CLI::CheckedTransformer(gpu_policy_map, CLI::ignore_case))
+        ->type_name("ENUM");
+    app.add_option("--gpu-id", gpu_id, "CUDA device id, or auto");
     app.add_option("--gpu-switchsize", settings::cuda::gpu_switchsize, "Minimum problem size before AUTO can use the GPU");
     app.add_option("--gpu-max-alloc-fraction", settings::cuda::gpu_max_alloc_fraction, "Refuse GPU matvec when the estimated allocation exceeds this fraction of free memory");
     app.add_option("--epochs", epochs, "Nanobench epochs");
     app.add_option("--iterations", iterations, "Minimum nanobench iterations");
     app.parse(argc, argv);
 
-    std::ranges::transform(gpuid, gpuid.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     for(auto &backend : backends) std::ranges::transform(backend, backend.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    settings::cuda::device = gpuid == "auto" ? -1 : std::stoi(gpuid);
+    settings::cuda::gpu_id = parse_gpu_id(gpu_id);
     settings::configure_threads();
 
     const auto affinity_status = debug::affinity::query_status();

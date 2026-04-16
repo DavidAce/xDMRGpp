@@ -17,13 +17,16 @@ namespace config::cuda {
         struct CudaState {
             bool        initialized      = false;
             bool        available        = false;
-            int         requested_device = -1;
-            int         active_device    = -1;
+            GpuPolicy   policy           = GpuPolicy::TRY;
+            int         requested_gpu_id = -1;
+            int         active_gpu_id    = -1;
             std::string description      = "CUDA/cuTENSOR support is disabled in this build";
         };
 
         CudaState      cudaState;
         std::once_flag init_flag;
+
+        [[nodiscard]] bool policy_requires_gpu(GpuPolicy policy) { return policy == GpuPolicy::ON; }
 
 #if defined(DMRG_ENABLE_CUTENSOR)
         inline void check_cuda(cudaError_t err, const char *expr) {
@@ -59,7 +62,15 @@ namespace config::cuda {
     void initialize() {
         std::call_once(init_flag, [] {
             cudaState.initialized      = true;
-            cudaState.requested_device = settings::cuda::device;
+            cudaState.policy           = settings::cuda::gpu_policy;
+            cudaState.requested_gpu_id = settings::cuda::gpu_id;
+
+            if(cudaState.policy == GpuPolicy::OFF) {
+                cudaState.available   = false;
+                cudaState.description = "CUDA/cuTENSOR disabled by gpu_policy=OFF";
+                if(tools::log) tools::log->debug("{}", cudaState.description);
+                return;
+            }
 
 #if defined(DMRG_ENABLE_CUTENSOR)
             int device_count = 0;
@@ -67,23 +78,27 @@ namespace config::cuda {
                 cudaState.description = fmt::format("CUDA/cuTENSOR unavailable: cudaGetDeviceCount failed: {}", cudaGetErrorString(err));
             } else if(device_count <= 0) {
                 cudaState.description = "CUDA/cuTENSOR unavailable: no CUDA devices detected";
-            } else if(cudaState.requested_device >= 0) {
-                if(cudaState.requested_device >= device_count) {
-                    throw except::runtime_error("Requested --gpuid={} but only {} CUDA device(s) are visible", cudaState.requested_device, device_count);
+            } else if(cudaState.requested_gpu_id >= 0) {
+                if(cudaState.requested_gpu_id >= device_count) {
+                    cudaState.description =
+                        fmt::format("CUDA/cuTENSOR unavailable: requested --gpu-id={} but only {} CUDA device(s) are visible", cudaState.requested_gpu_id, device_count);
+                } else {
+                    std::string desc;
+                    if(probe_device(cudaState.requested_gpu_id, desc)) {
+                        cudaState.available     = true;
+                        cudaState.active_gpu_id = cudaState.requested_gpu_id;
+                        cudaState.description   = desc;
+                    } else {
+                        cudaState.description = fmt::format("CUDA/cuTENSOR unavailable: requested --gpu-id={} failed runtime initialization",
+                                                            cudaState.requested_gpu_id);
+                    }
                 }
-                std::string desc;
-                if(not probe_device(cudaState.requested_device, desc)) {
-                    throw except::runtime_error("Requested --gpuid={} but the device failed CUDA/cuTENSOR initialization", cudaState.requested_device);
-                }
-                cudaState.available     = true;
-                cudaState.active_device = cudaState.requested_device;
-                cudaState.description   = desc;
             } else {
                 for(int device = 0; device < device_count; ++device) {
                     std::string desc;
                     if(probe_device(device, desc)) {
                         cudaState.available     = true;
-                        cudaState.active_device = device;
+                        cudaState.active_gpu_id = device;
                         cudaState.description   = desc;
                         break;
                     }
@@ -92,11 +107,20 @@ namespace config::cuda {
             }
 #endif
 
+            if(cudaState.available) {
+                cudaState.policy = GpuPolicy::ON;
+            } else if(policy_requires_gpu(cudaState.policy)) {
+                throw except::runtime_error("gpu_policy=ON requires a usable CUDA/cuTENSOR device, but none was found: {}", cudaState.description);
+            } else {
+                cudaState.policy = GpuPolicy::OFF;
+            }
+            settings::cuda::gpu_policy = cudaState.policy;
+
             if(tools::log) {
                 if(cudaState.available)
                     tools::log->info("{}", cudaState.description);
                 else
-                    tools::log->warn("{}", cudaState.description);
+                    tools::log->debug("{}", cudaState.description);
             }
         });
     }
@@ -113,7 +137,7 @@ namespace config::cuda {
 
 #if defined(DMRG_ENABLE_CUTENSOR)
         if(not cudaState.available) return status;
-        check_cuda(cudaSetDevice(cudaState.active_device), "cudaSetDevice");
+        check_cuda(cudaSetDevice(cudaState.active_gpu_id), "cudaSetDevice");
 
         std::size_t free_bytes  = 0;
         std::size_t total_bytes = 0;
@@ -128,11 +152,13 @@ namespace config::cuda {
         return status;
     }
 
-    int requested_device() noexcept { return cudaState.requested_device; }
+    GpuPolicy gpu_policy() noexcept { return cudaState.policy; }
 
-    int active_device() {
+    int requested_gpu_id() noexcept { return cudaState.requested_gpu_id; }
+
+    int active_gpu_id() {
         initialize();
-        return cudaState.active_device;
+        return cudaState.active_gpu_id;
     }
 
     const std::string &description() {

@@ -303,7 +303,7 @@ namespace tools::common::contraction::internal {
                                              [[maybe_unused]] std::array<long, 3> envR_dims) {
 #if defined(DMRG_ENABLE_CUTENSOR)
         static_assert(cutensor_supported_v<Scalar>);
-        const auto device = config::cuda::active_device();
+        const auto device = config::cuda::active_gpu_id();
         if(device < 0) return 0;
 
         auto &cache = get_cache<Scalar>();
@@ -323,7 +323,7 @@ namespace tools::common::contraction::internal {
                           [[maybe_unused]] std::array<long, 3> envR_dims) {
 #if defined(DMRG_ENABLE_CUTENSOR)
         static_assert(cutensor_supported_v<Scalar>);
-        const auto device = config::cuda::active_device();
+        const auto device = config::cuda::active_gpu_id();
         if(device < 0) return false;
 
         auto &cache = get_cache<Scalar>();
@@ -354,7 +354,7 @@ namespace tools::common::contraction::internal {
                                 [[maybe_unused]] std::array<long, 3> envR_dims) {
 #if defined(DMRG_ENABLE_CUTENSOR)
         static_assert(cutensor_supported_v<Scalar>);
-        const auto device = config::cuda::active_device();
+        const auto device = config::cuda::active_gpu_id();
         if(device < 0) throw except::runtime_error("cuTENSOR contraction requested without an active CUDA device");
 
         auto &cache = get_cache<Scalar>();

@@ -50,9 +50,10 @@ namespace settings {
 
     /*! \namespace settings::cuda Settings for optional CUDA/cuTENSOR contractions */
     namespace cuda {
-        inline int    device                 = -1;      /*!< CUDA device id. Use -1 for auto-selection of the first working GPU. */
-        inline size_t gpu_switchsize         = 131072;  /*!< Prefer GPU matvec only when the effective linear problem size reaches this threshold. */
-        inline double gpu_max_alloc_fraction = 0.80;    /*!< Refuse GPU matvec when the estimated allocation exceeds this fraction of currently free device memory. */
+        inline GpuPolicy gpu_policy          = GpuPolicy::TRY; /*!< Policy for GPU use [ON | OFF | TRY]. TRY enables a usable GPU when present and otherwise disables GPU contractions. */
+        inline int       gpu_id              = -1;             /*!< CUDA device id. Use -1 for auto-selection of the first working GPU. */
+        inline size_t    gpu_switchsize      = 32768;          /*!< Prefer GPU matvec only when the effective linear problem size reaches this threshold. */
+        inline double    gpu_max_alloc_fraction = 0.80;        /*!< Refuse GPU matvec when the estimated allocation exceeds this fraction of currently free device memory. */
     }
 
     /*!  \namespace settings::input Settings for initialization */
