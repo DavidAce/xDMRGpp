@@ -29,6 +29,23 @@ function(pkg_sync_cache_list var help)
     set(${var} "${merged_values}" CACHE INTERNAL "${help}" FORCE)
 endfunction()
 
+function(pkg_is_valid_dir_var out_var var)
+    set(${out_var} FALSE PARENT_SCOPE)
+    if(NOT DEFINED ${var})
+        return()
+    endif()
+
+    set(_value "${${var}}")
+    string(STRIP "${_value}" _value)
+    if(_value STREQUAL "" OR _value MATCHES "-NOTFOUND$")
+        return()
+    endif()
+
+    if(IS_DIRECTORY "${_value}")
+        set(${out_var} TRUE PARENT_SCOPE)
+    endif()
+endfunction()
+
 function(pkg_get_lock_file out_var)
     if(DEFINED ENV{HOME})
         set(_lock_root "$ENV{HOME}/.cache/cmake-pkginstall")
@@ -119,13 +136,19 @@ function(generate_init_cache)
         file(APPEND ${PKG_INIT_CACHE_FILE} "set(${var} \"${${var}}\" CACHE ${type} \"${help}\" FORCE)\n")
     endforeach()
 
-    get_property(_conan_generators_folder GLOBAL PROPERTY CONAN_GENERATORS_FOLDER)
-    if(_conan_generators_folder AND EXISTS "${_conan_generators_folder}/conan_cmakedeps_paths.cmake")
+    get_cmake_property(live_vars VARIABLES)
+    foreach(var ${live_vars})
+        if(NOT var MATCHES "_DIR$")
+            continue()
+        endif()
+        pkg_is_valid_dir_var(_dir_var_is_valid "${var}")
+        if(NOT _dir_var_is_valid)
+            continue()
+        endif()
+        string(REPLACE "\\" "/" _dir_value "${${var}}") # Fix windows backslash paths
         file(APPEND ${PKG_INIT_CACHE_FILE}
-             "\n# Reuse Conan-generated package lookup paths from the parent configure.\n")
-        file(APPEND ${PKG_INIT_CACHE_FILE}
-             "include([==[${_conan_generators_folder}/conan_cmakedeps_paths.cmake]==] OPTIONAL)\n")
-    endif()
+             "set(${var} [==[${_dir_value}]==] CACHE PATH \"Propagated package config directory from parent configure\" FORCE)\n")
+    endforeach()
 endfunction()
 
 
