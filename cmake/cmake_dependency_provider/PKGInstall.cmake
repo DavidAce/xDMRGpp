@@ -118,6 +118,14 @@ function(generate_init_cache)
         string(REPLACE "\"" "\\\"" ${var} "${${var}}") #Fix quotes
         file(APPEND ${PKG_INIT_CACHE_FILE} "set(${var} \"${${var}}\" CACHE ${type} \"${help}\" FORCE)\n")
     endforeach()
+
+    get_property(_conan_generators_folder GLOBAL PROPERTY CONAN_GENERATORS_FOLDER)
+    if(_conan_generators_folder AND EXISTS "${_conan_generators_folder}/conan_cmakedeps_paths.cmake")
+        file(APPEND ${PKG_INIT_CACHE_FILE}
+             "\n# Reuse Conan-generated package lookup paths from the parent configure.\n")
+        file(APPEND ${PKG_INIT_CACHE_FILE}
+             "include([==[${_conan_generators_folder}/conan_cmakedeps_paths.cmake]==] OPTIONAL)\n")
+    endif()
 endfunction()
 
 
