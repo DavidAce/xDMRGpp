@@ -14,7 +14,7 @@ namespace tools::common::contraction::internal {
     template<typename Index, int Rank>
     [[nodiscard]] constexpr std::array<long, static_cast<std::size_t>(Rank)> to_std_array(const Eigen::DSizes<Index, Rank> &dims) {
         std::array<long, static_cast<std::size_t>(Rank)> out {};
-        for(int i = 0; i < Rank; ++i) out[static_cast<std::size_t>(i)] = static_cast<long>(dims[i]);
+        for(size_t i = 0; i < static_cast<size_t>(Rank); ++i) out[i] = static_cast<long>(dims[i]);
         return out;
     }
 

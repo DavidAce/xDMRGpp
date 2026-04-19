@@ -1,6 +1,5 @@
 #include "affinity.h"
 #include "tools/common/log.h"
-
 #include <algorithm>
 #include <fmt/core.h>
 #include <thread>
@@ -22,11 +21,11 @@ namespace debug::affinity {
 
         Status status;
         status.host_threads = std::thread::hardware_concurrency();
-#if defined(_OPENMP)
+    #if defined(_OPENMP)
         status.omp_threads = static_cast<unsigned int>(std::max(1, omp_get_max_threads()));
-#endif
+    #endif
         for(int cpu = 0; cpu < CPU_SETSIZE; ++cpu)
-            if(CPU_ISSET(cpu, &mask)) status.allowed_cpus.push_back(cpu);
+            if(CPU_ISSET(static_cast<size_t>(cpu), &mask)) status.allowed_cpus.push_back(cpu);
 
         status.restricted     = status.host_threads > 0 and status.allowed_cpus.size() < status.host_threads;
         status.oversubscribed = status.omp_threads > status.allowed_cpus.size();
@@ -59,10 +58,8 @@ namespace debug::affinity {
     std::optional<std::string> format_openmp_placement() {
 #if defined(_OPENMP) && defined(__linux__)
         std::vector<int> cpus(static_cast<std::size_t>(omp_get_max_threads()), -1);
-#pragma omp parallel
-        {
-            cpus[static_cast<std::size_t>(omp_get_thread_num())] = sched_getcpu();
-        }
+    #pragma omp parallel
+        { cpus[static_cast<std::size_t>(omp_get_thread_num())] = sched_getcpu(); }
 
         std::vector<int> unique_cpus = cpus;
         std::ranges::sort(unique_cpus);

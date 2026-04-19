@@ -698,17 +698,17 @@ size_t StateFinite<Scalar>::num_bonds_at_maximum(const std::vector<size_t> &site
     auto L            = get_length<size_t>();
     auto bond_dims    = tools::finite::measure::bond_dimensions(*this);
     auto spin_dims    = tools::finite::measure::spin_dimensions(*this);
-    auto get_bond_max = [&](auto bond_idx) {
+    auto get_bond_max = [&](long bond_idx) {
         if(bond_idx <= L / 2) {
-            return std::accumulate(spin_dims.begin(), spin_dims.begin() + bond_idx, long(1), std::multiplies<long>());
+            return std::accumulate(spin_dims.begin(), spin_dims.begin() + bond_idx, 1l, std::multiplies<long>());
         } else {
-            return std::accumulate(spin_dims.begin() + bond_idx, spin_dims.end(), long(1), std::multiplies<long>());
+            return std::accumulate(spin_dims.begin() + bond_idx, spin_dims.end(), 1l, std::multiplies<long>());
         }
     };
     size_t num_bonds_at_max = 0;
     for(size_t i = 1; i < sites.size(); ++i) {
         assert(i < L);
-        num_bonds_at_max += bond_dims[sites[i]] >= get_bond_max(sites[i]) ? 1 : 0;
+        num_bonds_at_max += bond_dims[sites[i]] >= get_bond_max(static_cast<long>(sites[i])) ? 1 : 0;
     }
     return num_bonds_at_max;
 }
