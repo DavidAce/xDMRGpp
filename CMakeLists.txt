@@ -38,7 +38,7 @@ option(COMPILER_ENABLE_COVERAGE     "(Development) Enable test coverage"        
 option(EIGEN_USE_THREADS            "Use STL threads to parallelize Eigen::Tensor"                      TRUE)
 option(THREADS_PREFER_PTHREAD_FLAG  "Prefer -pthread flag over -lpthread or similar"                    TRUE)
 
-set(DMRG_ENABLED_SCALARS)
+set(DMRG_ENABLED_SCALARS "")
 foreach(dmrg_scalar IN ITEMS fp32 fp64 fp128 cx32 cx64 cx128)
     string(TOUPPER "${dmrg_scalar}" dmrg_scalar_upper)
     if(DMRG_ENABLE_${dmrg_scalar_upper})
@@ -50,7 +50,7 @@ if(NOT DMRG_ENABLED_SCALARS)
     message(FATAL_ERROR "At least one explicit-instantiation scalar must be enabled")
 endif()
 
-set(DMRG_ENABLED_SCALARS "${DMRG_ENABLED_SCALARS}" CACHE INTERNAL "Enabled explicit-instantiation scalars")
+set(DMRG_ENABLED_SCALARS "${DMRG_ENABLED_SCALARS}" CACHE INTERNAL "Enabled explicit-instantiation scalars" FORCE)
 
 
 
