@@ -40,6 +40,7 @@ add_subdirectory(multisite)
 add_subdirectory(env)
 add_subdirectory(bex)
 add_subdirectory(mps)
+add_subdirectory(pos)
 add_subdirectory(opt)
 add_subdirectory(mpo)
 
@@ -51,6 +52,7 @@ target_link_libraries(xdmrg++-tools-finite INTERFACE
         xdmrg++-tools-finite-mps
         xdmrg++-tools-finite-env
         xdmrg++-tools-finite-bex
+        xdmrg++-tools-finite-pos
         xdmrg++-tools-finite-multisite
         xdmrg++-tools-finite-opt
         xdmrg++-tools-finite-mpo

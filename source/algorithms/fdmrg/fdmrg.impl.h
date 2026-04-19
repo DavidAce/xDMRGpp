@@ -31,6 +31,7 @@
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
+#include "tools/finite/pos.h"
 #include "tools/finite/print.h"
 
 template<typename Scalar>
@@ -88,7 +89,7 @@ void fdmrg<Scalar>::resume() {
         status.trnc_limit_has_reached_min = false;
 
         // Apply shifts and compress the model
-        tensors.move_center_point_to_inward_edge();
+        tools::finite::pos::move_center_point_to_inward_edge(tensors);
         set_parity_shift_mpo();
         set_parity_shift_mpo_squared();
         set_energy_shift_mpo();
@@ -239,7 +240,7 @@ void fdmrg<Scalar>::update_state() {
     tools::log->debug("Starting {} iter {} | step {} | pos {} | dir {} | ritz {} | type {}", status.algo_type_sv(), status.iter, status.step, status.position,
                       status.direction, enum2sv(opt_meta.optRitz), enum2sv(opt_meta.optType));
     // Try activating the sites asked for;
-    tensors.activate_sites(opt_meta.chosen_sites);
+    tools::finite::pos::activate_sites(tensors, opt_meta.chosen_sites);
     if(tensors.active_sites.empty()) {
         tools::log->warn("Failed to activate sites");
         return;

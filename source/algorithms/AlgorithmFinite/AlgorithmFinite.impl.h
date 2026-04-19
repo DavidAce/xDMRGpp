@@ -55,6 +55,7 @@
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
 #include "tools/finite/ops.h"
+#include "tools/finite/pos.h"
 #include "tools/finite/print.h"
 #include <h5pp/h5pp.h>
 
@@ -143,8 +144,8 @@ void AlgorithmFinite<Scalar>::run_rbds_analysis() {
     auto t_rbds         = tid::tic_scope("rbds");
     auto tensors_backup = tensors;
     auto status_backup  = status;
-    tensors.move_center_point_to_inward_edge();
-    tensors.activate_sites({tensors.get_position()});
+    tools::finite::pos::move_center_point_to_inward_edge(tensors);
+    tools::finite::pos::activate_sites(tensors, {tensors.get_position()});
     tensors.rebuild_edges();
     // Generate a list of bond dimension limits
     auto bond_max    = std::min(settings::get_bond_max(status.algo_type), safe_cast<long>(std::pow(2.0, tensors.template get_length<double>() / 2)));
@@ -191,8 +192,8 @@ void AlgorithmFinite<Scalar>::run_rtes_analysis() {
     auto t_rbds         = tid::tic_scope("rtes");
     auto tensors_backup = tensors;
     auto status_backup  = status;
-    tensors.move_center_point_to_inward_edge();
-    tensors.activate_sites({tensors.get_position()});
+    tools::finite::pos::move_center_point_to_inward_edge(tensors);
+    tools::finite::pos::activate_sites(tensors, {tensors.get_position()});
     tensors.rebuild_edges();
     // Generate a list of truncation error limits
     auto trnc_min    = std::min(1e-1, settings::precision::svd_truncation_min);
@@ -362,20 +363,20 @@ void AlgorithmFinite<Scalar>::move_center_point(std::optional<long> num_moves) {
             //     tools::log->info("M bare before move: \n{}\n", linalg::matrix::to_string(M_bare, 8));
             // }
 
-            if(tensors.position_is_outward_edge()) status.iter++;
+            if(tools::finite::pos::position_is_outward_edge(tensors)) status.iter++;
             tools::log->trace("Moving center position | step {} | pos {} | dir {} ", status.step, tensors.template get_position<long>(),
                               tensors.state->get_direction());
 
-            status.step += tensors.move_center_point(svd::config(status.bond_lim, status.trnc_lim));
+            status.step += tools::finite::pos::move_center_point(tensors, svd::config(status.bond_lim, status.trnc_lim));
 
             // Do not go past the edge if you aren't there already!
             // It's important to stay at the inward edge, so we can do convergence checks and so on
-            if(tensors.position_is_inward_edge()) break;
+            if(tools::finite::pos::position_is_inward_edge(tensors)) break;
         }
-        // if(tensors.position_is_outward_edge())
+        // if(tools::finite::pos::position_is_outward_edge(tensors))
         // throw except::logic_error("Invalid position after moving {} steps: the position is outward edge: pos {} | dir {}", num_moves,
         // tensors.template get_position<long>(), tensors.state->get_direction());
-        tensors.clear_active_sites();
+        tools::finite::pos::clear_active_sites(tensors);
     } catch(std::exception &e) {
         tools::finite::print::dimensions(tensors);
         throw except::runtime_error("Failed to move center point: {}", e.what());
@@ -384,7 +385,7 @@ void AlgorithmFinite<Scalar>::move_center_point(std::optional<long> num_moves) {
     status.direction = tensors.get_state().get_direction();
     if(status.position >= 0) {
         tensors.rebuild_edges();
-        tensors.activate_sites({tensors.template get_position<size_t>()});
+        tools::finite::pos::activate_sites(tensors, {tensors.template get_position<size_t>()});
         auto var_after_move = tools::finite::measure::energy_variance(tensors);
         tools::log->debug("Moved center position {} -> {} | var {:.2e} -> {:.2e}", old_pos, status.position, var_before_move, var_after_move);
     }
@@ -403,7 +404,7 @@ void AlgorithmFinite<Scalar>::move_center_point(std::optional<long> num_moves) {
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::set_energy_shift_mpo() {
     if(not settings::precision::use_energy_shifted_mpo) return;
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
 
     auto threshold = std::min<RealScalar>(100 * eps, static_cast<RealScalar>(settings::precision::variance_convergence_threshold));
@@ -420,7 +421,7 @@ void AlgorithmFinite<Scalar>::set_energy_shift_mpo() {
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::rebuild_tensors() {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     tensors.rebuild_mpo();          // The shift clears our squared mpo's. So we have to rebuild them.
     tensors.rebuild_mpo_squared();  // The shift clears our squared mpo's. So we have to rebuild them.
     tensors.compress_mpo_squared(); // Compress the mpo's if compression is enabled
@@ -430,7 +431,7 @@ void AlgorithmFinite<Scalar>::rebuild_tensors() {
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::update_precision_limit(std::optional<double> energy_upper_bound) {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     // The variance precision limit depends on the Hamiltonian operator norm ~ largest eigenvalue.
     // We can get a rough order of magnitude estimate of the largest eigenvalue by adding the absolute value of all the
     // Hamiltonian couplings and fields.
@@ -450,7 +451,7 @@ void AlgorithmFinite<Scalar>::update_precision_limit(std::optional<double> energ
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     status.bond_limit_has_reached_max = status.bond_lim >= status.bond_max;
 
     if(status.iter < settings::strategy::iter_max_warmup and not has_flag(settings::strategy::bond_increase_when, UpdatePolicy::WARMUP)) {
@@ -542,7 +543,7 @@ void AlgorithmFinite<Scalar>::update_bond_dimension_limit() {
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::reduce_bond_dimension_limit(double rate, UpdatePolicy when, StorageEvent storage_event) {
     // We reduce the bond dimension limit during RBDS whenever entanglement has stopped changing
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(when == UpdatePolicy::NEVER) return;
     if(iter_last_bond_reduce == 0) iter_last_bond_reduce = status.iter;
     size_t iter_since_reduce = std::max(status.iter, iter_last_bond_reduce) - std::min(status.iter, iter_last_bond_reduce);
@@ -573,7 +574,7 @@ void AlgorithmFinite<Scalar>::reduce_bond_dimension_limit(double rate, UpdatePol
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::try_mps_compression() {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(status.iter == 0) return;
     if(settings::strategy::trnc_increase_iter == 0) return;
     if(settings::strategy::trnc_increase_rtol <= 0) return;
@@ -656,7 +657,7 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(status.trnc_lim == 0.0) throw std::runtime_error("trnc_lim is zero!");
     status.trnc_limit_has_reached_min = status.trnc_lim <= status.trnc_min;
 
@@ -843,7 +844,7 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
         return;
     }
 
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     using namespace settings::strategy;
     tools::log->trace("Updating blocksize | policy: {}", flag2str(dmrg_blocksize_policy));
     bool has_converged = status.algorithm_converged_for > 0 or var_latest <= static_cast<RealScalar>(settings::precision::variance_convergence_threshold);
@@ -926,7 +927,7 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     using namespace settings::precision;
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     dmrg_eigs_abstol = std::clamp(dmrg_eigs_abstol, eigs_abstol_min, eigs_abstol_max);
     dmrg_eigs_reltol = std::clamp(dmrg_eigs_reltol, eigs_reltol_min, eigs_reltol_max);
 
@@ -1030,7 +1031,7 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
 
         if(state_init == StateInit::RANDOMIZE_PREVIOUS_STATE) trnc_lim = 1e-2;
     }
-    tensors.activate_sites(settings::precision::eigs_max_size_shift_invert, 1);
+    tools::finite::pos::activate_sites(tensors, settings::precision::eigs_max_size_shift_invert, 1);
     tensors.rebuild_edges();
     tensors.initialize_state(reason, state_init, state_type.value(), axis.value(), use_eigenspinors.value(), bond_lim.value(), pattern.value());
     tensors.get_state().assert_validity();
@@ -1082,7 +1083,7 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::try_projection(std::optional<std::string> target_axis) {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(settings::strategy::projection_policy == ProjectionPolicy::NEVER) return;
     // if(status.spin_parity_has_converged) {
     //     tools::log->info("Skip projection: spin parity has converged");
@@ -1240,7 +1241,7 @@ void AlgorithmFinite<Scalar>::try_projection(std::optional<std::string> target_a
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::set_parity_shift_mpo(std::optional<std::string> target_axis) {
     if(not settings::precision::use_parity_shifted_mpo) return;
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     target_axis = target_axis.value_or(settings::strategy::target_axis);
     // If ritz == SR we shift the spectrum of the non-targeted sector UP in energy.
     // If ritz == LR we shift the spectrum of the non-targetd sector DOWN in energy
@@ -1264,14 +1265,14 @@ void AlgorithmFinite<Scalar>::set_parity_shift_mpo(std::optional<std::string> ta
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::set_parity_shift_mpo_squared(std::optional<std::string> target_axis) {
     if(not settings::precision::use_parity_shifted_mpo_squared) return;
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     target_axis = target_axis.value_or(settings::strategy::target_axis);
     tensors.set_parity_shift_mpo_squared(target_axis.value());
 }
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::check_convergence() {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     auto t_con = tid::tic_scope("conv");
 
     check_convergence_energy();
@@ -1498,7 +1499,7 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::check_convergence_energy(std::optional<RealScalar> saturation_sensitivity) {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(not saturation_sensitivity) {
         saturation_sensitivity = static_cast<RealScalar>(settings::precision::energy_saturation_sensitivity);
         saturation_sensitivity = std::max(saturation_sensitivity.value(), 2 * std::sqrt(var_latest)); // Fluctuations within two standard deviations
@@ -1544,7 +1545,7 @@ void AlgorithmFinite<Scalar>::check_convergence_energy(std::optional<RealScalar>
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScalar> threshold, std::optional<RealScalar> saturation_sensitivity) {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::variance_saturation_sensitivity);
     if(saturation_sensitivity <= 0) return;
     if(not threshold) {
@@ -1628,7 +1629,7 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::check_convergence_locinfoscale(std::optional<RealScalar> saturation_sensitivity) {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(not saturation_sensitivity) saturation_sensitivity = static_cast<RealScalar>(settings::precision::locinfoscale_saturation_sensitivity);
     if(saturation_sensitivity <= 0) return;
     tools::log->trace("Checking convergence of the local info scale | sensitivity {:.2e}", saturation_sensitivity.value());
@@ -1676,7 +1677,7 @@ void AlgorithmFinite<Scalar>::check_convergence_locinfoscale(std::optional<RealS
 
 template<typename Scalar>
 void AlgorithmFinite<Scalar>::check_convergence_entanglement(std::optional<RealScalar> saturation_sensitivity) {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(not saturation_sensitivity) saturation_sensitivity = settings::precision::entanglement_saturation_sensitivity;
     if(saturation_sensitivity <= 0) return;
     tools::log->trace("Checking convergence of entanglement");
@@ -1878,9 +1879,9 @@ void AlgorithmFinite<Scalar>::print_status() {
     if(tensors.active_sites.size() >= 2) {
         auto frnt = sites_mps.has_value() ? sites_mps->at(tensors.active_sites.front()) : tensors.active_sites.front();
         auto back = sites_mps.has_value() ? sites_mps->at(tensors.active_sites.back()) : tensors.active_sites.back();
-        if(tensors.position_is_at(safe_cast<long>(tensors.active_sites.front())))
+        if(tools::finite::pos::position_is_at(tensors, safe_cast<long>(tensors.active_sites.front())))
             site_str = fmt::format("{:>2}.{:>2} ", frnt, back);
-        else if(tensors.position_is_at(safe_cast<long>(tensors.active_sites.back())))
+        else if(tools::finite::pos::position_is_at(tensors, safe_cast<long>(tensors.active_sites.back())))
             site_str = fmt::format("{:>2} {:>2}.", frnt, back);
         else
             site_str = fmt::format("{:>2} {:>2} ", frnt, back);

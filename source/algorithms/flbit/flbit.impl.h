@@ -48,6 +48,7 @@
 #include "tools/finite/measure/number_entropy.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/ops.h"
+#include "tools/finite/pos.h"
 #include "tools/finite/print.h"
 #include <complex>
 #include <h5pp/h5pp.h>
@@ -109,7 +110,7 @@ void flbit<Scalar>::resume() {
         tensors.initialize_state(ResetReason::INIT, settings::strategy::initial_state, StateInitType::REAL, settings::strategy::initial_axis,
                                  settings::strategy::use_eigenspinors, settings::get_bond_min(status.algo_type), settings::strategy::initial_pattern);
 
-        tensors.move_center_point_to_inward_edge();
+        tools::finite::pos::move_center_point_to_inward_edge(tensors);
 
         // Load the unitary circuit
         unitary_gates_2site_layers = qm::lbit::read_unitary_2site_gate_layers(*h5file, "/fLBIT/model/unitary_circuit");
@@ -221,7 +222,7 @@ template<typename Scalar> void flbit<Scalar>::run_preprocessing() {
     // Create an initial state in the real basis
     tensors.state->set_name("state_real");
     initialize_state(ResetReason::INIT, settings::strategy::initial_state);
-    tensors.move_center_point_to_inward_edge();
+    tools::finite::pos::move_center_point_to_inward_edge(tensors);
     state_real_init = std::make_unique<StateFinite<Scalar>>(tensors.get_state());
     tools::finite::print::model(tensors.get_model());
 
@@ -235,7 +236,7 @@ template<typename Scalar> void flbit<Scalar>::run_preprocessing() {
     create_hamiltonian_gates();
     update_time_evolution_gates();
 
-    if(not tensors.position_is_inward_edge()) throw except::logic_error("Put the state on an edge!");
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) throw except::logic_error("Put the state on an edge!");
 
     // Generate the corresponding state in lbit basis
     transform_to_lbit_basis();
@@ -291,7 +292,7 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm() {
     if(cmp_t(status.delta_t.template to_floating_point<cx128>(), 0.0)) update_time_step();
     tools::log->info("Starting {} algorithm with model [{}] for state [{}]", status.algo_type_sv(), enum2sv(settings::model::model_type),
                      tensors.state->get_name());
-    if(not tensors.position_is_inward_edge()) throw except::logic_error("Put the state on an edge!");
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) throw except::logic_error("Put the state on an edge!");
     if(settings::flbit::run_effective_model) run_algorithm2();
     auto t_run = tid::tic_scope("run", tid::level::normal);
     while(true) {
@@ -323,7 +324,7 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm_parallel() {
     if(cmp_t(status.delta_t.template to_floating_point<cx128>(), 0.0)) update_time_step();
     tools::log->info("Starting {} algorithm with model [{}] for state [{}]", status.algo_type_sv(), enum2sv(settings::model::model_type),
                      tensors.state->get_name());
-    if(not tensors.position_is_inward_edge()) throw except::logic_error("Put the state on an edge!");
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) throw except::logic_error("Put the state on an edge!");
     if(settings::flbit::run_effective_model) run_algorithm2();
 
     auto ham_swap_gates = std::vector<std::vector<qm::SwapGate>>{ham_swap_gates_1body, ham_swap_gates_2body, ham_swap_gates_3body};
@@ -531,7 +532,7 @@ template<typename Scalar> void flbit<Scalar>::update_time_step() {
 
 template<typename Scalar>
 void flbit<Scalar>::check_convergence() {
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     auto t_con = tid::tic_scope("check_conv");
     if(status.entanglement_saturated_for > 0)
         status.algorithm_saturated_for++;

@@ -33,6 +33,7 @@ add_source_target(xdmrg++-tools-finite-opt
             xdmrg++-algorithms-status
             xdmrg++-tensors-finite
             xdmrg++-tools-finite-measure
+            xdmrg++-tools-finite-pos
             xdmrg++-tools-common-log
             xdmrg++-tools-common-contraction
         )

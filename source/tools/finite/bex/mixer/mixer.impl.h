@@ -12,6 +12,7 @@
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
+#include "tools/finite/pos.h"
 
 /*! Typically, the bond dimension of M_P >> bond_lim, and we do not know apriori which columns
  * to keep from the P-part of M_P = [A, P]. Running the eigenvalue solver a few iterations sets
@@ -34,7 +35,7 @@ void tools::finite::bex::internal::run_expansion_term_mixer(TensorsFinite<Scalar
     const auto active_sites_backup = tensors.active_sites;
     // Re-optimize the site that was zero-padded during the bond expansion step so the
     // one-step eigensolve can populate the newly added local basis directions.
-    tensors.activate_sites(std::vector<size_t>{pos0});
+    tools::finite::pos::activate_sites(tensors, std::vector<size_t>{pos0});
     tools::finite::env::rebuild_edges(state, model, edges);
 
     // Run one step of the DMRG optimizer
@@ -96,6 +97,6 @@ void tools::finite::bex::internal::run_expansion_term_mixer(TensorsFinite<Scalar
         mps0.assert_normalized(normtol);
         mpsP.assert_normalized(normtol);
     }
-    tensors.activate_sites(active_sites_backup);
+    tools::finite::pos::activate_sites(tensors, active_sites_backup);
     tools::finite::env::rebuild_edges(state, model, edges);
 };

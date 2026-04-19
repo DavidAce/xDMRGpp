@@ -22,6 +22,7 @@
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
+#include "tools/finite/pos.h"
 
 template<typename Scalar>
 StateFinite<Scalar> tools::finite::ed::find_exact_state(const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status,
@@ -34,7 +35,7 @@ StateFinite<Scalar> tools::finite::ed::find_exact_state(const TensorsFinite<Scal
     // The reduction clears our squared mpo's. So we have to rebuild.
     tensors_ed.rebuild_mpo_squared();
     tensors_ed.rebuild_edges();
-    tensors_ed.activate_sites(sites);
+    tools::finite::pos::activate_sites(tensors_ed, sites);
     auto t_ham       = tid::tic_scope("get_ham");
     auto hamiltonian = tensors_ed.model->template get_multisite_ham<Scalar>();
     t_ham.toc();

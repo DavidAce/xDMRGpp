@@ -58,6 +58,7 @@ add_source_target(xdmrg++-tools-finite-bex-mixer
             ${tools_finite_bex_common_deps}
             xdmrg++-tensors-finite
             xdmrg++-tools-finite-env-edges
+            xdmrg++-tools-finite-pos
             xdmrg++-tools-finite-opt
         )
 
@@ -86,5 +87,6 @@ add_source_target(xdmrg++-tools-finite-bex
             xdmrg++-tensors-finite
             xdmrg++-tools-finite-bex-bond-expansion
             xdmrg++-tools-finite-bex-density-perturbation
+            xdmrg++-tools-finite-pos
             xdmrg++-tools-common-log
         )

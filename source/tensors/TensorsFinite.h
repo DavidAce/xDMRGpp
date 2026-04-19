@@ -64,6 +64,11 @@ class TensorsFinite {
     template<typename T>
     Cache<T> &get_cache() const;
 
+    void sync_active_sites();
+    void clear_active_sites();
+    void activate_sites(const std::vector<size_t> &sites);
+    void activate_sites();
+
     public:
     std::unique_ptr<StateFinite<Scalar>> state;
     std::unique_ptr<ModelFinite<Scalar>> model;
@@ -74,9 +79,7 @@ class TensorsFinite {
 
     // This class should have these responsibilities:
     //  - Initialize/randomize the tensors
-    //  - Move/manage center position
     //  - Rebuild edges
-    //  - Activate sites
     //  - Manage caches
 
     TensorsFinite();
@@ -135,41 +138,8 @@ class TensorsFinite {
 
     [[nodiscard]] bool is_real() const;
     [[nodiscard]] bool has_nan() const;
-    [[nodiscard]] bool has_center_point() const;
-    [[nodiscard]] bool position_is_the_middle() const;
-    [[nodiscard]] bool position_is_the_middle_any_direction() const;
-    [[nodiscard]] bool position_is_outward_edge_left(size_t nsite = 1) const;
-    [[nodiscard]] bool position_is_outward_edge_right(size_t nsite = 1) const;
-    [[nodiscard]] bool position_is_outward_edge(size_t nsite = 1) const;
-    [[nodiscard]] bool position_is_inward_edge_left(size_t nsite = 1) const;
-    [[nodiscard]] bool position_is_inward_edge_right(size_t nsite = 1) const;
-    [[nodiscard]] bool position_is_inward_edge(size_t nsite = 1) const;
-    [[nodiscard]] bool position_is_at(long pos) const;
-    [[nodiscard]] bool position_is_at(long pos, int dir) const;
-    [[nodiscard]] bool position_is_at(long pos, int dir, bool isCenter) const;
-
-    void                sync_active_sites();
-    void                clear_active_sites();
-    void                activate_sites(const std::vector<size_t> &sites);
-    void                activate_sites();
-    void                activate_sites(long threshold, size_t max_sites, size_t min_sites = 1);
-    std::array<long, 3> active_problem_dims() const;
-    long                active_problem_size() const;
-    size_t              move_center_point(std::optional<svd::config> svd_cfg = std::nullopt);
-    size_t              move_center_point_to_pos(long pos, std::optional<svd::config> svd_cfg = std::nullopt);
-    size_t              move_center_point_to_inward_edge(std::optional<svd::config> svd_cfg = std::nullopt);
-    size_t              move_center_point_to_middle(std::optional<svd::config> svd_cfg = std::nullopt);
     void merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg = std::nullopt,
                              LogPolicy log_policy = LogPolicy::SILENT);
-
-    void move_site_mps(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::optional<long> new_pos = std::nullopt);
-    void move_site_mpo(const size_t site, const long steps, std::vector<size_t> &sites_mpo);
-    void move_site_mps_to_pos(const size_t site, const long tgt_pos, std::vector<size_t> &sites_mps, std::optional<long> new_pos = std::nullopt);
-    void move_site_mpo_to_pos(const size_t site, const long tgt_pos, std::vector<size_t> &sites_mpo);
-    void move_site(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::vector<size_t> &sites_mpo,
-                   std::optional<long> new_pos = std::nullopt);
-    void move_site_to_pos(const size_t site, const long tgt_pos, std::optional<std::vector<size_t>> &sites_mps, std::optional<std::vector<size_t>> &sites_mpo,
-                          std::optional<long> new_pos = std::nullopt);
 
     void assert_edges() const;
     void assert_edges_ene() const;

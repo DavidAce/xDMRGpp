@@ -17,6 +17,7 @@
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
+#include "tools/finite/pos.h"
 #include <Eigen/Eigenvalues>
 #include <queue>
 
@@ -175,7 +176,7 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_generalized_shift_invert_
     }
 
     initial_mps.validate_initial_mps();
-    const auto problem_size = tensors.active_problem_size();
+    const auto problem_size = tools::finite::pos::active_problem_size(tensors);
     if(problem_size > settings::precision::eig_max_size)
         throw except::logic_error("optimize_generalized_shift_invert_eig: the problem size is too large for eig: {}", problem_size);
 

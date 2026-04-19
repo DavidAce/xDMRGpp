@@ -9,6 +9,7 @@
 #include "tools/finite/bex.h"
 #include "tools/finite/bex/BondExpansionConfig.h"
 #include "tools/finite/bex/BondExpansionResult.h"
+#include "tools/finite/pos.h"
 
 template<typename Scalar>
 BondExpansionResult<Scalar> tools::finite::bex::expand_bonds(TensorsFinite<Scalar> &tensors, BondExpansionConfig bcfg) {
@@ -19,7 +20,7 @@ BondExpansionResult<Scalar> tools::finite::bex::expand_bonds(TensorsFinite<Scala
     }
     auto t_exp = tid::tic_scope("bondexp");
 
-    if(tensors.active_sites.empty()) tensors.activate_sites({tensors.template get_position<size_t>()});
+    if(tensors.active_sites.empty()) tools::finite::pos::activate_sites(tensors, {tensors.template get_position<size_t>()});
     tensors.rebuild_edges(); // Use fresh edges
     if constexpr(settings::debug) tensors.assert_validity();
     if(has_flag(bcfg.policy, BondExpansionPolicy::DMRG3S) and bcfg.order == BondExpansionOrder::POSTOPT) {

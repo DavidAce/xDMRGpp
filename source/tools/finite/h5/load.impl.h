@@ -18,6 +18,7 @@
 #include "tools/common/log.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/hamiltonian.h"
+#include "tools/finite/pos.h"
 #include "tools/finite/print.h"
 #include <complex>
 #include <h5pp/h5pp.h>
@@ -137,7 +138,7 @@ void tools::finite::h5::load::validate(const h5pp::File &h5file, std::string_vie
     tools::log->info("Validating state: [{}]", state_prefix);
     tensors.rebuild_mpo();
     tensors.rebuild_mpo_squared();
-    tensors.activate_sites({tensors.template get_position<size_t>()});
+    tools::finite::pos::activate_sites(tensors, {tensors.template get_position<size_t>()});
     tensors.rebuild_edges();
     tools::log->debug("State labels: {}", tensors.state->get_labels());
     tensors.state->clear_cache();

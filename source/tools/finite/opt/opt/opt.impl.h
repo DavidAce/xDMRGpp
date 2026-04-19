@@ -21,6 +21,7 @@
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
+#include "tools/finite/pos.h"
 #include <string>
 
 //
@@ -94,7 +95,7 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
     auto t_opt = tid::tic_scope("opt");
     tools::log->trace("Starting optimization: algo [{}] | solver [{}] | type [{}] | ritz [{}] | position [{}] | sites {} | shape {} = {}",
                       enum2sv(meta.optAlgo), enum2sv(meta.optSolver), enum2sv(meta.optType), enum2sv(meta.optRitz), tensors.template get_position<long>(),
-                      tensors.active_sites, tensors.active_problem_dims(), tensors.active_problem_size());
+                      tensors.active_sites, tools::finite::pos::active_problem_dims(tensors), tools::finite::pos::active_problem_size(tensors));
 
     using namespace opt::internal;
 

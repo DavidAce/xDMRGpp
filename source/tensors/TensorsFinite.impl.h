@@ -66,6 +66,51 @@ Eigen::Tensor<T, 2> contract_mpo_env(const Eigen::Tensor<T, 4> &mpo, const Eigen
 }
 
 template<typename Scalar>
+void TensorsFinite<Scalar>::clear_active_sites() {
+    if constexpr(settings::debug) tools::log->trace("Clearing active sites {}", active_sites);
+    active_sites.clear();
+    state->active_sites.clear();
+    model->active_sites.clear();
+    edges->active_sites.clear();
+}
+
+template<typename Scalar>
+void TensorsFinite<Scalar>::activate_sites(const std::vector<size_t> &sites) {
+    tools::log->trace("Activating sites: {}", sites);
+    if(num::all_equal(sites, active_sites, state->active_sites, model->active_sites, edges->active_sites)) return;
+    active_sites        = sites;
+    state->active_sites = active_sites;
+    model->active_sites = active_sites;
+    edges->active_sites = active_sites;
+    clear_cache();
+    clear_measurements();
+}
+
+template<typename Scalar>
+void TensorsFinite<Scalar>::sync_active_sites() {
+    if(num::all_equal(active_sites, state->active_sites, model->active_sites, edges->active_sites)) return;
+    if(not active_sites.empty())
+        activate_sites(active_sites);
+    else if(not state->active_sites.empty())
+        activate_sites(state->active_sites);
+    else if(not model->active_sites.empty())
+        activate_sites(model->active_sites);
+    else if(not edges->active_sites.empty())
+        activate_sites(edges->active_sites);
+    else
+        clear_active_sites();
+}
+
+template<typename Scalar>
+void TensorsFinite<Scalar>::activate_sites() {
+    sync_active_sites();
+    if(active_sites.empty()) {
+        if(get_state().position_is_at(-1)) throw except::logic_error("activate_sites: cannot activate a default site when pos == -1");
+        activate_sites({get_position<size_t>()});
+    }
+}
+
+template<typename Scalar>
 TensorsFinite<Scalar>::TensorsFinite()
     : state(std::make_unique<StateFinite<Scalar>>()), model(std::make_unique<ModelFinite<Scalar>>()), edges(std::make_unique<EdgesFinite<Scalar>>()) {
     tools::log->trace("Constructing TensorsFinite");
@@ -413,65 +458,6 @@ void TensorsFinite<Scalar>::compress_mpo_squared() {
     if constexpr(settings::debug) model->assert_validity();
 }
 
-// Active sites
-template<typename Scalar>
-void TensorsFinite<Scalar>::sync_active_sites() {
-    if(num::all_equal(active_sites, state->active_sites, model->active_sites, edges->active_sites)) return;
-    if(not active_sites.empty())
-        activate_sites(active_sites);
-    else if(not state->active_sites.empty())
-        activate_sites(state->active_sites);
-    else if(not model->active_sites.empty())
-        activate_sites(model->active_sites);
-    else if(not edges->active_sites.empty())
-        activate_sites(edges->active_sites);
-    else
-        clear_active_sites();
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::clear_active_sites() {
-    if constexpr(settings::debug) tools::log->trace("Clearing active sites {}", active_sites);
-    active_sites.clear();
-    state->active_sites.clear();
-    model->active_sites.clear();
-    edges->active_sites.clear();
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::activate_sites(const std::vector<size_t> &sites) {
-    tools::log->trace("Activating sites: {}", sites);
-    if(num::all_equal(sites, active_sites, state->active_sites, model->active_sites, edges->active_sites)) return;
-    active_sites        = sites;
-    state->active_sites = active_sites;
-    model->active_sites = active_sites;
-    edges->active_sites = active_sites;
-    clear_cache();
-    clear_measurements();
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::activate_sites() {
-    sync_active_sites();
-    if(active_sites.empty()) {
-        if(position_is_at(-1)) throw except::logic_error("activate_sites: cannot activate a default site when pos == -1");
-        activate_sites({get_position<size_t>()});
-    }
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::activate_sites(long threshold, size_t max_sites, size_t min_sites) {
-    activate_sites(tools::finite::multisite::generate_site_list(get_state(), threshold, max_sites, min_sites));
-}
-
-template<typename Scalar>
-std::array<long, 3> TensorsFinite<Scalar>::active_problem_dims() const {
-    return tools::finite::multisite::get_dimensions(get_state(), active_sites);
-}
-template<typename Scalar>
-long TensorsFinite<Scalar>::active_problem_size() const {
-    return tools::finite::multisite::get_problem_size(get_state(), active_sites);
-}
 template<typename Scalar>
 bool TensorsFinite<Scalar>::is_real() const {
     const bool s_real = state->is_real();
@@ -509,80 +495,6 @@ void TensorsFinite<Scalar>::assert_validity() const {
 }
 
 template<typename Scalar>
-bool TensorsFinite<Scalar>::has_center_point() const {
-    return state->has_center_point();
-}
-
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_the_middle() const {
-    return state->position_is_the_middle();
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_the_middle_any_direction() const {
-    return state->position_is_the_middle_any_direction();
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_outward_edge_left(size_t nsite) const {
-    return state->position_is_outward_edge_left(nsite);
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_outward_edge_right(size_t nsite) const {
-    return state->position_is_outward_edge_right(nsite);
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_outward_edge(size_t nsite) const {
-    return state->position_is_outward_edge(nsite);
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_inward_edge_left(size_t nsite) const {
-    return state->position_is_inward_edge_left(nsite);
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_inward_edge_right(size_t nsite) const {
-    return state->position_is_inward_edge_right(nsite);
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_inward_edge(size_t nsite) const {
-    return state->position_is_inward_edge(nsite);
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_at(long pos) const {
-    return state->position_is_at(pos);
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_at(long pos, int dir) const {
-    return state->position_is_at(pos, dir);
-}
-template<typename Scalar>
-bool TensorsFinite<Scalar>::position_is_at(long pos, int dir, bool isCenter) const {
-    return state->position_is_at(pos, dir, isCenter);
-}
-template<typename Scalar>
-size_t TensorsFinite<Scalar>::move_center_point(std::optional<svd::config> svd_cfg) {
-    auto moves = tools::finite::mps::move_center_point_single_site(get_state(), svd_cfg);
-    if(moves != 0) clear_active_sites();
-    return moves;
-}
-template<typename Scalar>
-size_t TensorsFinite<Scalar>::move_center_point_to_pos(long pos, std::optional<svd::config> svd_cfg) {
-    auto moves = tools::finite::mps::move_center_point_to_pos(get_state(), pos, svd_cfg);
-    if(moves != 0) clear_active_sites();
-    return moves;
-}
-template<typename Scalar>
-size_t TensorsFinite<Scalar>::move_center_point_to_inward_edge(std::optional<svd::config> svd_cfg) {
-    auto moves = tools::finite::mps::move_center_point_to_inward_edge(get_state(), svd_cfg);
-    if(moves != 0) clear_active_sites();
-    return moves;
-}
-template<typename Scalar>
-size_t TensorsFinite<Scalar>::move_center_point_to_middle(std::optional<svd::config> svd_cfg) {
-    auto moves = tools::finite::mps::move_center_point_to_middle(get_state(), svd_cfg);
-    if(moves != 0) clear_active_sites();
-    return moves;
-}
-
-template<typename Scalar>
 void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg,
                                                 LogPolicy log_policy) {
     // Make sure the active sites are the same everywhere
@@ -593,150 +505,6 @@ void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &
     clear_measurements(log_policy);
     tools::finite::mps::merge_multisite_mps(get_state(), multisite_tensor, active_sites, get_position<long>(), mevent, svd_cfg, log_policy);
     normalize_state(svd_cfg, NormPolicy::IFNEEDED);
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::move_site_mps(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::optional<long> new_pos) {
-    if(sites_mps.size() != get_length<size_t>()) {
-        sites_mps.clear();
-        for(const auto &mps : state->mps_sites) sites_mps.emplace_back(mps->template get_position<size_t>());
-    }
-    long dir = steps < 0l ? -1l : 1l;
-
-    for(long step = 0; std::abs(step) < std::abs(steps); step += dir) {
-        long posL = std::min(safe_cast<long>(site) + step, safe_cast<long>(site) + step + dir);
-        long posR = std::max(safe_cast<long>(site) + step, safe_cast<long>(site) + step + dir);
-        if(posL == posR) break;
-        if(posL < 0 or posL >= get_length<long>()) break;
-        if(posR < 0 or posR >= get_length<long>()) break;
-        tools::log->debug("swapping mps sites {} <--> {}", posL, posR);
-        // Move the MPS site
-        tools::finite::mps::swap_sites(get_state(), safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mps, GateMove::OFF);
-    }
-    if(new_pos) {
-        if(new_pos.value() != std::clamp(new_pos.value(), 0l, get_length<long>()))
-            throw except::runtime_error("move_site: expected new_pos in range [0,{}]. Got {}", get_length<long>(), new_pos.value());
-        move_center_point_to_pos(new_pos.value());
-        activate_sites(std::vector<size_t>{safe_cast<size_t>(new_pos.value())});
-    }
-
-    tools::log->debug("Sites mps: {}", sites_mps);
-    clear_cache();
-    clear_measurements();
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::move_site_mpo(const size_t site, const long steps, std::vector<size_t> &sites_mpo) {
-    if(sites_mpo.size() != get_length<size_t>()) {
-        sites_mpo.clear();
-        for(const auto &mpo : model->MPO) sites_mpo.emplace_back(mpo->get_position());
-    }
-    long dir = steps < 0l ? -1l : 1l;
-
-    for(long step = 0; std::abs(step) < std::abs(steps); step += dir) {
-        long posL = std::min(safe_cast<long>(site) + step, safe_cast<long>(site) + step + dir);
-        long posR = std::max(safe_cast<long>(site) + step, safe_cast<long>(site) + step + dir);
-        if(posL == posR) break;
-        if(posL < 0 or posL >= get_length<long>()) break;
-        if(posR < 0 or posR >= get_length<long>()) break;
-        tools::log->debug("swapping mpo sites {} <--> {}", posL, posR);
-        // Move the MPO site
-        tools::finite::mpo::swap_sites(get_model(), safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mpo);
-    }
-    tools::log->debug("Sites mpo: {}", sites_mpo);
-    clear_cache();
-    clear_measurements();
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::move_site_mps_to_pos(const size_t site, const long tgt_pos, std::vector<size_t> &sites_mps, std::optional<long> new_pos) {
-    if(sites_mps.size() != get_length<size_t>()) {
-        sites_mps.clear();
-        for(const auto &mps : state->mps_sites) sites_mps.emplace_back(mps->template get_position<size_t>());
-    }
-    while(true) {
-        // We must first find the src_pos of the given site in the list.
-        // Example:
-        //      site = 0
-        //      tgt_pos = 0
-        //      sites = {1,2,3,4,0,5,6,7}
-        //  We can then calculate:
-        //      src_pos = find(sites.begin(), sites.end(), site) = 4
-        auto src_itr = std::find(sites_mps.begin(), sites_mps.end(), site);
-        if(src_itr == sites_mps.end()) throw except::logic_error("site {} was not found in sites_mps: {}", site, sites_mps);
-        auto src_pos = std::distance(sites_mps.begin(), src_itr);
-        if(src_pos == tgt_pos) break;
-        long step = tgt_pos < src_pos ? -1l : 1l;
-        long posL = src_pos + (step < 0 ? -1l : 0);
-        long posR = src_pos + (step < 0 ? 0 : 1l);
-        if(posL == posR) break;
-        if(posL < 0 or posL >= get_length<long>()) break;
-        if(posR < 0 or posR >= get_length<long>()) break;
-        tools::log->debug("swapping mps sites {} <--> {}", posL, posR);
-        // Move the MPS site
-        tools::finite::mps::swap_sites(get_state(), safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mps, GateMove::OFF);
-    }
-    if(new_pos) {
-        if(new_pos.value() != std::clamp(new_pos.value(), 0l, get_length<long>()))
-            throw except::runtime_error("move_site: expected new_pos in range [0,{}]. Got {}", get_length<long>(), new_pos.value());
-        move_center_point_to_pos(new_pos.value());
-        activate_sites(std::vector<size_t>{safe_cast<size_t>(new_pos.value())});
-    }
-
-    tools::log->debug("Sites mps: {}", sites_mps);
-    clear_cache();
-    clear_measurements();
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::move_site_mpo_to_pos(const size_t site, const long tgt_pos, std::vector<size_t> &sites_mpo) {
-    if(sites_mpo.size() != get_length<size_t>()) {
-        sites_mpo.clear();
-        for(const auto &mpo : model->MPO) sites_mpo.emplace_back(mpo->get_position());
-    }
-
-    while(true) {
-        // We must first find the src_pos of the given site in the list.
-        // Example:
-        //      site = 0
-        //      tgt_pos = 0
-        //      sites = {1,2,3,4,0,5,6,7}
-        //  We can then calculate:
-        //      src_pos = find(sites.begin(), sites.end(), site) = 4
-        auto src_itr = std::find(sites_mpo.begin(), sites_mpo.end(), site);
-        if(src_itr == sites_mpo.end()) throw except::logic_error("site {} was not found in sites_mpo: {}", site, sites_mpo);
-        auto src_pos = std::distance(sites_mpo.begin(), src_itr);
-        if(src_pos == tgt_pos) break;
-        long step = tgt_pos < src_pos ? -1l : 1l;
-        long posL = src_pos + (step < 0 ? -1l : 0);
-        long posR = src_pos + (step < 0 ? 0 : 1l);
-        if(posL == posR) break;
-        if(posL < 0 or posL >= get_length<long>()) break;
-        if(posR < 0 or posR >= get_length<long>()) break;
-        tools::log->debug("swapping mpo sites {} <--> {}", posL, posR);
-        // Move the MPO site
-        tools::finite::mpo::swap_sites(get_model(), safe_cast<size_t>(posL), safe_cast<size_t>(posR), sites_mpo);
-    }
-    tools::log->debug("Sites mpo: {}", sites_mpo);
-    clear_cache();
-    clear_measurements();
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::move_site(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::vector<size_t> &sites_mpo,
-                                      std::optional<long> new_pos) {
-    move_site_mps(site, steps, sites_mps, new_pos);
-    move_site_mpo(site, steps, sites_mpo);
-}
-
-template<typename Scalar>
-void TensorsFinite<Scalar>::move_site_to_pos(const size_t site, const long tgt_pos, std::optional<std::vector<size_t>> &sites_mps,
-                                             std::optional<std::vector<size_t>> &sites_mpo, std::optional<long> new_pos) {
-    if(not sites_mps) sites_mps = std::vector<size_t>{};
-    if(not sites_mpo) sites_mpo = std::vector<size_t>{};
-    move_site_mps_to_pos(site, tgt_pos, sites_mps.value(), new_pos);
-    move_site_mpo_to_pos(site, tgt_pos, sites_mpo.value());
-    if(sites_mps != sites_mpo) throw except::logic_error("sites mismatch \n sites_mps {}\n sites_mpo {}", sites_mps.value(), sites_mpo.value());
 }
 
 template<typename Scalar>

@@ -50,6 +50,7 @@ add_source_target(xdmrg++-algorithms-finite
         xdmrg++-tools-finite-measure-spin
         xdmrg++-tools-finite-mps
         xdmrg++-tools-finite-ops
+        xdmrg++-tools-finite-pos
         xdmrg++-tools-finite-print
         xdmrg++-tools-common-log
         )

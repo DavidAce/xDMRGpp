@@ -16,5 +16,6 @@ add_source_target(xdmrg++-tools-finite-ed
         xdmrg++-tools-finite-measure-opdm
         xdmrg++-tools-finite-measure-spin
         xdmrg++-tools-finite-opt
+        xdmrg++-tools-finite-pos
         xdmrg++-tools-common-split
         )

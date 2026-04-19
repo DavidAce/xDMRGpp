@@ -17,6 +17,7 @@
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
+#include "tools/finite/pos.h"
 
 using namespace tools::finite::opt;
 using namespace tools::finite::opt::internal;
@@ -73,7 +74,7 @@ opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tenso
     if(meta.optAlgo != OptAlgo::DMRG)
         throw except::logic_error("optimize_energy_eig: Expected OptAlgo [{}] | Got [{}]", enum2sv(OptAlgo::DMRG), enum2sv(meta.optAlgo));
 
-    const auto problem_size = tensors.active_problem_size();
+    const auto problem_size = tools::finite::pos::active_problem_size(tensors);
     if(problem_size > settings::precision::eig_max_size)
         throw except::logic_error("optimize_energy_eig: the problem size is too large for eig: {} > {}(max)", problem_size, settings::precision::eig_max_size);
 

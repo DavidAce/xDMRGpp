@@ -45,6 +45,7 @@
 #include "tools/finite/opt.h"
 #include "tools/finite/opt_meta.h"
 #include "tools/finite/opt_mps.h"
+#include "tools/finite/pos.h"
 #include <h5pp/h5pp.h>
 
 template<typename Scalar>
@@ -103,7 +104,7 @@ void xdmrg<Scalar>::resume() {
         status.opt_ritz = settings::xdmrg::ritz;
 
         // Apply shifts and compress the model
-        tensors.move_center_point_to_inward_edge();
+        tools::finite::pos::move_center_point_to_inward_edge(tensors);
         set_parity_shift_mpo();
         set_parity_shift_mpo_squared();
         set_energy_shift_mpo();
@@ -409,7 +410,7 @@ void xdmrg<Scalar>::update_state() {
     tools::log->debug("Starting {} iter {} | step {} | pos {} | dir {} | ritz {} | type {}", status.algo_type_sv(), status.iter, status.step, status.position,
                       status.direction, enum2sv(settings::get_ritz(status.algo_type)), enum2sv(opt_meta.optType));
     // Try activating the sites asked for;
-    tensors.activate_sites(opt_meta.chosen_sites);
+    tools::finite::pos::activate_sites(tensors, opt_meta.chosen_sites);
     if(tensors.active_sites.empty()) {
         tools::log->debug("No more sites to activate");
         return;
@@ -972,7 +973,7 @@ void xdmrg<Scalar>::set_energy_shift_mpo() {
     //              Var H = <(H-E_tgt)²> - <H-E_tgt>² = <(H-E_tgt)²> - (E-E_tgt)²
     // we get the subtraction of two very small terms since E-E_shf should be small.
 
-    if(not tensors.position_is_inward_edge()) return;
+    if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
     if(var_latest < eps * 10) return; // No need to improve precision further.
 
