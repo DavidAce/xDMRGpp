@@ -37,11 +37,33 @@ add_source_target(xdmrg++-algorithms-finite
         xdmrg++-tensors-edges-finite
         xdmrg++-algorithms-status
         xdmrg++-algorithms-base
-        xdmrg++-tools-finite-env
         xdmrg++-tools-finite-h5
-        xdmrg++-tools-finite-measure
+        xdmrg++-tools-finite-measure-dimensions
+        xdmrg++-tools-finite-measure-entanglement-entropy
+        xdmrg++-tools-finite-measure-expectation-value
+        xdmrg++-tools-finite-measure-hamiltonian
+        xdmrg++-tools-finite-measure-information
+        xdmrg++-tools-finite-measure-norm
+        xdmrg++-tools-finite-measure-number-entropy
+        xdmrg++-tools-finite-measure-opdm
+        xdmrg++-tools-finite-measure-residual
+        xdmrg++-tools-finite-measure-spin
+        xdmrg++-tools-finite-mps
         xdmrg++-tools-finite-ops
         xdmrg++-tools-finite-print
+        xdmrg++-tools-common-log
+        )
+
+add_source_target(xdmrg++-algorithms-finite-opt-meta
+        INST_TEMPLATE_FILES
+        AlgorithmFinite/AlgorithmFinite.opt_meta.inst.cpp.in
+
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        xdmrg++-algorithms-finite
+        xdmrg++-tools-finite-multisite
+        xdmrg++-tools-finite-opt
         xdmrg++-tools-common-log
         )
 
@@ -73,6 +95,8 @@ add_source_target(xdmrg++-algorithms-fdmrg
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
         xdmrg++-algorithms-finite
+        xdmrg++-algorithms-finite-opt-meta
+        xdmrg++-tools-finite-bex
         xdmrg++-tools-finite-opt
         xdmrg++-tools-common-h5
         xdmrg++-tools-common-prof
@@ -91,11 +115,11 @@ add_source_target(xdmrg++-algorithms-flbit
         xdmrg++-algorithms-finite
         xdmrg++-math-tenx
         xdmrg++-qm-lbit
-        xdmrg++-tools-finite-opt
+        xdmrg++-tools-common-plot
+        xdmrg++-tools-finite-h5
         xdmrg++-tools-finite-mps
         xdmrg++-tools-common-h5
         xdmrg++-tools-common-prof
-        xdmrg++-tools-common-plot
 
         )
 
@@ -110,6 +134,8 @@ add_source_target(xdmrg++-algorithms-xdmrg
         xdmrg++-qm-time
         xdmrg++-math-rnd
         xdmrg++-algorithms-fdmrg
+        xdmrg++-algorithms-finite-opt-meta
+        xdmrg++-tools-finite-bex
         xdmrg++-tools-finite-opt
         )
 

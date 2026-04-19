@@ -9,7 +9,12 @@ add_source_target(xdmrg++-tools-finite-ed
         xdmrg++-math-eig
         xdmrg++-math-tenx
         xdmrg++-tensors-finite
-        xdmrg++-tools-finite-measure
+        xdmrg++-tools-finite-measure-dimensions
+        xdmrg++-tools-finite-measure-entanglement-entropy
+        xdmrg++-tools-finite-measure-hamiltonian
+        xdmrg++-tools-finite-measure-number-entropy
+        xdmrg++-tools-finite-measure-opdm
+        xdmrg++-tools-finite-measure-spin
         xdmrg++-tools-finite-opt
         xdmrg++-tools-common-split
         )

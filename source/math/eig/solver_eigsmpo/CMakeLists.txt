@@ -10,8 +10,7 @@ add_source_target(xdmrg++-math-eig-eigsmpo
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
         xdmrg++-tid
-        xdmrg++-math-eig-matvec
+        xdmrg++-math-eig-matvec-mpos
         xdmrg++-math-eig-o
         )
-
 

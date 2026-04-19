@@ -1,0 +1,5 @@
+#include "AlgorithmFinite.opt_meta.impl.h"
+
+using Scalar = @SCALAR@;
+
+template typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta();

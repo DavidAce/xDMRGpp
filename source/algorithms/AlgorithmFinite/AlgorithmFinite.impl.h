@@ -40,8 +40,7 @@
 #include "tid/tid.h"
 #include "tools/common/h5/storage_info.h"
 #include "tools/common/log.h"
-#include "tools/finite/env/BondExpansionConfig.h"
-#include "tools/finite/env/BondExpansionResult.h"
+#include "tools/finite/bex/BondExpansionConfig.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/dimensions.h"
 #include "tools/finite/measure/entanglement_entropy.h"
@@ -267,103 +266,7 @@ int AlgorithmFinite<Scalar>::get_eigs_iter_max() const {
 }
 
 template<typename Scalar>
-typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta() {
-    tools::log->trace("get_opt_meta: configuring optimization step");
-    OptMeta m1;
-
-    // The first decision is easy. Real or complex optimization
-    switch(settings::precision::optScalar) {
-        case ScalarType::FP32: m1.optType = OptType::FP32; break;
-        case ScalarType::FP64: m1.optType = OptType::FP64; break;
-        case ScalarType::FP128: m1.optType = OptType::FP128; break;
-        case ScalarType::CX32: m1.optType = OptType::CX32; break;
-        case ScalarType::CX64: m1.optType = OptType::CX64; break;
-        case ScalarType::CX128: m1.optType = OptType::CX128; break;
-    }
-
-    // if(var_latest < 1e-14) {
-    //     if(m1.optType == OptType::FP64) m1.optType = OptType::FP128;
-    //     if(m1.optType == OptType::CX64) m1.optType = OptType::CX128;
-    // }
-
-    // Set the target eigenvalue
-    m1.optRitz = status.opt_ritz;
-    m1.optAlgo = status.algo_type == AlgorithmType::xDMRG ? settings::xdmrg::algo : OptAlgo::DMRG;
-    if(status.algo_type == AlgorithmType::xDMRG) {
-        if(status.algorithm_has_stuck_for > 1) {
-            m1.optAlgo = settings::xdmrg::algo_stuck;
-            m1.optRitz = settings::xdmrg::ritz_stuck;
-            // if(m1.optAlgo == OptAlgo::GDMRG and status.iter % 3 == 0) {
-            //     m1.optAlgo = settings::xdmrg::algo_warmup;
-            //     m1.optRitz = settings::xdmrg::ritz_warmup;
-            // }
-        }
-        if(status.iter < settings::strategy::iter_max_warmup /* or std::abs(h2) > 1e-3 */) {
-            m1.optAlgo = settings::xdmrg::algo_warmup;
-            m1.optRitz = settings::xdmrg::ritz_warmup;
-        }
-    }
-
-    // Set the default svd limits
-    m1.svd_cfg = svd::config(status.bond_lim, status.trnc_lim);
-
-    // Set up handy quantities
-    // auto var_conv_thresh = std::max(status.energy_variance_prec_limit, settings::precision::variance_convergence_threshold);
-    // bool var_isconverged = status.variance_mpo_converged_for > 0 or var_latest < var_conv_thresh;
-
-    // Set up the dmrg block size
-    m1.min_sites = std::min(tensors.template get_length<size_t>(), settings::strategy::dmrg_min_blocksize);
-    m1.max_sites = has_flag(settings::strategy::dmrg_blocksize_policy, BlockSizePolicy::ON_UPDATE) ? std::max(m1.min_sites, dmrg_blocksize) : m1.min_sites;
-
-    // Set up the problem size and select the dmrg sites
-    m1.max_problem_size = settings::strategy::dmrg_max_prob_size;
-    m1.chosen_sites     = tools::finite::multisite::generate_site_list(tensors.get_state(), m1.max_problem_size, m1.max_sites, m1.min_sites, m1.label);
-    m1.problem_dims     = tools::finite::multisite::get_dimensions(tensors.get_state(), m1.chosen_sites);
-    m1.problem_size     = tools::finite::multisite::get_problem_size(tensors.get_state(), m1.chosen_sites);
-
-    // Set up the bond expansion (aka subspace expansion)
-    m1.subspace_tol = settings::precision::target_subspace_error; // Used in Hybrid DMRG-X
-
-    // m1.primme_method = "PRIMME_GD_Olsen_plusK";
-    m1.primme_method = "PRIMME_DYNAMIC";
-    m1.eigs_lib      = "EIGSMPO";
-    m1.eigv_target   = 0.0; // We always target 0 when OptCost::VARIANCE
-    m1.eigs_nev      = settings::precision::eigs_nev_min;
-    m1.eigs_ncv      = settings::precision::eigs_ncv_min; // Sets to log2(problem_size) if a nonpositive value is given
-    m1.eigs_blk      = settings::precision::eigs_blk_min;
-    if(status.algorithm_has_stuck_for > 0) {
-        m1.eigs_nev = settings::precision::eigs_nev_max;
-        m1.eigs_ncv = settings::precision::eigs_ncv_max; // Sets to log2(problem_size) if a nonpositive value is given
-        m1.eigs_blk = settings::precision::eigs_blk_max;
-    }
-    m1.eigs_iter_max = get_eigs_iter_max() * m1.eigs_nev.value();
-    m1.eigs_abstol   = dmrg_eigs_abstol;
-    m1.eigs_reltol   = dmrg_eigs_reltol;
-
-    m1.eigs_jcbMaxBlockSize = settings::precision::eigs_jcb_blocksize_min;
-    m1.eigs_jcbOverlapSize  = settings::precision::eigs_jcb_overlap_size;
-    if(status.algorithm_saturated_for + status.algorithm_has_stuck_for > 0) {
-        using namespace settings::precision;
-        double jcbBlockSizeLog2_20pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_blocksize_min), std::log2(eigs_jcb_blocksize_max), 0.20));
-        double jcbBlockSizeLog2_50pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_blocksize_min), std::log2(eigs_jcb_blocksize_max), 0.50));
-        double jcbBlockSizeLog2_80pcnt = std::ceil(std::lerp(std::log2(eigs_jcb_blocksize_min), std::log2(eigs_jcb_blocksize_max), 0.80));
-        if(status.algorithm_saturated_for > 0) { m1.eigs_jcbMaxBlockSize = static_cast<long>(std::pow(2, jcbBlockSizeLog2_20pcnt)); }
-        if(status.algorithm_has_stuck_for > 0) { m1.eigs_jcbMaxBlockSize = static_cast<long>(std::pow(2, jcbBlockSizeLog2_50pcnt)); }
-        if(status.algorithm_has_stuck_for > 2) { m1.eigs_jcbMaxBlockSize = static_cast<long>(std::pow(2, jcbBlockSizeLog2_80pcnt)); }
-        if(status.algorithm_has_stuck_for > 4) { m1.eigs_jcbMaxBlockSize = eigs_jcb_blocksize_max; }
-    }
-
-    // Do eig instead of eigs when it's cheap (e.g. near the edges or early in the simulation)
-    m1.optSolver = m1.problem_size <= settings::precision::eig_max_size ? OptSolver::EIG : OptSolver::EIGS;
-    m1.label     = enum2sv(m1.optAlgo);
-
-    if(has_any_flags(m1.optType, OptType::FP128, OptType::CX128)) m1.eigs_lib = "EIGSMPO";
-    m1.validate();
-    return m1;
-}
-
-template<typename Scalar>
-BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionOrder order) {
+BondExpansionConfig AlgorithmFinite<Scalar>::get_bond_expansion_config(BondExpansionOrder order) {
     BondExpansionConfig bcfg;
     bcfg.order         = order;
     bcfg.policy        = settings::strategy::dmrg_bond_expansion_policy;
@@ -402,7 +305,7 @@ BondExpansionResult<Scalar> AlgorithmFinite<Scalar>::expand_bonds(BondExpansionO
         case ScalarType::CX128: bcfg.optType = OptType::CX128; break;
     }
 
-    return tensors.expand_bonds(bcfg);
+    return bcfg;
 }
 
 template<typename Scalar>

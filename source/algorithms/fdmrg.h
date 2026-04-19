@@ -49,7 +49,7 @@ class fdmrg : public AlgorithmFinite<Scalar> {
     using AlgorithmFinite<Scalar>::init_truncation_error_limits;
     using AlgorithmFinite<Scalar>::get_opt_meta;
     using AlgorithmFinite<Scalar>::last_optsolver;
-    using AlgorithmFinite<Scalar>::expand_bonds;
+    using AlgorithmFinite<Scalar>::get_bond_expansion_config;
     using AlgorithmFinite<Scalar>::write_to_file;
     using AlgorithmFinite<Scalar>::check_convergence;
     using AlgorithmFinite<Scalar>::clear_convergence_status;

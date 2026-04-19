@@ -21,7 +21,6 @@
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 
-struct BondExpansionConfig;
 class TensorsLocal;
 enum class AlgorithmType;
 enum class MergeEvent;
@@ -36,8 +35,6 @@ template<typename Scalar>
 class ModelFinite;
 template<typename Scalar>
 class EdgesFinite;
-template<typename Scalar>
-struct BondExpansionResult;
 namespace tools::finite::opt {
     struct OptMeta;
 }
@@ -164,8 +161,6 @@ class TensorsFinite {
     size_t              move_center_point_to_middle(std::optional<svd::config> svd_cfg = std::nullopt);
     void merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &multisite_tensor, MergeEvent mevent, std::optional<svd::config> svd_cfg = std::nullopt,
                              LogPolicy log_policy = LogPolicy::SILENT);
-
-    BondExpansionResult<Scalar> expand_bonds(BondExpansionConfig bcfg);
 
     void move_site_mps(const size_t site, const long steps, std::vector<size_t> &sites_mps, std::optional<long> new_pos = std::nullopt);
     void move_site_mpo(const size_t site, const long steps, std::vector<size_t> &sites_mpo);

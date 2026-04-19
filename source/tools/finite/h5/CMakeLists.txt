@@ -11,9 +11,17 @@ add_source_target(xdmrg++-tools-finite-h5
                   xdmrg++-algorithms-status
                   xdmrg++-math-tenx
                   xdmrg++-tensors-finite
-                  xdmrg++-tools-finite-measure
+                  xdmrg++-tools-finite-measure-dimensions
+                  xdmrg++-tools-finite-measure-entanglement-entropy
+                  xdmrg++-tools-finite-measure-expectation-value
+                  xdmrg++-tools-finite-measure-hamiltonian
+                  xdmrg++-tools-finite-measure-information
+                  xdmrg++-tools-finite-measure-norm
+                  xdmrg++-tools-finite-measure-number-entropy
+                  xdmrg++-tools-finite-measure-opdm
+                  xdmrg++-tools-finite-measure-spin
+                  xdmrg++-tools-finite-measure-truncation
                   xdmrg++-tools-finite-ops
-                  xdmrg++-tools-finite-env
                   xdmrg++-tools-finite-print
                   xdmrg++-tools-common-h5
                   xdmrg++-tools-common-log

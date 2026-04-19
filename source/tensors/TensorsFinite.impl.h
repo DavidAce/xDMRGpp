@@ -1,7 +1,6 @@
 #pragma once
 #include "config/debug.h"
 #include "config/enums/AlgorithmType.h"
-#include "config/enums/BondExpansionPolicy.h"
 #include "config/enums/GateMove.h"
 #include "config/enums/LogPolicy.h"
 #include "config/enums/MergeEvent.h"
@@ -29,8 +28,6 @@
 #include "tid/tid.h"
 #include "tools/common/log.h"
 #include "tools/finite/env.h"
-#include "tools/finite/env/BondExpansionConfig.h"
-#include "tools/finite/env/BondExpansionResult.h"
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/measure/norm.h"
 #include "tools/finite/measure/spin.h"
@@ -596,45 +593,6 @@ void TensorsFinite<Scalar>::merge_multisite_mps(const Eigen::Tensor<Scalar, 3> &
     clear_measurements(log_policy);
     tools::finite::mps::merge_multisite_mps(get_state(), multisite_tensor, active_sites, get_position<long>(), mevent, svd_cfg, log_policy);
     normalize_state(svd_cfg, NormPolicy::IFNEEDED);
-}
-
-template<typename Scalar>
-BondExpansionResult<Scalar> TensorsFinite<Scalar>::expand_bonds(BondExpansionConfig bcfg) {
-    // if(active_sites.empty()) throw except::runtime_error("No active sites for subspace expansion");
-    auto res = BondExpansionResult<Scalar>();
-    if(get_position<long>() < 0) {
-        res.msg = "Negative position";
-        return res;
-    }
-    auto t_exp = tid::tic_scope("bondexp");
-
-    if(active_sites.empty()) activate_sites({get_position<size_t>()});
-    rebuild_edges(); // Use fresh edges
-    if constexpr(settings::debug) assert_validity();
-    if(has_flag(bcfg.policy, BondExpansionPolicy::DMRG3S) and bcfg.order == BondExpansionOrder::POSTOPT) {
-        res = tools::finite::env::expand_bond_dmrg3s(get_state(), get_model(), get_edges(), bcfg);
-    } else if(has_flag(bcfg.policy, BondExpansionPolicy::POSTOPT_1SITE) and bcfg.order == BondExpansionOrder::POSTOPT) {
-        res = tools::finite::env::rexpand_bond_postopt_1site(get_state(), get_model(), get_edges(), bcfg);
-    } else if(has_flag(bcfg.policy, BondExpansionPolicy::PREOPT_1SITE) and bcfg.order == BondExpansionOrder::PREOPT) {
-        res = tools::finite::env::rexpand_bond_preopt_1site(get_state(), get_model(), get_edges(), bcfg);
-    } else if(has_flag(bcfg.policy, BondExpansionPolicy::POSTOPT_RDMP_1SITE) and bcfg.order == BondExpansionOrder::POSTOPT) {
-        res = tools::finite::env::density_matrix_perturbation_postopt_1site(*this, bcfg);
-    } else if(has_flag(bcfg.policy, BondExpansionPolicy::PREOPT_RDMP_1SITE) and bcfg.order == BondExpansionOrder::PREOPT) {
-        res = tools::finite::env::density_matrix_perturbation_preopt_1site(*this, bcfg);
-    } else if(has_any_flags(bcfg.policy, BondExpansionPolicy::PREOPT_NSITE_REAR, BondExpansionPolicy::PREOPT_NSITE_FORE) and
-              bcfg.order == BondExpansionOrder::PREOPT) {
-        res = tools::finite::env::expand_bond_preopt_nsite(get_state(), get_model(), get_edges(), bcfg);
-    }
-
-    if(res.ok) {
-        tools::log->debug("Expanded environment {} block [{}-{}] | var {:.3e} -> {:.3e} | ene {:.16f} -> {:.16f} | hsq {:.16f} -> {:.16f}",
-                          flag2str(bcfg.policy), res.posL, res.posR, res.var_old, res.var_new, res.ene_old, res.ene_new, res.hsq_old, res.hsq_new);
-        clear_measurements();
-    } else {
-        tools::log->debug("Expansion canceled: {}", res.msg);
-    }
-    if constexpr(settings::debug) assert_validity();
-    return res;
 }
 
 template<typename Scalar>

@@ -21,8 +21,9 @@
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
-#include "tools/finite/env/BondExpansionConfig.h"
-#include "tools/finite/env/BondExpansionResult.h"
+#include "tools/finite/bex.h"
+#include "tools/finite/bex/BondExpansionConfig.h"
+#include "tools/finite/bex/BondExpansionResult.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/mps.h"
@@ -231,7 +232,7 @@ void fdmrg<Scalar>::run_algorithm() {
 template<typename Scalar>
 void fdmrg<Scalar>::update_state() {
     auto t_step                = tid::tic_scope("step");
-    auto bondexp_preopt_result = expand_bonds(BondExpansionOrder::PREOPT);
+    auto bondexp_preopt_result = tools::finite::bex::expand_bonds(tensors, get_bond_expansion_config(BondExpansionOrder::PREOPT));
     auto opt_meta              = get_opt_meta();
     variance_before_step       = std::nullopt;
 
@@ -307,7 +308,7 @@ void fdmrg<Scalar>::update_state() {
     var_latest                    = var_mrg;
     ene_latest                    = ene_mrg;
 
-    auto bondexp_postopt_result = expand_bonds(BondExpansionOrder::POSTOPT);
+    auto bondexp_postopt_result = tools::finite::bex::expand_bonds(tensors, get_bond_expansion_config(BondExpansionOrder::POSTOPT));
 
     auto ene_ini = initial_state.get_energy();
     auto ene_opt = opt_state.get_energy();

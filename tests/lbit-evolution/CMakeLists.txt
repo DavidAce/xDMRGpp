@@ -3,13 +3,6 @@ project(xdmrg++-test-lbit-evolution)
 enable_testing()
 add_executable(${PROJECT_NAME} main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE
-#                      xdmrg++-tid
-#                      xdmrg++-math-svd
-#                      xdmrg++-math-rnd
-#                      xdmrg++-math-tenx
-#                      xdmrg++-tools-common-log
-#                      xdmrg++-tools-common-contraction
-                      xdmrg++-tools-common-plot
                       xdmrg++-algorithms-flbit
                       )
 target_link_libraries(${PROJECT_NAME} PRIVATE xdmrg++-deps xdmrg++-flags)
@@ -24,4 +17,3 @@ endif()
 
 add_test(NAME ${PROJECT_NAME} WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
                COMMAND ${PROJECT_NAME} -t 1 -c ${PROJECT_SOURCE_DIR}/input-flbit.cfg )
-

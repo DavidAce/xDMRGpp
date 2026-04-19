@@ -32,8 +32,9 @@
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
-#include "tools/finite/env/BondExpansionConfig.h"
-#include "tools/finite/env/BondExpansionResult.h"
+#include "tools/finite/bex.h"
+#include "tools/finite/bex/BondExpansionConfig.h"
+#include "tools/finite/bex/BondExpansionResult.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/hamiltonian.h"
 #include "tools/finite/measure/norm.h"
@@ -400,7 +401,7 @@ void xdmrg<Scalar>::update_state() {
         auto h1info      = SetH1MvInfo(ContractionBackend::TBLIS);
         auto h2info      = SetH2MvInfo(ContractionBackend::TBLIS);
         auto envinfo     = SetEnvInfo(ContractionPrecision::X2);
-        auto bexp_result = expand_bonds(BondExpansionOrder::PREOPT);
+        auto bexp_result = tools::finite::bex::expand_bonds(tensors, get_bond_expansion_config(BondExpansionOrder::PREOPT));
     }
 
     auto opt_meta = get_opt_meta();
@@ -881,7 +882,7 @@ void xdmrg<Scalar>::update_state() {
     ene_delta                     = ene_mrg - ene_latest;
     var_latest                    = var_mrg;
     ene_latest                    = ene_mrg;
-    auto bondexp_result           = expand_bonds(BondExpansionOrder::POSTOPT);
+    auto bondexp_result           = tools::finite::bex::expand_bonds(tensors, get_bond_expansion_config(BondExpansionOrder::POSTOPT));
 
     auto ene_ini = initial_state.get_energy();
     auto ene_opt = opt_state.get_energy();

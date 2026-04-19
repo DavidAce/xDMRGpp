@@ -12,7 +12,9 @@ add_source_target(xdmrg++-tensors-state-finite
         xdmrg++-debug-info
         xdmrg++-tensors-mps
         xdmrg++-math-tenx
-        xdmrg++-tools-finite-measure
+        xdmrg++-tools-finite-measure-dimensions
+        xdmrg++-tools-finite-measure-norm
+        xdmrg++-tools-finite-measure-truncation
         xdmrg++-tools-finite-multisite
         xdmrg++-tools-common-contraction
         xdmrg++-tools-common-log

@@ -12,7 +12,10 @@ add_source_target(xdmrg++-tools-finite-ops
             xdmrg++-tensors-mpo
             xdmrg++-math-tenx
             xdmrg++-tools-finite-mps
-            xdmrg++-tools-finite-measure
+            xdmrg++-tools-finite-measure-dimensions
+            xdmrg++-tools-finite-measure-entanglement-entropy
+            xdmrg++-tools-finite-measure-norm
+            xdmrg++-tools-finite-measure-spin
             xdmrg++-tools-common-log
             xdmrg++-tools-common-contraction
         )
@@ -35,6 +38,7 @@ add_subdirectory(ed)
 add_subdirectory(measure)
 add_subdirectory(multisite)
 add_subdirectory(env)
+add_subdirectory(bex)
 add_subdirectory(mps)
 add_subdirectory(opt)
 add_subdirectory(mpo)
@@ -46,6 +50,7 @@ target_link_libraries(xdmrg++-tools-finite INTERFACE
         xdmrg++-tools-finite-measure
         xdmrg++-tools-finite-mps
         xdmrg++-tools-finite-env
+        xdmrg++-tools-finite-bex
         xdmrg++-tools-finite-multisite
         xdmrg++-tools-finite-opt
         xdmrg++-tools-finite-mpo

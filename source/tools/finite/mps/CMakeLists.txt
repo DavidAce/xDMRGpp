@@ -27,6 +27,8 @@ add_source_target(xdmrg++-tools-finite-mps
         xdmrg++-tools-common-contraction
         xdmrg++-tools-common-log
         xdmrg++-tools-common-split
-        xdmrg++-tools-finite-measure
+        xdmrg++-tools-finite-measure-dimensions
+        xdmrg++-tools-finite-measure-norm
+        xdmrg++-tools-finite-measure-spin
         xdmrg++-tools-finite-ops
         )

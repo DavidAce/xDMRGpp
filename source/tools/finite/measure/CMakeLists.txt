@@ -1,36 +1,140 @@
-add_source_target(xdmrg++-tools-finite-measure
-        TARGET_SOURCES
-
-        infopolicy.cpp
-
-        INST_TEMPLATE_FILES
-        correlation/correlation.inst.cpp.in
-        dimensions/dimensions.inst.cpp.in
-        entanglement_entropy/entanglement_entropy.inst.cpp.in
-        expectation_value/contract.inst.cpp.in
-        hamiltonian/hamiltonian.inst.cpp.in
-        information/information.inst.cpp.in
-        norm/norm.inst.cpp.in
-        number_entropy/number_entropy.inst.cpp.in
-        opdm/opdm.inst.cpp.in
-        residual/residual.inst.cpp.in
-        spin/spin.inst.cpp.in
-        truncation/truncation.inst.cpp.in
-
-        INST_PAIR_TEMPLATE_FILES
-        expectation_value/expectation_value.pair.inst.cpp.in
-
-        OBJECT_LINK_LIBRARIES
-        xdmrg++-deps xdmrg++-flags
-        INTERFACE_LINK_LIBRARIES
+set(tools_finite_measure_common_deps
         xdmrg++-tid
         xdmrg++-qm-spin
         xdmrg++-qm-mpo
         xdmrg++-tensors-finite
-        xdmrg++-math-eig
         xdmrg++-math-tenx
         xdmrg++-tools-finite-mps
         xdmrg++-tools-common-log
         xdmrg++-tools-common-contraction
+        )
 
+add_source_target(xdmrg++-tools-finite-measure-correlation
+        INST_TEMPLATE_FILES
+        correlation/correlation.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-dimensions
+        INST_TEMPLATE_FILES
+        dimensions/dimensions.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-entanglement-entropy
+        INST_TEMPLATE_FILES
+        entanglement_entropy/entanglement_entropy.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-expectation-value
+        INST_TEMPLATE_FILES
+        expectation_value/contract.inst.cpp.in
+        INST_PAIR_TEMPLATE_FILES
+        expectation_value/expectation_value.pair.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-hamiltonian
+        INST_TEMPLATE_FILES
+        hamiltonian/hamiltonian.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-information
+        TARGET_SOURCES
+        infopolicy.cpp
+        INST_TEMPLATE_FILES
+        information/information.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        xdmrg++-math-eig
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-norm
+        INST_TEMPLATE_FILES
+        norm/norm.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-number-entropy
+        INST_TEMPLATE_FILES
+        number_entropy/number_entropy.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-opdm
+        INST_TEMPLATE_FILES
+        opdm/opdm.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        xdmrg++-math-eig
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-residual
+        INST_TEMPLATE_FILES
+        residual/residual.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-spin
+        INST_TEMPLATE_FILES
+        spin/spin.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_source_target(xdmrg++-tools-finite-measure-truncation
+        INST_TEMPLATE_FILES
+        truncation/truncation.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+        xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+        ${tools_finite_measure_common_deps}
+        )
+
+add_library(xdmrg++-tools-finite-measure INTERFACE)
+target_link_libraries(xdmrg++-tools-finite-measure INTERFACE
+        xdmrg++-tools-finite-measure-correlation
+        xdmrg++-tools-finite-measure-dimensions
+        xdmrg++-tools-finite-measure-entanglement-entropy
+        xdmrg++-tools-finite-measure-expectation-value
+        xdmrg++-tools-finite-measure-hamiltonian
+        xdmrg++-tools-finite-measure-information
+        xdmrg++-tools-finite-measure-norm
+        xdmrg++-tools-finite-measure-number-entropy
+        xdmrg++-tools-finite-measure-opdm
+        xdmrg++-tools-finite-measure-residual
+        xdmrg++-tools-finite-measure-spin
+        xdmrg++-tools-finite-measure-truncation
         )
