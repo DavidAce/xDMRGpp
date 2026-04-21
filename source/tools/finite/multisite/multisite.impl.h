@@ -8,7 +8,6 @@
 #include "tensors/site/mps/MpsSite.h"
 #include "tensors/state/StateFinite.h"
 #include "tools/common/log.h"
-#include "tools/finite/mps.h"
 
 template<typename Scalar>
 std::array<long, 3> tools::finite::multisite::get_dimensions(const StateFinite<Scalar> &state, std::optional<std::vector<size_t>> sites) {

@@ -1,25 +1,67 @@
-add_source_target(xdmrg++-tools-finite-ops
+set(tools_finite_ops_state_deps
+        xdmrg++-tid
+        xdmrg++-math-tenx
+        xdmrg++-tensors-state-finite
+        xdmrg++-tools-common-log
+        )
+
+add_source_target(xdmrg++-tools-finite-ops-apply
         TARGET_SOURCES
         INST_TEMPLATE_FILES
-            ops/ops.inst.cpp.in
+            ops/ops_apply.inst.cpp.in
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-            xdmrg++-tid
-            xdmrg++-qm-spin
+            ${tools_finite_ops_state_deps}
+            xdmrg++-config
+            xdmrg++-math-svd
             xdmrg++-qm-mpo
-            xdmrg++-tensors-state-finite
             xdmrg++-tensors-mpo
-            xdmrg++-math-tenx
-            xdmrg++-tools-finite-mps
+            xdmrg++-tools-common-contraction
             xdmrg++-tools-finite-measure-dimensions
             xdmrg++-tools-finite-measure-entanglement-entropy
             xdmrg++-tools-finite-measure-norm
             xdmrg++-tools-finite-measure-spin
-            xdmrg++-tools-common-log
+            xdmrg++-tools-finite-mpo
+        )
+
+add_source_target(xdmrg++-tools-finite-ops-overlap
+        TARGET_SOURCES
+        INST_TEMPLATE_FILES
+            ops/ops_overlap.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+            xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+            ${tools_finite_ops_state_deps}
             xdmrg++-tools-common-contraction
         )
 
+add_source_target(xdmrg++-tools-finite-ops-project
+        TARGET_SOURCES
+        INST_TEMPLATE_FILES
+            ops/ops_project.inst.cpp.in
+        OBJECT_LINK_LIBRARIES
+            xdmrg++-deps xdmrg++-flags
+        INTERFACE_LINK_LIBRARIES
+            ${tools_finite_ops_state_deps}
+            xdmrg++-config
+            xdmrg++-math-rnd
+            xdmrg++-math-svd
+            xdmrg++-qm-mpo
+            xdmrg++-qm-spin
+            xdmrg++-tools-finite-measure-dimensions
+            xdmrg++-tools-finite-measure-norm
+            xdmrg++-tools-finite-measure-spin
+            xdmrg++-tools-finite-mps-normalize
+            xdmrg++-tools-finite-ops-apply
+        )
+
+add_library(xdmrg++-tools-finite-ops INTERFACE)
+target_link_libraries(xdmrg++-tools-finite-ops INTERFACE
+        xdmrg++-tools-finite-ops-apply
+        xdmrg++-tools-finite-ops-overlap
+        xdmrg++-tools-finite-ops-project
+        )
 
 add_source_target(xdmrg++-tools-finite-print
         TARGET_SOURCES

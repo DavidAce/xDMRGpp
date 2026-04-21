@@ -8,7 +8,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
                       xdmrg++-qm-gate
                       xdmrg++-math-tenx
                       xdmrg++-tensors-state-finite
-                      xdmrg++-tools-finite-mps
+                      xdmrg++-tools-finite-mps-gates
                       xdmrg++-tools-finite-h5
                       xdmrg++-tools-common-h5
                       xdmrg++-tools-common-prof)

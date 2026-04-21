@@ -21,7 +21,6 @@ add_source_target(xdmrg++-tools-finite-h5
                   xdmrg++-tools-finite-measure-opdm
                   xdmrg++-tools-finite-measure-spin
                   xdmrg++-tools-finite-measure-truncation
-                  xdmrg++-tools-finite-ops
                   xdmrg++-tools-finite-pos
                   xdmrg++-tools-finite-print
                   xdmrg++-tools-common-h5

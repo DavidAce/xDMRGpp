@@ -1,0 +1,10 @@
+#include "ops.impl.h"
+
+using Scalar = @SCALAR@;
+using Real   = decltype(std::real(std::declval<Scalar>()));
+
+/* clang-format off */
+template void tools::finite::ops::project_to_axis(StateFinite<Scalar> &state, const Eigen::Matrix2cd &paulimatrix, int sign, std::optional<svd::config> svd_cfg);
+template std::optional<Real> tools::finite::ops::get_spin_component_along_axis(StateFinite<Scalar> &state, std::string_view axis);
+template int tools::finite::ops::project_to_nearest_axis(StateFinite<Scalar> &state, std::string_view axis, std::optional<svd::config> svd_cfg);
+/* clang-format on */

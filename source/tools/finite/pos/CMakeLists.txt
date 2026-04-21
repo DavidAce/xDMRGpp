@@ -9,7 +9,8 @@ add_source_target(xdmrg++-tools-finite-pos
         xdmrg++-math-svd
         xdmrg++-math-tenx
         xdmrg++-tensors-finite
-        xdmrg++-tools-finite-mps
+        xdmrg++-tools-finite-mps-gates
+        xdmrg++-tools-finite-mps-move
         xdmrg++-tools-finite-mpo
         xdmrg++-tools-finite-multisite
         xdmrg++-tools-common-log

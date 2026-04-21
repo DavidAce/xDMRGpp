@@ -1,12 +1,19 @@
-set(tools_finite_measure_common_deps
+set(tools_finite_measure_state_deps
         xdmrg++-tid
-        xdmrg++-qm-spin
-        xdmrg++-qm-mpo
-        xdmrg++-tensors-finite
         xdmrg++-math-tenx
-        xdmrg++-tools-finite-mps
+        xdmrg++-tensors-state-finite
         xdmrg++-tools-common-log
+        )
+
+set(tools_finite_measure_expectation_deps
+        ${tools_finite_measure_state_deps}
+        xdmrg++-math-svd
+        xdmrg++-tensors-env
+        xdmrg++-tensors-mpo
+        xdmrg++-tensors-mps
         xdmrg++-tools-common-contraction
+        xdmrg++-tools-common-split
+        xdmrg++-tools-finite-mpo
         )
 
 add_source_target(xdmrg++-tools-finite-measure-correlation
@@ -15,7 +22,8 @@ add_source_target(xdmrg++-tools-finite-measure-correlation
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
+        xdmrg++-tools-finite-measure-expectation-value
         )
 
 add_source_target(xdmrg++-tools-finite-measure-dimensions
@@ -24,7 +32,8 @@ add_source_target(xdmrg++-tools-finite-measure-dimensions
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        xdmrg++-tid
+        xdmrg++-tensors-state-finite
         )
 
 add_source_target(xdmrg++-tools-finite-measure-entanglement-entropy
@@ -33,7 +42,7 @@ add_source_target(xdmrg++-tools-finite-measure-entanglement-entropy
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
         )
 
 add_source_target(xdmrg++-tools-finite-measure-expectation-value
@@ -44,7 +53,7 @@ add_source_target(xdmrg++-tools-finite-measure-expectation-value
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_expectation_deps}
         )
 
 add_source_target(xdmrg++-tools-finite-measure-hamiltonian
@@ -53,7 +62,10 @@ add_source_target(xdmrg++-tools-finite-measure-hamiltonian
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
+        xdmrg++-tensors-finite
+        xdmrg++-tools-common-contraction
+        xdmrg++-tools-finite-measure-expectation-value
         )
 
 add_source_target(xdmrg++-tools-finite-measure-information
@@ -64,8 +76,13 @@ add_source_target(xdmrg++-tools-finite-measure-information
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
         xdmrg++-math-eig
+        xdmrg++-math-svd
+        xdmrg++-qm-mpo
+        xdmrg++-tools-common-split
+        xdmrg++-tools-finite-measure-dimensions
+        xdmrg++-tools-finite-measure-entanglement-entropy
         )
 
 add_source_target(xdmrg++-tools-finite-measure-norm
@@ -74,7 +91,8 @@ add_source_target(xdmrg++-tools-finite-measure-norm
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
+        xdmrg++-tools-common-contraction
         )
 
 add_source_target(xdmrg++-tools-finite-measure-number-entropy
@@ -83,7 +101,9 @@ add_source_target(xdmrg++-tools-finite-measure-number-entropy
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
+        xdmrg++-tools-finite-measure-dimensions
+        xdmrg++-tools-finite-mps-move
         )
 
 add_source_target(xdmrg++-tools-finite-measure-opdm
@@ -92,8 +112,10 @@ add_source_target(xdmrg++-tools-finite-measure-opdm
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
         xdmrg++-math-eig
+        xdmrg++-qm-spin
+        xdmrg++-tools-finite-measure-expectation-value
         )
 
 add_source_target(xdmrg++-tools-finite-measure-residual
@@ -102,7 +124,9 @@ add_source_target(xdmrg++-tools-finite-measure-residual
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
+        xdmrg++-tensors-finite
+        xdmrg++-tools-common-contraction
         )
 
 add_source_target(xdmrg++-tools-finite-measure-spin
@@ -111,7 +135,12 @@ add_source_target(xdmrg++-tools-finite-measure-spin
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        ${tools_finite_measure_state_deps}
+        xdmrg++-qm-mpo
+        xdmrg++-qm-spin
+        xdmrg++-tools-common-contraction
+        xdmrg++-tools-finite-measure-correlation
+        xdmrg++-tools-finite-measure-expectation-value
         )
 
 add_source_target(xdmrg++-tools-finite-measure-truncation
@@ -120,7 +149,8 @@ add_source_target(xdmrg++-tools-finite-measure-truncation
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        ${tools_finite_measure_common_deps}
+        xdmrg++-tid
+        xdmrg++-tensors-state-finite
         )
 
 add_library(xdmrg++-tools-finite-measure INTERFACE)

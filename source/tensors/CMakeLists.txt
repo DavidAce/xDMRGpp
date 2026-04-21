@@ -24,10 +24,13 @@ add_source_target(xdmrg++-tensors-finite
                   xdmrg++-tools-finite-measure-hamiltonian
                   xdmrg++-tools-finite-measure-norm
                   xdmrg++-tools-finite-measure-spin
-                  xdmrg++-tools-finite-mps
+                  xdmrg++-tools-finite-mps-init-entangled-state
+                  xdmrg++-tools-finite-mps-init-product-state
+                  xdmrg++-tools-finite-mps-merge
+                  xdmrg++-tools-finite-mps-normalize
                   xdmrg++-tools-finite-mpo
                   xdmrg++-tools-finite-multisite
-                  xdmrg++-tools-finite-ops
+                  xdmrg++-tools-finite-ops-project
                   xdmrg++-tools-common-log
                   )
 

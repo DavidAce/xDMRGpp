@@ -1,0 +1,11 @@
+#include "ops.impl.h"
+
+using Scalar = @SCALAR@;
+using Real   = decltype(std::real(std::declval<Scalar>()));
+
+/* clang-format off */
+template Scalar tools::finite::ops::overlap<Scalar>(const StateFinite<Scalar> &state1, const StateFinite<Scalar> &state2);
+#if @SCALAR_IS_COMPLEX@
+template Scalar tools::finite::ops::overlap<Real>(const StateFinite<Scalar> &state1, const StateFinite<Scalar> &state2);
+#endif
+/* clang-format on */
