@@ -49,8 +49,6 @@
 #include "tools/finite/measure/information.h"
 #include "tools/finite/measure/norm.h"
 #include "tools/finite/measure/number_entropy.h"
-#include "tools/finite/measure/opdm.h"
-#include "tools/finite/measure/residual.h"
 #include "tools/finite/measure/spin.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"

@@ -20,13 +20,7 @@ add_source_target(xdmrg++-algorithms-base
         xdmrg++-tools-common-log
         )
 
-add_source_target(xdmrg++-algorithms-finite
-        INST_TEMPLATE_FILES
-        AlgorithmFinite/AlgorithmFinite.inst.cpp.in
-
-        OBJECT_LINK_LIBRARIES
-        xdmrg++-deps xdmrg++-flags
-        INTERFACE_LINK_LIBRARIES
+set(algorithms_finite_deps
         xdmrg++-tid
         xdmrg++-config
         xdmrg++-debug-info
@@ -45,14 +39,34 @@ add_source_target(xdmrg++-algorithms-finite
         xdmrg++-tools-finite-measure-information
         xdmrg++-tools-finite-measure-norm
         xdmrg++-tools-finite-measure-number-entropy
-        xdmrg++-tools-finite-measure-opdm
-        xdmrg++-tools-finite-measure-residual
         xdmrg++-tools-finite-measure-spin
-        xdmrg++-tools-finite-mps
-        xdmrg++-tools-finite-ops
+        xdmrg++-tools-finite-mps-normalize
+        xdmrg++-tools-finite-ops-apply
+        xdmrg++-tools-finite-ops-overlap
         xdmrg++-tools-finite-pos
         xdmrg++-tools-finite-print
         xdmrg++-tools-common-log
+        )
+
+set(algorithms_finite_scalar_targets)
+foreach(scalar IN LISTS DMRG_ENABLED_SCALARS)
+    add_source_target(xdmrg++-algorithms-finite-${scalar}
+            INST_TEMPLATE_FILES
+            AlgorithmFinite/AlgorithmFinite.inst.cpp.in
+            INST_SCALARS
+            ${scalar}
+
+            OBJECT_LINK_LIBRARIES
+            xdmrg++-deps xdmrg++-flags
+            INTERFACE_LINK_LIBRARIES
+            ${algorithms_finite_deps}
+            )
+    list(APPEND algorithms_finite_scalar_targets xdmrg++-algorithms-finite-${scalar})
+endforeach()
+
+add_library(xdmrg++-algorithms-finite INTERFACE)
+target_link_libraries(xdmrg++-algorithms-finite INTERFACE
+        ${algorithms_finite_scalar_targets}
         )
 
 add_source_target(xdmrg++-algorithms-finite-opt-meta
@@ -113,12 +127,17 @@ add_source_target(xdmrg++-algorithms-flbit
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
-        xdmrg++-algorithms-finite
+        xdmrg++-algorithms-finite-cx64
         xdmrg++-math-tenx
         xdmrg++-qm-lbit
         xdmrg++-tools-common-plot
         xdmrg++-tools-finite-h5
-        xdmrg++-tools-finite-mps
+        xdmrg++-tools-finite-mps-gates
+        xdmrg++-tools-finite-mps-init-product-state
+        xdmrg++-tools-finite-mps-merge
+        xdmrg++-tools-finite-mps-normalize
+        xdmrg++-tools-finite-mps-to-tensor
+        xdmrg++-tools-finite-ops-overlap
         xdmrg++-tools-common-h5
         xdmrg++-tools-common-prof
 
