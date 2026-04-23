@@ -25,7 +25,7 @@ namespace tools::finite::opt {
         std::optional<Eigen::Tensor<Scalar, 3>> tensor         = std::nullopt;
         std::optional<Eigen::Tensor<Scalar, 2>> bond           = std::nullopt;
         std::optional<std::vector<size_t>>      sites          = std::nullopt;
-        std::optional<RealScalar<Scalar>>       eshift         = std::nullopt; /*!< current energy shift in the energy MPOs: eshift  */
+        std::optional<RealScalar<Scalar>>       eshift         = std::nullopt; /*!< Current MPO energy shift: eshift */
         std::optional<RealScalar<Scalar>>       energy_shifted = std::nullopt; /*!< <H-eshift>  */
         std::optional<RealScalar<Scalar>>       energy         = std::nullopt; /*!< Energy: eigenvalue of H: (E - eshift) + eshift   */
         std::optional<RealScalar<Scalar>>       hsquared       = std::nullopt; /*!< Variance: H²-E² = <(H-eshift)²> - <H-eshift>² */

@@ -695,7 +695,7 @@ bool StateFinite<Scalar>::is_at_bond_limit(long bond_lim, double fraction) const
 template<typename Scalar>
 size_t StateFinite<Scalar>::num_bonds_at_maximum(const std::vector<size_t> &sites) const {
     if(sites.empty()) return 0;
-    auto L            = get_length<size_t>();
+    auto L            = get_length<long>();
     auto bond_dims    = tools::finite::measure::bond_dimensions(*this);
     auto spin_dims    = tools::finite::measure::spin_dimensions(*this);
     auto get_bond_max = [&](long bond_idx) {
@@ -745,15 +745,18 @@ void StateFinite<Scalar>::shrink_cache() const {
         while(cache.trf.size() > max_trf_cache_size) cache.trf.pop_front();
     };
     auto shrink_once = [&](auto &cache) {
-        using namespace settings;
-        using namespace settings::precision;
-
         if(!cache.mps.empty()) {
-            if constexpr(debug_cache) { tools::log->trace("shrink_cache (max {}): del mps: {}", max_cache_gbts, cache.mps.front().first); }
+            if constexpr(debug_cache) {
+                tools::log->trace("shrink_cache (max {}): del mps: {}",
+                                  settings::storage::dataset::subsystem_entanglement_entropies::cache_max_gbts, cache.mps.front().first);
+            }
             cache.mps.pop_front();
         }
         if(!cache.trf.empty()) {
-            if constexpr(debug_cache) { tools::log->trace("shrink_cache (max {}): del trf: {}", max_cache_gbts, cache.trf.front().first); }
+            if constexpr(debug_cache) {
+                tools::log->trace("shrink_cache (max {}): del trf: {}",
+                                  settings::storage::dataset::subsystem_entanglement_entropies::cache_max_gbts, cache.trf.front().first);
+            }
             cache.trf.pop_front();
         }
     };
@@ -773,7 +776,7 @@ void StateFinite<Scalar>::shrink_cache() const {
     shrink_while(cache_cx64);
     shrink_while(cache_cx128);
 
-    while(get_mps_cache_gbts() + get_trf_cache_gbts() > std::max(0.0, settings::precision::max_cache_gbts)) {
+    while(get_mps_cache_gbts() + get_trf_cache_gbts() > std::max(0.0, settings::storage::dataset::subsystem_entanglement_entropies::cache_max_gbts)) {
         if(all_empty()) break;
         shrink_once(cache_fp32);
         shrink_once(cache_fp64);

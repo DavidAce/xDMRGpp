@@ -167,7 +167,7 @@ namespace folded_spectrum {
         auto hamiltonian_squared = MatVecMPO<CalcType>(env2.L, env2.R, tensors.template get_multisite_mpo_squared<CalcType>());
         tools::log->trace("Finding largest-magnitude eigenvalue");
         eig::solver solver; // Define a solver just to find the maximum eigenvalue
-        solver.config.tol             = settings::precision::eigs_abstol_min;
+        solver.config.tol             = settings::solvers::eig::abstol_min;
         solver.config.maxIter         = 200;
         solver.config.maxNev          = 1;
         solver.config.maxNcv          = 16;
@@ -194,10 +194,10 @@ namespace folded_spectrum {
 //     std::string eigprob;
 //     switch(meta.optAlgo) {
 //         case OptAlgo::DMRG: eigprob = "Hx=λx"; break;
-//         case OptAlgo::DMRGX: eigprob = "Hx=λx"; break;
-//         case OptAlgo::HYBRID_DMRGX: eigprob = "Hx=λx"; break;
-//         case OptAlgo::XDMRG: eigprob = "H²x=λx"; break;
-//         case OptAlgo::GDMRG: eigprob = "Hx=λH²x"; break;
+//         case OptAlgo::DMRG_X: eigprob = "Hx=λx"; break;
+//         case OptAlgo::DMRG_X_HYBRID: eigprob = "Hx=λx"; break;
+//         case OptAlgo::DMRG_FOLDED: eigprob = "H²x=λx"; break;
+//         case OptAlgo::DMRG_GSI: eigprob = "Hx=λH²x"; break;
 //     }
 //
 //     tools::log->debug("eigs_lanczos_h1h2_executor: Solving [{}] | ritz {} | maxIter {} | tol {:.2e} | init on | size {} | mps {}", eigprob,
@@ -280,10 +280,10 @@ void eigs_manager_folded_spectrum(const TensorsFinite<Scalar> &tensors, const op
     auto       &cfg           = solver.config;
     cfg.loglevel              = 2;
     cfg.compute_eigvecs       = eig::Vecs::ON;
-    cfg.tol                   = meta.eigs_abstol.value_or(settings::precision::eigs_abstol_min); // 1e-12 is good. This Sets "eps" in primme, see link above.
-    cfg.maxIter               = meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
+    cfg.tol                   = meta.eigs_abstol.value_or(settings::solvers::eig::abstol_min); // 1e-12 is good. This Sets "eps" in primme, see link above.
+    cfg.maxIter               = meta.eigs_iter_max.value_or(settings::solvers::eig::iter_max);
     cfg.maxNev                = meta.eigs_nev.value_or(1);
-    cfg.maxNcv                = meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    cfg.maxNcv                = meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min);
     cfg.maxTime               = meta.eigs_time_max.value_or(2 * 60 * 60); // Two hours default
     cfg.primme_minRestartSize = meta.primme_minRestartSize;
     cfg.primme_maxBlockSize   = meta.primme_maxBlockSize;
@@ -322,7 +322,6 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum(const Ten
     if(meta.optSolver == OptSolver::EIG) return optimize_folded_spectrum_eig(tensors, initial_mps, meta, elog);
 
     using namespace internal;
-    using namespace settings::precision;
     initial_mps.validate_initial_mps();
     elog.eigs_add_entry(initial_mps, spdlog::level::debug);
 

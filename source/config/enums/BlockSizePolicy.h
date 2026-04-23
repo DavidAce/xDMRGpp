@@ -8,8 +8,8 @@
  */
 
 enum class BlockSizePolicy {
-    MIN         = 0,       /*!< Block size = settings::strategy::dmrg_min_blocksize */
-    MAX         = 1 << 0,  /*!< Block size = settings::strategy::dmrg_max_blocksize */
+    MIN         = 0,       /*!< Block size = settings::schedule::dmrg::min_blocksize */
+    MAX         = 1 << 0,  /*!< Block size = settings::schedule::dmrg::max_blocksize */
     INFO        = 1 << 1,  /*!< Block size = ceil of "information_center_of_mass" */
     INFOPLUS1   = 1 << 2,  /*!< Block size = ceil of "information_center_of_mass + 1.00" */
     INFO150     = 1 << 3,  /*!< Block size = ceil of "information_center_of_mass * 1.50" */

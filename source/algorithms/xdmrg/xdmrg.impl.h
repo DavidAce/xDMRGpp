@@ -83,9 +83,6 @@ void xdmrg<Scalar>::resume() {
         auto name = tools::common::h5::resume::extract_state_name(state_prefix);
         tensors.state->set_name(name);
 
-        // Set a possibly new energy target
-        // status.energy_tgt = settings::xdmrg::energy_spectrum_shift;
-
         // Reload the bond and truncation error limits (could be different in the config compared to the status we just loaded)
         double long_max                   = static_cast<double>(std::numeric_limits<long>::max());
         double bond_max                   = std::min(long_max, std::pow(2.0, settings::model::model_size / 2));
@@ -95,8 +92,8 @@ void xdmrg<Scalar>::resume() {
         status.bond_limit_has_reached_max = status.bond_lim == status.bond_max;
         tools::log->info("Initialized bond dimension limits: min {} lim {} max {}", status.bond_min, status.bond_lim, status.bond_max);
 
-        status.trnc_min                   = settings::precision::svd_truncation_min;
-        status.trnc_max                   = settings::precision::svd_truncation_max;
+        status.trnc_min                   = settings::solvers::svd::truncation_min;
+        status.trnc_max                   = settings::solvers::svd::truncation_max;
         status.trnc_lim                   = std::clamp(status.trnc_lim, status.trnc_min, status.trnc_max);
         status.trnc_limit_has_reached_min = status.trnc_lim == status.trnc_min;
         tools::log->info("Initialized truncation error limits: max {:8.2e} lim {:8.2e} min {:8.2e}", status.trnc_max, status.trnc_lim, status.trnc_min);
@@ -235,7 +232,7 @@ void xdmrg<Scalar>::run_preprocessing() {
     init_truncation_error_limits();
     initialize_model(); // First use of random!
 
-    initialize_state(ResetReason::INIT, settings::strategy::initial_state); // Second use of random!
+    initialize_state(ResetReason::INIT, settings::state::init::initial_state); // Second use of random!
     tensors.get_state().assert_validity();
     find_energy_range();
     tensors.get_state().assert_validity();
@@ -362,11 +359,11 @@ void xdmrg<Scalar>::run_algorithm() {
         update_bond_dimension_limit();   // Updates the bond dimension if the state precision is being limited by bond dimension
         update_truncation_error_limit(); // Updates the truncation error limit if the state is being truncated
         update_mixing_factor();          // Updates the mixing factor used in DMRG3S
-        set_energy_shift_mpo();          // Shifts the energy H -> H-<E> by subtracting E/L on each MPO.
+        set_energy_shift_mpo();          // Shifts the MPOs by the target energy used in the folded/generalized objective.
         set_parity_shift_mpo();          // Shifts the energy spectrum of states with opposite parity away from the current energy.
         set_parity_shift_mpo_squared();  // Shifts the energy-squared spectrum of states with opposite parity up by 1 (makes sense with ritz == SM)
         rebuild_tensors();               // Rebuilds mpos (and compresses them) and edges, only if they were modified.
-        try_projection();                // Tries to project the state to the nearest global spin parity sector along settings::strategy::target_axis
+        try_projection();                // Tries to project the state to the nearest global spin parity sector along settings::state::sector::target_axis
         try_mps_compression();           // Tries to compress all the MPS bond dimensions without sacrificing too much precision
 
         // Perform the step
@@ -447,7 +444,7 @@ void xdmrg<Scalar>::update_state() {
     /* clang-format off */
     opt_meta.optExit = OptExit::SUCCESS;
     if(opt_state.get_grad_max()       > static_cast<RealScalar>(1.000)                            ) opt_meta.optExit |= OptExit::FAIL_GRADIENT;
-    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::precision::eigs_abstol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
+    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::solvers::eig::abstol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
     if(opt_state.get_eigs_nev()       == 0 and
        opt_meta.optSolver             == OptSolver::EIGS                                          ) opt_meta.optExit |= OptExit::FAIL_RESIDUAL; // No convergence
     if(opt_state.get_overlap()        < static_cast<RealScalar>(0.010)                            ) opt_meta.optExit |= OptExit::FAIL_OVERLAP;
@@ -488,8 +485,8 @@ void xdmrg<Scalar>::update_state() {
     if(var_mrg < 0) {
         tools::log->info("Variance is negative! {:.16e}", var_mrg);
         // Disable mpo compression
-        settings::precision::use_compressed_mpo         = MpoCompress::NONE;
-        settings::precision::use_compressed_mpo_squared = MpoCompress::NONE;
+        settings::model::use_compressed_mpo         = MpoCompress::NONE;
+        settings::model::use_compressed_mpo_squared = MpoCompress::NONE;
         {
             using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
             auto       pos   = tensors.template get_position<Eigen::Index>();
@@ -960,30 +957,28 @@ void xdmrg<Scalar>::find_energy_range() {
 }
 
 template<typename Scalar>
-void xdmrg<Scalar>::set_energy_shift_mpo() {
-    // In xdmrg we find an excited energy eigenstate by optimizing the energy variance of some state close to a target energy.
-    // We can target a particular energy by setting an energy shift (equal to the target energy), which then becomes the energy minimum
-    // once we fold the spectrum by squaring the Hamiltonian (i.e. we optimize (H-E_tgt)²):
-    //      Var H = <(H-E_tgt)²> - <H-E_tgt>²     = <H²> - 2<H>E_tgt + E_tgt² - (<H> - E_tgt)²
-    //                                            =  H²  - 2*E*E_tgt + E_tgt² - E² + 2*E*E_tgt - E_tgt²
-    //                                            =  H²  - E²
-    // The first term <(H-E_tgt)²> is computed using a double-layer of mpos with energy shifted by E_tgt.
-    // If we didn't shift mpo's, the last line, H²-E² is subtraction of two large numbers --> catastrophic cancellation --> loss of precision.
-    // However, by minimizing the variance of shifted mpos:
-    //              Var H = <(H-E_tgt)²> - <H-E_tgt>² = <(H-E_tgt)²> - (E-E_tgt)²
-    // we get the subtraction of two very small terms since E-E_shf should be small.
-
+void xdmrg<Scalar>::set_energy_shift_mpo(std::optional<RealScalar> eshift) {
+    // In xdmrg, the MPO energy shift defines the target energy E_tgt used by the excited-state search.
+    // If "eshift" is not given explicitly, we use status.energy_tgt.
+    //
+    // This shift is used by all excited-state DMRG modes:
+    //   - DMRG_X / DMRG_X_HYBRID: local energies are measured relative to E_tgt, so eigenpairs near the target sit near zero and can be selected/refined around that reference.
+    //   - DMRG_FOLDED           : optimize the folded operator (H-E_tgt)^2, whose smallest eigenvalue corresponds to the state nearest E_tgt.
+    //   - DMRG_GSI              : apply the same target shift consistently to the generalized problem, H-E_tgt and (H-E_tgt)^2.
+    //
+    // The same shift also gives the natural "distance to target" form of the variance:
+    //      Var(H) = <(H-E_tgt)^2> - <H-E_tgt>^2
+    //             = <H^2> - 2<H>E_tgt + E_tgt^2 - (<H> - E_tgt)^2
+    //             = <H^2> - <H>^2.
+    // Therefore, the physical variance is unchanged by the shift, while the shifted expectation
+    // <H-E_tgt> = E-E_tgt directly measures how far the current state energy lies from the target.
     if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     constexpr auto eps = std::numeric_limits<RealScalar>::epsilon();
     if(var_latest < eps * 10) return; // No need to improve precision further.
 
-    if(settings::precision::use_energy_shifted_mpo) {
-        auto energy_shift = tools::finite::measure::energy(tensors);
-        tensors.set_energy_shift_mpo(energy_shift);
-    } else {
-        Scalar energy_shift = narrow_cast<Scalar>(std::real(status.energy_tgt));
-        tensors.set_energy_shift_mpo(energy_shift);
-    }
+    if(not eshift) eshift = std::real(status.energy_tgt);
+    Scalar energy_shift = narrow_cast<Scalar>(eshift.value());
+    tensors.set_energy_shift_mpo(energy_shift);
 }
 
 template<typename Scalar>

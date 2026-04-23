@@ -75,8 +75,8 @@ opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tenso
         throw except::logic_error("optimize_energy_eig: Expected OptAlgo [{}] | Got [{}]", enum2sv(OptAlgo::DMRG), enum2sv(meta.optAlgo));
 
     const auto problem_size = tools::finite::pos::active_problem_size(tensors);
-    if(problem_size > settings::precision::eig_max_size)
-        throw except::logic_error("optimize_energy_eig: the problem size is too large for eig: {} > {}(max)", problem_size, settings::precision::eig_max_size);
+    if(problem_size > settings::solvers::eig::max_size)
+        throw except::logic_error("optimize_energy_eig: the problem size is too large for eig: {} > {}(max)", problem_size, settings::solvers::eig::max_size);
 
     tools::log->debug("optimize_energy_eig: ritz {} | type {} | algo {}", enum2sv(meta.optRitz), enum2sv(meta.optType), enum2sv(meta.optAlgo));
 

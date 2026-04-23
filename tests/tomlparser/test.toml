@@ -43,6 +43,9 @@ file_resume_iter                 = -1                                # On file_c
 #  - REPLACE : Keep only the last event (i.e. replace previous events when possible)
 mps.state_emid.policy                               = "NONE"           #
 mps.state_emin.policy                               = "NONE"           #
+dataset.statevector.policy                          = "NONE"           # Storage policy for the dense statevector dataset
+dataset.statevector.chunksize                       = 1                # Chunk depth for appending statevector records
+dataset.statevector.max_model_size                  = 16               # Largest model size allowed for dense statevector saves. Statevectors scale exponentially in L; values above 16 can require substantial time and memory
 mps.state_emax.policy                               = "NONE"           #
 mps.state_real.policy                               = "NONE"           #
 mps.state_lbit.policy                               = "NONE"           #
@@ -73,7 +76,7 @@ dataset.expectation_values_spin_xyz.chunksize       = 10               #
 dataset.correlation_matrix_spin_xyz.policy          = "NONE"           #
 dataset.correlation_matrix_spin_xyz.chunksize       = 10               #
 
-[solver] # Parmaters that control solvers such as eigs, svd and bfgs
+[solver] # Legacy parser fixture section for solver-related settings
 eig_max_size                    = 3000                              # Maximum problem size before switching from eig to eigs.
 eigs_iter_max                   = 50000                             # Maximum number of steps for eigenvalue solver.
 eigs_tol_min                    = 1e-14                             # Minimum precision tolerance for halting the eigenvalue solver.
@@ -81,14 +84,13 @@ eigs_tol_max                    = 1e-10                             # Maximum (d
 eigs_ncv                        = 4                                 # Parameter controlling the krylov/column space of the Arnoldi eigenvalue solver
 eigs_max_size_shift_invert      = 4096                              # Maximum problem size allowed for partial diagonalization of the local (effective) hamiltonian matrix.
 eigs_stuck_multiplier           = 4                                 # Increase number of iterations on BFGS/EIGS by this factor when stuck
-svd_truncation_lim              = 1e-5                              # Truncation error limit, i.e. discard singular values while the truncation error is lower than this
-svd_truncation_init             = 1e-5                              # If truncation error limit is updated (trnc_decrease_when != NEVER), start from this value
+truncation_min              = 1e-5                              # Truncation error limit, i.e. discard singular values while the truncation error is lower than this
+truncation_max             = 1e-5                              # If truncation error limit is updated (trnc_decrease_when != NEVER), start from this value
 svd_switchsize_bdc              = 16                                # Linear size of a matrix, below which SVD will use slower but more precise JacobiSVD instead of BDC (default is 16 , good could be ~64)
 svd_save_fail                   = false                             # Save failed SVD calculations to file
 
 
-[strategy] # Options for strategy that affect convergence and targeted state
-move_sites_when_stuck           = false                             # Try moving sites around when stuck
+[strategy] # Legacy parser fixture section for state/schedule-related settings
 project_on_saturation           = 5                                 # Project to target axis/parity sector every nth iteration when saturated. (0 = turn off)
 project_on_every_iter           = 0                                 # Project to target axis/parity sector at the end of every nth iteration. This implies doing it when stuck also.
 project_on_bond_update          = false                             # Project to target axis/parity sector before the bond dimension limit is increased (only works if bond_increase_when != NEVER).
@@ -123,7 +125,6 @@ trnc_decrease_rate              = 1e-2                              # Decrease S
 [precision] # Parmaters that control MPS precision
 use_compressed_mpo_squared_all  = false                             # Use SVD to compress the bond dimensions of all H² mpos at the end of an iteration
 use_compressed_mpo_on_the_fly   = false                             # Use SVD to compress the bond dimensions of the multisite H² mpo on-the-fly, just before an optimization step
-use_energy_shifted_mpo          = false                             # Whether to subtract E/L from ALL mpos to avoid catastrophic cancellation when computing the variance
 use_parity_shifted_mpo          = false                             # Lift degeneracy by redefining H --> (H + Q(σ)) where Q(σ) = 0.5(1 - prod(σ)) = P(-σ) is the (flipped sign) projection operator
 use_parity_shifted_mpo_squared  = false                             # Lift degeneracy by redefining H² --> (H² + Q(σ)) where Q(σ) = 0.5(1 - prod(σ)) = P(-σ) is the (flipped sign) projection operator
 variance_convergence_threshold  = 1e-13                             # Variance convergence threshold. The MPS state is considered good enough when its variance reaches below this value
@@ -216,7 +217,6 @@ min_iters                          = 6                                 # Min num
 bond_max                           = 128                               # Bond dimension of the current position (maximum number of singular values to keep in SVD).
 bond_init                          = 16                                # Initial bond dimension limit. Only used when bond_grow == true.
 print_freq                         = 1                                 # Print frequency for console output. In units of iterations. (0 = off).
-store_wavefn                       = false                             # Whether to store the wavefunction. Runs out of memory quick, recommended is false for max_length > 14
 
 [flbit] # Settings for the finite l-bit algorithm
 on                                 = true                              # Turns flbit simulation on/off.
@@ -233,7 +233,6 @@ time_final_real                    = 1e9                               # Finishi
 time_final_imag                    = 0                                 # Finishing time point (imag)
 time_num_steps                     = 200                               # Number of steps from start to finish. Start and final times are included
 print_freq                         = 1                                 # Print frequency for console output. In units of iterations. (0 = off).
-store_wavefn                       = false                             # Whether to store the wavefunction. Runs out of memory quick, recommended is false for max_length > 14
 
 # Settings for calculating the characteristic length-scale of lbits
 cls.num_rnd_circuits              = 1                                 # Calculate the characteristic length-scale for this many realizations of the unitary circuit
@@ -262,6 +261,5 @@ print_freq                         = 1                                 # Print f
 energy_density_target              = 0.5                               # Target energy in [0-1], where 0.5 means middle of spectrum.
 energy_density_window              = 0.5                               # Accept states inside of energy_tgt_per_site +- energy_dens_window.
 max_states                         = 1                                 # Max number of random states to find using xDMRG on a single disorder realization
-store_wavefn                       = false                             # Whether to store the wavefunction. Runs out of memory quick, recommended is false for max_length > 14
 finish_if_entanglm_saturated       = false                             # Finish early as soon as entanglement has saturated
 finish_if_variance_saturated       = false                             # Finish early as soon as energy variance has saturated

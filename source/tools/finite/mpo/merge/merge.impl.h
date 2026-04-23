@@ -54,7 +54,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> tools::finite::mpo::get_merged_mpos(const 
     // auto cfg             = svd::config();
     // cfg.rank_max         = settings::flbit::cls::mpo_circuit_svd_bondlim;
     // cfg.truncation_limit = settings::flbit::cls::mpo_circuit_svd_trnclim;
-    // cfg.switchsize_gesdd = settings::precision::svd_switchsize_bdc;
+    // cfg.switchsize_gesdd = settings::solvers::svd::switchsize_bdc;
     // cfg.svd_lib          = svd::lib::lapacke;
     // cfg.svd_rtn          = svd::rtn::geauto;
     auto  svd     = svd::solver(cfg);

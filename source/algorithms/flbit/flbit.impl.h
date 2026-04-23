@@ -87,7 +87,7 @@ void flbit<Scalar>::resume() {
         clear_convergence_status();
 
         // Create an initial state in the real basis
-        switch(settings::strategy::initial_state) {
+        switch(settings::state::init::initial_state) {
             case StateInit::PRODUCT_STATE_DOMAIN_WALL:
             case StateInit::PRODUCT_STATE_PATTERN:
             case StateInit::PRODUCT_STATE_NEEL:
@@ -101,14 +101,14 @@ void flbit<Scalar>::resume() {
                                  "PRODUCT_STATE_NEEL_SHUFFLED|"
                                  "PRODUCT_STATE_NEEL_DISLOCATED"
                                  ". Got {}",
-                                 enum2sv(settings::strategy::initial_state));
+                                 enum2sv(settings::state::init::initial_state));
         }
 
-        if(settings::strategy::initial_axis.find("z") == std::string::npos)
-            tools::log->warn("Expected initial_axis == z. Got {}", settings::strategy::initial_axis);
+        if(settings::state::init::initial_axis.find("z") == std::string::npos)
+            tools::log->warn("Expected initial_axis == z. Got {}", settings::state::init::initial_axis);
 
-        tensors.initialize_state(ResetReason::INIT, settings::strategy::initial_state, StateInitType::REAL, settings::strategy::initial_axis,
-                                 settings::strategy::use_eigenspinors, settings::get_bond_min(status.algo_type), settings::strategy::initial_pattern);
+        tensors.initialize_state(ResetReason::INIT, settings::state::init::initial_state, StateInitType::REAL, settings::state::init::initial_axis,
+                                 settings::state::init::use_eigenspinors, settings::get_bond_min(status.algo_type), settings::state::init::initial_pattern);
 
         tools::finite::pos::move_center_point_to_inward_edge(tensors);
 
@@ -143,7 +143,6 @@ void flbit<Scalar>::resume() {
 }
 
 template<typename Scalar> void flbit<Scalar>::run_task_list(std::deque<flbit_task> &task_list) {
-    using namespace settings::strategy;
     while(not task_list.empty()) {
         auto task = task_list.front();
         switch(task) {
@@ -221,7 +220,7 @@ template<typename Scalar> void flbit<Scalar>::run_preprocessing() {
 
     // Create an initial state in the real basis
     tensors.state->set_name("state_real");
-    initialize_state(ResetReason::INIT, settings::strategy::initial_state);
+    initialize_state(ResetReason::INIT, settings::state::init::initial_state);
     tools::finite::pos::move_center_point_to_inward_edge(tensors);
     state_real_init = std::make_unique<StateFinite<Scalar>>(tensors.get_state());
     tools::finite::print::model(tensors.get_model());
@@ -897,10 +896,10 @@ void flbit<Scalar>::transform_to_lbit_basis() {
 template<typename Scalar>
 void flbit<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
     AlgorithmFinite<Scalar>::write_to_file(tensors.get_state(), tensors.get_model(), tensors.get_edges(), storage_event, copy_policy);
-    //    if(settings::storage::mps::state_lbit::policy != StoragePolicy::NONE) {
-    //    if (not state_lbit) transform_to_lbit_basis();
-    //    AlgorithmFinite::write_to_file(*state_lbit, tensors.get_model(), tensors.get_edges(), storage_event, copy_policy);
-    //    }
+    // if(settings::storage::mps::state_lbit::policy != StoragePolicy::NONE) {
+    //     if(not state_lbit) transform_to_lbit_basis();
+    //     AlgorithmFinite::write_to_file(*state_lbit, tensors.get_model(), tensors.get_edges(), storage_event, copy_policy);
+    // }
 
     if(h5file and storage_event == StorageEvent::INIT) {
         using namespace settings::flbit;

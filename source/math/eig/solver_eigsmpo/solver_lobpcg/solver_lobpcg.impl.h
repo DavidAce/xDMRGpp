@@ -250,7 +250,7 @@ void solver_lobpcg<Scalar>::build() {
 
     auto MultP = [this](const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals,
                         std::optional<const Eigen::Ref<const MatrixType>> iG) -> MatrixType {
-        if(algo == OptAlgo::GDMRG)
+        if(algo == OptAlgo::DMRG_GSI)
             return this->MultP2(X, evals, iG);
         else
             return this->MultP(X, evals, iG);

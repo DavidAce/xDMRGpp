@@ -42,7 +42,7 @@ void AlgorithmBase::init_bond_dimension_limits() {
     status.bond_lim                   = std::clamp(settings::get_bond_min(status.algo_type), 1l, status.bond_max);
     status.bond_min                   = std::clamp(settings::get_bond_min(status.algo_type), 1l, status.bond_max);
     status.bond_limit_has_reached_max = status.bond_lim >= status.bond_max;
-    if(settings::strategy::bond_increase_when == UpdatePolicy::NEVER) {
+    if(settings::schedule::opt::bond_increase_when == UpdatePolicy::NEVER) {
         status.bond_lim                   = status.bond_max;
         status.bond_limit_has_reached_max = true;
     }
@@ -52,16 +52,16 @@ void AlgorithmBase::init_bond_dimension_limits() {
 }
 
 void AlgorithmBase::init_truncation_error_limits() {
-    if(settings::strategy::trnc_decrease_when == UpdatePolicy::NEVER) {
-        status.trnc_min = settings::precision::svd_truncation_min;
-        status.trnc_lim = settings::precision::svd_truncation_min;
-        status.trnc_max = settings::precision::svd_truncation_min;
+    if(settings::schedule::opt::trnc_decrease_when == UpdatePolicy::NEVER) {
+        status.trnc_min = settings::solvers::svd::truncation_min;
+        status.trnc_lim = settings::solvers::svd::truncation_min;
+        status.trnc_max = settings::solvers::svd::truncation_min;
     } else {
-        status.trnc_min = settings::precision::svd_truncation_min;
-        status.trnc_lim = settings::precision::svd_truncation_max;
-        status.trnc_max = settings::precision::svd_truncation_max;
+        status.trnc_min = settings::solvers::svd::truncation_min;
+        status.trnc_lim = settings::solvers::svd::truncation_max;
+        status.trnc_max = settings::solvers::svd::truncation_max;
     }
-    if(settings::strategy::trnc_decrease_when == UpdatePolicy::NEVER) {
+    if(settings::schedule::opt::trnc_decrease_when == UpdatePolicy::NEVER) {
         status.trnc_lim                   = status.trnc_min;
         status.trnc_limit_has_reached_min = true;
     }

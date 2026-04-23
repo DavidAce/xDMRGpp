@@ -40,7 +40,7 @@ class xdmrg : public AlgorithmFinite<Scalar> {
     void update_state() final;
     void resume() final;
     void update_time_step();
-    void set_energy_shift_mpo() final;
+    void set_energy_shift_mpo(std::optional<RealScalar> eshift = std::nullopt);
 
     using AlgorithmFinite<Scalar>::AlgorithmFinite;
     using AlgorithmFinite<Scalar>::status;
@@ -48,7 +48,6 @@ class xdmrg : public AlgorithmFinite<Scalar> {
     using AlgorithmFinite<Scalar>::tensors;
     using AlgorithmFinite<Scalar>::set_parity_shift_mpo;
     using AlgorithmFinite<Scalar>::set_parity_shift_mpo_squared;
-    using AlgorithmFinite<Scalar>::set_energy_shift_mpo;
     using AlgorithmFinite<Scalar>::rebuild_tensors;
     using AlgorithmFinite<Scalar>::update_precision_limit;
     using AlgorithmFinite<Scalar>::update_eigs_tolerance;

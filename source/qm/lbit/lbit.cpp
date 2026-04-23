@@ -336,7 +336,7 @@ std::vector<Eigen::Tensor<cx64, 4>> qm::lbit::get_unitary_mpo_layer(const std::v
     if(not cfg->svd_rtn) cfg->svd_rtn = svd::rtn::geauto;
     if(not cfg->rank_max) cfg->rank_max = settings::flbit::cls::mpo_circuit_svd_bondlim;
     if(not cfg->truncation_limit) cfg->truncation_limit = settings::flbit::cls::mpo_circuit_svd_trnclim;
-    if(not cfg->switchsize_gesdd) cfg->switchsize_gesdd = settings::precision::svd_switchsize_bdc;
+    if(not cfg->switchsize_gesdd) cfg->switchsize_gesdd = settings::solvers::svd::switchsize_bdc;
     auto svd = svd::solver(cfg);
 
     // Start Step 1 with the first gate
@@ -403,7 +403,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> qm::lbit::merge_unitary_mpo_layers(const s
 //     cfg.svd_rtn              = svd::rtn::geauto;
 //     cfg.rank_max             = 256;
 //     cfg.truncation_limit     = 1e-14;
-//     cfg.switchsize_gesdd     = settings::precision::svd_switchsize_bdc;
+//     cfg.switchsize_gesdd     = settings::solvers::svd::switchsize_bdc;
 //     auto           mpo_layer = Eigen::Tensor<cx64, 4>();
 //     constexpr auto con2      = tenx::idx({1}, {0});
 //     constexpr auto shf6      = tenx::array6{0, 3, 1, 4, 2, 5};
@@ -1281,7 +1281,7 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<s
      */
     auto svd_cfg             = svd::config();
     svd_cfg.truncation_limit = tol;
-    svd_cfg.switchsize_gesdd = settings::precision::svd_switchsize_bdc;
+    svd_cfg.switchsize_gesdd = settings::solvers::svd::switchsize_bdc;
     svd_cfg.rank_max         = 8;
     svd_cfg.svd_lib          = svd::lib::lapack;
     svd_cfg.svd_rtn          = svd::rtn::geauto;

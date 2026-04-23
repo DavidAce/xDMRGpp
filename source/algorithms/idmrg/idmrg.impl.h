@@ -89,8 +89,8 @@ void idmrg<Scalar>::check_convergence() {
     check_convergence_variance_ham();
     check_convergence_variance_mom();
 
-    bool ent_enabled = settings::precision::entanglement_saturation_sensitivity > 0;
-    bool var_enabled = settings::precision::variance_saturation_sensitivity > 0;
+    bool ent_enabled = settings::convergence::entanglement_saturation_sensitivity > 0;
+    bool var_enabled = settings::convergence::variance_saturation_sensitivity > 0;
 
     bool ent_sat = ent_enabled ? status.entanglement_saturated_for > 1 : true;
     bool mpo_sat = var_enabled ? status.variance_mpo_saturated_for > 1 : true;
@@ -109,6 +109,6 @@ void idmrg<Scalar>::check_convergence() {
 
     status.algorithm_converged_for = converged_now ? status.algorithm_converged_for + 1 : 0;
     status.algorithm_has_stuck_for = all_saturated and !converged_now ? status.algorithm_has_stuck_for + 1 : 0;
-    status.algorithm_has_succeeded = status.algorithm_converged_for > settings::strategy::iter_min_converged;
-    status.algorithm_has_to_stop   = trnc_has_saturated and bond_has_saturated and status.algorithm_has_stuck_for >= settings::strategy::iter_max_stuck;
+    status.algorithm_has_succeeded = status.algorithm_converged_for > settings::schedule::opt::iter_min_converged;
+    status.algorithm_has_to_stop   = trnc_has_saturated and bond_has_saturated and status.algorithm_has_stuck_for >= settings::schedule::opt::iter_max_stuck;
 }

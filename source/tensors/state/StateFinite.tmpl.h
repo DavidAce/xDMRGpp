@@ -302,7 +302,7 @@ std::array<double, 3> StateFinite<Scalar>::get_reduced_density_matrix_cost(const
         }
     }
 
-    if(!is_contiguous or static_cast<double>(sizeof(T)) * mem_t2b / std::pow(1024.0, 3.0) >= settings::precision::max_cache_gbts) {
+    if(!is_contiguous or static_cast<double>(sizeof(T)) * mem_t2b / std::pow(1024.0, 3.0) >= settings::storage::dataset::subsystem_entanglement_entropies::cache_max_gbts) {
         mem_t2b = std::numeric_limits<double>::infinity();
         ops_t2b = std::numeric_limits<double>::infinity();
     }
@@ -342,7 +342,7 @@ std::array<double, 3> StateFinite<Scalar>::get_reduced_density_matrix_cost(const
     }
     ops_l2r += spindim * spindim * static_cast<double>(chiR); // add the last contraction that closes the density matrix
     mem_l2r  = std::max(mem_l2r, spindim * spindim);
-    if(static_cast<double>(sizeof(T)) * mem_l2r / std::pow(1024.0, 3.0) >= settings::precision::max_cache_gbts) {
+    if(static_cast<double>(sizeof(T)) * mem_l2r / std::pow(1024.0, 3.0) >= settings::storage::dataset::subsystem_entanglement_entropies::cache_max_gbts) {
         mem_l2r = std::numeric_limits<double>::infinity();
         ops_l2r = std::numeric_limits<double>::infinity();
     }
@@ -376,7 +376,7 @@ std::array<double, 3> StateFinite<Scalar>::get_reduced_density_matrix_cost(const
     }
     ops_r2l += spindim * spindim * static_cast<double>(chiL); // add the last contraction that closes the density matrix
     mem_r2l  = std::max(mem_r2l, spindim * spindim);
-    if(static_cast<double>(sizeof(T)) * mem_r2l / std::pow(1024.0, 3.0) >= settings::precision::max_cache_gbts) {
+    if(static_cast<double>(sizeof(T)) * mem_r2l / std::pow(1024.0, 3.0) >= settings::storage::dataset::subsystem_entanglement_entropies::cache_max_gbts) {
         mem_r2l = std::numeric_limits<double>::infinity();
         ops_r2l = std::numeric_limits<double>::infinity();
     }
@@ -546,7 +546,7 @@ double StateFinite<Scalar>::get_transfer_matrix_cost(const std::vector<size_t> &
             }
         }
     }
-    if(static_cast<double>(sizeof(T)) * mem / std::pow(1024.0, 3.0) >= settings::precision::max_cache_gbts) {
+    if(static_cast<double>(sizeof(T)) * mem / std::pow(1024.0, 3.0) >= settings::storage::dataset::subsystem_entanglement_entropies::cache_max_gbts) {
         mem = std::numeric_limits<double>::infinity();
         ops = std::numeric_limits<double>::infinity();
     }

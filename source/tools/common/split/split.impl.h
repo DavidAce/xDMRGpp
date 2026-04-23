@@ -129,9 +129,9 @@ std::vector<MpsSite<Scalar>> tools::common::split::split_mps(const Eigen::Tensor
 
     // Set up the svd settings if not given explicitly
     svd_cfg                   = svd_cfg.value_or(svd::config());
-    svd_cfg->truncation_limit = svd_cfg->truncation_limit.value_or(settings::precision::svd_truncation_min);
-    svd_cfg->switchsize_gesdd = svd_cfg->switchsize_gesdd.value_or(settings::precision::svd_switchsize_bdc);
-    svd_cfg->svd_save         = svd_cfg->svd_save.value_or(settings::precision::svd_save_fail ? svd::save::FAIL : svd::save::NONE);
+    svd_cfg->truncation_limit = svd_cfg->truncation_limit.value_or(settings::solvers::svd::truncation_min);
+    svd_cfg->switchsize_gesdd = svd_cfg->switchsize_gesdd.value_or(settings::solvers::svd::switchsize_bdc);
+    svd_cfg->svd_save         = svd_cfg->svd_save.value_or(settings::solvers::svd::save_fail ? svd::save::FAIL : svd::save::NONE);
 
     // Define dimensions and positions after the desired split
     long chiL = multisite_mps.dimension(1);

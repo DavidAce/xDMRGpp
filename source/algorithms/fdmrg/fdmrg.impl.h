@@ -84,15 +84,14 @@ void fdmrg<Scalar>::resume() {
         status.bond_lim                   = std::min(status.bond_lim, status.bond_max);
         status.bond_limit_has_reached_max = false;
 
-        status.trnc_min                   = settings::precision::svd_truncation_min;
-        status.trnc_max                   = settings::precision::svd_truncation_max;
+        status.trnc_min                   = settings::solvers::svd::truncation_min;
+        status.trnc_max                   = settings::solvers::svd::truncation_max;
         status.trnc_limit_has_reached_min = false;
 
         // Apply shifts and compress the model
         tools::finite::pos::move_center_point_to_inward_edge(tensors);
         set_parity_shift_mpo();
         set_parity_shift_mpo_squared();
-        set_energy_shift_mpo();
         rebuild_tensors(); // Rebuilds and compresses mpos, then rebuilds the environments
         update_precision_limit();
         update_dmrg_blocksize();
@@ -185,10 +184,9 @@ void fdmrg<Scalar>::run_preprocessing() {
     initialize_model(); // First use of random!
     init_bond_dimension_limits();
     init_truncation_error_limits();
-    initialize_state(ResetReason::INIT, settings::strategy::initial_state);
+    initialize_state(ResetReason::INIT, settings::state::init::initial_state);
     set_parity_shift_mpo();
     set_parity_shift_mpo_squared();
-    set_energy_shift_mpo();
     rebuild_tensors(); // Rebuilds and compresses mpos, then rebuilds the environments
     update_precision_limit();
     tools::log->info("Finished {} preprocessing", status.algo_type_sv());
@@ -215,7 +213,6 @@ void fdmrg<Scalar>::run_algorithm() {
         update_truncation_error_limit(); // Will update truncation error limit if the state is being truncated
         update_dmrg_blocksize();
         try_projection();
-        set_energy_shift_mpo(); // Shift the energy in the mpos to get rid of critical cancellation (shifts by the current energy)
         rebuild_tensors();
         move_center_point();
         status.wall_time = tid::get_unscoped("t_tot").get_time();
@@ -223,11 +220,6 @@ void fdmrg<Scalar>::run_algorithm() {
     }
     tools::log->info("Finished {} simulation of state [{}] -- stop reason: {}", status.algo_type_sv(), tensors.state->get_name(), status.algo_stop_sv());
     status.algorithm_has_finished = true;
-    if(settings::fdmrg::store_wavefn and tensors.template get_length<long>() <= 16) {
-#pragma message "Save fdmrg wavevector properly"
-        Eigen::Tensor<RealScalar, 1> psi = tools::finite::mps::mps2tensor<Scalar>(tensors.get_state()).real();
-        this->write_tensor_to_file(psi, "psi", StorageEvent::FINISHED);
-    }
 }
 
 template<typename Scalar>
@@ -260,7 +252,7 @@ void fdmrg<Scalar>::update_state() {
     /* clang-format off */
     opt_meta.optExit = OptExit::SUCCESS;
     if(opt_state.get_grad_max()       > static_cast<RealScalar>(1.000)                            ) opt_meta.optExit |= OptExit::FAIL_GRADIENT;
-    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::precision::eigs_abstol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
+    if(opt_state.get_eigs_rnorm()     > static_cast<RealScalar>(settings::solvers::eig::abstol_max)) opt_meta.optExit |= OptExit::FAIL_RESIDUAL;
     if(opt_state.get_eigs_nev()       == 0 and
        opt_meta.optSolver             == OptSolver::EIGS                                          ) opt_meta.optExit |= OptExit::FAIL_RESIDUAL; // No convergence
     if(opt_state.get_overlap()        < static_cast<RealScalar>(0.010)                            ) opt_meta.optExit |= OptExit::FAIL_OVERLAP;

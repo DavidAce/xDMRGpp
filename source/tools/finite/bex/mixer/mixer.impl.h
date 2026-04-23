@@ -45,11 +45,11 @@ void tools::finite::bex::internal::run_expansion_term_mixer(TensorsFinite<Scalar
     optm.eigs_residual_correction_type        = "CHEAP_OLSEN";
     optm.eigs_preconditioner_type             = "SOLVE";
     optm.eigs_nev                             = 1;
-    optm.eigs_abstol                          = settings::precision::eigs_abstol_max;
-    optm.eigs_reltol                          = settings::precision::eigs_reltol_max;
-    optm.eigs_blk                             = settings::precision::eigs_blk_min;
-    optm.eigs_ncv                             = settings::precision::eigs_ncv_min;
-    optm.eigs_jcbMaxBlockSize                 = std::min(1l, settings::precision::eigs_jcb_blocksize_min);
+    optm.eigs_abstol                          = settings::solvers::eig::abstol_max;
+    optm.eigs_reltol                          = settings::solvers::eig::reltol_max;
+    optm.eigs_blk                             = settings::solvers::eig::blk_min;
+    optm.eigs_ncv                             = settings::solvers::eig::ncv_min;
+    optm.eigs_jcbMaxBlockSize                 = std::min(1l, settings::solvers::eig::jcb_blocksize_min);
     optm.eigs_use_coarse_inner_preconditioner = false;
     optm.optRitz                              = bcfg.optRitz;
     optm.optAlgo                              = bcfg.optAlgo;
@@ -61,7 +61,7 @@ void tools::finite::bex::internal::run_expansion_term_mixer(TensorsFinite<Scalar
     optm.max_sites = 1;
 
     // Set up the problem size and select the dmrg sites
-    optm.max_problem_size = settings::strategy::dmrg_max_prob_size;
+    optm.max_problem_size = settings::schedule::dmrg::max_prob_size;
     optm.chosen_sites     = tensors.active_sites;
     optm.problem_dims     = state.active_problem_dims();
     optm.problem_size     = state.active_problem_size();

@@ -102,7 +102,7 @@ void AlgorithmInfinite<Scalar>::update_precision_limit(std::optional<double> ene
 template<typename Scalar>
 void AlgorithmInfinite<Scalar>::update_bond_dimension_limit() {
     status.bond_limit_has_reached_max = status.bond_lim >= status.bond_max;
-    if(settings::strategy::bond_increase_when == UpdatePolicy::NEVER) {
+    if(settings::schedule::opt::bond_increase_when == UpdatePolicy::NEVER) {
         status.bond_lim = status.bond_max;
         return;
     }
@@ -114,9 +114,9 @@ void AlgorithmInfinite<Scalar>::update_bond_dimension_limit() {
     bool is_has_stuck = status.algorithm_has_stuck_for > 1;
     bool is_truncated = tensors.state->is_limited_by_bond(status.bond_lim) or tensors.state->is_truncated(status.trnc_lim);
 
-    bool grow_if_truncated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::TRUNCATED);
-    bool grow_if_saturated = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::SAT_ALGO);
-    bool grow_if_has_stuck = has_flag(settings::strategy::bond_increase_when, UpdatePolicy::STK_ALGO);
+    bool grow_if_truncated = has_flag(settings::schedule::opt::bond_increase_when, UpdatePolicy::TRUNCATED);
+    bool grow_if_saturated = has_flag(settings::schedule::opt::bond_increase_when, UpdatePolicy::SAT_ALGO);
+    bool grow_if_has_stuck = has_flag(settings::schedule::opt::bond_increase_when, UpdatePolicy::STK_ALGO);
 
     if(grow_if_truncated and not is_truncated) {
         tools::log->info("State is not limited by its bond dimension. Kept current bond limit {}", status.bond_lim);
@@ -132,14 +132,14 @@ void AlgorithmInfinite<Scalar>::update_bond_dimension_limit() {
     }
 
     // If we got to this point we will update the bond dimension by a factor
-    auto grow_rate = settings::strategy::bond_increase_rate;
+    auto grow_rate = settings::schedule::opt::bond_increase_rate;
     if(grow_rate <= 1.0) throw except::runtime_error("Error: bond_increase_rate == {:.3f} | must be larger than one", grow_rate);
 
     // Write current results before updating bond dimension
     write_to_file(StorageEvent::BOND_UPDATE);
 
     // If we got to this point we will update the bond dimension by a factor
-    auto factor = settings::strategy::bond_increase_rate;
+    auto factor = settings::schedule::opt::bond_increase_rate;
     if(factor <= 1.0) throw except::logic_error("Error: bond_increase_rate == {:.3f} | must be larger than one", factor);
 
     auto bond_new = static_cast<double>(status.bond_lim);
@@ -164,9 +164,9 @@ void AlgorithmInfinite<Scalar>::update_bond_dimension_limit() {
 template<typename Scalar>
 void AlgorithmInfinite<Scalar>::update_truncation_error_limit() {
     if(status.trnc_lim == 0.0) throw std::runtime_error("trnc_lim is zero!");
-    status.trnc_min                   = settings::precision::svd_truncation_min;
+    status.trnc_min                   = settings::solvers::svd::truncation_min;
     status.trnc_limit_has_reached_min = status.trnc_lim <= status.trnc_min;
-    if(settings::strategy::trnc_decrease_when == UpdatePolicy::NEVER or settings::strategy::trnc_decrease_rate == 0.0) {
+    if(settings::schedule::opt::trnc_decrease_when == UpdatePolicy::NEVER or settings::schedule::opt::trnc_decrease_rate == 0.0) {
         status.trnc_lim                   = status.trnc_min;
         status.trnc_limit_has_reached_min = true;
         return;
@@ -178,9 +178,9 @@ void AlgorithmInfinite<Scalar>::update_truncation_error_limit() {
     bool is_saturated      = status.algorithm_saturated_for > 1; // Allow one round while saturated so that extra efforts get a chance.
     bool is_has_stuck      = status.algorithm_has_stuck_for > 1; // Allow one round while saturated so that extra efforts get a chance.
     bool is_truncated      = tensors.state->is_limited_by_bond(status.bond_lim) or tensors.state->is_truncated(status.trnc_lim);
-    bool drop_if_truncated = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::TRUNCATED);
-    bool drop_if_saturated = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::SAT_ALGO);
-    bool drop_if_has_stuck = has_flag(settings::strategy::trnc_decrease_when, UpdatePolicy::STK_ALGO);
+    bool drop_if_truncated = has_flag(settings::schedule::opt::trnc_decrease_when, UpdatePolicy::TRUNCATED);
+    bool drop_if_saturated = has_flag(settings::schedule::opt::trnc_decrease_when, UpdatePolicy::SAT_ALGO);
+    bool drop_if_has_stuck = has_flag(settings::schedule::opt::trnc_decrease_when, UpdatePolicy::STK_ALGO);
 
     if(drop_if_truncated and not is_truncated) {
         tools::log->info("State is not truncated. Kept current truncation error limit {:8.2e}", status.trnc_lim);
@@ -199,7 +199,7 @@ void AlgorithmInfinite<Scalar>::update_truncation_error_limit() {
     write_to_file(StorageEvent::TRNC_UPDATE);
 
     // If we got to this point we will update the truncation error limit by a factor
-    auto rate = settings::strategy::trnc_decrease_rate;
+    auto rate = settings::schedule::opt::trnc_decrease_rate;
     if(rate > 1.0 or rate < 0) throw except::runtime_error("Error: trnc_decrease_rate == {:8.2e} | must be in [0, 1]");
 
     auto trnc_new = std::max(status.trnc_min, status.trnc_lim * rate);
@@ -218,9 +218,9 @@ template<typename Scalar>
 void AlgorithmInfinite<Scalar>::initialize_state([[maybe_unused]] ResetReason reason, std::optional<std::string> sector, std::optional<bool> use_eigenspinors,
                                                  std::optional<std::string> pattern) {
     tools::log->trace("Initializing state");
-    if(not sector) sector = settings::strategy::initial_axis;
-    if(not pattern) pattern = settings::strategy::initial_pattern;
-    if(not use_eigenspinors) use_eigenspinors = settings::strategy::use_eigenspinors;
+    if(not sector) sector = settings::state::init::initial_axis;
+    if(not pattern) pattern = settings::state::init::initial_pattern;
+    if(not use_eigenspinors) use_eigenspinors = settings::state::init::use_eigenspinors;
 
     status.iter = 0;
     tensors.reset_to_random_product_state(sector.value(), use_eigenspinors.value(), pattern.value());
@@ -257,8 +257,8 @@ void AlgorithmInfinite<Scalar>::clear_convergence_status() {
 template<typename Scalar>
 void AlgorithmInfinite<Scalar>::check_convergence_variance_mpo(std::optional<RealScalar> threshold, std::optional<RealScalar> sensitivity) {
     tools::log->debug("Checking convergence of variance mpo");
-    if(not threshold) threshold = settings::precision::variance_convergence_threshold;
-    if(not sensitivity) sensitivity = settings::precision::variance_saturation_sensitivity;
+    if(not threshold) threshold = settings::convergence::variance_threshold;
+    if(not sensitivity) sensitivity = settings::convergence::variance_saturation_sensitivity;
     var_mpo_iter.emplace_back(tools::infinite::measure::energy_variance_per_site_mpo(tensors));
     status.variance_mpo_converged_for = count_convergence(var_mpo_iter, threshold.value());
     auto report =
@@ -269,8 +269,8 @@ void AlgorithmInfinite<Scalar>::check_convergence_variance_mpo(std::optional<Rea
 template<typename Scalar>
 void AlgorithmInfinite<Scalar>::check_convergence_variance_ham(std::optional<RealScalar> threshold, std::optional<RealScalar> sensitivity) {
     tools::log->trace("Checking convergence of variance ham");
-    if(not threshold) threshold = settings::precision::variance_convergence_threshold;
-    if(not sensitivity) sensitivity = settings::precision::variance_saturation_sensitivity;
+    if(not threshold) threshold = settings::convergence::variance_threshold;
+    if(not sensitivity) sensitivity = settings::convergence::variance_saturation_sensitivity;
     var_ham_iter.emplace_back(tools::infinite::measure::energy_variance_per_site_ham(tensors));
     status.variance_ham_converged_for = count_convergence(var_ham_iter, threshold.value());
     auto report =
@@ -281,8 +281,8 @@ void AlgorithmInfinite<Scalar>::check_convergence_variance_ham(std::optional<Rea
 template<typename Scalar>
 void AlgorithmInfinite<Scalar>::check_convergence_variance_mom(std::optional<RealScalar> threshold, std::optional<RealScalar> sensitivity) {
     tools::log->trace("Checking convergence of variance mom");
-    if(not threshold) threshold = settings::precision::variance_convergence_threshold;
-    if(not sensitivity) sensitivity = settings::precision::variance_saturation_sensitivity;
+    if(not threshold) threshold = settings::convergence::variance_threshold;
+    if(not sensitivity) sensitivity = settings::convergence::variance_saturation_sensitivity;
     var_mom_iter.emplace_back(tools::infinite::measure::energy_variance_per_site_mom(tensors));
     status.variance_mom_converged_for = count_convergence(var_mom_iter, threshold.value());
     auto report                       = check_saturation(var_mom_iter, sensitivity.value(),
@@ -293,7 +293,7 @@ void AlgorithmInfinite<Scalar>::check_convergence_variance_mom(std::optional<Rea
 template<typename Scalar>
 void AlgorithmInfinite<Scalar>::check_convergence_entanglement(std::optional<RealScalar> sensitivity) {
     tools::log->debug("Checking convergence of entanglement");
-    if(not sensitivity) sensitivity = settings::precision::entanglement_saturation_sensitivity;
+    if(not sensitivity) sensitivity = settings::convergence::entanglement_saturation_sensitivity;
     entropy_iter.emplace_back(tools::infinite::measure::entanglement_entropy(tensors.get_state()));
     auto report = check_saturation(entropy_iter, sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mov);
     if(report.has_computed) { status.entanglement_saturated_for = report.saturated_count; }

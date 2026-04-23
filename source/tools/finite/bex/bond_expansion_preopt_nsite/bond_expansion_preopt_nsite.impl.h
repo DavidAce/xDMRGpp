@@ -41,8 +41,8 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
     }
 
     auto       t_mixblk = tid::tic_scope("mixblk");
-    const auto K1_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::DMRG);
-    const auto K2_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRGX, OptAlgo::HYBRID_DMRGX, OptAlgo::GDMRG, OptAlgo::XDMRG);
+    const auto K1_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRG_X, OptAlgo::DMRG_X_HYBRID, OptAlgo::DMRG_GSI, OptAlgo::DMRG);
+    const auto K2_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRG_X, OptAlgo::DMRG_X_HYBRID, OptAlgo::DMRG_GSI, OptAlgo::DMRG_FOLDED);
 
     MatVecMPOS<T> H1 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_ene(sites));
     MatVecMPOS<T> H2 = MatVecMPOS<T>(model.get_mpo(sites), edges.get_multisite_env_var(sites));
@@ -72,7 +72,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
 
     R                  optVal = std::numeric_limits<R>::quiet_NaN();
     IdxT               optIdx = 0;
-    R                  tol    = static_cast<R>(settings::precision::eigs_abstol_max);
+    R                  tol    = static_cast<R>(settings::solvers::eig::abstol_max);
     R                  absTol = std::numeric_limits<R>::epsilon() * 100;
     R                  relTol = R{1e-4f};
     R                  rnorm  = R{1};
@@ -126,7 +126,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
         if(!std::isnan(optVal)) {
             if(bcfg.optAlgo == OptAlgo::DMRG)
                 rnorm = (H1V.col(0) - optVal * V.col(0)).cwiseAbs().maxCoeff();
-            else if(bcfg.optAlgo == OptAlgo::GDMRG)
+            else if(bcfg.optAlgo == OptAlgo::DMRG_GSI)
                 rnorm = (H1V.col(0) - optVal * H2V.col(0)).cwiseAbs().maxCoeff();
             else
                 rnorm = (H2V.col(0) - optVal * V.col(0)).cwiseAbs().maxCoeff();
@@ -184,20 +184,20 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
                 if(evals.hasNaN()) throw except::runtime_error("found nan eigenvalues");
                 break;
             }
-            case DMRGX: [[fallthrough]];
-            case HYBRID_DMRGX: {
+            case DMRG_X: [[fallthrough]];
+            case DMRG_X_HYBRID: {
                 auto solver = Eigen::SelfAdjointEigenSolver<MatrixT>(K2 - K1 * K1, Eigen::ComputeEigenvectors);
                 evals       = solver.eigenvalues();
                 evecs       = solver.eigenvectors();
                 break;
             }
-            case XDMRG: {
+            case DMRG_FOLDED: {
                 auto solver = Eigen::SelfAdjointEigenSolver<MatrixT>(K2, Eigen::ComputeEigenvectors);
                 evals       = solver.eigenvalues();
                 evecs       = solver.eigenvectors();
                 break;
             }
-            case GDMRG: {
+            case DMRG_GSI: {
                 if(numZeroRows == 0) {
                     auto solver = Eigen::GeneralizedSelfAdjointEigenSolver<MatrixT>(
                         K1.template selfadjointView<Eigen::Lower>(), K2.template selfadjointView<Eigen::Lower>(), Eigen::ComputeEigenvectors | Eigen::Ax_lBx);
@@ -225,9 +225,9 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
         auto normTol = std::numeric_limits<R>::epsilon() * safe_cast<R>(settings::precision::max_norm_slack);
         for(long i = 0; i < mixedNorms.size(); ++i) {
             if(std::abs(mixedNorms(i) - R{1}) > normTol) continue;
-            // if(algo != OptAlgo::GDMRG and evals(i) <= 0) continue; // H2 and variance are positive definite, but the eigenvalues of GDMRG are not
-            // if(algo != OptAlgo::GDMRG and (evals(i) < -1e-15 or evals(i) == 0)) continue; // H2 and variance are positive definite, but the eigenvalues of
-            // GDMRG are not
+            // if(algo != OptAlgo::DMRG_GSI and evals(i) <= 0) continue; // H2 and variance are positive definite, but the eigenvalues of DMRG_GSI are not
+            // if(algo != OptAlgo::DMRG_GSI and (evals(i) < -1e-15 or evals(i) == 0)) continue; // H2 and variance are positive definite, but the eigenvalues of
+            // DMRG_GSI are not
             mixedColOk.emplace_back(i);
         }
         if constexpr(!sfinae::is_quadruple_prec_v<T>) {
@@ -242,7 +242,7 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
                 tools::log->debug("numZeroRowsK1          = {}", numZeroRowsK1);
                 tools::log->debug("numZeroRowsK2          = {}", numZeroRowsK2);
                 tools::log->debug("ngramSchmidt           = {}", numMGS);
-                if(bcfg.optAlgo == OptAlgo::GDMRG) {
+                if(bcfg.optAlgo == OptAlgo::DMRG_GSI) {
                     if(V.cols() > 1) {
                         H2.MultAx(V.col(0).data(), H2V.col(0).data());
                         H2.MultAx(V.col(1).data(), H2V.col(1).data());
@@ -370,7 +370,7 @@ BondExpansionResult<Scalar> get_mixing_factors_preopt_krylov(const std::vector<s
      */
     // auto bcfg2 = bcfg;
     // bcfg2.optRitz = OptRitz::SM;
-    // bcfg2.optAlgo = OptAlgo::XDMRG;
+    // bcfg2.optAlgo = OptAlgo::DMRG_FOLDED;
     get_optimally_mixed_block<Scalar>(sites, state, model, edges, bcfg, res);
     return res;
 }

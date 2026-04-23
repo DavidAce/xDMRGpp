@@ -148,10 +148,10 @@ void eigs_manager_generalized_shift_invert(const TensorsFinite<Scalar> &tensors,
     auto       &cfg            = solver.config;
     cfg.loglevel               = 2;
     cfg.compute_eigvecs        = eig::Vecs::ON;
-    cfg.tol                    = meta.eigs_abstol.value_or(settings::precision::eigs_abstol_min); // 1e-12 is good. This Sets "eps" in primme, see link above.
-    cfg.maxIter                = meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
+    cfg.tol                    = meta.eigs_abstol.value_or(settings::solvers::eig::abstol_min); // 1e-12 is good. This Sets "eps" in primme, see link above.
+    cfg.maxIter                = meta.eigs_iter_max.value_or(settings::solvers::eig::iter_max);
     cfg.maxNev                 = meta.eigs_nev.value_or(1);
-    cfg.maxNcv                 = meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    cfg.maxNcv                 = meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min);
     cfg.maxTime                = meta.eigs_time_max.value_or(2 * 60 * 60); // Two hours default
     cfg.lib                    = meta.eigs_lib.empty() ? eig::Lib::PRIMME : eig::StringToLib(meta.eigs_lib);
     cfg.primme_minRestartSize  = meta.primme_minRestartSize;
@@ -197,7 +197,6 @@ opt_mps<Scalar> internal::optimize_generalized_shift_invert(const TensorsFinite<
     if(meta.optSolver == OptSolver::EIG) return optimize_generalized_shift_invert_eig(tensors, initial_mps, meta, elog);
 
     using namespace internal;
-    using namespace settings::precision;
     initial_mps.validate_initial_mps();
     elog.eigs_add_entry(initial_mps, spdlog::level::debug);
 

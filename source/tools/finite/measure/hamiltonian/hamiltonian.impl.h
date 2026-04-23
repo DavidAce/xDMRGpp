@@ -665,10 +665,10 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const StateFinite<Sca
     //                                            = H²    - 2*E*E_shf + E_shf² - E² + 2*E*E_shf - E_shf²
     //                                            = H²    - E²
     //      Note that in the last line, H²-E² is a subtraction of two large numbers --> catastrophic cancellation --> loss of precision.
-    //      On the other hand Var H = <(H-E_shf)²> - energy_minus_energy_shift² = <(H-E_red)²> - ~dE², where both terms are always  << 1.
+    //      On the other hand Var H = <(H-E_shf)²> - energy_minus_energy_shift² = <(H-E_shf)²> - ~dE², where both terms are always << 1.
     //      The first term is computed from a double-layer of shifted mpo's.
-    //      In the second term dE is usually very small, in fact identically zero immediately after an energy-reduction operation,
-    //      but may grow if the optimization steps make significant progress refining E. Thus wethe first term is a good approximation to
+    //      In the second term dE is usually very small, and may grow if the optimization steps make significant progress refining E.
+    //      Thus the first term is a good approximation to
     //      the variance by itself.
     //
     // Else, if E_shf = 0 (i.e. not shifted) we get the usual formula:
@@ -703,10 +703,10 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
     //                                            = H²    - 2*E*E_shf + E_shf² - E² + 2*E*E_shf - E_shf²
     //                                            = H²    - E²
     //      Note that in the last line, H²-E² is a subtraction of two large numbers --> catastrophic cancellation --> loss of precision.
-    //      On the other hand Var H = <(H-E_shf)²> - energy_minus_energy_shift² = <(H-E_red)²> - ~dE², where both terms are always  << 1.
+    //      On the other hand Var H = <(H-E_shf)²> - energy_minus_energy_shift² = <(H-E_shf)²> - ~dE², where both terms are always << 1.
     //      The first term is computed from a double-layer of shifted mpo's.
-    //      In the second term dE is usually very small, in fact identically zero immediately after an energy-reduction operation,
-    //      but may grow if the optimization steps make significant progress refining E. Thus wethe first term is a good approximation to
+    //      In the second term dE is usually very small, and may grow if the optimization steps make significant progress refining E.
+    //      Thus the first term is a good approximation to
     //      the variance by itself.
     //
     // Else, if E_shf = 0 (i.e. not shifted) we get the usual formula:

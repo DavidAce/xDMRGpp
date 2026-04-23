@@ -57,7 +57,7 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum_eig(const
     initial_mps.validate_initial_mps();
 
     const auto problem_size = tools::finite::pos::active_problem_size(tensors);
-    if(problem_size > settings::precision::eig_max_size)
+    if(problem_size > settings::solvers::eig::max_size)
         throw except::logic_error("optimize_folded_spectrum_eig: the problem size is too large for eig: {}", problem_size);
 
     tools::log->debug("optimize_folded_spectrum_eig: ritz {} | type {} | algo {}", enum2sv(meta.optRitz), enum2sv(meta.optType), enum2sv(meta.optAlgo));

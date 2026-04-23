@@ -32,9 +32,9 @@ void tools::finite::h5::load::simulation(const h5pp::File &h5file, std::string_v
         if(algo_type == AlgorithmType::fLBIT) {
             // To successfully load a simulation there has to be a clearly defined initial state, either a pattern or an initial state selection
             tensors = TensorsFinite<Scalar>(algo_type, settings::model::model_type, settings::model::model_size, 0);
-            tools::common::h5::load::initial_state_attrs(h5file, state_prefix, settings::strategy::initial_pattern);
-            tensors.initialize_state(ResetReason::INIT, settings::strategy::initial_state, settings::strategy::initial_type, settings::strategy::initial_axis,
-                                     settings::strategy::use_eigenspinors, status.bond_lim, settings::strategy::initial_pattern);
+            tools::common::h5::load::initial_state_attrs(h5file, state_prefix, settings::state::init::initial_pattern);
+            tensors.initialize_state(ResetReason::INIT, settings::state::init::initial_state, settings::state::init::initial_type, settings::state::init::initial_axis,
+                                     settings::state::init::use_eigenspinors, status.bond_lim, settings::state::init::initial_pattern);
             tools::common::h5::load::status(h5file, state_prefix, status);
             tools::finite::h5::load::model(h5file, algo_type, *tensors.model);
             tools::common::h5::load::timer(h5file, state_prefix, status);
@@ -184,23 +184,11 @@ void tools::finite::h5::load::validate(const h5pp::File &h5file, std::string_vie
         if(expected_measurements and expected_measurements->iter == status.iter) {
             // In this case we have loaded state_real from file.
             // In the fLBIT case, the MPO's belong to state_lbit, so measuring the energy on state_real w.r.t the lbit-hamiltonian makes no sense.
-            tools::log->debug("Validating resumed state energy (without energy reduction): [{}]", state_prefix);
+            tools::log->debug("Validating resumed state energy: [{}]", state_prefix);
             tensors.clear_measurements();
             compare(tools::finite::measure::energy(tensors), expected_measurements->energy, 1e-5, "Energy");
             compare(tools::finite::measure::energy_variance(tensors), expected_measurements->energy_variance, 1e-5, "Energy variance");
 
-            if(settings::precision::use_energy_shifted_mpo) {
-                auto energy_shift = tools::finite::measure::energy(tensors);
-                tensors.set_energy_shift_mpo(energy_shift);
-                tensors.rebuild_mpo();
-                tensors.rebuild_mpo_squared();
-                tensors.compress_mpo_squared();
-                tensors.rebuild_edges();
-                tools::log->debug("Validating resumed state (after energy reduction): [{}]", state_prefix);
-                tensors.clear_measurements();
-                compare(tools::finite::measure::energy(tensors), expected_measurements->energy, 1e-5, "Energy");
-                compare(tools::finite::measure::energy_variance(tensors), expected_measurements->energy_variance, 1e-5, "Energy variance");
-            }
         }
     }
 }

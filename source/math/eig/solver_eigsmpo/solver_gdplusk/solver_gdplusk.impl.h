@@ -55,7 +55,7 @@ void solver_gdplusk<Scalar>::make_new_Q_block(fMultP_t fMultP) {
         HQ_new        = MatrixType();
         H1Q_new       = MatrixType();
         H2Q_new       = MatrixType();
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             if(use_h2_inner_product) {
                 assert_h2_orthonormal(V, H2V, m);
                 assert_h2_orthonormal(Q, H2Q, m);
@@ -89,9 +89,9 @@ void solver_gdplusk<Scalar>::build() {
     auto t_build = tid::tic_scope("build");
     switch(algo) {
         case OptAlgo::DMRG: [[fallthrough]];
-        case OptAlgo::DMRGX: [[fallthrough]];
-        case OptAlgo::HYBRID_DMRGX: [[fallthrough]];
-        case OptAlgo::XDMRG: {
+        case OptAlgo::DMRG_X: [[fallthrough]];
+        case OptAlgo::DMRG_X_HYBRID: [[fallthrough]];
+        case OptAlgo::DMRG_FOLDED: {
             fMultP_t fMultP = [this](const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals,
                                      std::optional<const Eigen::Ref<const MatrixType>> iG) -> MatrixType { return this->MultP(X, evals, iG); };
             // fMultH_t fMultH = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return this->MultH(X); };
@@ -99,7 +99,7 @@ void solver_gdplusk<Scalar>::build() {
             build(Q, HQ, Q_new, HQ_new);
             break;
         }
-        case OptAlgo::GDMRG: {
+        case OptAlgo::DMRG_GSI: {
             fMultP_t fMultP = [this](const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals,
                                      std::optional<const Eigen::Ref<const MatrixType>> iG) -> MatrixType {
                 if(use_h1h2_jcb_preconditioner)
@@ -188,7 +188,7 @@ void solver_gdplusk<Scalar>::build() {
 template<typename Scalar>
 void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &HQ, const MatrixType &Q_new, const MatrixType &HQ_new) {
     if(status.stopReason != StopReason::none) return;
-    assert(algo != OptAlgo::GDMRG);
+    assert(algo != OptAlgo::DMRG_GSI);
     RealScalar half = RealScalar{1} / RealScalar{2};
 
     if(Q_new.cols() == 0 and status.iter <= status.iter_last_restart + 2) {
@@ -295,7 +295,7 @@ template<typename Scalar>
 void solver_gdplusk<Scalar>::build(MatrixType &Q, MatrixType &H1Q, MatrixType &H2Q, const MatrixType &Q_new, const MatrixType &H1Q_new,
                                    const MatrixType &H2Q_new) {
     if(status.stopReason != StopReason::none) return;
-    assert(algo == OptAlgo::GDMRG);
+    assert(algo == OptAlgo::DMRG_GSI);
     RealScalar half = RealScalar{1} / RealScalar{2};
 
     if(Q_new.cols() == 0 and status.iter <= status.iter_last_restart + 2) {

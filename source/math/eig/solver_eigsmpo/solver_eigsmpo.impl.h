@@ -111,13 +111,13 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     auto           envv     = edges.get_multisite_env_var(sites);
     auto           size     = initial.get_tensor().size();
     constexpr auto eps      = std::numeric_limits<RealScalar>::epsilon();
-    Eigen::Index   nev      = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
-    Eigen::Index   ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    Eigen::Index   nev      = opt_meta.eigs_nev.value_or(settings::solvers::eig::nev_min);
+    Eigen::Index   ncv      = opt_meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min);
     if(ncv <= 0) {
         // Automatic selection
         Eigen::Index ncv_by_size = safe_cast<Eigen::Index>(std::ceil(std::log2(size)));
-        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::precision::eigs_ncv_min);
-        Eigen::Index ncv_max     = settings::precision::eigs_ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::precision::eigs_ncv_max);
+        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::solvers::eig::ncv_min);
+        Eigen::Index ncv_max     = settings::solvers::eig::ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::solvers::eig::ncv_max);
         ncv                      = std::clamp(ncv_by_size, ncv_min, ncv_max);
         tools::log->trace("ncv automatic selection: {} (min {}, max {})", ncv, ncv_min, ncv_max);
     }
@@ -132,10 +132,10 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
     if(opt_meta.eigs_jcbMaxBlockSize.has_value() and opt_meta.eigs_jcbMaxBlockSize.value() > 0) {
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
-    solver.b              = opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
+    solver.b              = opt_meta.eigs_blk.value_or(settings::solvers::eig::blk_min);
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
-    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.max_matvecs    = -1ul; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::solvers::eig::iter_min);
+    solver.max_matvecs    = -1ul; // opt_meta.eigs_iter_max.value_or(settings::solvers::eig::iter_min);
     solver.set_jcbMaxBlockSize(jcb_bs);
     solver.set_jcbOverlapSize(jcb_bs);
     solver.set_chebyshevFilterDegree(0);
@@ -210,8 +210,8 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
                                   const EdgesFinite<Scalar>                  &edges,    //
                                   OptMeta                                    &opt_meta, //
                                   reports::eigs_log<Scalar>                  &elog) {
-    auto jcb_bs = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::precision::eigs_jcb_blocksize_max);
-    auto jcb_os = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::precision::eigs_jcb_overlap_size);
+    auto jcb_bs = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::solvers::eig::jcb_blocksize_max);
+    auto jcb_os = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::solvers::eig::jcb_overlap_size);
     auto prt    = eig::StringToPreconditioner(opt_meta.eigs_preconditioner_type.value_or("SOLVE"));
     auto rct    = StringToResidualCorrection(opt_meta.eigs_residual_correction_type.value_or("JACOBI_DAVIDSON"));
     bool crs    = opt_meta.eigs_use_coarse_inner_preconditioner.value_or(false);
@@ -249,7 +249,6 @@ template<typename Scalar>
 [[nodiscard]] opt_mps<Scalar> tools::finite::opt::internal::optimize_lanczos_h1h2(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial,
                                                                                   [[maybe_unused]] OptMeta &meta, reports::eigs_log<Scalar> &elog) {
     using namespace internal;
-    using namespace settings::precision;
     initial.validate_initial_mps();
     elog.eigs_add_entry(initial, spdlog::level::debug);
 
@@ -258,10 +257,10 @@ template<typename Scalar>
     std::string eigprob;
     switch(meta.optAlgo) {
         case OptAlgo::DMRG: eigprob = "Hx=λx"; break;
-        case OptAlgo::DMRGX: eigprob = "Hx=λx"; break;
-        case OptAlgo::HYBRID_DMRGX: eigprob = "Hx=λx"; break;
-        case OptAlgo::XDMRG: eigprob = "H²x=λx"; break;
-        case OptAlgo::GDMRG: eigprob = "Hx=λH²x"; break;
+        case OptAlgo::DMRG_X: eigprob = "Hx=λx"; break;
+        case OptAlgo::DMRG_X_HYBRID: eigprob = "Hx=λx"; break;
+        case OptAlgo::DMRG_FOLDED: eigprob = "H²x=λx"; break;
+        case OptAlgo::DMRG_GSI: eigprob = "Hx=λH²x"; break;
     }
 
     tools::log->debug("eigs_lanczos_h1h2_executor: Solving [{}] | ritz {} | maxIter {} | tol {:.2e} | init on | size {} | mps {}", eigprob,

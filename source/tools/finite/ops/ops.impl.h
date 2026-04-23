@@ -404,7 +404,7 @@ int tools::finite::ops::project_to_nearest_axis(StateFinite<Scalar> &state, std:
         auto spin_alignment = sign * spin_component_along_axis.value();
         // Now we have to check that the intended projection is safe
         tools::log->debug("Spin component in axis {}: {:.16f}", axis, spin_component_along_axis.value());
-        if(spin_alignment > tol1 and !has_flag(settings::strategy::projection_policy, ProjectionPolicy::FORCE)) {
+        if(spin_alignment > tol1 and !has_flag(settings::state::sector::projection_policy, ProjectionPolicy::FORCE)) {
             tools::log->info("Projection skipped: spin component along axis {}: {:.16f}", axis, spin_component_along_axis.value());
             return sign;
         } else if(spin_alignment > 0) {
@@ -430,7 +430,7 @@ int tools::finite::ops::project_to_nearest_axis(StateFinite<Scalar> &state, std:
             else
                 sign = -1;
             spin_alignment = sign * spin_component_along_axis.value();
-            if(spin_alignment > tol1 and !has_flag(settings::strategy::projection_policy, ProjectionPolicy::FORCE)) {
+            if(spin_alignment > tol1 and !has_flag(settings::state::sector::projection_policy, ProjectionPolicy::FORCE)) {
                 tools::log->info("Projection skipped: spin component along axis {}: {:.16f}", axis, spin_component_along_axis.value());
             } else {
                 project_to_axis(state, pauli, sign, svd_cfg);

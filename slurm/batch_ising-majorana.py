@@ -63,11 +63,11 @@ for val_L,val_g, val_d, init, multi in  product(sites,gs,deltas,initial_state,mu
         "model::ising_majorana::g"           : str_g,
         "xdmrg::bond_max"                    : "2048",
         "xdmrg::max_states"                  : "1",
-        "strategy::multisite_mps_site_def"   : str(multisite_mps_size_def[0]),
-        "strategy::multisite_mps_site_max"   : str(multi),
-        "strategy::initial_state"            : str(init),
-        "strategy::initial_axis"             : str(initial_sector),
-        "strategy::target_axis"              : str(target_sector),
+        "schedule::dmrg::min_blocksize"   : str(multisite_mps_size_def[0]),
+        "schedule::dmrg::max_blocksize"   : str(multi),
+        "state::init::initial_state"            : str(init),
+        "state::init::initial_axis"             : str(initial_sector),
+        "state::sector::target_axis"              : str(target_sector),
     }
     os.makedirs(input_dirname, exist_ok=True)
     num_total = num_total + 1

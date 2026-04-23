@@ -50,6 +50,9 @@ FileResumePolicy              ; settings::storage::file_resume_policy           
 
 ## /*! state_emid is obtained in the xDMRG algorithm (mid energy) */
 StoragePolicy                 ; settings::storage::mps::state_emid::policy                           ; "ITER|FINISH|REPLACE"                  ;                ;
+StoragePolicy                 ; settings::storage::dataset::statevector::policy                      ; "NONE"                                ;                ; Storage policy for the dense statevector dataset
+int                           ; settings::storage::dataset::statevector::chunksize                   ; 1                                     ;                ; Chunk depth for appending statevector records
+long                          ; settings::storage::dataset::statevector::max_model_size              ; 16                                    ;                ; Largest model size allowed for dense statevector saves. Statevectors scale exponentially in L; values above 16 can require substantial time and memory
 
 StoragePolicy                 ; settings::storage::table::status::policy                             ; "ALWAYS"                               ;                ;
 
@@ -58,26 +61,34 @@ StoragePolicy                 ; settings::storage::table::memory::policy        
 ## /*! Entanglement entropy (log2) of all contiguous subsystems */
 Precision                     ; settings::storage::dataset::subsystem_entanglement_entropies::precision ; "DOUBLE"                            ;                ; Use SINGLE or DOUBLE precision internally
 
-## /*! \namespace settings::strategy Settings affecting the convergence rate of the algorithms */
-ProjectionPolicy              ; settings::strategy::projection_policy                                 ; "ITER"                                 ;                ; Enum bitflag to control projections to a symmetry sector {NEVER,+INIT,WARMUP,+STUCK,ITER,+CONVERGED,FINISHED,FORCE,DEFAULT} (+ are DEFAULT)
-BlockSizePolicy               ; settings::strategy::dmrg_blocksize_policy                            ; "MIN"                                  ;                ; Bitflag to control the adaptive dmrg blocksize {MIN,MAX,INFO,INFOPLUS1,SATURATED,STUCK,FIN_BOND,FIN_TRNC}
-std::string                   ; settings::strategy::target_axis                                      ; "+z"                                   ;                ; Find an eigenstate with global spin component along this axis. Choose between Choose {none, (+-) x,y or z}
-std::string                   ; settings::strategy::initial_axis                                     ; "+z"                                   ;                ; Initialize state with global spin component along this axis. Choose {none, (+-) x,y or z}
-StateInitType                 ; settings::strategy::initial_type                                     ; "REAL"                                 ;                ; Initial state can be REAL/CPLX
-StateInit                     ; settings::strategy::initial_state                                    ; "PRODUCT_STATE_NEEL_SHUFFLED"          ;                ; Initial configuration for the spin chain (only for finite systems)
+## /*! \namespace settings::state Settings for state initialization and symmetry-sector targeting */
+ProjectionPolicy              ; settings::state::sector::projection_policy                                 ; "ITER"                                 ;                ; Enum bitflag to control projections to a symmetry sector {NEVER,+INIT,WARMUP,+STUCK,ITER,+CONVERGED,FINISHED,FORCE,DEFAULT} (+ are DEFAULT)
+std::string                   ; settings::state::sector::target_axis                                      ; "+z"                                   ;                ; Find an eigenstate with global spin component along this axis. Choose between Choose {none, (+-) x,y or z}
+std::string                   ; settings::state::init::initial_axis                                     ; "+z"                                   ;                ; Initialize state with global spin component along this axis. Choose {none, (+-) x,y or z}
+StateInitType                 ; settings::state::init::initial_type                                     ; "REAL"                                 ;                ; Initial state can be REAL/CPLX
+StateInit                     ; settings::state::init::initial_state                                    ; "PRODUCT_STATE_NEEL_SHUFFLED"          ;                ; Initial configuration for the spin chain (only for finite systems)
 
-## /*! \namespace settings::precision Settings for the convergence threshold and precision of MPS, SVD and eigensolvers */
+## /*! \namespace settings::schedule Settings for adaptive optimizer schedules and DMRG-local step control */
+BlockSizePolicy               ; settings::schedule::dmrg::blocksize_policy                            ; "MIN"                                  ;                ; Bitflag to control the adaptive dmrg blocksize {MIN,MAX,INFO,INFOPLUS1,SATURATED,STUCK,FIN_BOND,FIN_TRNC}
+
+## /*! \namespace settings::precision Settings for scalar types and floating-point tolerances shared across the codebase */
 ScalarType                    ; settings::precision::algoScalar                                      ; "FP64"                                 ;                ; Scalar type for tensor storage (state, model, edges)
 ScalarType                    ; settings::precision::optScalar                                       ; "FP64"                                 ;                ; Scalar type for computations (eig, eigs, svd)
-long                          ; settings::precision::eig_max_size                                    ; 2048                                   ;                ; Maximum problem size before switching from eig to eigs.
-long                          ; settings::precision::eigs_iter_min                                   ; 10                                     ;                ; Minimum number of iterations for eigenvalue solver.
-long                          ; settings::precision::eigs_iter_max                                   ; 50                                     ;                ; Maximum number of iterations for eigenvalue solver.
-GainPolicy                    ; settings::precision::eigs_iter_gain_policy                           ; "SAT_ALGO"                             ;                ; Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC]
-double                        ; settings::precision::eigs_abstol_min                                 ; 1e-14                                  ;                ; Precision tolerance for halting the eigenvalue solver.
-double                        ; settings::precision::eigs_abstol_max                                 ; 1e-5                                   ;                ; Precision tolerance for halting the eigenvalue solver.
-MpoCompress                   ; settings::precision::use_compressed_mpo                              ; "DPL"                                  ;                ; Select the compression scheme for the virtual bond dimensions of H  mpos. Select {NONE, SVD (high compression), DPL (high precision)}
-MpoCompress                   ; settings::precision::use_compressed_mpo_squared                      ; "DPL"                                  ;                ; Select the compression scheme for the virtual bond dimensions of H² mpos. Select {NONE, SVD (high compression), DPL (high precision)}
-double                        ; settings::precision::variance_convergence_threshold                  ; 1e-13                                  ;                ; Desired precision on total energy variance. The MPS state is considered good enough when its energy variance reaches below this value
+
+## /*! \namespace settings::solvers Settings for local eigensolver and SVD backends */
+long                          ; settings::solvers::eig::max_size                                    ; 2048                                   ;                ; Maximum problem size before switching from eig to eigs.
+long                          ; settings::solvers::eig::iter_min                                   ; 10                                     ;                ; Minimum number of iterations for eigenvalue solver.
+long                          ; settings::solvers::eig::iter_max                                   ; 50                                     ;                ; Maximum number of iterations for eigenvalue solver.
+GainPolicy                    ; settings::solvers::eig::iter_gain_policy                           ; "SAT_ALGO"                             ;                ; Bitflag for when to increase the eigensolver iterations. Choose one or more: [NEVER, ITERATION, VARSAT, SATURATED, STUCK, FIN_BOND, FIN_TRNC]
+double                        ; settings::solvers::eig::abstol_min                                 ; 1e-14                                  ;                ; Precision tolerance for halting the eigenvalue solver.
+double                        ; settings::solvers::eig::abstol_max                                 ; 1e-5                                   ;                ; Precision tolerance for halting the eigenvalue solver.
+
+## /*! \namespace settings::model Settings for MPO construction and Hamiltonian representation */
+MpoCompress                   ; settings::model::use_compressed_mpo                              ; "DPL"                                  ;                ; Select the compression scheme for the virtual bond dimensions of H  mpos. Select {NONE, SVD (high compression), DPL (high precision)}
+MpoCompress                   ; settings::model::use_compressed_mpo_squared                      ; "DPL"                                  ;                ; Select the compression scheme for the virtual bond dimensions of H² mpos. Select {NONE, SVD (high compression), DPL (high precision)}
+
+## /*! \namespace settings::convergence Settings for convergence thresholds and saturation tests */
+double                        ; settings::convergence::variance_threshold                  ; 1e-13                                  ;                ; Desired precision on total energy variance. The MPS state is considered good enough when its energy variance reaches below this value
 
 ## /*! \namespace settings::model::ising_majorana Settings for the Ising-Majorana model */
 double                        ; settings::model::ising_majorana::g                                   ; 0.500                                  ;                ; Interaction parameter for nearest ZZ and next-nearest XX neighbor coupling
@@ -114,8 +125,6 @@ double                        ; settings::flbit::time_final_real                
 double                        ; settings::flbit::time_final_imag                                     ; 0.0                                    ;                ; Finishing time point (imag)
 int                           ; settings::flbit::time_num_steps                                      ; 50                                     ;                ; Number of steps from start to finish. Start and final times are included
 int                           ; settings::flbit::print_freq                                          ; 1                                      ;                ; Print frequency for console output. In units of iterations. (0 = off).
-bool                          ; settings::flbit::store_wavefn                                        ; false                                  ;                ; Whether to store the wavefunction. Runs out of memory quick, recommended is false for max_length > 14
-
 ## /*! \namespace settings::flbit::cls Settings for calculating the characteristic length-scale of lbits */
 int                           ; settings::flbit::cls::num_rnd_circuits                               ; 0                                      ;                ; Calculate the characteristic length-scale for this many realizations of the unitary circuit
 bool                          ; settings::flbit::cls::exit_when_done                                 ; false                                  ;                ; If true, the program exits after calculating cls. Otherwise it starts the time evolution as usual
@@ -130,11 +139,11 @@ bool                          ; settings::flbit::opdm::exit_when_done           
 
 ## /*! \namespace settings::xdmrg Settings for the finite excited-state DMRG algorithm */
 bool                          ; settings::xdmrg::on                                                  ; true                                   ;                ; Turns xDMRG simulation on/off.
-OptAlgo                       ; settings::xdmrg::algo                                                ; "GDMRG"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]
+OptAlgo                       ; settings::xdmrg::algo                                                ; "DMRG_GSI"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRG_X, DMRG_X_HYBRID, DMRG_FOLDED, DMRG_GSI]
 OptRitz                       ; settings::xdmrg::ritz                                                ; "LM"                                   ;                ; Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)]
-OptAlgo                       ; settings::xdmrg::algo_warmup                                         ; "GDMRG"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]
+OptAlgo                       ; settings::xdmrg::algo_warmup                                         ; "DMRG_GSI"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRG_X, DMRG_X_HYBRID, DMRG_FOLDED, DMRG_GSI]
 OptRitz                       ; settings::xdmrg::ritz_warmup                                         ; "LM"                                   ;                ; Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)]
-OptAlgo                       ; settings::xdmrg::algo_stuck                                          ; "GDMRG"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRGX, HYBRID_DMRGX, XDMRG, GDMRG]
+OptAlgo                       ; settings::xdmrg::algo_stuck                                          ; "DMRG_GSI"                                ;                ; Choose the type of DMRG algorithm [DMRG DMRG_X, DMRG_X_HYBRID, DMRG_FOLDED, DMRG_GSI]
 OptRitz                       ; settings::xdmrg::ritz_stuck                                          ; "LM"                                   ;                ; Select which eigenpair to target [LR (largest real), SR(largest real) SM(smallest magnitude) IS(initial state) TE(target energy density) CE(current energy)]
 double                        ; settings::xdmrg::energy_spectrum_shift                               ; 0.0                                    ;                ; (Used with ritz == OptRitz::SM) Shift the energy eigenvalue spectrum by this amount: H -> H - shift
 double                        ; settings::xdmrg::energy_density_target                               ; 0.5                                    ;                ; (Used with ritz == OptRitz::TE) Target energy in [0-1], Target energy = energy_density_target * (EMAX+EMIN) + EMIN.
@@ -144,8 +153,6 @@ long                          ; settings::xdmrg::bond_min                       
 long                          ; settings::xdmrg::bond_max                                            ; 8192                                   ;                ; Maximum bond dimension (number of singular values to keep after SVD).
 int                           ; settings::xdmrg::print_freq                                          ; 1                                      ;                ; Print frequency for console output. In units of iterations. (0 = off).
 int                           ; settings::xdmrg::max_states                                          ; 1                                      ;                ; Max number of random states to find using xDMRG on a single disorder realization
-bool                          ; settings::xdmrg::store_wavefn                                        ; false                                  ;                ; Whether to store the wavefunction. Runs out of memory quick, recommended is false for max_length > 14
-
 std::array<int, 3>            ; settings::demo::measurement_sites                                    ; [0, 10, 21]                            ;                ; Fixed-size int array.
 std::vector<double>           ; settings::demo::bond_schedule                                        ; [512.0, 1024.0, 2048.0, 4096.0]        ;                ; Dynamic float array.
 std::vector<double>           ; settings::demo::variance_targets                                     ; [1e-6, 1e-8, 1e-10]                    ;                ; Another vector<double>.

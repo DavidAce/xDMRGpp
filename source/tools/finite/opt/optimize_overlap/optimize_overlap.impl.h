@@ -65,8 +65,8 @@ using namespace tools::finite::opt::internal;
 template<typename Scalar>
 opt_mps<Scalar> tools::finite::opt::internal::optimize_overlap(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
                                                                [[maybe_unused]] OptMeta &meta, reports::subs_log<Scalar> &slog) {
-    if(meta.optAlgo != OptAlgo::DMRGX)
-        throw except::runtime_error("optimize_overlap: Expected OptAlgo [{}] | Got [{}]", enum2sv(OptAlgo::DMRGX), enum2sv(meta.optAlgo));
+    if(meta.optAlgo != OptAlgo::DMRG_X)
+        throw except::runtime_error("optimize_overlap: Expected OptAlgo [{}] | Got [{}]", enum2sv(OptAlgo::DMRG_X), enum2sv(meta.optAlgo));
     tools::log->trace("Optimizing in OVERLAP mode");
     auto t_olap = tid::tic_scope("overlap", tid::level::higher);
     initial_mps.validate_initial_mps();

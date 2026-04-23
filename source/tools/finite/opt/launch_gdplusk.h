@@ -274,14 +274,14 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_std(const opt_mps<Scalar>       &in
     auto           envv       = tensors.get_edges().get_multisite_env_var(sites);
     auto           size       = initial.get_tensor().size();
     constexpr auto eps        = std::numeric_limits<CalcReal>::epsilon();
-    auto           nev        = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
-    // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    auto           nev        = opt_meta.eigs_nev.value_or(settings::solvers::eig::nev_min);
+    // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min);
     if(ncv <= 0) {
         // Automatic selection
 
         Eigen::Index ncv_by_size = safe_cast<Eigen::Index>(std::ceil(std::log2(size)));
-        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::precision::eigs_ncv_min);
-        Eigen::Index ncv_max     = settings::precision::eigs_ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::precision::eigs_ncv_max);
+        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::solvers::eig::ncv_min);
+        Eigen::Index ncv_max     = settings::solvers::eig::ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::solvers::eig::ncv_max);
         ncv                      = std::clamp(ncv_by_size, ncv_min, ncv_max);
         tools::log->trace("ncv automatic selection: {} (min {}, max {})", ncv, ncv_min, ncv_max);
     }
@@ -318,10 +318,10 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_std(const opt_mps<Scalar>       &in
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
     solver.setLogger(spdlog::level::info, fmt::format("gd+k {}", tag));
-    solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
+    solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::solvers::eig::blk_min);
     solver.status.initVal = static_cast<CalcReal>(initial.get_energy());
-    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::solvers::eig::iter_min);
+    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::solvers::eig::iter_min);
     solver.set_jcbMaxBlockSize(jcb_max_block_size);
     solver.set_jcbOverlapSize(jcb_overlap_size);
     solver.set_jcbNumPasses(jcb_num_passes);
@@ -512,14 +512,14 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
     // auto           envv       = tensors.get_edges().get_multisite_env_var(sites);
     auto           size = initial.get_tensor().size();
     constexpr auto eps  = std::numeric_limits<CalcReal>::epsilon();
-    auto           nev  = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
-    // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    auto           nev  = opt_meta.eigs_nev.value_or(settings::solvers::eig::nev_min);
+    // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min);
     if(ncv <= 0) {
         // Automatic selection
 
         Eigen::Index ncv_by_size = safe_cast<Eigen::Index>(std::ceil(std::log2(size)));
-        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::precision::eigs_ncv_min);
-        Eigen::Index ncv_max     = settings::precision::eigs_ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::precision::eigs_ncv_max);
+        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::solvers::eig::ncv_min);
+        Eigen::Index ncv_max     = settings::solvers::eig::ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::solvers::eig::ncv_max);
         ncv                      = std::clamp(ncv_by_size, ncv_min, ncv_max);
         tools::log->trace("ncv automatic selection: {} (min {}, max {})", ncv, ncv_min, ncv_max);
     }
@@ -570,10 +570,10 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk_bc_gen(const opt_mps<Scalar>       &in
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
     solver.setLogger(spdlog::level::trace, fmt::format("gen gd+k {}", tag));
-    solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
+    solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::solvers::eig::blk_min);
     solver.status.initVal = static_cast<CalcReal>(initial.get_energy());
-    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::solvers::eig::iter_min);
+    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::solvers::eig::iter_min);
     solver.set_jcbMaxBlockSize(jcb_max_block_size);
     solver.set_jcbOverlapSize(jcb_overlap_size);
     solver.set_jcbNumPasses(jcb_num_passes);
@@ -761,14 +761,14 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
     auto           envv       = tensors.get_edges().get_multisite_env_var(sites);
     auto           size       = initial.get_tensor().size();
     constexpr auto eps        = std::numeric_limits<RealScalar>::epsilon();
-    auto           nev        = opt_meta.eigs_nev.value_or(settings::precision::eigs_nev_min);
-    // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    auto           nev        = opt_meta.eigs_nev.value_or(settings::solvers::eig::nev_min);
+    // auto           ncv      = opt_meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min);
     if(ncv <= 0) {
         // Automatic selection
 
         Eigen::Index ncv_by_size = safe_cast<Eigen::Index>(std::ceil(std::log2(size)));
-        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::precision::eigs_ncv_min);
-        Eigen::Index ncv_max     = settings::precision::eigs_ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::precision::eigs_ncv_max);
+        Eigen::Index ncv_min     = std::max<Eigen::Index>(2 * nev, settings::solvers::eig::ncv_min);
+        Eigen::Index ncv_max     = settings::solvers::eig::ncv_max <= 0 ? ncv_by_size : static_cast<Eigen::Index>(settings::solvers::eig::ncv_max);
         ncv                      = std::clamp(ncv_by_size, ncv_min, ncv_max);
         tools::log->trace("ncv automatic selection: {} (min {}, max {})", ncv, ncv_min, ncv_max);
     }
@@ -787,10 +787,10 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const opt_mps<Scalar>       &initial, 
         solver.set_jcbMaxBlockSize(opt_meta.eigs_jcbMaxBlockSize.value_or(0));
     }
     solver.setLogger(spdlog::level::info, fmt::format("std gd+k {}", tag));
-    solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
+    solver.b              = block_size; // opt_meta.eigs_blk.value_or(settings::solvers::eig::blk_min);
     solver.status.initVal = static_cast<RealScalar>(initial.get_energy());
-    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
-    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::precision::eigs_iter_min);
+    solver.max_iters      = opt_meta.eigs_iter_max.value_or(settings::solvers::eig::iter_min);
+    solver.max_matvecs    = -1l; // opt_meta.eigs_iter_max.value_or(settings::solvers::eig::iter_min);
     solver.set_jcbMaxBlockSize(jcb_max_block_size);
     solver.set_jcbOverlapSize(jcb_overlap_size);
     solver.set_jcbNumPasses(jcb_num_passes);
@@ -838,13 +838,13 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
                                           const opt_mps<Scalar>       &initial,  //
                                           const OptMeta               &opt_meta, //
                                           reports::eigs_log<Scalar>   &elog) {
-    auto jcb_bs = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::precision::eigs_jcb_blocksize_max);
-    auto jcb_os = opt_meta.eigs_jcbOverlapSize.value_or(settings::precision::eigs_jcb_overlap_size);
+    auto jcb_bs = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::solvers::eig::jcb_blocksize_max);
+    auto jcb_os = opt_meta.eigs_jcbOverlapSize.value_or(settings::solvers::eig::jcb_overlap_size);
     auto prt    = eig::StringToPreconditioner(opt_meta.eigs_preconditioner_type.value_or("SOLVE"));
     auto rct    = StringToResidualCorrection(opt_meta.eigs_residual_correction_type.value_or("JACOBI_DAVIDSON"));
     // bool         crs        = opt_meta.eigs_use_coarse_inner_preconditioner.value_or(false);
-    Eigen::Index block_size = opt_meta.eigs_blk.value_or(settings::precision::eigs_blk_min);
-    Eigen::Index ncv        = opt_meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min);
+    Eigen::Index block_size = opt_meta.eigs_blk.value_or(settings::solvers::eig::blk_min);
+    Eigen::Index ncv        = opt_meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min);
     if(jcb_bs == 1)
         return eigs_gdplusk<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false, block_size, ncv,
                                       "jcb=1", elog);
@@ -887,10 +887,10 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
     // | **F** | $H_2$              | Identity (no blocks)           |
     // ncv = 16;
 
-    if(opt_meta.optAlgo == OptAlgo::XDMRG)
+    if(opt_meta.optAlgo == OptAlgo::DMRG_FOLDED)
         return eigs_gdplusk_bc_std<CalcType>(initial, tensors, opt_meta, jcb_bs, jcb_os, 1, prt, rct, false, false, false, false, false, false, false,
                                              BasisChangeScale::NONE, 1, ncv * 1, "NONE    BC:JD b1 L2 h2", elog); // A:JD b1 L2 h2
-    if(opt_meta.optAlgo == OptAlgo::GDMRG) {
+    if(opt_meta.optAlgo == OptAlgo::DMRG_GSI) {
         auto ewt_a = EnvWeightType::NO_PSI_TRACE;
         auto ewt_b = EnvWeightType::AB_TRACE;
         auto ewt_c = EnvWeightType::NO_PSI_SUM;

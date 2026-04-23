@@ -505,7 +505,7 @@ auto GeneralizedBasisChange<Scalar>::get_generalized_transforms_H2_zip(const Eig
         auto env_zip = env.contract(Pmap, tenx::idx({0}, {0})).contract(Pmap.conjugate(), tenx::idx({0}, {0})).shuffle(std::array<Eigen::Index, 3>{1, 2, 0});
         return {env_zip, P};
     };
-    Eigen::Index max_size = settings::precision::eig_max_size;
+    Eigen::Index max_size = settings::solvers::eig::max_size;
     Eigen::Index max_bond = std::max<Eigen::Index>(40, static_cast<Eigen::Index>(std::sqrt(max_size / mpo.dimension(2))));
     Eigen::Index max_chiL = std::min(envL.dimension(0), max_bond);
     Eigen::Index max_chiR = std::min(envR.dimension(0), max_bond);

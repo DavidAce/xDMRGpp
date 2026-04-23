@@ -25,7 +25,7 @@ namespace settings::precision {
 can be overridden from a configuration file with
 
 ```text
-precision::svd_truncation_min = 1e-12   // Optional comment
+solvers::svd::truncation_min = 1e-12   // Optional comment
 ```
 
 Example configuration files are provided under `input/`. They are usually the quickest way to discover which settings matter for a particular algorithm.
@@ -98,18 +98,50 @@ The output file path, storage policy, compression settings, and resume behavior 
    :path: config/settings.h
 ```
 
-## Algorithm Strategies
+## State Settings
 
 ```{eval-rst}
-.. doxygennamespace:: settings::strategy
+.. doxygennamespace:: settings::state
    :project: DMRG++
    :path: config/settings.h
 ```
 
-## Algorithm Precision
+## Schedule Settings
+
+```{eval-rst}
+.. doxygennamespace:: settings::schedule
+   :project: DMRG++
+   :path: config/settings.h
+```
+
+## Solver Settings
+
+```{eval-rst}
+.. doxygennamespace:: settings::solvers
+   :project: DMRG++
+   :path: config/settings.h
+```
+
+## Precision Settings
 
 ```{eval-rst}
 .. doxygennamespace:: settings::precision
+   :project: DMRG++
+   :path: config/settings.h
+```
+
+## Convergence Settings
+
+```{eval-rst}
+.. doxygennamespace:: settings::convergence
+   :project: DMRG++
+   :path: config/settings.h
+```
+
+## Post Settings
+
+```{eval-rst}
+.. doxygennamespace:: settings::post
    :project: DMRG++
    :path: config/settings.h
 ```

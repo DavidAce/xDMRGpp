@@ -78,8 +78,8 @@ void ModelInfinite<Scalar>::reset_mpo_squared() {
 
 template<typename Scalar>
 void ModelInfinite<Scalar>::rebuild_mpo_squared() {
-    if(settings::precision::use_compressed_mpo_squared != MpoCompress::NONE) {
-        throw std::runtime_error("Compressed MPO² is unsupported for infinite systems. Set settings::precision::use_compressed_mpo_squared = NONE");
+    if(settings::model::use_compressed_mpo_squared != MpoCompress::NONE) {
+        throw std::runtime_error("Compressed MPO² is unsupported for infinite systems. Set settings::model::use_compressed_mpo_squared = NONE");
     }
     reset_mpo_squared();
     clear_cache();

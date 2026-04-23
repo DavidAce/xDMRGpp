@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
         if(settings::demo::measurement_sites.back() >= settings::model::model_size)
             throw std::runtime_error("measurement_sites must be smaller than model_size");
         if(runtime.preview_times.empty()) throw std::runtime_error("expected a non-empty preview time grid");
-        if(settings::precision::eigs_iter_min > settings::precision::eigs_iter_max) throw std::runtime_error("eigs_iter_min must not exceed eigs_iter_max");
+        if(settings::solvers::eig::iter_min > settings::solvers::eig::iter_max) throw std::runtime_error("eigs_iter_min must not exceed eigs_iter_max");
     } catch(const test::tomlpp::CliExit &ex) { return ex.exit_code; } catch(const std::exception &ex) {
         fmt::print(stderr, "tomlpp_parser failed: {}\n", ex.what());
         return 1;

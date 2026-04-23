@@ -444,7 +444,7 @@ void TensorsFinite<Scalar>::rebuild_mpo_squared() {
 
 template<typename Scalar>
 void TensorsFinite<Scalar>::compress_mpo_squared() {
-    if(settings::precision::use_compressed_mpo_squared == MpoCompress::NONE) return;
+    if(settings::model::use_compressed_mpo_squared == MpoCompress::NONE) return;
 
     if(model->has_compressed_mpo_squared()) {
         // throw std::runtime_error("compress_mpo_squared: the model already has compressed mpo squared.");

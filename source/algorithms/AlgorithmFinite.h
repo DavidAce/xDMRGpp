@@ -88,7 +88,6 @@ class AlgorithmFinite : public AlgorithmBase {
     void                        set_parity_shift_mpo_squared(std::optional<std::string> target_axis = std::nullopt);
     BondExpansionConfig         get_bond_expansion_config(BondExpansionOrder order);
     void                        move_center_point(std::optional<long> num_moves = std::nullopt);
-    virtual void                set_energy_shift_mpo(); // We override this in xdmrg
     void                        rebuild_tensors();
     void                        update_precision_limit(std::optional<double> energy_upper_bound = std::nullopt) final;
     void                        update_bond_dimension_limit() final;

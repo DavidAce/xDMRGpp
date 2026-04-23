@@ -47,19 +47,19 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_opt_initial_mps(cons
 
     switch(meta.optAlgo) {
         case OptAlgo::DMRG:
-        case OptAlgo::DMRGX:
-        case OptAlgo::HYBRID_DMRGX: {
+        case OptAlgo::DMRG_X:
+        case OptAlgo::DMRG_X_HYBRID: {
             auto H1 = tools::finite::measure::expval_hamiltonian(tensors);
             initial_mps.set_eigs_eigval(std::real(H1));
             break;
         }
-        case OptAlgo::XDMRG: {
+        case OptAlgo::DMRG_FOLDED: {
             // (H-Eshift)v =  <H²> v
             auto H2 = tools::finite::measure::expval_hamiltonian_squared(tensors);
             initial_mps.set_eigs_eigval(std::real(H2));
             break;
         }
-        case OptAlgo::GDMRG: {
+        case OptAlgo::DMRG_GSI: {
             // (H-Eshift)v =  <H¹>/<H²> (H-Eshift)²v
             auto H1 = tools::finite::measure::expval_hamiltonian(tensors);         // <H>
             auto H2 = tools::finite::measure::expval_hamiltonian_squared(tensors); // <H²>
@@ -110,13 +110,13 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
     // result = internal::optimize_lanczos_h1h2(tensors, initial_mps, meta, elog);
     // auto meta2      = meta;
     // meta2.optSolver = OptSolver::EIGS;
-    // meta2.optAlgo   = OptAlgo::XDMRG;
+    // meta2.optAlgo   = OptAlgo::DMRG_FOLDED;
     // meta2.optRitz   = OptRitz::SM;
     // auto result2    = internal::optimize_lanczos_h1h2(tensors, initial_mps, meta2, elog);
     // auto meta3      = meta;
     // meta3.optSolver = meta.optSolver == OptSolver::EIGS ? OptSolver::H1H2 : OptSolver::EIGS;
     // meta3.optType   = OptType::FP64;
-    // meta3.optAlgo   = OptAlgo::GDMRG;
+    // meta3.optAlgo   = OptAlgo::DMRG_GSI;
     // meta3.optRitz   = OptRitz::LM;
     // if(meta.optSolver != meta3.optSolver or meta.optType != meta3.optType or meta.optAlgo != meta3.optAlgo or meta.optRitz != meta3.optRitz) {
     //     if(meta3.optSolver == OptSolver::EIGS) {
@@ -128,10 +128,10 @@ tools::finite::opt::opt_mps<Scalar> tools::finite::opt::get_updated_state(const 
     // } else {
     switch(meta.optAlgo) {
         case OptAlgo::DMRG: result = internal::optimize_energy(tensors, initial_mps, meta, elog); break;
-        case OptAlgo::DMRGX: result = internal::optimize_overlap(tensors, initial_mps, meta, slog); break;
-        case OptAlgo::HYBRID_DMRGX: result = internal::optimize_subspace_variance(tensors, initial_mps, meta, elog); break;
-        case OptAlgo::XDMRG: result = internal::optimize_folded_spectrum(tensors, initial_mps, meta, elog); break;
-        case OptAlgo::GDMRG: result = internal::optimize_generalized_shift_invert(tensors, initial_mps, meta, elog); break;
+        case OptAlgo::DMRG_X: result = internal::optimize_overlap(tensors, initial_mps, meta, slog); break;
+        case OptAlgo::DMRG_X_HYBRID: result = internal::optimize_subspace_variance(tensors, initial_mps, meta, elog); break;
+        case OptAlgo::DMRG_FOLDED: result = internal::optimize_folded_spectrum(tensors, initial_mps, meta, elog); break;
+        case OptAlgo::DMRG_GSI: result = internal::optimize_generalized_shift_invert(tensors, initial_mps, meta, elog); break;
     }
     // }
 

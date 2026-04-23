@@ -39,7 +39,6 @@ class fdmrg : public AlgorithmFinite<Scalar> {
     using AlgorithmFinite<Scalar>::tensors;
     using AlgorithmFinite<Scalar>::set_parity_shift_mpo;
     using AlgorithmFinite<Scalar>::set_parity_shift_mpo_squared;
-    using AlgorithmFinite<Scalar>::set_energy_shift_mpo;
     using AlgorithmFinite<Scalar>::rebuild_tensors;
     using AlgorithmFinite<Scalar>::update_precision_limit;
     using AlgorithmFinite<Scalar>::update_dmrg_blocksize;

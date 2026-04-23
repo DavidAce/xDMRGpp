@@ -59,14 +59,14 @@ std::vector<opt_mps<Scalar>> optimize_energy_eigs_executor(const TensorsFinite<S
     hamiltonian.factorization = eig::Factorization::LU; // H is not definite, so we can't use LLT or LDLT
 
     // https://www.cs.wm.edu/~andreas/software/doc/appendix.html#c.primme_params.eps
-    solver.config.tol                   = meta.eigs_abstol.value_or(settings::precision::eigs_abstol_min);
+    solver.config.tol                   = meta.eigs_abstol.value_or(settings::solvers::eig::abstol_min);
     solver.config.compute_eigvecs       = eig::Vecs::ON;
     solver.config.lib                   = eig::Lib::PRIMME;
     solver.config.primme_method         = eig::stringToMethod(meta.primme_method);
-    solver.config.maxIter               = meta.eigs_iter_max.value_or(settings::precision::eigs_iter_max);
+    solver.config.maxIter               = meta.eigs_iter_max.value_or(settings::solvers::eig::iter_max);
     solver.config.maxTime               = 2 * 60 * 60;
     solver.config.maxNev                = meta.eigs_nev.value_or(1);
-    solver.config.maxNcv                = meta.eigs_ncv.value_or(settings::precision::eigs_ncv_min); // arpack needs ncv ~512. Primme seems happy with 4-32.
+    solver.config.maxNcv                = meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min); // arpack needs ncv ~512. Primme seems happy with 4-32.
     solver.config.primme_minRestartSize = meta.primme_minRestartSize;
     solver.config.primme_maxBlockSize   = meta.primme_maxBlockSize;
     solver.config.primme_locking        = true;
@@ -84,7 +84,7 @@ std::vector<opt_mps<Scalar>> optimize_energy_eigs_executor(const TensorsFinite<S
 
     if(meta.optRitz == OptRitz::SM) {
         // This is used to find excited eigenstates of H
-        if(meta.problem_size <= settings::precision::eigs_max_size_shift_invert) {
+        if(meta.problem_size <= settings::solvers::eig::max_size_shift_invert) {
             hamiltonian.factorization           = eig::Factorization::LU;
             solver.config.ritz                  = eig::Ritz::primme_largest_abs;
             solver.config.sigma                 = cx64(meta.eigv_target.value_or(0.0), 0.0);
@@ -95,8 +95,8 @@ std::vector<opt_mps<Scalar>> optimize_energy_eigs_executor(const TensorsFinite<S
             solver.config.jcbMaxBlockSize       = meta.problem_size;
         } else {
             tools::log->debug("eigs_energy_executor: ignoring OptAlgo::SHIFTINV: "
-                              "problem size {} > settings::precision::eigs_max_size_shift_invert ({})",
-                              meta.problem_size, settings::precision::eigs_max_size_shift_invert);
+                              "problem size {} > settings::solvers::eig::max_size_shift_invert ({})",
+                              meta.problem_size, settings::solvers::eig::max_size_shift_invert);
             // The problem size is too big. Just find the eigenstate closest to zero
             // Remember: since the Hamiltonian is expected to be shifted, the target energy is near zero.
             solver.config.ritz                  = eig::Ritz::primme_closest_abs;
@@ -151,7 +151,7 @@ opt_mps<Scalar> internal::optimize_energy(const TensorsFinite<Scalar> &tensors, 
 
     auto comparator = [&meta](const opt_mps<Scalar> &lhs, const opt_mps<Scalar> &rhs) {
         // auto diff = std::abs(lhs.get_energy_shifted() - rhs.get_energy_shifted());
-        // if(diff < settings::precision::eigs_tol_min) return lhs.get_overlap() > rhs.get_overlap();
+        // if(diff < settings::solvers::eig::abstol_min) return lhs.get_overlap() > rhs.get_overlap();
         auto lhs_abs_energy = std::abs(lhs.get_energy()) + std::sqrt(std::abs(lhs.get_variance()));
         auto rhs_abs_energy = std::abs(rhs.get_energy()) + std::sqrt(std::abs(rhs.get_variance()));
         auto lhs_min_energy = lhs.get_energy() + std::sqrt(std::abs(lhs.get_variance()));

@@ -70,11 +70,11 @@ for val_L,val_l, val_d, init, multi in  product(sites,lambdas,deltas,initial_sta
         "model::ising_sdual::lambda"         : str_l,
         "xdmrg::bond_max"                    : "64",
         "xdmrg::max_states"                  : "1",
-        "strategy::multisite_mps_site_def"   : str(multisite_mps_size_def[0]),
-        "strategy::multisite_mps_site_max"   : str(multi),
-        "strategy::initial_state"            : str(init),
-        "strategy::initial_sector"           : str(initial_sector),
-        "strategy::target_sector"            : str(target_sector),
+        "schedule::dmrg::min_blocksize"   : str(multisite_mps_size_def[0]),
+        "schedule::dmrg::max_blocksize"   : str(multi),
+        "state::init::initial_state"            : str(init),
+        "state::init::initial_axis"   : str(initial_sector),
+        "state::sector::target_axis"  : str(target_sector),
     }
     os.makedirs(location + extra_prefix, exist_ok=True)
     num_total = num_total + 1

@@ -250,15 +250,15 @@ typename solver_base<Scalar>::RealScalar solver_base<Scalar>::get_op_norm_estima
             auto H_pownorm = H1.get_op_norm();                                                     // Norm estaimte from power iteration
             return std::max({H_maxeval, H_maxnorm, H_pownorm});
         }
-        case OptAlgo::DMRGX: [[fallthrough]];
-        case OptAlgo::HYBRID_DMRGX: [[fallthrough]];
-        case OptAlgo::XDMRG: {
+        case OptAlgo::DMRG_X: [[fallthrough]];
+        case OptAlgo::DMRG_X_HYBRID: [[fallthrough]];
+        case OptAlgo::DMRG_FOLDED: {
             auto H_maxeval = std::max({std::abs(status.T_min_eval), std::abs(status.T_max_eval)}); // Largest seen eigenvalue of T2 (projected H2)
             auto H_maxnorm = HQ.norm() / Q.norm();                                                 // Estimate the op norm from the current basis
             auto H_pownorm = H2.get_op_norm();                                                     // Norm estaimte from power iteration
             return std::max({H_maxeval, H_maxnorm, H_pownorm});
         }
-        case OptAlgo::GDMRG: {
+        case OptAlgo::DMRG_GSI: {
             auto H1_maxeval = std::max({std::abs(status.T1_min_eval), std::abs(status.T1_max_eval)}); // Largest seen eigenvalue of T1 (projected H1)
             auto H2_maxeval = std::max({std::abs(status.T2_min_eval), std::abs(status.T2_max_eval)}); // Largest seen eigenvalue of T2 (projected H2)
             auto H1_maxnorm = H1Q.norm() / Q.norm();                                                  // Estimate the op norm from the current basis
@@ -716,19 +716,19 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH(const Eigen:
             HX                  = H1.MultAX(X);
             status.num_matvecs += X.cols();
             break;
-        case OptAlgo::DMRGX: [[fallthrough]];
-        case OptAlgo::HYBRID_DMRGX: {
+        case OptAlgo::DMRG_X: [[fallthrough]];
+        case OptAlgo::DMRG_X_HYBRID: {
             MatrixType H2X      = H2.MultAX(X);
             MatrixType H1X      = H1.MultAX(X);
             HX                  = H2X - H1.MultAX(H1X);
             status.num_matvecs += 3 * X.cols(); // two more matvecs
             break;
         }
-        case OptAlgo::XDMRG:
+        case OptAlgo::DMRG_FOLDED:
             HX                  = H2.MultAX(X);
             status.num_matvecs += X.cols();
             break;
-        case OptAlgo::GDMRG: throw except::runtime_error("MultH: GDMRG is not suitable, use MultH1X or MultH2X instead");
+        case OptAlgo::DMRG_GSI: throw except::runtime_error("MultH: DMRG_GSI is not suitable, use MultH1X or MultH2X instead");
         default: throw except::runtime_error("unknown algorithm {}", enum2sv(algo));
     }
     return HX;
@@ -736,7 +736,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH(const Eigen:
 
 template<typename Scalar>
 typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH1(const Eigen::Ref<const MatrixType> &X) {
-    if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultH1: should only be called by GDMRG");
+    if(algo != OptAlgo::DMRG_GSI) throw except::runtime_error("MultH1: should only be called by DMRG_GSI");
     auto token_matvecs  = status.time_matvecs.tic_token();
     status.num_matvecs += X.cols();
     return H1.MultAX(X);
@@ -744,7 +744,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH1(const Eigen
 
 template<typename Scalar>
 typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH2(const Eigen::Ref<const MatrixType> &X) {
-    if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultH2: should only be called by GDMRG");
+    if(algo != OptAlgo::DMRG_GSI) throw except::runtime_error("MultH2: should only be called by DMRG_GSI");
     auto token_matvecs  = status.time_matvecs.tic_token();
     status.num_matvecs += X.cols();
     return H2.MultAX(X);
@@ -752,7 +752,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH2(const Eigen
 
 template<typename Scalar>
 typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH2_hp(const Eigen::Ref<const MatrixType> &X) {
-    if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultH2_hp: should only be called by GDMRG");
+    if(algo != OptAlgo::DMRG_GSI) throw except::runtime_error("MultH2_hp: should only be called by DMRG_GSI");
     auto token_matvecs  = status.time_matvecs.tic_token();
     status.num_matvecs += X.cols();
     return H2.MultAX_hp(X);
@@ -771,18 +771,18 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP(const Eigen:
             HPX                                               = H1.MultPX(X);
             break;
         }
-        case OptAlgo::DMRGX: [[fallthrough]];
-        case OptAlgo::HYBRID_DMRGX: {
+        case OptAlgo::DMRG_X: [[fallthrough]];
+        case OptAlgo::DMRG_X_HYBRID: {
             H2.get_iterativeLinearSolverConfig().initialGuess = initialGuess.value_or(MatrixType{});
             HPX                                               = H2.MultPX(X);
             break;
         }
-        case OptAlgo::XDMRG: {
+        case OptAlgo::DMRG_FOLDED: {
             H2.get_iterativeLinearSolverConfig().initialGuess = initialGuess.value_or(MatrixType{});
             HPX                                               = H2.MultPX(X);
             break;
         }
-        case OptAlgo::GDMRG: throw except::runtime_error("MultPX: GDMRG is not suitable, use MultP1X or MultP2X instead");
+        case OptAlgo::DMRG_GSI: throw except::runtime_error("MultPX: DMRG_GSI is not suitable, use MultP1X or MultP2X instead");
         default: throw except::runtime_error("MultPX: unknown algorithm {}", enum2sv(algo));
     }
     save_preconditioner_stats(H1.get_iterativeLinearSolverConfig());
@@ -808,7 +808,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP2(const Eigen
                                                                      [[maybe_unused]] const Eigen::Ref<const VectorReal> &evals,
                                                                      std::optional<const Eigen::Ref<const MatrixType>>    initialGuess) {
     // Preconditioning
-    if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultP2: should only be called by GDMRG");
+    if(algo != OptAlgo::DMRG_GSI) throw except::runtime_error("MultP2: should only be called by DMRG_GSI");
     auto token_precond = status.time_precond.tic_token();
     assert(X.allFinite());
     H2.get_iterativeLinearSolverConfig().initialGuess    = initialGuess.value_or(MatrixType{});
@@ -824,7 +824,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultP1P2(const Eig
                                                                        [[maybe_unused]] const Eigen::Ref<const VectorReal> &evals,
                                                                        std::optional<const Eigen::Ref<const MatrixType>>    initialGuess) {
     // Preconditioning
-    if(algo != OptAlgo::GDMRG) throw except::runtime_error("MultP1P2: should only be called by GDMRG");
+    if(algo != OptAlgo::DMRG_GSI) throw except::runtime_error("MultP1P2: should only be called by DMRG_GSI");
     auto token_precond                                     = status.time_precond.tic_token();
     H1H2.get_iterativeLinearSolverConfig().initialGuess    = initialGuess.value_or(MatrixType{});
     H1H2.get_iterativeLinearSolverConfig().jacobi.skipjcb  = dev_skipjcb;
@@ -843,7 +843,7 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
         auto Z              = T_evecs(Eigen::placeholders::all, top_2b_indices); // Selected subspace eigenvectors
         M                   = Q * Z;                                             // Regular Rayleigh-Ritz
         // Transform the basis with applied operators
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             H1M = H1Q * Z;
             H2M = H2Q * Z;
         } else {
@@ -869,7 +869,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::cheap_Olsen_correc
         auto numerator   = Scalar{1};
         auto denominator = Scalar{1};
 
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             // For generalized eigenvalue problems
             auto h2v    = H2V.col(i);
             numerator   = h2v.dot(s); // v^H * B * s
@@ -894,7 +894,7 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::full_Olsen_correct
     MatrixType coeffs;
     auto       Y = T_evals(status.optIdx);
 
-    if(algo == OptAlgo::GDMRG and use_h2_inner_product) {
+    if(algo == OptAlgo::DMRG_GSI and use_h2_inner_product) {
         MV.noalias() = use_preconditioner ? MultP2(V, Y, std::nullopt) : V;
         MS.noalias() = use_preconditioner ? MultP2(S, Y, std::nullopt) : S;
 
@@ -1092,14 +1092,14 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
                 HX.resize(X.rows(), X.cols());
                 switch(algo) {
                     case OptAlgo::DMRG: [[fallthrough]];
-                    case OptAlgo::DMRGX: [[fallthrough]];
-                    case OptAlgo::HYBRID_DMRGX: [[fallthrough]];
-                    case OptAlgo::XDMRG: {
+                    case OptAlgo::DMRG_X: [[fallthrough]];
+                    case OptAlgo::DMRG_X_HYBRID: [[fallthrough]];
+                    case OptAlgo::DMRG_FOLDED: {
                         status.num_matvecs_inner += X.cols();
                         HX.noalias()              = H.MultAX(X) - th * X;
                         break;
                     }
-                    case OptAlgo::GDMRG: {
+                    case OptAlgo::DMRG_GSI: {
                         // Generalized problem
                         if(use_jd_h2_only) {
                             HX.noalias()              = H2.MultAX(X);
@@ -1134,7 +1134,7 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
 
 template<typename Scalar> typename solver_base<Scalar>::MatrixType
     solver_base<Scalar>::jacobi_davidson_h2_correction(const MatrixType &V, const MatrixType &H2V, const MatrixType &S, const VectorReal &evals) {
-    assert(algo == OptAlgo::GDMRG);
+    assert(algo == OptAlgo::DMRG_GSI);
     assert(use_h2_inner_product);
     assert(V.rows() == S.rows());
     assert(V.cols() == S.cols());
@@ -1278,7 +1278,7 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
         case ResidualCorrectionType::JACOBI_DAVIDSON:
             // This is an internal preconditioner
             assert(use_preconditioner && " Jacobi Davidson correction needs use_preconditioner == true");
-            if(algo == OptAlgo::GDMRG && use_h2_inner_product) {
+            if(algo == OptAlgo::DMRG_GSI && use_h2_inner_product) {
                 S.noalias() = jacobi_davidson_h2_correction(V, H2V, S, Y);
             } else {
                 S.noalias() = jacobi_davidson_l2_correction(V, S, Y);
@@ -1292,7 +1292,7 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
 template<typename Scalar>
 typename solver_base<Scalar>::MatrixType solver_base<Scalar>::get_wBlock(fMultP_t MultP) {
     // We add Lanczos-style residual blocks
-    W = (algo == OptAlgo::GDMRG) ? H2V : HV;
+    W = (algo == OptAlgo::DMRG_GSI) ? H2V : HV;
     A = V.adjoint() * W;
 
     // 3) Subtract projections to A and B once
@@ -1613,7 +1613,7 @@ template<typename Scalar> void solver_base<Scalar>::assert_allFinite(const Eigen
 
 template<typename Scalar>
 void solver_base<Scalar>::assert_l2_orthonormal(const Eigen::Ref<const MatrixType> &X, const OrthMeta &m, const std::source_location &location) {
-    assert(!(use_h2_inner_product and algo == OptAlgo::GDMRG) && "assert_l2_orthonormal is for the L2 inner product");
+    assert(!(use_h2_inner_product and algo == OptAlgo::DMRG_GSI) && "assert_l2_orthonormal is for the L2 inner product");
     if constexpr(settings::debug_solver) {
         if(X.cols() == 0) return;
 
@@ -1646,7 +1646,7 @@ void solver_base<Scalar>::assert_l2_orthonormal(const Eigen::Ref<const MatrixTyp
 template<typename Scalar>
 void solver_base<Scalar>::assert_l2_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &Y, const OrthMeta &m,
                                                const std::source_location &location) {
-    assert(!(use_h2_inner_product and algo == OptAlgo::GDMRG) && "assert_l2_orthonormal is for the L2 inner product");
+    assert(!(use_h2_inner_product and algo == OptAlgo::DMRG_GSI) && "assert_l2_orthonormal is for the L2 inner product");
     if constexpr(settings::debug_solver) {
         if(X.cols() == 0 || Y.cols() == 0) return;
         if(m.mask.size() > 0 and m.mask.sum() == 0) return;
@@ -1679,7 +1679,7 @@ void solver_base<Scalar>::assert_l2_orthogonal(const Eigen::Ref<const MatrixType
 template<typename Scalar>
 void solver_base<Scalar>::assert_h2_orthogonal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &H2Y, const OrthMeta &m,
                                                const std::source_location &location) {
-    assert(use_h2_inner_product and algo == OptAlgo::GDMRG && "assert_h2_orthonormal is for the H2 inner product");
+    assert(use_h2_inner_product and algo == OptAlgo::DMRG_GSI && "assert_h2_orthonormal is for the H2 inner product");
     if constexpr(settings::debug_solver) {
         if(X.cols() == 0 || H2Y.cols() == 0) return;
 
@@ -1719,7 +1719,7 @@ void solver_base<Scalar>::assert_h2_orthogonal(const Eigen::Ref<const MatrixType
 template<typename Scalar>
 void solver_base<Scalar>::assert_h2_orthonormal(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const MatrixType> &H2X, const OrthMeta &m,
                                                 const std::source_location &location) {
-    assert(use_h2_inner_product and algo == OptAlgo::GDMRG && "assert_h2_orthonormal is for the H2 inner product");
+    assert(use_h2_inner_product and algo == OptAlgo::DMRG_GSI && "assert_h2_orthonormal is for the H2 inner product");
     if constexpr(settings::debug_solver) {
         if(X.cols() == 0) return;
         MatrixType G1        = X.adjoint() * H2X;
@@ -1790,7 +1790,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &H1Y
     }
     if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
-    assert(algo == OptAlgo::GDMRG);
+    assert(algo == OptAlgo::DMRG_GSI);
     assert(!use_h2_inner_product);
 
     // Column-wise orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
@@ -1905,7 +1905,7 @@ void solver_base<Scalar>::block_l2_orthonormalize(MatrixType &Y, MatrixType &HY,
     }
     if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
-    assert(algo != OptAlgo::GDMRG);
+    assert(algo != OptAlgo::DMRG_GSI);
     assert(!use_h2_inner_product);
 
     // Column-wise orthonormalization with respect to the H2 inner product, i.e. Y.adjoint()*H2*Y = I
@@ -1982,7 +1982,7 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
         return;
     }
     if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-    assert(algo != OptAlgo::GDMRG);
+    assert(algo != OptAlgo::DMRG_GSI);
     assert(!use_h2_inner_product);
 
     assert_allFinite(X);
@@ -2027,7 +2027,7 @@ void solver_base<Scalar>::block_l2_orthogonalize(const MatrixType &X, const Matr
         return;
     }
     if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-    assert(algo == OptAlgo::GDMRG);
+    assert(algo == OptAlgo::DMRG_GSI);
     assert(!use_h2_inner_product);
 
     assert_allFinite(X);
@@ -2072,7 +2072,7 @@ void solver_base<Scalar>::block_h2_orthonormalize_dgks(MatrixType &Y, MatrixType
     if(Y.cols() == 0) return;
     if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
-    assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
+    assert(algo == OptAlgo::DMRG_GSI and use_h2_inner_product);
     auto h1info                = SetH1MvInfo(ContractionPrecision::X2); // Use more accurate matvec
     auto h2info                = SetH2MvInfo(ContractionPrecision::X2); // Use more accurate matvec
     auto handle_masked_columns = [&]() {
@@ -2360,7 +2360,7 @@ void solver_base<Scalar>::block_h2_orthonormalize_eig(MatrixType &Y, MatrixType 
     if(Y.cols() == 0) return;
     if(m.mask.size() > 0 and m.mask.sum() == 0) return;
 
-    assert(algo == OptAlgo::GDMRG and use_h2_inner_product);
+    assert(algo == OptAlgo::DMRG_GSI and use_h2_inner_product);
     assert(m.maskPolicy == MaskPolicy::COMPRESS); // This operation does not preserve column order
 
     auto h1info = SetH1MvInfo(ContractionPrecision::X2); // Use high-precision matvec
@@ -2462,7 +2462,7 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
                                                  MatrixType &H2Y, OrthMeta &m) {
     if(X.cols() == 0 || Y.cols() == 0) return;
     if(m.mask.size() > 0 && m.mask.sum() == 0) return;
-    assert(algo == OptAlgo::GDMRG and use_h2_inner_product && "block_h2_orthogonalize is for H2 inner product");
+    assert(algo == OptAlgo::DMRG_GSI and use_h2_inner_product && "block_h2_orthogonalize is for H2 inner product");
     auto h1info = SetH1MvInfo(ContractionPrecision::X2); // Use high-precision matvec
     auto h2info = SetH2MvInfo(ContractionPrecision::X2); // Use high-precision matvec
     assert_allFinite(X);
@@ -2594,7 +2594,7 @@ void solver_base<Scalar>::pad_and_orthonormalize(MatrixType &Y, MatrixType &H1Y,
             m.refresh_h2y = true;
         }
 
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             if(use_h2_inner_product) {
                 block_h2_orthonormalize_eig(Y, H1Y, H2Y, m);
             } else {
@@ -2611,7 +2611,7 @@ std::vector<Eigen::Index> solver_base<Scalar>::get_ritz_indices(OptRitz ritz, Ei
     std::vector<Eigen::Index> indices;
     assert(num <= evals.size());
     auto ritz_internal = ritz;
-    // if(algo == OptAlgo::GDMRG) {
+    // if(algo == OptAlgo::DMRG_GSI) {
     //     // Map to opposite ritz
     //     switch(ritz) {
     //         case OptRitz::LM: ritz_internal = OptRitz::SM; break;
@@ -2678,7 +2678,7 @@ void solver_base<Scalar>::init() {
         auto m        = OrthMeta();
         m.refresh_h2y = true;
         m.maskPolicy  = MaskPolicy::COMPRESS;
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             if(use_h2_inner_product) {
                 block_h2_orthonormalize_dgks(V, H1V, H2V, m);
             } else {
@@ -2692,7 +2692,7 @@ void solver_base<Scalar>::init() {
     assert(V.cols() == b);
     if(status.iter == 0) {
         // Make sure we start with ritz vectors in V, so that the first Lanczos loop produces proper residuals.
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             block_orthonormalize();
             Q             = V;
             H1Q           = H1V;
@@ -2733,7 +2733,7 @@ void solver_base<Scalar>::init() {
             auto H1H2_min_abs       = std::min(std::abs(status.T_min_eval), std::abs(status.T_max_eval));
             status.condition        = H1H2_max_abs / H1H2_min_abs;
             status.op_norm_estimate = get_op_norm_estimate();
-            // We may need to orthonormalize V in GDMRG
+            // We may need to orthonormalize V in DMRG_GSI
             block_orthonormalize();
 
             std::tie(S, status.rNorms) = get_residuals(Y, H1V, H2V);
@@ -2780,7 +2780,7 @@ void solver_base<Scalar>::init() {
 
 template<typename Scalar>
 void solver_base<Scalar>::diagonalizeT() {
-    if(algo == OptAlgo::GDMRG) return diagonalizeT1T2();
+    if(algo == OptAlgo::DMRG_GSI) return diagonalizeT1T2();
     if(status.stopReason != StopReason::none) return;
     if(Q.cols() == 0) return;
     if(HQ.cols() == 0) return;
@@ -2829,7 +2829,7 @@ void solver_base<Scalar>::diagonalizeT() {
 template<typename Scalar>
 void solver_base<Scalar>::diagonalizeT1T2() {
     if(status.stopReason != StopReason::none) return;
-    if(algo != OptAlgo::GDMRG) throw except::runtime_error("diagonalizeT1T2() is only implemented for GDMRG");
+    if(algo != OptAlgo::DMRG_GSI) throw except::runtime_error("diagonalizeT1T2() is only implemented for DMRG_GSI");
     auto t_diag = tid::tic_scope("diagonalizeT1T2");
 
     status.rNorms              = {};
@@ -2943,11 +2943,11 @@ void solver_base<Scalar>::diagonalizeT1T2() {
         //      - M^{-1}_BJ is the curren block jacobi preconditioner.
         //      - Z(Z*BZ)^{-1}Z* is the B-pseudo-inverse on span(Z)
         //      - Z is a tall B-orthonormal coarse basis that captures slow modes in the eigenvalue problem.
-        //      - B is the matrix out of which you made the block jacobi: H2 in GDMRG, else H.
+        //      - B is the matrix out of which you made the block jacobi: H2 in DMRG_GSI, else H.
         //
         //
-        const auto &BQ         = algo == OptAlgo::GDMRG ? H2Q : HQ;
-        const auto &BV         = algo == OptAlgo::GDMRG ? H2V : HV;
+        const auto &BQ         = algo == OptAlgo::DMRG_GSI ? H2Q : HQ;
+        const auto &BV         = algo == OptAlgo::DMRG_GSI ? H2V : HV;
         auto        nCoarse    = std::min(5l, T_evals.size());
         auto        nCoarseIdx = get_ritz_indices(ritz, 1, nCoarse, T_evals);
 
@@ -3061,13 +3061,13 @@ void solver_base<Scalar>::extractRitzVectors() {
 
     if(use_refined_rayleigh_ritz) {
         // Refined extraction
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             refinedRitzVectors(status.optIdx, V, H1V, H2V, S, status.rNorms);
         } else {
             refinedRitzVectors(status.optIdx, V, HV, S, status.rNorms);
         }
     } else {
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             extractRitzVectors(status.optIdx, V, H1V, H2V, S, status.rNorms);
         } else {
             extractRitzVectors(status.optIdx, V, HV, S, status.rNorms);
@@ -3081,7 +3081,7 @@ void solver_base<Scalar>::extractRitzVectors() {
     // Keep b columns
     if(k > b) {
         V.conservativeResize(Eigen::NoChange, b);
-        if(algo == OptAlgo::GDMRG) {
+        if(algo == OptAlgo::DMRG_GSI) {
             H1V.conservativeResize(Eigen::NoChange, b);
             H2V.conservativeResize(Eigen::NoChange, b);
         } else {
@@ -3096,7 +3096,7 @@ template<typename Scalar>
 solver_base<Scalar>::MatrixType solver_base<Scalar>::get_refined_ritz_eigenvectors_gen(const Eigen::Ref<const MatrixType> &Z,
                                                                                        const Eigen::Ref<const VectorReal> &Y, const MatrixType &H1Q,
                                                                                        const MatrixType &H2Q) {
-    assert(algo == OptAlgo::GDMRG);
+    assert(algo == OptAlgo::DMRG_GSI);
     // assert(static_cast<size_t>(V.cols()) == optIdx.size());
     assert(Z.cols() == Y.size());
     Eigen::JacobiSVD<MatrixType, Eigen::ComputeThinV> svd;
@@ -3256,7 +3256,7 @@ template<typename Scalar>
 solver_base<Scalar>::MatrixType solver_base<Scalar>::get_refined_ritz_eigenvectors_std(const Eigen::Ref<const MatrixType> &Z,
                                                                                        const Eigen::Ref<const VectorReal> &Y, const MatrixType &Q,
                                                                                        const MatrixType &HQ) {
-    assert(algo != OptAlgo::GDMRG);
+    assert(algo != OptAlgo::DMRG_GSI);
     assert(Z.cols() == Y.size());
     Eigen::JacobiSVD<MatrixType, Eigen::ComputeThinV> svd;
     MatrixType                                        Z_ref(Z.rows(), Z.cols());
@@ -3284,13 +3284,13 @@ solver_base<Scalar>::MatrixType solver_base<Scalar>::get_refined_ritz_eigenvecto
 template<typename Scalar>
 void solver_base<Scalar>::refinedRitzVectors(const std::vector<Eigen::Index> &optIdx, MatrixType &V, MatrixType &H1V, MatrixType &H2V, MatrixType &S,
                                              VectorReal &rNorms) {
-    assert(algo == OptAlgo::GDMRG);
+    assert(algo == OptAlgo::DMRG_GSI);
     VectorReal Y     = T_evals(optIdx);
     MatrixType Z_rr  = T_evecs(Eigen::placeholders::all, optIdx);
     MatrixType Z_ref = get_refined_ritz_eigenvectors_gen(Z_rr, Y, H1Q, H2Q);
     MatrixType Z_opt = get_optimal_rayleigh_ritz_matrix(Z_rr, Z_ref, T1, T2); // Gives an optimal combination of Z_rr and Z_ref
 
-    // if(algo == OptAlgo::GDMRG) {
+    // if(algo == OptAlgo::DMRG_GSI) {
     //     Eigen::SelfAdjointEigenSolver<MatrixType> es2(T2);
     //     auto                                      T2idx   = get_ritz_indices(OptRitz::SM, 0, optIdx.size(), es2.eigenvalues());
     //     VectorReal                                YT2     = es2.eigenvalues()(T2idx);
@@ -3347,7 +3347,7 @@ void solver_base<Scalar>::refinedRitzVectors() {
     if(status.rNorms.size() == 0) throw except::runtime_error("refineRitzVectors() called before extractRitzVectors()");
     auto t_refined = tid::tic_scope("refinedRitzVectors");
     // Refined extraction
-    if(algo == OptAlgo::GDMRG) {
+    if(algo == OptAlgo::DMRG_GSI) {
         refinedRitzVectors(status.optIdx, V, H1V, H2V, S, status.rNorms);
     } else {
         refinedRitzVectors(status.optIdx, V, HV, S, status.rNorms);
@@ -3427,7 +3427,7 @@ void solver_base<Scalar>::updateStatus() {
     if(status.rNorm_below_rnormTol) {
         std::string msg_rnorm_gap = fmt::format(" | gap {:.3e} (rel {:.3e})", fp(status.gap), fp(relGap));
         if constexpr(settings::debug_solver) {
-            if(algo == OptAlgo::GDMRG and dev_append_extra_blocks_to_basis) {
+            if(algo == OptAlgo::DMRG_GSI and dev_append_extra_blocks_to_basis) {
                 msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e}", fp(H1.get_op_norm()), fp(H2.get_op_norm()));
             }
         }
@@ -3472,7 +3472,7 @@ template<typename Scalar>
 void solver_base<Scalar>::printStatus() {
     std::string msg_rnorm_gap = fmt::format(" | gap {:.3e}", fp(status.gap));
     if constexpr(settings::debug_solver) {
-        if(algo == OptAlgo::GDMRG) { msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e}", fp(status.T1_max_eval), fp(status.T2_max_eval)); }
+        if(algo == OptAlgo::DMRG_GSI) { msg_rnorm_gap = fmt::format(" | H1|H2: norm {:.2e}|{:.2e}", fp(status.T1_max_eval), fp(status.T2_max_eval)); }
     }
 
     std::string rCorrMsg;
@@ -3501,7 +3501,7 @@ void solver_base<Scalar>::printStatus() {
     Gram                  = (Gram + Gram.adjoint()).eval() / RealScalar{2};
     RealScalar  orthError = (Gram - MatrixType::Identity(Gram.rows(), Gram.cols())).norm();
     std::string evMsg;
-    if(algo == OptAlgo::GDMRG) {
+    if(algo == OptAlgo::DMRG_GSI) {
         VectorReal VH1V = (V.adjoint() * H1V).real();
         VectorReal VH2V = (V.adjoint() * H2V).real();
         evMsg           = fmt::format(" {::.16f} / {::.16f}", fv(VH1V), fv(VH2V));

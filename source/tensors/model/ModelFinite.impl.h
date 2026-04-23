@@ -153,8 +153,6 @@ bool ModelFinite<Scalar>::has_energy_shifted_mpo() const {
         if(shifted != mpo->has_energy_shifted_mpo())
             throw except::logic_error(
                 fmt::format("Mismatching has_energy_shifted_mpo: pos 0:{} | {}:{}", shifted, mpo->get_position(), mpo->has_energy_shifted_mpo()));
-    if(shifted and not settings::precision::use_energy_shifted_mpo)
-        throw except::logic_error("The MPO's are energy-shifted but settings::precision::use_energy_shifted_mpo is false");
     return shifted;
 }
 
@@ -289,7 +287,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpo_tensors(Scala
         auto redge = MPO.back()->template get_MPO_edge_right<Scalar>();
         mpos       = tools::finite::mpo::get_mpos_with_edges(mpos, ledge, redge);
     }
-    if(compress == MpoCompress::AUTO) { compress = settings::precision::use_compressed_mpo; }
+    if(compress == MpoCompress::AUTO) { compress = settings::model::use_compressed_mpo; }
     return tools::finite::mpo::get_compressed_mpos(mpos, compress);
 }
 
@@ -307,7 +305,7 @@ std::vector<Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4>>
         Eigen::Tensor<QuadScalar, 1> redge = MPO.back()->template get_MPO_edge_right<QuadScalar>();
         mpos_q                             = tools::finite::mpo::get_mpos_with_edges<QuadScalar>(mpos_q, ledge, redge);
     }
-    if(compress == MpoCompress::AUTO) compress = settings::precision::use_compressed_mpo;
+    if(compress == MpoCompress::AUTO) compress = settings::model::use_compressed_mpo;
     return tools::finite::mpo::get_compressed_mpos(mpos_q, compress);
 }
 
@@ -322,7 +320,7 @@ std::vector<Eigen::Tensor<Scalar, 4>> ModelFinite<Scalar>::get_mpo2_tensors(Scal
         auto redge = MPO.back()->template get_MPO2_edge_right<Scalar>();
         mpos2      = tools::finite::mpo::get_mpos_with_edges(mpos2, ledge, redge);
     }
-    if(compress == MpoCompress::AUTO) compress = settings::precision::use_compressed_mpo_squared;
+    if(compress == MpoCompress::AUTO) compress = settings::model::use_compressed_mpo_squared;
     return tools::finite::mpo::get_compressed_mpos(mpos2, compress);
 }
 
@@ -376,8 +374,8 @@ bool ModelFinite<Scalar>::has_parity_shifted_mpo() const {
         if(shifted != mpo->has_parity_shifted_mpo())
             throw except::logic_error(
                 fmt::format("Mismatching has_parity_shifted_mpo: pos 0:{} | {}:{}", shifted, mpo->get_position(), mpo->has_parity_shifted_mpo()));
-    if(shifted and not settings::precision::use_parity_shifted_mpo)
-        throw except::logic_error("The MPO's are parity-shifted but settings::precision::use_parity_shifted_mpo is false");
+    if(shifted and not settings::model::use_parity_shifted_mpo)
+        throw except::logic_error("The MPO's are parity-shifted but settings::model::use_parity_shifted_mpo is false");
     return shifted;
 }
 
@@ -388,8 +386,8 @@ bool ModelFinite<Scalar>::has_parity_shifted_mpo_squared() const {
         if(shifted != mpo->has_parity_shifted_mpo2())
             throw except::logic_error(
                 fmt::format("Mismatching has_parity_shifted_mpo2: pos 0:{} | {}:{}", shifted, mpo->get_position(), mpo->has_parity_shifted_mpo2()));
-    if(shifted and not settings::precision::use_parity_shifted_mpo_squared)
-        throw except::logic_error("The MPO's are parity-shifted but settings::precision::use_parity_shifted_mpo_squared is false");
+    if(shifted and not settings::model::use_parity_shifted_mpo_squared)
+        throw except::logic_error("The MPO's are parity-shifted but settings::model::use_parity_shifted_mpo_squared is false");
     return shifted;
 }
 

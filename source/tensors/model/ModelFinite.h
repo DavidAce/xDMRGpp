@@ -127,7 +127,7 @@ class ModelFinite {
     [[nodiscard]] bool has_mpo() const;
     [[nodiscard]] bool has_mpo_squared() const;
 
-    [[nodiscard]] bool   has_energy_shifted_mpo() const; // For shifted energy MPO's
+    [[nodiscard]] bool   has_energy_shifted_mpo() const;
     [[nodiscard]] Scalar get_energy_shift_mpo() const;
     [[nodiscard]] Scalar get_energy_shift_mpo_per_site() const;
 

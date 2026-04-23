@@ -89,8 +89,8 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const T
     tools::log->trace("Optimizing subspace");
     auto t_sub = tid::tic_scope("subspace");
     initial_mps.validate_initial_mps();
-    if(meta.optAlgo != OptAlgo::HYBRID_DMRGX)
-        throw except::runtime_error("optimize_subspace_variance: Expected OptAlgo [{}]. Got [{}]", enum2sv(OptAlgo::HYBRID_DMRGX), enum2sv(meta.optAlgo));
+    if(meta.optAlgo != OptAlgo::DMRG_X_HYBRID)
+        throw except::runtime_error("optimize_subspace_variance: Expected OptAlgo [{}]. Got [{}]", enum2sv(OptAlgo::DMRG_X_HYBRID), enum2sv(meta.optAlgo));
 
     // Handy references
     const auto &model = tensors.get_model();
@@ -159,7 +159,7 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_subspace_variance(const T
      *
      */
 
-    internal::subspace::filter_subspace(subspace, settings::precision::max_subspace_size);
+    internal::subspace::filter_subspace(subspace, settings::solvers::eig::max_subspace_size);
 
     /*
      *

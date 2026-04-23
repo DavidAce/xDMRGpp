@@ -57,7 +57,7 @@ inline std::vector<int> subspace::generate_nev_list(int rows) {
     if(3072 < rows and rows <= 4096) nev_list = {16};
     if(4096 < rows) nev_list = {4};
 
-    while(nev_list.size() > 1 and (nev_list.back() * 2 > rows or safe_cast<size_t>(nev_list.back()) > settings::precision::max_subspace_size))
+    while(nev_list.size() > 1 and (nev_list.back() * 2 > rows or safe_cast<size_t>(nev_list.back()) > settings::solvers::eig::max_subspace_size))
         nev_list.pop_back();
     if(nev_list.empty()) throw except::logic_error("nev_list is empty");
     return nev_list;
@@ -88,7 +88,7 @@ std::vector<opt_mps<Scalar>> subspace::find_subspace(const TensorsFinite<Scalar>
         eigval_target = static_cast<RealScalar<Scalar>>(meta.eigv_target.value());
     } else {
         switch(meta.optAlgo) {
-            case OptAlgo::HYBRID_DMRGX: {
+            case OptAlgo::DMRG_X_HYBRID: {
                 // We are trying to find a subspace close to the current energy, on which to optimize the variance.
                 switch(meta.optRitz) {
                     case OptRitz::NONE: throw std::logic_error("find_subspace: invalid OptRitz::NONE");
@@ -122,7 +122,7 @@ std::vector<opt_mps<Scalar>> subspace::find_subspace(const TensorsFinite<Scalar>
                 break;
             }
             // case OptAlgo::DMRG:
-            // case OptAlgo::DMRGX: {
+            // case OptAlgo::DMRG_X: {
             //     // We are trying
             //     break;
             // }
@@ -131,7 +131,7 @@ std::vector<opt_mps<Scalar>> subspace::find_subspace(const TensorsFinite<Scalar>
     }
 
     // If the mps is small enough you can afford full diag.
-    if(tensors.state->active_problem_size() <= settings::precision::eig_max_size) {
+    if(tensors.state->active_problem_size() <= settings::solvers::eig::max_size) {
         std::tie(eigvecs, eigvals) = find_subspace_lapack<T>(tensors, slog);
     } else {
         // {
@@ -221,7 +221,7 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_part(const Tenso
 
     // Create a reusable config for multiple nev trials
     eig::settings config;
-    config.tol             = settings::precision::eigs_abstol_min;
+    config.tol             = settings::solvers::eig::abstol_min;
     config.sigma           = cx64(static_cast<fp64>(energy_target), 0.0);
     config.shift_invert    = eig::Shinv::ON;
     config.compute_eigvecs = eig::Vecs::ON;
@@ -264,7 +264,7 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_part(const Tenso
             reason = fmt::format("subspace error is low enough: {:.3e} < tolerance {:.3e}", fp(subspace_error), meta.subspace_tol.value_or(1e-10));
             break;
         }
-        if(meta.optAlgo == OptAlgo::DMRGX and sq_sum_overlap >= R{1} / std::sqrt(R{2})) {
+        if(meta.optAlgo == OptAlgo::DMRG_X and sq_sum_overlap >= R{1} / std::sqrt(R{2})) {
             reason = fmt::format("Overlap is sufficient:  {:.16f} >= threshold {:.16f}", fp(max_overlap), 1.0 / std::sqrt(2.0));
             break;
         }
@@ -390,22 +390,22 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const Ten
     config.maxNev              = meta.eigs_nev;
     config.maxNcv              = meta.eigs_ncv;
     config.shift_invert        = eig::Shinv::OFF;
-    config.maxIter             = settings::precision::eigs_iter_max; // We need them to actually converge;
+    config.maxIter             = settings::solvers::eig::iter_max; // We need them to actually converge;
     config.ritz                = eig::Ritz::primme_closest_abs;
     config.primme_targetShifts = {static_cast<double>(eigval_shift)};
     // config.primme_projection    = "primme_proj_refined";
     config.compute_eigvecs    = eig::Vecs::ON;
     config.primme_locking     = 1;
     config.loglevel           = 2;
-    config.subspace_tol       = meta.optAlgo == OptAlgo::DMRGX ? 1.0 - 1.0 / std::sqrt(2.0) : meta.subspace_tol;
+    config.subspace_tol       = meta.optAlgo == OptAlgo::DMRG_X ? 1.0 - 1.0 / std::sqrt(2.0) : meta.subspace_tol;
     config.primme_convTestFun = convTestFun<Scalar>;
     config.primme_method      = eig::PrimmeMethod::PRIMME_DEFAULT_MIN_TIME;
-    // if(initial_mps.size() <= settings::precision::eigs_max_size_shift_invert) {
+    // if(initial_mps.size() <= settings::solvers::eig::max_size_shift_invert) {
     // Instead of doing shift invert, we can simply set the jacobi block size equal to the matrix size
-    // config.jcbMaxBlockSize = settings::precision::eigs_max_size_shift_invert;
+    // config.jcbMaxBlockSize = settings::solvers::eig::max_size_shift_invert;
     // }
 
-    if(initial_mps.size() <= settings::precision::eigs_max_size_shift_invert) {
+    if(initial_mps.size() <= settings::solvers::eig::max_size_shift_invert) {
         hamiltonian.factorization  = eig::Factorization::LU;
         config.shift_invert        = eig::Shinv::ON;
         config.ritz                = eig::Ritz::primme_largest_abs;
@@ -425,15 +425,15 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const Ten
     VectorR eigvals;
     MatrixT eigvecs;
     // tools::log->info("initial: \n{}\n", linalg::matrix::to_string(initial_vec.transpose().real(), 8));
-    auto nev_list = std::vector<int>{static_cast<int>(settings::precision::max_subspace_size)};
-    // for(int nev = 2; nev <= static_cast<int>(settings::precision::max_subspace_size); nev *= 4) { nev_list.emplace_back(nev); }
+    auto nev_list = std::vector<int>{static_cast<int>(settings::solvers::eig::max_subspace_size)};
+    // for(int nev = 2; nev <= static_cast<int>(settings::solvers::eig::max_subspace_size); nev *= 4) { nev_list.emplace_back(nev); }
 
     for(auto nev : nev_list) {
         eig::solver solver;
         solver.config         = config;
         solver.config.maxNev  = nev;
         solver.config.maxNcv  = std::max(16, std::max(meta.eigs_ncv.value_or(nev * 2), nev * 2));
-        solver.config.maxIter = nev * safe_cast<int>(settings::precision::eigs_iter_max);
+        solver.config.maxIter = nev * safe_cast<int>(settings::solvers::eig::iter_max);
 
         // Set the new initial guess if we are doing one more round
         if(eigvecs.size() == 0) {
@@ -508,7 +508,7 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_primme(const Ten
             reason = fmt::format("subspace error is low enough: {:.3e} < threshold {:.3e}", fp(subspace_error), meta.subspace_tol.value_or(1e-10));
             break;
         }
-        if(meta.optAlgo == OptAlgo::DMRGX and num::geq(sq_sum_overlap, 1.0 / std::sqrt(2.0))) {
+        if(meta.optAlgo == OptAlgo::DMRG_X and num::geq(sq_sum_overlap, 1.0 / std::sqrt(2.0))) {
             reason = fmt::format("Overlap is sufficient:  {:.16f} >= threshold {:.16f}", fp(max_overlap), 1.0 / std::sqrt(2.0));
             break;
         }

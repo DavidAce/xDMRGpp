@@ -19,11 +19,11 @@ config_ranges = {
     "storage::output_filepath": [get_output_filepath],
     "storage::temp_dir": [config_paths['temp_dir']],
     "console::loglevel": ['2'],
-    "solver::svd_truncation_lim": ['1e-12'],
-    "solver::svd_truncation_init": ['1e-8'],
+    "solvers::svd::truncation_min": ['1e-12'],
+    "solvers::svd::truncation_max": ['1e-8'],
     "solver::svd_switchsize_bdc": ['16'],
     "solver::svd_save_fail": ['false'],
-    "strategy::initial_state": ["PRODUCT_STATE_NEEL_SHUFFLED"],
+    "state::init::initial_state": ["PRODUCT_STATE_NEEL_SHUFFLED"],
     "model::model_type": ['ising_majorana'],
     "model::model_size": ['16'],
     "model::ising_majorana::g": ['0.50'],
@@ -32,7 +32,7 @@ config_ranges = {
     "fdmrg::min_iters": ['6'],
     "fdmrg::bond_max": ['2048'],
     "fdmrg::bond_init": ['16'],
-    "fdmrg::store_wavefn": ['false'],
+    "storage::dataset::statevector::policy": ["NONE"],
 }
 
 configs = get_config_product(config_ranges, config_paths)

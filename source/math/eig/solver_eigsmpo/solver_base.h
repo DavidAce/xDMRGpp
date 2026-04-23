@@ -337,14 +337,14 @@ class solver_base {
     MatrixType             A, B, W, Q;
     MatrixType             HQ;              /*!< Save H*Q when preconditioning */
     MatrixType             HQ_cur;          /*!< Save H*Q_cur when preconditioning */
-    MatrixType             H1Q, H2Q;        /*!< H1 or H2 times the basis blocks Q used for GDMRG */
+    MatrixType             H1Q, H2Q;        /*!< H1 or H2 times the basis blocks Q used for DMRG_GSI */
     MatrixType             V;               /*!< Holds the current top ritz eigenvectors. Use this to pass initial guesses */
     MatrixType             HV;              /*!< Holds the current top ritz eigenvectors multiplied by H. */
-    MatrixType             H1V;             /*!< Holds the current top ritz eigenvectors multiplied by H1 (for GDMRG). */
-    MatrixType             H2V;             /*!< Holds the current top ritz eigenvectors multiplied by H2 (for GDMRG). */
+    MatrixType             H1V;             /*!< Holds the current top ritz eigenvectors multiplied by H1 (for DMRG_GSI). */
+    MatrixType             H2V;             /*!< Holds the current top ritz eigenvectors multiplied by H2 (for DMRG_GSI). */
     MatrixType             V_prev;          /*!< Holds the previous top ritz eigenvectors */
     MatrixType             K, K_prev;       /*!< Holds the "k >= b" top ritz vectors from the two previous iterations (used for "k" in GD+k) */
-    MatrixType             S, S1, S2;       /*!< The residual vectors for the top b ritz vectors, also for H1 and H2 (for GDMRG) */
+    MatrixType             S, S1, S2;       /*!< The residual vectors for the top b ritz vectors, also for H1 and H2 (for DMRG_GSI) */
     MatrixType             D;               /*!< The solutions to the jacobi davidson correction equations */
     VectorReal             jd_rhs_norms;    /*!< The rhs norms in the JD correction equation */
     MatrixType             M, HM, H1M, H2M; /*!< The b next best residual vectors M, and with the applied operators */
@@ -365,7 +365,7 @@ class solver_base {
     /*! Gets the residual vector and residual norms scaled by the operator norms */
     std::pair<MatrixType, VectorReal> get_residuals(const Eigen::Ref<VectorReal> &Y /*!< Eigenvalues */,
                                                     const Eigen::Ref<MatrixType> &H1V, /*!< H1 times the ritz vector V */
-                                                    const Eigen::Ref<MatrixType> &H2V  /*!< GDMRG: H2 times the ritz vector V, OTHERS: just V */
+                                                    const Eigen::Ref<MatrixType> &H2V  /*!< DMRG_GSI: H2 times the ritz vector V, OTHERS: just V */
     );
 
     /*! Convergence tolerance of ritz-vector residuals.
@@ -439,7 +439,7 @@ class solver_base {
 
     virtual void build() = 0;
     virtual void diagonalizeT();
-    virtual void diagonalizeT1T2(); /*!< For GDMRG (generalized problem) */
+    virtual void diagonalizeT1T2(); /*!< For DMRG_GSI (generalized problem) */
 
     template<typename Comp>
     std::vector<Eigen::Index> getIndices(const VectorType &v, const Eigen::Index offset, const Eigen::Index num, Comp comp) const {

@@ -161,7 +161,7 @@ int settings::parse(int argc, char **argv) {
     app.add_flag("--help-preload"                      , "Print help related to preloading configuration");
     app.add_option("-c,--config"                       , input::config_filename         , "Path to a .cfg or .h5 file from a previous simulation");
     app.add_option("-m,--model"                        , model::model_type              , "Select the Hamiltonian")->transform(CLI::CheckedTransformer(s2e_model, CLI::ignore_case));
-    app.add_option("-b,--bitfield,--pattern"           , strategy::initial_pattern      , "Integer whose bitfield sets the initial product state. Negative is unused");
+    app.add_option("-b,--bitfield,--pattern"           , state::init::initial_pattern      , "Integer whose bitfield sets the initial product state. Negative is unused");
     app.add_option("-o,--outfile"                      , storage::output_filepath       , "Path to the output file. The seed number gets appended by default (see -x)");
     app.add_option("-s,--seed"                         , input::seed                    , "Positive number seeds the random number generator");
     app.add_option("-t,--threads"                      , threading::num_threads         , "Total number of threads (omp + std threads). Use env OMP_NUM_THREADS to control omp.");
@@ -203,7 +203,7 @@ int settings::parse(int argc, char **argv) {
     // Generate the correct output filename based on given seeds
     if(storage::output_append_seed) {
         settings::storage::output_filepath = filename_append_seed(settings::storage::output_filepath, settings::input::seed);
-        settings::storage::output_filepath = filename_append_pattern(settings::storage::output_filepath, settings::strategy::initial_pattern);
+        settings::storage::output_filepath = filename_append_pattern(settings::storage::output_filepath, settings::state::init::initial_pattern);
     }
     return 0;
 }

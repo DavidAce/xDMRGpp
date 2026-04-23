@@ -134,7 +134,7 @@ inline std::vector<size_t> get_subsystem_complement(size_t length, const std::ve
 //                 S                       = S.reverse().eval();
 //                 eigenvalues             = tenx::asScalarType<CalcType>(S);
 //                 if(eigenvalues.minCoeff() < tol) break; // Good enough
-//             } else if(rank_max == size and size <= settings::precision::eig_max_size) {
+//             } else if(rank_max == size and size <= settings::solvers::eig::max_size) {
 //                 auto eig_solver = eig::solver();
 //                 eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
 //                 eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result)); // Eigenvalues
@@ -182,7 +182,7 @@ auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchs
 
             last_rank_max = rank_max;
 
-            if(rank_max == size and size <= settings::precision::eig_max_size) {
+            if(rank_max == size and size <= settings::solvers::eig::max_size) {
                 auto eig_solver = eig::solver();
                 eig_solver.eig<eig::Form::SYMM>(matrix_ptr, size, eig::Vecs::OFF);
                 eigenvalues = tenx::asScalarType<CalcType>(eig::view::get_eigvals<RealScalar>(eig_solver.result));
@@ -212,9 +212,9 @@ auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchs
         }
 
         // If we ended without reaching a good-enough tol and couldn’t diagonalize, warn.
-        if(last_rank_max < size or size > settings::precision::eig_max_size) {
+        if(last_rank_max < size or size > settings::solvers::eig::max_size) {
             const auto smallest_kept = eigenvalues.size() > 0 ? eigenvalues(eigenvalues.size() - 1) : CalcType{0};
-            if(smallest_kept >= tol and size > settings::precision::eig_max_size) {
+            if(smallest_kept >= tol and size > settings::solvers::eig::max_size) {
                 tools::log->warn("get_eigenvalues: size {} exceeds eig_max_size. Approx eigenvalues from truncated SVD (rank_max {}), "
                                  "smallest kept value {:.3e}. Entropies may be inaccurate.",
                                  size, last_rank_max, smallest_kept);
