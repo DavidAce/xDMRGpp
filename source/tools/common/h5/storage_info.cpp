@@ -49,6 +49,7 @@ StoragePolicy StorageInfo::get_table_storage_policy(std::string_view table_path)
 StoragePolicy StorageInfo::get_dataset_storage_policy(std::string_view dset_path) const {
     /* clang-format off */
     using namespace settings::storage::dataset;
+    if(dset_path.find("statevector")                       != std::string_view::npos) return statevector::policy;
     if(dset_path.find("lbit_analysis")                    != std::string_view::npos) return lbit_analysis::policy;
     if(dset_path.find("subsystem_entanglement_entropies") != std::string_view::npos) return subsystem_entanglement_entropies::policy;
     if(dset_path.find("information_lattice")              != std::string_view::npos) return information_lattice::policy;

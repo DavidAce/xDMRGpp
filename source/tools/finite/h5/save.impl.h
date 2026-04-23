@@ -30,6 +30,7 @@
 #include "tools/finite/measure/opdm.h"
 #include "tools/finite/measure/spin.h"
 #include "tools/finite/measure/truncation.h"
+#include "tools/finite/mps.h"
 #include "tools/finite/ops.h"
 #include <complex>
 #include <h5pp/h5pp.h>
@@ -175,6 +176,46 @@ void tools::finite::h5::save::expectations(h5pp::File &h5file, const StorageInfo
         h5file.appendToDataset(state.measurements.expectation_values_sz.value(), dset_path, 1);
         tools::common::h5::save::set_save_attrs(h5file, dset_path, sinfo);
     }
+}
+
+template<typename Scalar>
+void tools::finite::h5::save::statevector(h5pp::File &h5file, const StorageInfo &sinfo, const StateFinite<Scalar> &state) {
+    if(not should_save(sinfo, settings::storage::dataset::statevector::policy)) return;
+    auto model_size = state.template get_length<long>();
+    if(model_size > settings::storage::dataset::statevector::max_model_size) {
+        static bool warned_model_size = false;
+        if(not warned_model_size) {
+            tools::log->warn("Skipping dense statevector saves for model size {}: storage::dataset::statevector::max_model_size = {}. "
+                             "Dense statevectors scale exponentially in L, and values above 16 can require substantial time and memory",
+                             model_size, settings::storage::dataset::statevector::max_model_size);
+            warned_model_size = true;
+        }
+        return;
+    }
+
+    auto dset_path = fmt::format("{}/{}", sinfo.get_state_prefix(), "statevector");
+    auto attrs     = tools::common::h5::save::get_save_attrs(h5file, dset_path);
+    if(attrs == sinfo) return;
+    if(not attrs.link_exists and model_size > 16) {
+        tools::log->warn("Saving dense statevectors for model size {}. This scales exponentially in L and may require substantial time and memory", model_size);
+    }
+
+    auto statevector = tools::finite::mps::mps2tensor<Scalar>(state);
+    auto rows        = safe_cast<hsize_t>(statevector.dimension(0));
+    auto data_dims   = std::vector<hsize_t>{rows, 1};
+    if(not attrs.link_exists) {
+        std::vector<hsize_t> dims = {rows, 0};
+        std::vector<hsize_t> chnk = {rows, settings::storage::dataset::statevector::chunksize};
+        using vector_type         = typename std::remove_cvref_t<decltype(statevector)>::Scalar;
+        h5file.createDataset(dset_path, h5pp::type::getH5Type<vector_type>(), H5D_CHUNKED, dims, chnk, std::nullopt, 1);
+        h5file.writeAttribute("extent-1,offset,iter", dset_path, "index");
+        h5file.writeAttribute("Dense statevector", dset_path, "description");
+    }
+
+    tools::log->trace("Writing to dataset: {} | event {} | policy {}", dset_path, enum2sv(sinfo.storage_event),
+                      flag2str(sinfo.get_dataset_storage_policy(dset_path)));
+    h5file.appendToDataset(statevector, dset_path, 1, data_dims);
+    tools::common::h5::save::set_save_attrs(h5file, dset_path, sinfo);
 }
 
 template<typename Scalar>
@@ -567,6 +608,7 @@ void tools::finite::h5::save::simulation(h5pp::File &h5file, const StateFinite<S
     tools::finite::h5::save::number_probabilities(h5file, sinfo, state);
     tools::finite::h5::save::expectations(h5file, sinfo, state);
     tools::finite::h5::save::correlations(h5file, sinfo, state);
+    tools::finite::h5::save::statevector(h5file, sinfo, state);
     tools::finite::h5::save::opdm(h5file, sinfo, state);
     tools::finite::h5::save::opdm_spectrum(h5file, sinfo, state);
     tools::common::h5::save::resume_attrs(h5file, sinfo); // Save attributes relevant for resuming

@@ -78,6 +78,7 @@ namespace tools::finite::h5 {
         template<typename Scalar>  void number_entropies                (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar>  void expectations                    (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar>  void structure_factors               (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
+        template<typename Scalar>  void statevector                     (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar>  void opdm                            (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar>  void opdm_spectrum                   (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar>  void number_probabilities            (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
