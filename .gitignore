@@ -31,3 +31,6 @@ docs/source/doxyoutput
 docs/source/api
 CMakeUserPresets.json
 act
+
+.codex
+AGENTS.md
