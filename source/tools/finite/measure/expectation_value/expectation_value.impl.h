@@ -51,11 +51,34 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
     if(state.mps_sites.empty()) throw std::runtime_error("expectation_value: state.mps_sites is empty");
     if(ops.empty()) throw std::runtime_error("expectation_value: ops is empty");
 
+    // Merge operators that act on the same site into a single on-site operator.
+    // The product order must match the original operator-string order.
+    using MatrixType = Eigen::Matrix<OpType, Eigen::Dynamic, Eigen::Dynamic>;
+    std::vector<LocalObservableOp<OpType>> combined_ops;
+    combined_ops.reserve(ops.size());
+    for(const auto &op : ops) {
+        auto op_it = std::find_if(combined_ops.begin(), combined_ops.end(), [&op](const auto &combined) { return combined.pos == op.pos; });
+        if(op_it == combined_ops.end()) {
+            combined_ops.push_back(LocalObservableOp<OpType>{op.op, op.pos, false});
+            continue;
+        }
+
+        auto lhs = MatrixType(tenx::MatrixMap(op_it->op));
+        auto rhs = MatrixType(tenx::MatrixMap(op.op));
+        if(lhs.cols() != rhs.rows())
+            throw except::runtime_error("expectation_value: operator dimension mismatch on site {}: {}x{} times {}x{}", op.pos, lhs.rows(), lhs.cols(),
+                                        rhs.rows(), rhs.cols());
+
+        MatrixType prod = lhs * rhs;
+        op_it->op       = tenx::TensorMap(prod);
+        op_it->used     = false;
+    }
+
     // Convert to LocalObservableMpo to reuse code
     std::vector<LocalObservableMpo<OpType>> mpos;
-    mpos.reserve(ops.size());
+    mpos.reserve(combined_ops.size());
 
-    for(const auto &op : ops) {
+    for(const auto &op : combined_ops) {
         Eigen::Tensor<OpType, 4> mpo_op = op.op.reshape(Eigen::DSizes<Eigen::Index, 4>{1, 1, op.op.dimension(0), op.op.dimension(1)});
         mpos.push_back(LocalObservableMpo<OpType>{mpo_op, op.pos, false});
     }
@@ -97,6 +120,16 @@ CalcType tools::finite::measure::expectation_value(const StateFinite<Scalar> &st
 
     if(state.mps_sites.empty()) throw std::runtime_error("expectation_value: state.mps_sites is empty");
     if(mpos.empty()) throw std::runtime_error("expectation_value: obs is empty");
+
+    {
+        std::vector<long> positions;
+        positions.reserve(mpos.size());
+        for(const auto &ob : mpos) {
+            if(std::find(positions.begin(), positions.end(), ob.pos) != positions.end())
+                throw except::runtime_error("expectation_value: repeated MPO position {} is not supported", ob.pos);
+            positions.push_back(ob.pos);
+        }
+    }
 
     // Generate a string of mpos for each site. If a site has no local observable given, insert an identity MPO there.
     auto mpodims = mpos.front().mpo.dimensions();
