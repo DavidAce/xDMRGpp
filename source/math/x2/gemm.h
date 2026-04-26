@@ -1,5 +1,5 @@
 #pragma once
-#include "gemm_kernel.h"
+#include "gemm_kernel3.h"
 #include "Matrix.h"
 #include "Tensor.h"
 #include "view.h"
