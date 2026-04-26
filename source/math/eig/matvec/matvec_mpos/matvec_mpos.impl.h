@@ -60,6 +60,18 @@ MatVecMPOS<Scalar>::MatVecMPOS(const std::vector<std::reference_wrapper<const Mp
     envL_A = envs_.L.template get_block_as<Scalar>();
     envR_A = envs_.R.template get_block_as<Scalar>();
 
+    if constexpr(std::is_same_v<EnvType, EnvVar<T>>) {
+        auto tensor_norm = [](const auto &t) {
+            using Real = typename Eigen::NumTraits<typename std::decay_t<decltype(t)>::Scalar>::Real;
+            Real sum   = Real{0};
+            for(Eigen::Index i = 0; i < t.size(); ++i) sum += Eigen::numext::abs2(t.data()[i]);
+            return std::sqrt(sum);
+        };
+        eig::log->debug("MatVecMPOS EnvVar A | mpos {} fullsystem {} | envL [{},{},{}] norm {:.16e} | envR [{},{},{}] norm {:.16e}", mpos_A.size(), fullsystem,
+                        envL_A.dimension(0), envL_A.dimension(1), envL_A.dimension(2), tensor_norm(envL_A), envR_A.dimension(0), envR_A.dimension(1),
+                        envR_A.dimension(2), tensor_norm(envR_A));
+    }
+
     long spin_dim = 1;
     for(const auto &mpo : mpos_A) spin_dim *= mpo.dimension(2);
     spindims.reserve(mpos_A.size());
