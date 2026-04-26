@@ -31,20 +31,20 @@ inline std::string_view enum2sv(ContractionPrecision precision) {
 
 namespace tools::common::contraction::internal {
     struct InfoH1Mv {
-        ContractionBackend  backend       = ContractionBackend::AUTO;
-        ContractionPrecision precision    = ContractionPrecision::X2_AS_NEEDED;
-        std::array<long, 4> H1_local_dims = {0};
-        double              H1_local_norm = std::numeric_limits<double>::quiet_NaN();
+        ContractionBackend   backend       = ContractionBackend::AUTO;
+        ContractionPrecision precision     = ContractionPrecision::X2_AS_NEEDED;
+        std::array<long, 4>  H1_local_dims = {0};
+        double               H1_local_norm = std::numeric_limits<double>::quiet_NaN();
     };
     struct InfoH2Mv {
-        ContractionBackend  backend       = ContractionBackend::AUTO;
-        ContractionPrecision precision    = ContractionPrecision::X2_AS_NEEDED;
-        std::array<long, 4> H2_local_dims = {0};
-        double              H2_local_norm = std::numeric_limits<double>::quiet_NaN();
+        ContractionBackend   backend       = ContractionBackend::AUTO;
+        ContractionPrecision precision     = ContractionPrecision::X2_AS_NEEDED;
+        std::array<long, 4>  H2_local_dims = {0};
+        double               H2_local_norm = std::numeric_limits<double>::quiet_NaN();
     };
 
     struct InfoEnv {
-        ContractionBackend  backend   = ContractionBackend::AUTO;
+        ContractionBackend   backend   = ContractionBackend::AUTO;
         ContractionPrecision precision = ContractionPrecision::SAME;
     };
 
@@ -58,6 +58,12 @@ namespace tools::common::contraction::internal {
     void   set_H2_global_norm(double H2_global_norm);
     double get_H1_global_norm();
     double get_H2_global_norm();
+
+    inline bool local_dims_are_unset(const std::array<long, 4> &dims) {
+        for(const auto dim : dims)
+            if(dim != 0) return false;
+        return true;
+    }
 }
 
 struct SetH1MvInfo {
@@ -93,7 +99,8 @@ struct SetH1MvInfo {
     template<typename T>
     requires(std::floating_point<T>)
     SetH1MvInfo(ContractionBackend backend, std::array<long, 4> h1dims, T h1norm)
-        : SetH1MvInfo(InfoH1Mv{.backend = backend, .precision = ContractionPrecision::SAME, .H1_local_dims = h1dims, .H1_local_norm = static_cast<double>(h1norm)}) {}
+        : SetH1MvInfo(
+              InfoH1Mv{.backend = backend, .precision = ContractionPrecision::SAME, .H1_local_dims = h1dims, .H1_local_norm = static_cast<double>(h1norm)}) {}
 
     template<typename T>
     requires(std::floating_point<T>)
@@ -146,7 +153,8 @@ struct SetH2MvInfo {
     template<typename T>
     requires(std::floating_point<T>)
     SetH2MvInfo(ContractionBackend backend, std::array<long, 4> h2dims, T h2norm)
-        : SetH2MvInfo(InfoH2Mv{.backend = backend, .precision = ContractionPrecision::SAME, .H2_local_dims = h2dims, .H2_local_norm = static_cast<double>(h2norm)}) {}
+        : SetH2MvInfo(
+              InfoH2Mv{.backend = backend, .precision = ContractionPrecision::SAME, .H2_local_dims = h2dims, .H2_local_norm = static_cast<double>(h2norm)}) {}
 
     template<typename T>
     requires(std::floating_point<T>)

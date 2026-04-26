@@ -26,30 +26,34 @@ using tools::finite::measure::RealScalar;
 
 namespace tools::finite::measure::internal {
     template<typename Scalar>
+    bool use_x2_hamiltonian_expval(const ModelFinite<Scalar> &model);
+
+    template<typename Scalar>
+    bool use_x2_hamiltonian_squared_expval(const ModelFinite<Scalar> &model);
+
+    template<typename Scalar>
     [[nodiscard]] constexpr RealScalar<Scalar> cache_match_tol() {
         return static_cast<RealScalar<Scalar>>(1e-12);
     }
 
     template<typename Value, typename Tol>
-    void assert_cached_value_matches(const MeasurementFiniteCached<Value> *cache, const Value &value, Tol tol) {
+    void assert_cached_value_matches([[maybe_unused]] const MeasurementFiniteCached<Value> *cache, [[maybe_unused]] const Value &value,
+                                     [[maybe_unused]] Tol tol) {
         if constexpr(settings::debug_hamiltonian) {
             if(cache != nullptr) assert(std::abs(value - cache->value()) < tol);
-        } else {
-            (void)cache;
-            (void)value;
-            (void)tol;
         }
     }
 
     template<typename Scalar>
     Scalar get_or_compute_expval_hamiltonian(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                              MeasurementsTensorsFinite<Scalar> *measurements) {
-        [[maybe_unused]] const auto *cache = measurements != nullptr ? measurements->get_cached_expval_hamiltonian(state, model, edges) : nullptr;
-        if(cache != nullptr) {
+        [[maybe_unused]] const auto *cache    = measurements != nullptr ? measurements->get_cached_expval_hamiltonian(state, model, edges) : nullptr;
+        const auto                   force_x2 = use_x2_hamiltonian_expval(model);
+        if(cache != nullptr and not force_x2) {
             if constexpr(!settings::debug_hamiltonian) return cache->value();
         }
         auto value = tools::finite::measure::expval_hamiltonian<Scalar>(state, model, edges);
-        assert_cached_value_matches(cache, value, cache_match_tol<Scalar>());
+        if(not force_x2) assert_cached_value_matches(cache, value, cache_match_tol<Scalar>());
         if(measurements != nullptr) measurements->set_cached_expval_hamiltonian(value, state, model, edges);
         return value;
     }
@@ -57,19 +61,45 @@ namespace tools::finite::measure::internal {
     template<typename Scalar>
     Scalar get_or_compute_expval_hamiltonian_squared(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                                      MeasurementsTensorsFinite<Scalar> *measurements) {
-        [[maybe_unused]] const auto *cache = measurements != nullptr ? measurements->get_cached_expval_hamiltonian_squared(state, model, edges) : nullptr;
-        if(cache != nullptr) {
+        [[maybe_unused]] const auto *cache    = measurements != nullptr ? measurements->get_cached_expval_hamiltonian_squared(state, model, edges) : nullptr;
+        const auto                   force_x2 = use_x2_hamiltonian_squared_expval(model);
+        if(cache != nullptr and not force_x2) {
             if constexpr(!settings::debug_hamiltonian) return cache->value();
         }
         auto value = tools::finite::measure::expval_hamiltonian_squared<Scalar>(state, model, edges);
-        assert_cached_value_matches(cache, value, cache_match_tol<Scalar>());
+        if(not force_x2) assert_cached_value_matches(cache, value, cache_match_tol<Scalar>());
         if(measurements != nullptr) measurements->set_cached_expval_hamiltonian_squared(value, state, model, edges);
         return value;
+    }
+
+    template<typename Scalar, typename EnvPair>
+    Scalar expval_from_x2_matvec(const Eigen::Tensor<Scalar, 3> &mps, const Eigen::Tensor<Scalar, 4> &mpo, const EnvPair &env) {
+        auto       Hx_x2 = tools::common::contraction::matrix_vector_product_x2(mps, mpo, env.L.get_blkx2(), env.R.get_blkx2());
+        const auto Hx    = Hx_x2.to_EigenTensor();
+        return tenx::VectorMap(mps).dot(tenx::VectorMap(Hx));
+    }
+
+    template<typename Scalar>
+    bool use_x2_hamiltonian_expval(const ModelFinite<Scalar> &model) {
+        const auto &h1info = tools::common::contraction::internal::get_info_h1mv();
+        return h1info.precision == ContractionPrecision::X2 and model.active_sites.size() <= 3;
+    }
+
+    template<typename Scalar>
+    bool use_x2_hamiltonian_squared_expval(const ModelFinite<Scalar> &model) {
+        const auto &h2info = tools::common::contraction::internal::get_info_h2mv();
+        return h2info.precision == ContractionPrecision::X2 and model.active_sites.size() <= 3;
     }
 }
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const Eigen::Tensor<Scalar, 3> &mps, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {
+    if(tools::finite::measure::internal::use_x2_hamiltonian_expval(model)) {
+        const auto &mpo = model.template get_multisite_mpo<Scalar>();
+        const auto &env = edges.get_multisite_env_ene();
+        auto        t_H = tid::tic_scope("H", tid::level::highest);
+        return tools::finite::measure::internal::expval_from_x2_matvec(mps, mpo, env);
+    }
     auto mpo  = model.get_mpo_active();
     auto env  = edges.get_ene_active();
     auto t_H2 = tid::tic_scope("H", tid::level::highest);
@@ -80,6 +110,13 @@ Scalar tools::finite::measure::expval_hamiltonian(const Eigen::Tensor<Scalar, 3>
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges) {
     assert(num::all_equal(state.active_sites, model.active_sites, edges.active_sites));
+    if(tools::finite::measure::internal::use_x2_hamiltonian_expval(model)) {
+        const auto &mps = state.template get_multisite_mps<Scalar>();
+        const auto &mpo = model.template get_multisite_mpo<Scalar>();
+        const auto &env = edges.get_multisite_env_ene();
+        auto        t_H = tid::tic_scope("H", tid::level::highest);
+        return tools::finite::measure::internal::expval_from_x2_matvec(mps, mpo, env);
+    }
     const auto &mps = state.get_mps_active();
     const auto &mpo = model.get_mpo_active();
     const auto &env = edges.get_ene_active();
@@ -126,6 +163,12 @@ template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian_squared(const Eigen::Tensor<Scalar, 3> &mps, const ModelFinite<Scalar> &model,
                                                           const EdgesFinite<Scalar> &edges) {
     assert(num::all_equal(model.active_sites, edges.active_sites));
+    if(tools::finite::measure::internal::use_x2_hamiltonian_squared_expval(model)) {
+        const auto &mpo = model.template get_multisite_mpo_squared<Scalar>();
+        const auto &env = edges.get_multisite_env_var();
+        auto        t_H = tid::tic_scope("H2", tid::level::highest);
+        return tools::finite::measure::internal::expval_from_x2_matvec(mps, mpo, env);
+    }
     auto mpo = model.get_mpo_active();
     auto env = edges.get_var_active();
     auto t_H = tid::tic_scope("H2", tid::level::highest);
@@ -136,6 +179,13 @@ template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian_squared(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
                                                           const EdgesFinite<Scalar> &edges) {
     assert(num::all_equal(state.active_sites, model.active_sites, edges.active_sites));
+    if(tools::finite::measure::internal::use_x2_hamiltonian_squared_expval(model)) {
+        const auto &mps = state.template get_multisite_mps<Scalar>();
+        const auto &mpo = model.template get_multisite_mpo_squared<Scalar>();
+        const auto &env = edges.get_multisite_env_var();
+        auto        t_H = tid::tic_scope("H2", tid::level::highest);
+        return tools::finite::measure::internal::expval_from_x2_matvec(mps, mpo, env);
+    }
     auto mps  = state.get_mps_active();
     auto mpo  = model.get_mpo_active();
     auto env  = edges.get_var_active();
@@ -181,14 +231,14 @@ template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian(const TensorsFinite<Scalar> &tensors) {
     tensors.assert_edges_ene();
     return tools::finite::measure::internal::get_or_compute_expval_hamiltonian(tensors.get_state(), tensors.get_model(), tensors.get_edges(),
-                                                                                &tensors.measurements);
+                                                                               &tensors.measurements);
 }
 
 template<typename Scalar>
 Scalar tools::finite::measure::expval_hamiltonian_squared(const TensorsFinite<Scalar> &tensors) {
     tensors.assert_edges_var();
     return tools::finite::measure::internal::get_or_compute_expval_hamiltonian_squared(tensors.get_state(), tensors.get_model(), tensors.get_edges(),
-                                                                                        &tensors.measurements);
+                                                                                       &tensors.measurements);
 }
 
 template<typename Scalar>
@@ -571,8 +621,7 @@ RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const State
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_minus_energy_shift(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
                                                                      const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg,
-                                                                     MeasurementsTensorsFinite<Scalar> *measurements) {
-    (void)measurements;
+                                                                     MeasurementsTensorsFinite<Scalar> *) {
     auto t_ene = tid::tic_scope("ene", tid::level::highest);
     assert(not model.active_sites.empty());
     assert(not edges.active_sites.empty());
@@ -642,9 +691,7 @@ RealScalar<Scalar> tools::finite::measure::energy(const StateFinite<Scalar> &sta
 
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
-                                                  const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg,
-                                                  MeasurementsTensorsFinite<Scalar> *measurements) {
-    (void)measurements;
+                                                  const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg, MeasurementsTensorsFinite<Scalar> *) {
     // This measures the actual energy of the system regardless of the energy shift in the MPO's
     // If they are shifted, then
     //      "Actual energy" = (E - E_shift) + E_shift = (~0) + E_shift = E
@@ -674,7 +721,9 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const StateFinite<Sca
     // Else, if E_shf = 0 (i.e. not shifted) we get the usual formula:
     //      Var H = <(H - 0)²> - <H - 0>² = H² - E²
     [[maybe_unused]] const auto *cache = measurements != nullptr ? measurements->get_cached_energy_variance(state, model, edges) : nullptr;
-    if(cache != nullptr) {
+    const auto                   force_x2 =
+        tools::finite::measure::internal::use_x2_hamiltonian_expval(model) or tools::finite::measure::internal::use_x2_hamiltonian_squared_expval(model);
+    if(cache != nullptr and not force_x2) {
         if constexpr(!settings::debug_hamiltonian) return cache->value();
     }
     assert(not state.active_sites.empty());
@@ -688,7 +737,7 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const StateFinite<Sca
     assert(std::abs(std::imag(H2)) < static_cast<RealScalar<Scalar>>(1e-10));
     RealScalar<Scalar> var = std::real(H2 - E2);
     if constexpr(settings::debug_hamiltonian) tools::log->trace("Variance |H2-E2| = |{:.16f} - {:.16f}| = {:.16f}", fp(std::real(H2)), fp(E2), fp(var));
-    tools::finite::measure::internal::assert_cached_value_matches(cache, var, tools::finite::measure::internal::cache_match_tol<Scalar>());
+    if(not force_x2) tools::finite::measure::internal::assert_cached_value_matches(cache, var, tools::finite::measure::internal::cache_match_tol<Scalar>());
     if(measurements != nullptr) measurements->set_cached_energy_variance(var, state, model, edges);
     return var;
 }
@@ -696,7 +745,7 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const StateFinite<Sca
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<Scalar, 3> &multisite_mps, const ModelFinite<Scalar> &model,
                                                            const EdgesFinite<Scalar> &edges, std::optional<svd::config> svd_cfg,
-                                                           MeasurementsTensorsFinite<Scalar> *measurements) {
+                                                           MeasurementsTensorsFinite<Scalar> *) {
     // Here we show that the variance calculated with energy-shifted mpo's is equivalent to the usual way.
     // If mpo's are shifted:
     //      Var H = <(H-E_shf)²> - <H-E_shf>²     = <H²>  - 2<H>E_shf + E_shf² - (<H> - E_shf)²
@@ -711,7 +760,6 @@ RealScalar<Scalar> tools::finite::measure::energy_variance(const Eigen::Tensor<S
     //
     // Else, if E_shf = 0 (i.e. not shifted) we get the usual formula:
     //      Var H = <(H - 0)²> - <H - 0>² = H² - E²
-    (void)measurements;
     assert(not model.active_sites.empty());
     assert(not edges.active_sites.empty());
     if(not num::all_equal(model.active_sites, edges.active_sites))

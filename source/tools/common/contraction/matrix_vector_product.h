@@ -40,6 +40,12 @@ namespace tools::common::contraction {
                                const x2::Tensor<Scalar, 3>    &envR);
 
     template<typename Scalar>
+    x2::Tensor<Scalar, 3> matrix_vector_product_x2(const Eigen::Tensor<Scalar, 3> &mps,  //
+                                                   const Eigen::Tensor<Scalar, 4> &mpo,  //
+                                                   const x2::Tensor<Scalar, 3>    &envL, //
+                                                   const x2::Tensor<Scalar, 3>    &envR);
+
+    template<typename Scalar>
     void matrix_vector_product(Eigen::Tensor<Scalar, 3>                    &res,     //
                                const Eigen::Tensor<Scalar, 3>              &mps,     //
                                const std::vector<Eigen::Tensor<Scalar, 4>> &mpo_shf, //

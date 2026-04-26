@@ -117,8 +117,8 @@ class ScaledConstTensorMap {
         if(maxval == RealScalar{0}) return;
         assert(std::isfinite(maxval));
 
-        int p2expn = 0;
-        (void) std::frexp(maxval, &p2expn);
+        int                   p2expn = 0;
+        [[maybe_unused]] auto mant   = std::frexp(maxval, &p2expn);
 
         if(std::abs(p2expn) <= 1) {
             // No scaling needed: remain non-owning, ex2 stays 0
