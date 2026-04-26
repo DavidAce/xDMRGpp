@@ -230,8 +230,16 @@ void ModelFinite<Scalar>::compress_mpo() {
 template<typename Scalar>
 void ModelFinite<Scalar>::compress_mpo_squared() {
     clear_cache_squared();
-    auto mpo_squared_compressed = get_mpo2_tensors(0, MposWithEdges::ON, MpoCompress::AUTO);
-    for(const auto &[pos, mpo] : iter::enumerate(MPO)) mpo->set_mpo_squared(mpo_squared_compressed[pos]);
+    if constexpr(std::is_same_v<Scalar, QuadScalar>) {
+        auto mpo_squared_compressed = get_mpo2_tensors(0, MposWithEdges::ON, MpoCompress::AUTO);
+        for(const auto &[pos, mpo] : iter::enumerate(MPO)) mpo->set_mpo_squared(mpo_squared_compressed[pos]);
+    } else {
+        auto model_quad             = this->template cast<QuadScalar>();
+        auto mpo_squared_compressed = model_quad.get_mpo2_tensors(QuadScalar{0}, MposWithEdges::ON, MpoCompress::AUTO);
+        for(const auto &[pos, mpo] : iter::enumerate(MPO)) {
+            mpo->set_mpo_squared(Eigen::Tensor<Scalar, 4>(mpo_squared_compressed[pos].template cast<Scalar>()));
+        }
+    }
 }
 
 template<typename Scalar>

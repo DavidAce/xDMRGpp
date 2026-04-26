@@ -80,7 +80,15 @@ void MpoSite<Scalar>::set_mpo(const Eigen::Tensor<Scalar, 4> &mpo) {
 
 template<typename Scalar>
 void MpoSite<Scalar>::set_mpo_squared(const Eigen::Tensor<Scalar, 4> &mpo_sq) {
-    mpo_squared    = mpo_sq;
+    mpo_squared.emplace(mpo_sq);
+    unique_id_sq   = std::nullopt;
+    is_real_cached = std::nullopt;
+    has_nan_cached = std::nullopt;
+}
+
+template<typename Scalar>
+void MpoSite<Scalar>::set_mpo_squared(Eigen::Tensor<Scalar, 4> &&mpo_sq) {
+    mpo_squared.emplace(std::move(mpo_sq));
     unique_id_sq   = std::nullopt;
     is_real_cached = std::nullopt;
     has_nan_cached = std::nullopt;

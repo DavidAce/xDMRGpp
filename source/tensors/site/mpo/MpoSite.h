@@ -96,6 +96,7 @@ class MpoSite {
     void                                              build_mpo_squared();
     void                                              set_mpo(const Eigen::Tensor<Scalar, 4> &mpo_sq);
     void                                              set_mpo_squared(const Eigen::Tensor<Scalar, 4> &mpo_sq);
+    void                                              set_mpo_squared(Eigen::Tensor<Scalar, 4> &&mpo_sq);
     void                                              clear_mpo();
     void                                              clear_mpo_squared();
     [[nodiscard]] bool                                has_mpo() const;
