@@ -1,5 +1,6 @@
 #pragma once
 #include "math/float.h"
+#include "math/svd/config.h"
 #include <Eigen/Core>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
@@ -52,6 +53,12 @@ namespace tools::finite::measure {
     [[nodiscard]] RealScalar<Scalar> residual_norm_H1    (const TensorsFinite<Scalar> & tensors);
 
     template<typename Scalar>
+    [[nodiscard]] RealScalar<Scalar> residual_norm_zip_up(const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> & edges, const svd::config & svd_cfg);
+
+    template<typename Scalar>
+    [[nodiscard]] RealScalar<Scalar> residual_norm_zip_up(const TensorsFinite<Scalar> & tensors, const svd::config & svd_cfg);
+
+    template<typename Scalar>
     [[nodiscard]] RealScalar<Scalar> residual_norm_H2    (const std::vector<size_t> & sites, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> & edges);
 
     template<typename Scalar>
@@ -59,7 +66,6 @@ namespace tools::finite::measure {
 
     template<typename Scalar>
     [[nodiscard]] RealScalar<Scalar> residual_norm_H2    (const TensorsFinite<Scalar> & tensors);
-
 
     template<typename Scalar>
     [[nodiscard]] RealScalar<Scalar> residual_norm_full  (const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> & edges);

@@ -1850,8 +1850,11 @@ void AlgorithmFinite<Scalar>::write_to_file(StorageEvent storage_event, CopyPoli
             apply_energy_variance_policy(tools::finite::measure::energy_variance(tensors));
 
         if(storage_event == StorageEvent::FINISHED and std::isfinite(var_raw) and var_raw < RealScalar{0}) {
-            auto rnorm    = tools::finite::measure::residual_norm_full(tensors);
-            auto variance = rnorm * rnorm;
+            auto svd_cfg    = svd::config(status.bond_max, status.trnc_min);
+            svd_cfg.svd_lib = svd::lib::lapack;
+            svd_cfg.svd_rtn = svd::rtn::gesdd;
+            auto rnorm      = tools::finite::measure::residual_norm_zip_up(tensors, svd_cfg);
+            auto variance   = rnorm * rnorm;
             if(std::isfinite(variance) and variance >= RealScalar{0}) {
                 var_latest = variance;
                 if(var_latest > RealScalar{0}) status.energy_variance_lowest = std::min(static_cast<double>(var_latest), status.energy_variance_lowest);
