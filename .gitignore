@@ -33,4 +33,5 @@ CMakeUserPresets.json
 act
 
 .codex
+.agents/
 AGENTS.md
