@@ -215,6 +215,7 @@ function(write_project_summary prj)
         string_target_info(${t} "| " target_strinfo)
     endforeach()
     string(REPLACE "<LINK_ONLY:" "<1:" target_strinfo "${target_strinfo}")
+    string(REPLACE "<COMPILE_ONLY:" "<1:" target_strinfo "${target_strinfo}")
     file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/${PROJECT_NAME}_$<CONFIG>_$<COMPILE_LANGUAGE>_target_info.txt
          CONTENT "${target_strinfo}"
          TARGET ${PROJECT_NAME})
@@ -237,6 +238,7 @@ function(print_and_write_project_summary prj)
     endforeach()
     message(STATUS "|--------------------------")
     string(REPLACE "<LINK_ONLY:" "<1:" target_strinfo "${target_strinfo}")
+    string(REPLACE "<COMPILE_ONLY:" "<1:" target_strinfo "${target_strinfo}")
     file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/${PROJECT_NAME}_$<CONFIG>_$<COMPILE_LANGUAGE>_target_info.txt
          CONTENT "${target_strinfo}"
          TARGET ${PROJECT_NAME})
