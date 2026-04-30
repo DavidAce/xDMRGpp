@@ -85,4 +85,5 @@ class xdmrg : public AlgorithmFinite<Scalar> {
     using AlgorithmFinite<Scalar>::var_latest;
     using AlgorithmFinite<Scalar>::ene_latest;
     using AlgorithmFinite<Scalar>::last_optalgo;
+    using AlgorithmFinite<Scalar>::apply_energy_variance_policy;
 };

@@ -71,13 +71,15 @@ void save_data(h5pp::File &h5file, const StorageInfo &sinfo, const T &data, std:
 }
 
 template<typename Scalar>
-void tools::finite::h5::save::measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status) {
-    tools::finite::h5::save::measurements(h5file, sinfo, tensors.get_state(), tensors.get_model(), tensors.get_edges(), status);
+void tools::finite::h5::save::measurements(h5pp::File &h5file, const StorageInfo &sinfo, const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status,
+                                           const std::optional<MeasurementsOverride<Scalar>> &measurements_override) {
+    tools::finite::h5::save::measurements(h5file, sinfo, tensors.get_state(), tensors.get_model(), tensors.get_edges(), status, measurements_override);
 }
 
 template<typename Scalar>
 void tools::finite::h5::save::measurements(h5pp::File &h5file, const StorageInfo &sinfo, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
-                                           const EdgesFinite<Scalar> &edges, const AlgorithmStatus &status) {
+                                           const EdgesFinite<Scalar> &edges, const AlgorithmStatus &status,
+                                           const std::optional<MeasurementsOverride<Scalar>> &measurements_override) {
     if(not should_save(sinfo, settings::storage::table::measurements::policy)) return;
     auto t_hdf = tid::tic_scope("measurements", tid::level::highest);
     tools::log->trace("Saving measurements with type {} ({} bits)", sfinae::type_name<Scalar>(), sizeof(Scalar));
@@ -99,9 +101,19 @@ void tools::finite::h5::save::measurements(h5pp::File &h5file, const StorageInfo
     measurement_entry.event    = sinfo.storage_event;
     measurement_entry.length   = state.template get_length<uint64_t>();
     if(status.algo_type != AlgorithmType::fLBIT) {
-        measurement_entry.energy                 = tools::finite::measure::energy(state, model, edges);
-        measurement_entry.energy_variance        = tools::finite::measure::energy_variance(state, model, edges);
-        measurement_entry.energy_variance_lowest = static_cast<RealScalar<Scalar>>(status.energy_variance_lowest);
+        const auto  empty_override = MeasurementsOverride<Scalar>{};
+        const auto &overrides      = measurements_override.has_value() ? measurements_override.value() : empty_override;
+
+        measurement_entry.energy = overrides.energy.has_value() ? overrides.energy.value() : tools::finite::measure::energy(state, model, edges);
+        measurement_entry.energy_variance =
+            overrides.energy_variance.has_value() ? overrides.energy_variance.value() : tools::finite::measure::energy_variance(state, model, edges);
+        measurement_entry.energy_variance_lowest = overrides.energy_variance_lowest.has_value()
+                                                       ? overrides.energy_variance_lowest.value()
+                                                       : static_cast<RealScalar<Scalar>>(status.energy_variance_lowest);
+
+        if(measurement_entry.energy_variance < RealScalar<Scalar>{0})
+            throw except::runtime_error("Refusing to save negative reported energy variance {:.16e} at state [{}]", measurement_entry.energy_variance,
+                                        sinfo.get_state_prefix());
     }
     measurement_entry.norm             = tools::finite::measure::norm_state(state);
     measurement_entry.truncation_error = state.get_truncation_error_midchain();
@@ -422,8 +434,8 @@ template<typename Scalar>
 void tools::finite::h5::save::number_probabilities(h5pp::File &h5file, const StorageInfo &sinfo, const StateFinite<Scalar> &state) {
     if(not should_save(sinfo, settings::storage::dataset::number_probabilities::policy)) return;
     if(state.get_algorithm() != AlgorithmType::fLBIT) {
-        tools::log->warn("Called tools::finite::h5::save::number_probabilities from algorithm [{}]: This is currently only valid with the [fLBIT] algorithm",
-                         enum2sv(state.get_algorithm()));
+        tools::log->debug("Called tools::finite::h5::save::number_probabilities from algorithm [{}]: This is currently only implemented for [fLBIT] algorithm",
+                          enum2sv(state.get_algorithm()));
         return;
     }
     if(not state.measurements.number_probabilities)
@@ -570,13 +582,15 @@ void tools::finite::h5::save::mpo(h5pp::File &h5file, const StorageInfo &sinfo, 
 }
 
 template<typename Scalar>
-void tools::finite::h5::save::simulation(h5pp::File &h5file, const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status, CopyPolicy copy_policy) {
-    tools::finite::h5::save::simulation(h5file, tensors.get_state(), tensors.get_model(), tensors.get_edges(), status, copy_policy);
+void tools::finite::h5::save::simulation(h5pp::File &h5file, const TensorsFinite<Scalar> &tensors, const AlgorithmStatus &status, CopyPolicy copy_policy,
+                                         const std::optional<MeasurementsOverride<Scalar>> &measurements_override) {
+    tools::finite::h5::save::simulation(h5file, tensors.get_state(), tensors.get_model(), tensors.get_edges(), status, copy_policy, measurements_override);
 }
 
 template<typename Scalar>
 void tools::finite::h5::save::simulation(h5pp::File &h5file, const StateFinite<Scalar> &state, const ModelFinite<Scalar> &model,
-                                         const EdgesFinite<Scalar> &edges, const AlgorithmStatus &status, CopyPolicy copy_policy) {
+                                         const EdgesFinite<Scalar> &edges, const AlgorithmStatus &status, CopyPolicy copy_policy,
+                                         const std::optional<MeasurementsOverride<Scalar>> &measurements_override) {
     if(not state.position_is_inward_edge()) return;
     auto sinfo   = StorageInfo(status, state.get_name(), model.model_type);
     auto t_h5    = tid::tic_scope("h5");
@@ -594,7 +608,7 @@ void tools::finite::h5::save::simulation(h5pp::File &h5file, const StateFinite<S
     tools::common::h5::save::status(h5file, sinfo, status);
     tools::common::h5::save::memory(h5file, sinfo);
     tools::common::h5::save::timer(h5file, sinfo);
-    tools::finite::h5::save::measurements(h5file, sinfo, state, model, edges, status);
+    tools::finite::h5::save::measurements(h5file, sinfo, state, model, edges, status, measurements_override);
     tools::finite::h5::save::bond_dimensions(h5file, sinfo, state);
     tools::finite::h5::save::bonds(h5file, sinfo, state);
     tools::finite::h5::save::truncation_errors(h5file, sinfo, state);

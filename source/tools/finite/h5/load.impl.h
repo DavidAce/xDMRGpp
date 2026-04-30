@@ -33,8 +33,9 @@ void tools::finite::h5::load::simulation(const h5pp::File &h5file, std::string_v
             // To successfully load a simulation there has to be a clearly defined initial state, either a pattern or an initial state selection
             tensors = TensorsFinite<Scalar>(algo_type, settings::model::model_type, settings::model::model_size, 0);
             tools::common::h5::load::initial_state_attrs(h5file, state_prefix, settings::state::init::initial_pattern);
-            tensors.initialize_state(ResetReason::INIT, settings::state::init::initial_state, settings::state::init::initial_type, settings::state::init::initial_axis,
-                                     settings::state::init::use_eigenspinors, status.bond_lim, settings::state::init::initial_pattern);
+            tensors.initialize_state(ResetReason::INIT, settings::state::init::initial_state, settings::state::init::initial_type,
+                                     settings::state::init::initial_axis, settings::state::init::use_eigenspinors, status.bond_lim,
+                                     settings::state::init::initial_pattern);
             tools::common::h5::load::status(h5file, state_prefix, status);
             tools::finite::h5::load::model(h5file, algo_type, *tensors.model);
             tools::common::h5::load::timer(h5file, state_prefix, status);
@@ -181,14 +182,20 @@ void tools::finite::h5::load::validate(const h5pp::File &h5file, std::string_vie
         auto measurements_path = fmt::format("{}/measurements", state_prefix);
         auto expected_measurements =
             h5file.readTableRecords<std::optional<typename h5pp_table_measurements_finite<Scalar>::table>>(measurements_path, h5pp::TableSelection::LAST);
-        if(expected_measurements and expected_measurements->iter == status.iter) {
+        if(expected_measurements.has_value() and expected_measurements.value().iter == status.iter) {
             // In this case we have loaded state_real from file.
             // In the fLBIT case, the MPO's belong to state_lbit, so measuring the energy on state_real w.r.t the lbit-hamiltonian makes no sense.
+            const auto &expected = expected_measurements.value();
             tools::log->debug("Validating resumed state energy: [{}]", state_prefix);
             tensors.clear_measurements();
-            compare(tools::finite::measure::energy(tensors), expected_measurements->energy, 1e-5, "Energy");
-            compare(tools::finite::measure::energy_variance(tensors), expected_measurements->energy_variance, 1e-5, "Energy variance");
-
+            compare(tools::finite::measure::energy(tensors), expected.energy, 1e-5, "Energy");
+            auto energy_variance_raw = tools::finite::measure::energy_variance(tensors);
+            if(energy_variance_raw < RealScalar<Scalar>{0} and expected.energy_variance >= RealScalar<Scalar>{0}) {
+                tools::log->debug("Skipping strict energy variance validation: raw local value {:.16e}, reported value {:.16e}", energy_variance_raw,
+                                  expected.energy_variance);
+            } else {
+                compare(energy_variance_raw, expected.energy_variance, 1e-5, "Energy variance");
+            }
         }
     }
 }

@@ -49,6 +49,7 @@
 #include "tools/finite/measure/information.h"
 #include "tools/finite/measure/norm.h"
 #include "tools/finite/measure/number_entropy.h"
+#include "tools/finite/measure/residual.h"
 #include "tools/finite/measure/spin.h"
 #include "tools/finite/mps.h"
 #include "tools/finite/multisite.h"
@@ -259,8 +260,7 @@ int AlgorithmFinite<Scalar>::get_eigs_iter_max() const {
     double iter_extra       = iter_min * iter_multiplier; // Run more when stuck
     auto   result           = std::min(iter_extra, iter_max);
     if(result != std::clamp(result, iter_min, iter_max))
-        throw except::runtime_error("eigs iter out of range: {} | min {} | max {}", result, settings::solvers::eig::iter_min,
-                                    settings::solvers::eig::iter_max);
+        throw except::runtime_error("eigs iter out of range: {} | min {} | max {}", result, settings::solvers::eig::iter_min, settings::solvers::eig::iter_max);
     return safe_cast<int>(result);
 }
 
@@ -427,6 +427,28 @@ void AlgorithmFinite<Scalar>::update_precision_limit(std::optional<double> energ
 
     tools::log->info("Estimated limit on energy variance precision: {:.3e}, max_digits {:.4e}, |H|~{:.4e}, |H²|~{:.4e}", status.energy_variance_prec_limit,
                      max_digits, max_energy, max_energy_squared);
+}
+
+template<typename Scalar>
+void AlgorithmFinite<Scalar>::apply_energy_variance_policy(RealScalar variance_raw) {
+    var_raw           = variance_raw;
+    auto previous_var = var_latest;
+
+    if(std::isfinite(var_raw) and var_raw > RealScalar{0}) {
+        var_last_positive = var_raw;
+        var_latest        = var_raw;
+    } else if(std::isfinite(var_last_positive) and var_last_positive > RealScalar{0}) {
+        // A negative local subtractive variance near convergence is a precision-limit signal, not a better estimate.
+        // During sweeps we keep reporting the last finite positive value so saturation remains a true flat signal.
+        // The final HDF5 write can replace this with the expensive global residual norm if the raw value is still negative.
+        var_latest = var_last_positive;
+    } else {
+        var_latest = std::numeric_limits<RealScalar>::quiet_NaN();
+    }
+
+    var_delta = var_latest - previous_var;
+    if(std::isfinite(var_latest) and var_latest > RealScalar{0})
+        status.energy_variance_lowest = std::min(static_cast<double>(var_latest), status.energy_variance_lowest);
 }
 
 template<typename Scalar>
@@ -730,8 +752,7 @@ void AlgorithmFinite<Scalar>::update_truncation_error_limit() {
     if(drop_if_next_iter and is_next_iter and truncated_ok) reason.emplace_back("next iter");
     if(drop_if_even_iter and is_even_iter and truncated_ok) reason.emplace_back("even iter");
     if(reason.empty()) {
-        tools::log->debug("Kept truncation error limit:  {:8.2e} | conditions: {} | no reason to update", status.trnc_lim,
-                          fmw::join(condition, " | "));
+        tools::log->debug("Kept truncation error limit:  {:8.2e} | conditions: {} | no reason to update", status.trnc_lim, fmw::join(condition, " | "));
         tools::log->trace("Truncation errors {::.3e}", tensors.get_state().get_truncation_errors());
 
         return;
@@ -827,11 +848,16 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
     if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     tools::log->trace("Updating blocksize | policy: {}", flag2str(settings::schedule::dmrg::blocksize_policy));
     bool has_converged = status.algorithm_converged_for > 0 or var_latest <= static_cast<RealScalar>(settings::convergence::variance_threshold);
-    bool has_sat_ent   = has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_ENTR) and status.entanglement_saturated_for > 0 and not has_converged;
-    bool has_sat_info  = has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_INFO) and status.locinfoscale_saturated_for > 0 and not has_converged;
-    bool has_sat_var   = has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_EVAR) and status.variance_mpo_saturated_for > 0 and not has_converged;
-    bool has_sat_algo  = has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_ALGO) and status.algorithm_saturated_for > 0 and not has_converged;
-    bool has_stk_algo  = has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_STK_ALGO) and status.algorithm_has_stuck_for > 0 and not has_converged;
+    bool has_sat_ent =
+        has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_ENTR) and status.entanglement_saturated_for > 0 and not has_converged;
+    bool has_sat_info =
+        has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_INFO) and status.locinfoscale_saturated_for > 0 and not has_converged;
+    bool has_sat_var =
+        has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_EVAR) and status.variance_mpo_saturated_for > 0 and not has_converged;
+    bool has_sat_algo =
+        has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_ALGO) and status.algorithm_saturated_for > 0 and not has_converged;
+    bool has_stk_algo =
+        has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_STK_ALGO) and status.algorithm_has_stuck_for > 0 and not has_converged;
     // bool has_saturated = has_flag(dmrg_blocksize_policy, BlockSizePolicy::SATURATED) and status.algorithm_saturated_for > 0 and not has_converged;
     // bool has_got_stuck = has_flag(dmrg_blocksize_policy, BlockSizePolicy::STUCK) and status.algorithm_has_stuck_for > 0 and not has_converged;
     bool has_no_status = !has_flag(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::IF_SAT_ENTR) and //
@@ -859,12 +885,11 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
         return;
     }
 
-    bool needs_info =
-        has_any_flags(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::INFO, BlockSizePolicy::INFOPLUS1, BlockSizePolicy::INFO150,
-                      BlockSizePolicy::INFO200,
-                      BlockSizePolicy::BIT_ONE, BlockSizePolicy::BIT_TWO, BlockSizePolicy::BIT_MID, BlockSizePolicy::BIT_PEN, BlockSizePolicy::BIT_ALL
+    bool needs_info = has_any_flags(settings::schedule::dmrg::blocksize_policy, BlockSizePolicy::INFO, BlockSizePolicy::INFOPLUS1, BlockSizePolicy::INFO150,
+                                    BlockSizePolicy::INFO200, BlockSizePolicy::BIT_ONE, BlockSizePolicy::BIT_TWO, BlockSizePolicy::BIT_MID,
+                                    BlockSizePolicy::BIT_PEN, BlockSizePolicy::BIT_ALL
 
-        );
+    );
     if(needs_info and has_to_adjust) {
         /*! Update the number of sites used in dmrg updates.
          *  We try to match the blocksize to the "information center of mass", obtained from the information lattice.
@@ -897,7 +922,7 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
         if(not std::isfinite(blocksize)) throw except::logic_error("Blocksize is not finite: {}", blocksize);
         auto blocksize_clamped =
             std::clamp(blocksize, static_cast<double>(settings::schedule::dmrg::min_blocksize), static_cast<double>(settings::schedule::dmrg::max_blocksize));
-        dmrg_blocksize         = safe_cast<size_t>(blocksize_clamped);
+        dmrg_blocksize = safe_cast<size_t>(blocksize_clamped);
         tools::log->info("Set INFO{} blocksize {} -> {}: icom = {:.3f}: {}", tag, old_bsize, dmrg_blocksize, info, has_no_status ? "" : flag2str(reasons));
     } else {
         dmrg_blocksize = settings::schedule::dmrg::min_blocksize;
@@ -976,11 +1001,9 @@ void AlgorithmFinite<Scalar>::update_eigs_tolerance() {
     eigs_reltol_new = std::clamp(eigs_reltol_new, settings::solvers::eig::reltol_min, settings::solvers::eig::reltol_max);
 
     if(dmrg_eigs_abstol != eigs_abstol_new)
-        tools::log->info("Updated eigs absolute tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_abstol, eigs_abstol_new,
-                         fmw::join(reason, " | "));
+        tools::log->info("Updated eigs absolute tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_abstol, eigs_abstol_new, fmw::join(reason, " | "));
     if(dmrg_eigs_reltol != eigs_reltol_new)
-        tools::log->info("Updated eigs relative tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_reltol, eigs_reltol_new,
-                         fmw::join(reason, " | "));
+        tools::log->info("Updated eigs relative tolerance: {:8.2e} -> {:8.2e} | reasons: {}", dmrg_eigs_reltol, eigs_reltol_new, fmw::join(reason, " | "));
     dmrg_eigs_abstol = eigs_abstol_new;
     dmrg_eigs_reltol = eigs_reltol_new;
 }
@@ -1351,28 +1374,15 @@ void AlgorithmFinite<Scalar>::check_convergence() {
 template<typename Scalar>
 AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const TensorsFinite<Scalar> &t)
     : entanglement_entropies(tools::finite::measure::entanglement_entropies(t.get_state())) {
-    status                = s;
-    energy                = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy(t);
-    energy_variance_local = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy_variance(t);
+    status                 = s;
+    energy                 = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy(t);
+    energy_variance_local  = status.algo_type == AlgorithmType::fLBIT ? static_cast<RealScalar>(0.0) : tools::finite::measure::energy_variance(t);
+    energy_variance_global = std::numeric_limits<RealScalar>::quiet_NaN();
 
     auto H2_local = tools::finite::measure::expval_hamiltonian_squared(t);
     tools::log->info("H               <ψ | H_local | ψ>                               = {:.16e}", energy);
     tools::log->info("H²              <ψ | H²_local | ψ>                              = {:.16e}", fp(H2_local));
     tools::log->info("energy variance <H²_local>-<H_local>²                           = {:.16e}", energy_variance_local);
-
-    [[maybe_unused]] RealScalar E1_global1 = 0;
-    [[maybe_unused]] RealScalar E1_global2 = 0;
-    [[maybe_unused]] RealScalar E2_global1 = 0;
-    [[maybe_unused]] RealScalar E2_global2 = 0;
-    {
-        auto                t_res     = tid::tic_token("<ψ | H_global ψ>");
-        StateFinite<Scalar> tmp_state = t.get_state();
-        auto                mpos      = t.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
-        auto                svdcfg    = svd::config(status.bond_max, status.trnc_min);
-        tools::finite::ops::apply_mpos_general(tmp_state, mpos, svdcfg);
-        E1_global1 = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, t.get_state()));
-        tools::log->info("E               <ψ | H_global ψ>                                = {:.16e} | t = {:.4e}", E1_global1, t_res->get_last_interval());
-    }
     // {
     //     auto                t_res     = tid::tic_token("<ψ | H_global | ψ> ");
     //     StateFinite<Scalar> tmp_state = t.get_state();
@@ -1430,13 +1440,6 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
     //     {:.16e} | t = {:.4e}", fp(VarH), t_res->get_last_interval());
     // }
 
-    {
-        auto t_res         = tid::tic_token("<ψ | (H_global-E)² | ψ>");
-        auto L             = t.template get_length<RealScalar>();
-        auto mpos2_shifted = t.get_model().get_mpo2_tensors(E1_global1 / L, MposWithEdges::ON, MpoCompress::NONE);
-        auto VarE          = std::real(tools::finite::measure::expectation_value<Scalar>(t.get_state(), t.get_state(), mpos2_shifted));
-        tools::log->info("energy variance  <ψ | (H_global-E_global)² | ψ>                 = {:.16e} | t = {:.4e}", VarE, t_res->get_last_interval());
-    }
     // {
     //     auto                t_res        = tid::tic_token("<ψ (H_global-E_local) | (H_global-E_local) ψ>");
     //     StateFinite<Scalar> tmp_state    = t.get_state();
@@ -1483,7 +1486,8 @@ void AlgorithmFinite<Scalar>::check_convergence_energy(std::optional<RealScalar>
     if(not tools::finite::pos::position_is_inward_edge(tensors)) return;
     if(not saturation_sensitivity) {
         saturation_sensitivity = static_cast<RealScalar>(settings::convergence::energy_saturation_sensitivity);
-        saturation_sensitivity = std::max(saturation_sensitivity.value(), 2 * std::sqrt(var_latest)); // Fluctuations within two standard deviations
+        if(std::isfinite(var_latest) and var_latest > RealScalar{0})
+            saturation_sensitivity = std::max(saturation_sensitivity.value(), 2 * std::sqrt(var_latest)); // Fluctuations within two standard deviations
     }
     if(saturation_sensitivity <= 0) return;
     tools::log->trace("Checking convergence of the energy | sensitivity {:.2e}", saturation_sensitivity.value());
@@ -1545,21 +1549,27 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
 
     // Gather the variance history
     std::vector<RealScalar> evar_local;
-    std::vector<RealScalar> evar_global;
-    std::vector<RealScalar> evar_diff;
     std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(evar_local),
                    [](const log_entry &h) -> RealScalar { return h.energy_variance_local; });
-    std::transform(algorithm_history.begin(), algorithm_history.end(), std::back_inserter(evar_global),
-                   [](const log_entry &h) -> RealScalar { return h.energy_variance_global; });
-    for(size_t i = 0; i < evar_local.size(); ++i) { evar_diff.emplace_back(evar_global[i] - evar_local[i]); }
 
-    // Create a floored version of the local variance history: it can become negative if <H²> introduces cancellation
-    std::vector<RealScalar> evar_local_logsafe;
-    evar_local_logsafe.reserve(evar_local.size());
-    for(auto v : evar_local) { evar_local_logsafe.emplace_back(std::max(std::numeric_limits<RealScalar>::epsilon(), std::abs(v))); }
+    // The raw local subtractive variance stays signed for convergence: a negative value means the estimate has hit the precision limit.
+    // For saturation we use the same reporting policy as the status line: after a negative raw value, hold the last finite positive value.
+    // This gives a true flat saturation signal instead of a noisy abs(var) signal.
+    std::vector<RealScalar> evar_reported;
+    evar_reported.reserve(evar_local.size());
+    auto last_positive = std::numeric_limits<RealScalar>::quiet_NaN();
+    for(auto v : evar_local) {
+        if(std::isfinite(v) and v > RealScalar{0}) last_positive = v;
+        evar_reported.emplace_back(std::isfinite(last_positive) and last_positive > RealScalar{0} ? last_positive : std::numeric_limits<RealScalar>::epsilon());
+    }
+
+    std::vector<RealScalar> evar_reported_logsafe;
+    evar_reported_logsafe.reserve(evar_reported.size());
+    for(auto v : evar_reported) { evar_reported_logsafe.emplace_back(std::max(std::numeric_limits<RealScalar>::epsilon(), v)); }
 
     //    var_mpo_iter.emplace_back(tools::finite::measure::energy_variance(tensors));
-    auto report = check_saturation(evar_local_logsafe, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::log);
+    auto report =
+        check_saturation(evar_reported_logsafe, saturation_sensitivity.value(), SaturationPolicy::val | SaturationPolicy::mid | SaturationPolicy::log);
     if(report.has_computed) {
         status.variance_mpo_converged_for                          = count_convergence(evar_local, threshold.value(), report.saturated_point);
         status.variance_mpo_saturated_for                          = report.saturated_count;
@@ -1585,8 +1595,7 @@ void AlgorithmFinite<Scalar>::check_convergence_variance(std::optional<RealScala
         tools::log->debug(" -- converged count = {} ", status.variance_mpo_converged_for);
         tools::log->debug(" -- sat             = {}", report.Y_sat);
         tools::log->debug(" -- var (local)     = {::7.4e}", evar_local);
-        tools::log->debug(" -- var (global)    = {::7.4e}", evar_global);
-        tools::log->debug(" -- var (diff)      = {::7.4e}", evar_diff);
+        tools::log->debug(" -- var (reported)  = {::7.4e}", evar_reported);
         tools::log->debug(" -- val             = {::7.4e}", report.Y_vec);
         tools::log->debug(" -- ene             = {::7.4e}", energies);
         tools::log->debug(" -- eig             = {::7.4e}", eigvals);
@@ -1834,7 +1843,33 @@ template<typename Scalar>
 void AlgorithmFinite<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_policy) {
     if(not h5file) return;
     status.event = storage_event;
-    tools::finite::h5::save::simulation(*h5file, tensors, status, copy_policy);
+
+    std::optional<MeasurementsOverride<Scalar>> measurements_override = std::nullopt;
+    if(status.algo_type != AlgorithmType::fLBIT) {
+        if(storage_event == StorageEvent::FINISHED and not std::isfinite(var_raw) and not tensors.active_sites.empty())
+            apply_energy_variance_policy(tools::finite::measure::energy_variance(tensors));
+
+        if(storage_event == StorageEvent::FINISHED and std::isfinite(var_raw) and var_raw < RealScalar{0}) {
+            auto rnorm    = tools::finite::measure::residual_norm_full(tensors);
+            auto variance = rnorm * rnorm;
+            if(std::isfinite(variance) and variance >= RealScalar{0}) {
+                var_latest = variance;
+                if(var_latest > RealScalar{0}) status.energy_variance_lowest = std::min(static_cast<double>(var_latest), status.energy_variance_lowest);
+                tools::log->info("energy variance from global residual norm |(H_global-E_global)ψ|² = {:.16e}", fp(var_latest));
+            } else {
+                tools::log->warn("Global residual norm did not give a finite nonnegative variance: rnorm {:.16e} | rnorm² {:.16e}", fp(rnorm), fp(variance));
+            }
+        }
+
+        if(std::isfinite(var_raw)) {
+            auto overrides                   = MeasurementsOverride<Scalar>{};
+            overrides.energy_variance        = var_latest;
+            overrides.energy_variance_lowest = static_cast<RealScalar>(status.energy_variance_lowest);
+            measurements_override            = overrides;
+        }
+    }
+
+    tools::finite::h5::save::simulation(*h5file, tensors, status, copy_policy, measurements_override);
     status.event = StorageEvent::NONE;
 }
 
@@ -1875,7 +1910,7 @@ void AlgorithmFinite<Scalar>::print_status() {
 
     if(status.algo_type == AlgorithmType::xDMRG and !std::isnan(status.energy_dens)) { report += fmt::format("e:{:<5.3f} ", status.energy_dens); }
     RealScalar ene = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : tools::finite::measure::energy(tensors);
-    RealScalar var = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : tools::finite::measure::energy_variance(tensors);
+    RealScalar var = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : var_latest;
     RealScalar hsq =
         tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : std::real(tools::finite::measure::expval_hamiltonian_squared(tensors));
     report += fmt::format("⟨H⟩:{:<20.16e} ", fp(ene));
@@ -1956,7 +1991,7 @@ void AlgorithmFinite<Scalar>::print_status_full() {
             tools::log->info(
                 "Energy density (rescaled 0 to 1) ε = {:<6.4f}",
                 tools::finite::measure::energy_normalized(tensors, static_cast<RealScalar>(status.energy_min), static_cast<RealScalar>(status.energy_max)));
-        RealScalar variance = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : tools::finite::measure::energy_variance(tensors);
+        RealScalar variance = tensors.active_sites.empty() ? std::numeric_limits<RealScalar>::quiet_NaN() : var_latest;
         tools::log->info("Energy variance σ²(H)              = {:<8.2e}", variance);
     }
     tools::log->info("Bond dimension maximum χmax        = {}", status.bond_max);

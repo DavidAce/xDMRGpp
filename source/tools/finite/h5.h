@@ -1,5 +1,7 @@
 #pragma once
 #include "general/sfinae.h"
+#include "measure/MeasurementsOverride.h"
+#include <optional>
 #include <string>
 
 template<typename Scalar>
@@ -64,8 +66,11 @@ namespace tools::finite::h5 {
 
         template<typename Scalar>  void correlations (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
 
-        template<typename Scalar>  void measurements                    (h5pp::File & h5file, const StorageInfo & sinfo, const TensorsFinite<Scalar> & tensors, const AlgorithmStatus & status);
-        template<typename Scalar>  void measurements                    (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model, const EdgesFinite<Scalar> & edges, const AlgorithmStatus & status);
+        template<typename Scalar>  void measurements                    (h5pp::File & h5file, const StorageInfo & sinfo, const TensorsFinite<Scalar> & tensors, const AlgorithmStatus & status,
+                                                                         const std::optional<MeasurementsOverride<Scalar>> & measurements_override = std::nullopt);
+        template<typename Scalar>  void measurements                    (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state, const ModelFinite<Scalar> & model,
+                                                                         const EdgesFinite<Scalar> & edges, const AlgorithmStatus & status,
+                                                                         const std::optional<MeasurementsOverride<Scalar>> & measurements_override = std::nullopt);
         template<typename Scalar>  void bond_dimensions                 (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar>  void schmidt_values                  (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
         template<typename Scalar>  void truncation_errors               (h5pp::File & h5file, const StorageInfo & sinfo, const StateFinite<Scalar> & state);
@@ -89,14 +94,16 @@ namespace tools::finite::h5 {
         void simulation(h5pp::File &h5file,
                                const TensorsFinite<Scalar> & tensors,
                                const AlgorithmStatus &status,
-                               CopyPolicy copy_policy);
+                               CopyPolicy copy_policy,
+                               const std::optional<MeasurementsOverride<Scalar>> & measurements_override = std::nullopt);
         template<typename Scalar>
         void simulation(h5pp::File &h5file,
                                const StateFinite<Scalar> & state,
                                const ModelFinite<Scalar> & model,
                                const EdgesFinite<Scalar> & edges,
                                const AlgorithmStatus &status,
-                               CopyPolicy copy_policy);
+                               CopyPolicy copy_policy,
+                               const std::optional<MeasurementsOverride<Scalar>> & measurements_override = std::nullopt);
 
     }
     namespace find{

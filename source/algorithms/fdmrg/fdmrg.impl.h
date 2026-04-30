@@ -292,14 +292,12 @@ void fdmrg<Scalar>::update_state() {
         tools::log->debug("Variance change from  SVD: {:.16f}%", 100 * variance_after_svd / variance_before_svd);
     }
 
-    tools::log->trace("Updating variance record holder");
-    auto ene_mrg                  = tools::finite::measure::energy(tensors);
-    auto var_mrg                  = tools::finite::measure::energy_variance(tensors);
-    status.energy_variance_lowest = std::min(static_cast<double>(var_mrg), status.energy_variance_lowest);
-    var_delta                     = var_mrg - var_latest;
-    ene_delta                     = ene_mrg - ene_latest;
-    var_latest                    = var_mrg;
-    ene_latest                    = ene_mrg;
+    tools::log->trace("Updating energy variance policy");
+    auto ene_mrg = tools::finite::measure::energy(tensors);
+    auto var_mrg = tools::finite::measure::energy_variance(tensors);
+    apply_energy_variance_policy(var_mrg);
+    ene_delta  = ene_mrg - ene_latest;
+    ene_latest = ene_mrg;
 
     auto bondexp_postopt_result = tools::finite::bex::expand_bonds(tensors, get_bond_expansion_config(BondExpansionOrder::POSTOPT));
 

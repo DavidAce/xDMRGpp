@@ -436,6 +436,19 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
                 return env_max_norm;
             };
 
+            struct PredictiveX2Decision {
+                RealScalar  gamma;
+                RealScalar  q0Tol;
+                RealScalar  q2Tol;
+                RealScalar  q4Tol;
+                RealScalar  xnorm2;
+                RealScalar  xnorm;
+                RealScalar  opnorm;
+                RealScalar  q0;
+                RealScalar  abs_roundoff;
+                bool        use_x2;
+                const char *reason;
+            };
             Eigen::Index md = mps_dims[0];
             Eigen::Index mL = mps_dims[1];
             Eigen::Index mR = mps_dims[2];
@@ -443,67 +456,132 @@ void tools::common::contraction::matrix_vector_product(Scalar             *res_p
             Eigen::Index wR = mpo_dims[1];
 
             const Eigen::Index cplx_factor = Eigen::NumTraits<Scalar>::IsComplex == 0 ? 1 : 4;
-            const RealScalar   k_eff =
-                static_cast<RealScalar>(cplx_factor * std::max({md * wL, md * wR, mL * wL, mR * wR})); // inner dimension of the dot products
-            const RealScalar eps   = std::numeric_limits<RealScalar>::epsilon();
-            const RealScalar gamma = (k_eff * eps) / (RealScalar(1) - k_eff * eps); // Slightly larger than eps
-            const RealScalar q0Tol = RealScalar{1} / gamma;
-            const RealScalar q2Tol = RealScalar{10} / gamma;
-            const RealScalar q4Tol = RealScalar{1e-9f};
+            const RealScalar   k_eff       = static_cast<RealScalar>(cplx_factor * std::max({md * wL, md * wR, mL * wL, mR * wR}));
+            const RealScalar   eps         = std::numeric_limits<RealScalar>::epsilon();
 
-            const RealScalar xnorm2 = mpsv.squaredNorm();
-            const RealScalar xnorm  = std::sqrt(xnorm2);
-            const RealScalar opnorm = get_op_norm();
-            const RealScalar q0     = opnorm * xnorm2;
-            const bool       use_x2 = !std::isfinite(q0) or q0 > q0Tol;
-            if(xnorm2 == RealScalar{0}) {
+            // X2_AS_NEEDED is a two-stage policy. First, it estimates the absolute roundoff floor
+            // in the scalar expectation <x|A|x> before computing y = A*x:
+            //
+            //     abs_roundoff ~= gamma_k * ||A|| * ||x||_2^2.
+            //
+            // Lowering predictiveAbsRoundoffTol makes X2_AS_NEEDED more eager to use X2 immediately.
+            // If the predictor selects the default backend, the result is still checked with q2/q4 below
+            // and recomputed once in X2 when the default result looks numerically suspect.
+            const RealScalar predictiveAbsRoundoffTol = RealScalar{1e-6f};
+
+            auto get_predictive_x2_decision = [&]() -> PredictiveX2Decision {
+                PredictiveX2Decision decision{};
+
+                // q2Tol and q4Tol control the post-contraction verification stage. Lowering either
+                // threshold makes default-backend results more likely to be recomputed once in X2.
+                decision.q4Tol  = RealScalar{1e-9f};
+                decision.xnorm2 = mpsv.squaredNorm();
+                decision.xnorm  = std::sqrt(decision.xnorm2);
+                decision.opnorm = get_op_norm();
+                decision.q0     = decision.opnorm * decision.xnorm2; // ||A|| * ||x||_2^2
+
+                const RealScalar gamma_denom = RealScalar{1} - k_eff * eps;
+                if(gamma_denom > RealScalar{0}) {
+                    // Standard gamma_k model for a length-k contraction:
+                    // gamma_k = k*eps / (1 - k*eps). Increasing k_eff makes X2 more likely.
+                    decision.gamma        = (k_eff * eps) / gamma_denom;
+                    decision.q0Tol        = RealScalar{1} / decision.gamma;
+                    decision.q2Tol        = RealScalar{10} / decision.gamma;
+                    decision.abs_roundoff = decision.gamma * decision.q0;
+                } else {
+                    decision.gamma        = std::numeric_limits<RealScalar>::infinity();
+                    decision.q0Tol        = RealScalar{0};
+                    decision.q2Tol        = RealScalar{0};
+                    decision.abs_roundoff = std::numeric_limits<RealScalar>::infinity();
+                    decision.use_x2       = true;
+                    decision.reason       = "invalid gamma_k denominator";
+                }
+                if(decision.use_x2) {
+                    return decision;
+                } else if(!std::isfinite(decision.gamma) or !std::isfinite(decision.q0) or !std::isfinite(decision.abs_roundoff)) {
+                    decision.use_x2 = true;
+                    decision.reason = "non-finite predictor";
+                } else if(decision.abs_roundoff > predictiveAbsRoundoffTol) {
+                    decision.use_x2 = true;
+                    decision.reason = "gamma_k * ||A|| * ||x||^2 exceeds predictive tolerance";
+                } else {
+                    decision.use_x2 = false;
+                    decision.reason = "default backend within predicted roundoff budget";
+                }
+
+                return decision;
+            };
+
+            const auto decision = get_predictive_x2_decision();
+            if(decision.xnorm2 == RealScalar{0}) {
                 resv.setZero();
                 return;
             }
 
-            if(use_x2) {
-                info                    = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
-                const Scalar     xAx    = mpsv.dot(resv);
-                const RealScalar denom  = std::abs(xAx);
-                const RealScalar Axnorm = resv.norm();
-                const RealScalar q2     = opnorm * xnorm2 / std::max(denom, eps);
-                const RealScalar q4     = gamma * opnorm * xnorm / std::max(Axnorm, eps); // E.g. q4 > 1e-2: 2 digits lost
-
-                if constexpr(settings::debug_contraction)
-                    tools::log->debug("Switched matvec to x2:  opnorm={:.4e} xnorm={:.4e} q0={:.4e} q2={:.4e} q4={:.4e} q0Tol {:.4e} q2Tol {:.4e}", opnorm,
-                                      xnorm, q0, q2, q4, q0Tol, q2Tol);
+            if(decision.use_x2) {
+                info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+                if constexpr(settings::debug_contraction) {
+                    const RealScalar pred_ratio = decision.abs_roundoff / predictiveAbsRoundoffTol;
+                    tools::log->debug("matrix_vector_product: X2_AS_NEEDED selected X2: reason [{}] "
+                                      "pred_abs=gamma*q0={:.4e} tol={:.4e} pred/tol={:.4e} | q0=||A||||x||²={:.4e} q0Tol=1/gamma={:.4e} "
+                                      "q0/q0Tol={:.4e} | opnorm={:.4e} xnorm={:.4e} xnorm2={:.4e} k_eff={:.4e} gamma={:.4e}",
+                                      decision.reason, decision.abs_roundoff, predictiveAbsRoundoffTol, pred_ratio, decision.q0, decision.q0Tol,
+                                      decision.q0 / decision.q0Tol, decision.opnorm, decision.xnorm, decision.xnorm2, k_eff, decision.gamma);
+                }
             } else {
-                if(not run_backend_policy()) throw std::runtime_error("matrix_vector_product: No supported contraction backend is available");
+                if constexpr(settings::debug_contraction)
+                    tools::log->debug("matrix_vector_product: X2_AS_NEEDED selected default backend: reason [{}]", decision.reason);
 
-                // Decide redo: If |A|/(xAx/xx) is too large, there is catastrophic cancellation in the matvec.
-                // Then we better switch to x2 if the precision policy allows redo.
-                const Scalar     xAx    = mpsv.dot(resv);
-                const RealScalar denom  = std::abs(xAx);
-                const RealScalar Axnorm = resv.norm();
-                const RealScalar q2     = opnorm * xnorm2 / std::max(denom, eps);
-                const RealScalar q4     = gamma * opnorm * xnorm / std::max(Axnorm, eps);
+                const bool success = run_backend_policy();
+                if(not success) throw std::runtime_error("matrix_vector_product: No supported contraction backend is available");
 
-                const bool q2_redo = !std::isfinite(q2) or q2 > q2Tol;
-                const bool q4_redo = !std::isfinite(q4) or q4 > q4Tol;
-                // tools::log->debug("matrix_vector_product:  opnorm={:.4e} xAx={:.4e} xnorm={:.4e} "
-                // "q0={:.4e} q2={:.4e} q4={:.4e} q2Tol={:.4e} q4Tol={:.4e}",
-                // fp(opnorm), fp(std::real(xAx)), fp(xnorm), fp(q0), fp(q2), fp(q4), fp(q2Tol), fp(q4Tol));
-                if(q2_redo or q4_redo) {
-                    VectorType resv_old = resv;
-                    info                = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+                const Scalar     xAx           = mpsv.dot(resv);
+                const RealScalar denom         = std::abs(xAx);
+                const RealScalar Axnorm        = resv.norm();
+                const RealScalar q2            = decision.opnorm * decision.xnorm2 / std::max(denom, eps);
+                const RealScalar q4            = decision.gamma * decision.opnorm * decision.xnorm / std::max(Axnorm, eps);
+                const bool       q2_bad        = !std::isfinite(q2) or q2 > decision.q2Tol;
+                const bool       q4_bad        = !std::isfinite(q4) or q4 > decision.q4Tol;
+                const RealScalar pred_ratio    = decision.abs_roundoff / predictiveAbsRoundoffTol;
+                const RealScalar q0_ratio      = decision.q0 / decision.q0Tol;
+                const RealScalar q2_ratio      = q2 / decision.q2Tol;
+                const RealScalar q4_ratio      = q4 / decision.q4Tol;
+                const RealScalar pred_over_xAx = decision.abs_roundoff / std::max(denom, eps);
+                const RealScalar pred_over_Ax  = decision.gamma * decision.opnorm * decision.xnorm / std::max(Axnorm, eps);
 
-                    const Scalar     xAx_x2     = mpsv.dot(resv);
-                    const RealScalar Axnorm_x2  = resv.norm();
-                    const RealScalar xAx_diff   = std::abs(xAx_x2 - xAx);
-                    const RealScalar Ax_diff    = (resv - resv_old).norm();
-                    const RealScalar Ax_reldiff = (resv - resv_old).norm() / Axnorm_x2;
-                    const RealScalar f          = Ax_reldiff / q4;
-                    if constexpr(settings::debug_contraction)
-                        tools::log->debug("matrix_vector_product: Redo matvec in x2:  opnorm={:.4e} xnorm={:.4e} Axnorm {:.4e} xAx={:.4e} -> {:.4e} "
-                                          "q0={:.4e} q2={:.4e} q4={:.4e} q0Tol={:.4e} q2Tol={:.4e} q4Tol={:.4e} |xAx-xAx|={:.16e} "
-                                          "|Ax-Ax_x2|={:.4e} |Ax-Ax_x2|/|Ax|={:.16e} f={:.4e}",
-                                          opnorm, xnorm, Axnorm, std::real(xAx), std::real(xAx_x2), q0, q2, q4, q0Tol, q2Tol, q4Tol, xAx_diff, Ax_diff,
-                                          Ax_reldiff, f);
+                // q2_bad directly flags scalar expectation cancellation and is enough to redo. q4_bad
+                // alone is too eager for H1-like matvecs, where ||Ax|| can make q4 large while the X2
+                // correction is negligible. Require q4_bad to be backed by predicted scalar noise that
+                // is also visible relative to <x|A|x>.
+                const bool redo_with_x2 = q2_bad or (q4_bad and pred_over_xAx > RealScalar{1e-3f});
+
+                if constexpr(settings::debug_contraction) {
+                    tools::log->debug("matrix_vector_product: X2_AS_NEEDED default backend diagnostics: reason [{}] "
+                                      "pred_abs=gamma*q0={:.4e} tol={:.4e} pred/tol={:.4e} | q0/q0Tol={:.4e} "
+                                      "| xAx={:.4e} pred/|xAx|={:.4e} | Axnorm={:.4e} pred_Ax/Axnorm={:.4e} "
+                                      "| q2/q2Tol={:.4e} q2_bad={} q4/q4Tol={:.4e} q4_bad={} redo_with_x2={} "
+                                      "| opnorm={:.4e} xnorm={:.4e} xnorm2={:.4e} k_eff={:.4e} gamma={:.4e}",
+                                      decision.reason, decision.abs_roundoff, predictiveAbsRoundoffTol, pred_ratio, q0_ratio, std::real(xAx), pred_over_xAx,
+                                      Axnorm, pred_over_Ax, q2_ratio, q2_bad, q4_ratio, q4_bad, redo_with_x2, decision.opnorm, decision.xnorm, decision.xnorm2,
+                                      k_eff, decision.gamma);
+                }
+
+                if(redo_with_x2) {
+                    if constexpr(settings::debug_contraction) {
+                        const VectorType resv_old   = resv;
+                        info                        = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+                        const Scalar     xAx_x2     = mpsv.dot(resv);
+                        const RealScalar Axnorm_x2  = resv.norm();
+                        const RealScalar xAx_diff   = std::abs(xAx_x2 - xAx);
+                        const RealScalar Ax_diff    = (resv - resv_old).norm();
+                        const RealScalar Ax_reldiff = Ax_diff / std::max(Axnorm_x2, eps);
+                        tools::log->debug("matrix_vector_product: X2_AS_NEEDED redid default backend result in X2: "
+                                          "q2/q2Tol={:.4e} q4/q4Tol={:.4e} | xAx={:.4e} -> {:.4e} |xAx diff|={:.4e} "
+                                          "Axnorm={:.4e} -> {:.4e} |Ax diff|={:.4e} |Ax diff|/|Ax_x2|={:.4e}",
+                                          q2_ratio, q4_ratio, std::real(xAx), std::real(xAx_x2), xAx_diff, Axnorm, Axnorm_x2, Ax_diff, Ax_reldiff);
+                    } else {
+                        info = internal::contract_with_gemm_x2<Scalar>(res, mps, mpo, envL, envR);
+                    }
                 }
             }
             break;

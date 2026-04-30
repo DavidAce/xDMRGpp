@@ -327,33 +327,37 @@ void xdmrg<Scalar>::run_algorithm() {
     auto t_run       = tid::tic_scope("run");
     status.algo_stop = AlgorithmStop::NONE;
 
-    auto get_precision = [&]() {
-        auto       position = tensors.template get_position<long>();
-        RealScalar h2norm   = H_norm_estimate * H_norm_estimate;
-        RealScalar quot     = std::numeric_limits<RealScalar>::quiet_NaN();
-        RealScalar vh2v     = std::numeric_limits<RealScalar>::quiet_NaN();
-        RealScalar eps      = std::numeric_limits<RealScalar>::epsilon();
+    const auto get_precision_policy = [&]() {
+        const auto       position = tensors.template get_position<long>();
+        const RealScalar h2norm   = H_norm_estimate * H_norm_estimate;
+        const RealScalar eps      = std::numeric_limits<RealScalar>::epsilon();
+        RealScalar       quot     = std::numeric_limits<RealScalar>::quiet_NaN();
+        RealScalar       vh2v     = std::numeric_limits<RealScalar>::quiet_NaN();
+
         if(position >= 0 and h2norm > RealScalar{0}) {
             vh2v = std::abs(tools::finite::measure::expval_hamiltonian_squared(tensors));
             quot = vh2v / h2norm; // Assume the state is normalized (vv = 1)
         }
+
         if(quot < eps * 1000 or !std::isfinite(vh2v)) {
-            tools::log->info("Switched to X2 precision: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", vh2v, h2norm, quot);
-            return ContractionPrecision::X2;
+            tools::log->info("Selected precision policy X2_AS_NEEDED: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} < 1000 * eps", vh2v, h2norm, quot);
+            return ContractionPrecision::X2_AS_NEEDED;
         } else {
-            tools::log->debug("Selected TBLIS backend: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} > 1000 * eps", vh2v, h2norm, quot);
+            tools::log->debug("Selected precision policy SAME: <H²>/|H²| = {:.16e} / {:.16e} = {:.4e} > 1000 * eps", vh2v, h2norm, quot);
             return ContractionPrecision::SAME;
         }
     };
 
     while(true) {
-        auto precision = get_precision();
-        auto h1info    = SetH1MvInfo(precision);
-        auto h2info    = SetH2MvInfo(precision);
-        auto envinfo   = SetEnvInfo(precision);
+        const auto prec_policy      = get_precision_policy();
+        const auto matvec_precision = prec_policy;
+        const auto env_precision    = prec_policy == ContractionPrecision::X2_AS_NEEDED ? ContractionPrecision::X2 : prec_policy;
+        auto       h1info           = SetH1MvInfo(matvec_precision);
+        auto       h2info           = SetH2MvInfo(matvec_precision);
+        auto       envinfo          = SetEnvInfo(env_precision);
 
-        tools::log->trace("Starting step {}, iter {}, pos {}, dir {}, precision:{}", status.step, status.iter, status.position, status.direction,
-                          enum2sv(precision));
+        tools::log->trace("Starting step {}, iter {}, pos {}, dir {}, precision policy:{}, matvec precision:{}, env precision:{}", status.step, status.iter,
+                          status.position, status.direction, enum2sv(prec_policy), enum2sv(matvec_precision), enum2sv(env_precision));
         // Apply end-of-half-sweep actions
         // Updating bond dimension must go first since it decides based on truncation error, but a projection+normalize resets truncation.
         update_bond_dimension_limit();   // Updates the bond dimension if the state precision is being limited by bond dimension
@@ -478,1045 +482,1049 @@ void xdmrg<Scalar>::update_state() {
     if(status.opt_ritz == OptRitz::TE)
         status.energy_dens = (static_cast<double>(tools::finite::measure::energy(tensors)) - status.energy_min) / (status.energy_max - status.energy_min);
 
-    tools::log->trace("Updating variance record holder");
+    tools::log->trace("Updating energy variance policy");
     auto ene_mrg = tools::finite::measure::energy(tensors);
     auto var_mrg = tools::finite::measure::energy_variance(tensors);
 
-    if(var_mrg < 0) {
-        tools::log->info("Variance is negative! {:.16e}", var_mrg);
-        auto mpo_squared_compress_before_postmortem = settings::model::use_compressed_mpo_squared;
-        // Disable mpo compression
-        settings::model::use_compressed_mpo         = MpoCompress::NONE;
-        settings::model::use_compressed_mpo_squared = MpoCompress::NONE;
-        {
-            using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
-            auto       pos   = tensors.template get_position<Eigen::Index>();
-            auto       NL    = tools::finite::measure::isometry_left(tensors.get_state(), pos - 1);
-            auto       NR    = tools::finite::measure::isometry_right(tensors.get_state(), pos + 1);
-            auto       NLm   = tenx::MatrixMap(NL);
-            auto       NRm   = tenx::MatrixMap(NR);
-            auto       IL    = MatrixType::Identity(NLm.rows(), NLm.cols());
-            auto       IR    = MatrixType::Identity(NRm.rows(), NRm.cols());
-            RealScalar NLerr = (NLm - IL).norm() / IL.norm();
-            RealScalar NRerr = (NRm - IR).norm() / IR.norm();
-            tools::log->info("NL err: {:.16e}", NLerr);
-            tools::log->info("NR err: {:.16e}", NRerr);
-        }
+    // if(var_mrg < 0) {
+    //     tools::log->info("Variance is negative! {:.16e}", var_mrg);
+    //     auto mpo_squared_compress_before_postmortem = settings::model::use_compressed_mpo_squared;
+    //     // Disable mpo compression
+    //     settings::model::use_compressed_mpo         = MpoCompress::NONE;
+    //     settings::model::use_compressed_mpo_squared = MpoCompress::NONE;
+    //     {
+    //         using MatrixType = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
+    //         auto       pos   = tensors.template get_position<Eigen::Index>();
+    //         auto       NL    = tools::finite::measure::isometry_left(tensors.get_state(), pos - 1);
+    //         auto       NR    = tools::finite::measure::isometry_right(tensors.get_state(), pos + 1);
+    //         auto       NLm   = tenx::MatrixMap(NL);
+    //         auto       NRm   = tenx::MatrixMap(NR);
+    //         auto       IL    = MatrixType::Identity(NLm.rows(), NLm.cols());
+    //         auto       IR    = MatrixType::Identity(NRm.rows(), NRm.cols());
+    //         RealScalar NLerr = (NLm - IL).norm() / IL.norm();
+    //         RealScalar NRerr = (NRm - IR).norm() / IR.norm();
+    //         tools::log->info("NL err: {:.16e}", NLerr);
+    //         tools::log->info("NR err: {:.16e}", NRerr);
+    //     }
+    //
+    //     {
+    //         auto                t_res      = tid::tic_token("<ψ|H²_global ψ>");
+    //         StateFinite<Scalar> tmp_state1 = tensors.get_state();
+    //         StateFinite<Scalar> tmp_state2 = tensors.get_state();
+    //         auto                mpos1      = tensors.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
+    //         auto                mpos2      = tensors.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
+    //         auto                svdcfg     = svd::config(8192, 1e-20);
+    //         svdcfg.svd_lib                 = svd::lib::lapack;
+    //         svdcfg.svd_rtn                 = svd::rtn::gesdd;
+    //         tools::finite::ops::apply_mpos_general(tmp_state1, mpos1, svdcfg);
+    //         tools::finite::ops::apply_mpos_general(tmp_state2, mpos2, svdcfg);
+    //         RealScalar E1_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state1, tensors.get_state()));
+    //         RealScalar E2_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state2, tensors.get_state()));
+    //         tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", E2_global,
+    //         t_res->get_last_interval());
+    //
+    //         RealScalar VarH = E2_global - E1_global * E1_global;
+    //         tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", VarH, t_res->get_last_interval());
+    //     }
+    //     {
+    //         auto                t_res        = tid::tic_token("<ψ (H_global-E_local) | (H_global-E_local) ψ>");
+    //         StateFinite<Scalar> tmp_state    = tensors.get_state();
+    //         auto                L            = tensors.template get_length<RealScalar>();
+    //         auto                mpos_shifted = tensors.get_model().get_mpo_tensors(ene_mrg / L, MposWithEdges::ON, MpoCompress::NONE);
+    //         auto                svdcfg       = svd::config(8192, 1e-20);
+    //         tools::finite::ops::apply_mpos_general(tmp_state, mpos_shifted, svdcfg);
+    //         RealScalar VarH_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
+    //         tools::log->info("energy variance <ψ (H_global-E_local) | (H_global-E_local) ψ>   = {:.16e} | t = {:.4e}", VarH_global,
+    //         t_res->get_last_interval());
+    //     }
+    //     {
+    //         using ScalarL       = Scalar;
+    //         using RealScalarL   = Eigen::NumTraits<ScalarL>::Real;
+    //         using RealScalar128 = fp128;
+    //         using Scalar128     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalar128>, RealScalar128>;
+    //
+    //         auto tensorsL = tensors.template cast<ScalarL>();
+    //         auto envi     = SetEnvInfo(ContractionPrecision::X2);
+    //         auto mv1i     = SetH1MvInfo(ContractionPrecision::X2);
+    //         auto mv2i     = SetH2MvInfo(ContractionPrecision::X2);
+    //         tensorsL.get_model().build_mpo();
+    //         tensorsL.get_model().build_mpo_squared();
+    //         tensorsL.get_edges().eject_edges_all();
+    //         tensorsL.rebuild_edges();
+    //         tensorsL.clear_measurements();
+    //         tensorsL.clear_cache();
+    //         auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
+    //         auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
+    //         auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
+    //
+    //         auto enve = tensorsL.get_edges().get_multisite_env_ene();
+    //         auto envv = tensorsL.get_edges().get_multisite_env_var();
+    //         auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+    //         auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+    //         tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L, enve.R);
+    //         tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L, envv.R);
+    //
+    //         auto          v           = tenx::VectorMap(mps);
+    //         auto          H1v         = tenx::VectorMap(H1t);
+    //         auto          H2v         = tenx::VectorMap(H2t);
+    //         RealScalarL   v_H1v       = std::real(v.dot(H1v));
+    //         RealScalarL   v_H2v       = std::real(v.dot(H2v));
+    //         RealScalar128 v_H2v_fp128 = std::real(v.template cast<Scalar128>().dot(H2v.template cast<Scalar128>()));
+    //
+    //         RealScalarL enveLnorm = enve.L.get_blkx2().norm();
+    //         RealScalarL enveRnorm = enve.R.get_blkx2().norm();
+    //         RealScalarL envvLnorm = envv.L.get_blkx2().norm();
+    //         RealScalarL envvRnorm = envv.R.get_blkx2().norm();
+    //         auto        envvLdims = envv.L.get_block().dimensions();
+    //         auto        envvRdims = envv.R.get_block().dimensions();
+    //
+    //         tools::log->info("X2    var_opt            = {:.16e}", opt_state.get_variance());
+    //         tools::log->info("X2    var_mrg            = {:.16e}", var_mrg);
+    //         tools::log->info("X2    active sites       = {} | first {} | last {}", tensorsL.active_sites.size(),
+    //                          tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.front()),
+    //                          tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.back()));
+    //         tools::log->info("X2    envv dims          = L[{},{},{}] R[{},{},{}]", envvLdims[0], envvLdims[1], envvLdims[2], envvRdims[0], envvRdims[1],
+    //                          envvRdims[2]);
+    //         tools::log->info("X2    |H1v|              = {:.16e}", H1v.norm());
+    //         tools::log->info("X2    |H2v|              = {:.16e}", H2v.norm());
+    //         tools::log->info("X2    v_H1v              = {:.16e}", v_H1v);
+    //         tools::log->info("X2    v_H2v              = {:.16e}", v_H2v);
+    //         tools::log->info("X2    v_H2v    (fp128)   = {:.16e}", v_H2v_fp128);
+    //         tools::log->info("X2    energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
+    //         tools::log->info("X2    |enveL|            = {:.16e}", enveLnorm);
+    //         tools::log->info("X2    |enveR|            = {:.16e}", enveRnorm);
+    //         tools::log->info("X2    |envvL|            = {:.16e}", envvLnorm);
+    //         tools::log->info("X2    |envvR|            = {:.16e}", envvRnorm);
+    //     }
+    //     {
+    //         using RealScalarL = fp64;
+    //         using ScalarL     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalarL>, RealScalarL>;
+    //         auto tensorsL     = tensors.template cast<ScalarL>();
+    //         auto envi         = SetEnvInfo(ContractionBackend::EIGEN);
+    //         auto mv1i         = SetH1MvInfo(ContractionBackend::EIGEN);
+    //         auto mv2i         = SetH2MvInfo(ContractionBackend::EIGEN);
+    //         tensorsL.get_model().build_mpo();
+    //         tensorsL.get_model().build_mpo_squared();
+    //         tensorsL.get_edges().eject_edges_all();
+    //         tensorsL.rebuild_edges();
+    //         tensorsL.clear_measurements();
+    //         tensorsL.clear_cache();
+    //         auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
+    //         auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
+    //         auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
+    //         auto enve = tensorsL.get_edges().get_multisite_env_ene();
+    //         auto envv = tensorsL.get_edges().get_multisite_env_var();
+    //         auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+    //         auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+    //         tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+    //         tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
+    //
+    //         auto        v     = tenx::VectorMap(mps);
+    //         auto        H1v   = tenx::VectorMap(H1t);
+    //         auto        H2v   = tenx::VectorMap(H2t);
+    //         RealScalarL v_H1v = std::real(v.dot(H1v));
+    //         RealScalarL v_H2v = std::real(v.dot(H2v));
+    //
+    //         RealScalarL enveLnorm = enve.L.get_blkx2().norm();
+    //         RealScalarL enveRnorm = enve.R.get_blkx2().norm();
+    //         RealScalarL envvLnorm = envv.L.get_blkx2().norm();
+    //         RealScalarL envvRnorm = envv.R.get_blkx2().norm();
+    //         auto        envvLdims = envv.L.get_block().dimensions();
+    //         auto        envvRdims = envv.R.get_block().dimensions();
+    //
+    //         tools::log->info("FP64  active sites       = {} | first {} | last {}", tensorsL.active_sites.size(),
+    //                          tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.front()),
+    //                          tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.back()));
+    //         tools::log->info("FP64  envv dims          = L[{},{},{}] R[{},{},{}]", envvLdims[0], envvLdims[1], envvLdims[2], envvRdims[0], envvRdims[1],
+    //                          envvRdims[2]);
+    //         tools::log->info("FP64  |H1v|              = {:.16e}", H1v.norm());
+    //         tools::log->info("FP64  |H2v|              = {:.16e}", H2v.norm());
+    //         tools::log->info("FP64  v_H1v              = {:.16e}", v_H1v);
+    //         tools::log->info("FP64  v_H2v              = {:.16e}", v_H2v);
+    //         tools::log->info("FP64  energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
+    //         tools::log->info("FP64  |enveL|            = {:.16e}", enveLnorm);
+    //         tools::log->info("FP64  |enveR|            = {:.16e}", enveRnorm);
+    //         tools::log->info("FP64  |envvL|            = {:.16e}", envvLnorm);
+    //         tools::log->info("FP64  |envvR|            = {:.16e}", envvRnorm);
+    //     }
+    //
+    //     {
+    //         using RealScalarL = fp128;
+    //         using ScalarL     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalarL>, RealScalarL>;
+    //         auto tensorsL     = tensors.template cast<ScalarL>();
+    //         auto envi         = SetEnvInfo(ContractionBackend::EIGEN);
+    //         auto mv1i         = SetH1MvInfo(ContractionBackend::EIGEN);
+    //         auto mv2i         = SetH2MvInfo(ContractionBackend::EIGEN);
+    //         tensorsL.get_model().build_mpo();
+    //         tensorsL.get_model().build_mpo_squared();
+    //         tensorsL.get_edges().eject_edges_all();
+    //         tensorsL.rebuild_edges();
+    //         tensorsL.clear_measurements();
+    //         tensorsL.clear_cache();
+    //         auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
+    //         auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
+    //         auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
+    //         auto enve = tensorsL.get_edges().get_multisite_env_ene();
+    //         auto envv = tensorsL.get_edges().get_multisite_env_var();
+    //         auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+    //         auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
+    //         tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+    //         tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
+    //
+    //         auto        v     = tenx::VectorMap(mps);
+    //         auto        H1v   = tenx::VectorMap(H1t);
+    //         auto        H2v   = tenx::VectorMap(H2t);
+    //         RealScalarL v_H1v = std::real(v.dot(H1v));
+    //         RealScalarL v_H2v = std::real(v.dot(H2v));
+    //
+    //         RealScalarL enveLnorm = enve.L.get_blkx2().norm();
+    //         RealScalarL enveRnorm = enve.R.get_blkx2().norm();
+    //         RealScalarL envvLnorm = envv.L.get_blkx2().norm();
+    //         RealScalarL envvRnorm = envv.R.get_blkx2().norm();
+    //         auto        envvLdims = envv.L.get_block().dimensions();
+    //         auto        envvRdims = envv.R.get_block().dimensions();
+    //
+    //         tools::log->info("FP128 active sites       = {} | first {} | last {}", tensorsL.active_sites.size(),
+    //                          tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.front()),
+    //                          tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.back()));
+    //         tools::log->info("FP128 envv dims          = L[{},{},{}] R[{},{},{}]", envvLdims[0], envvLdims[1], envvLdims[2], envvRdims[0], envvRdims[1],
+    //                          envvRdims[2]);
+    //         tools::log->info("FP128 |H1v|              = {:.16e}", H1v.norm());
+    //         tools::log->info("FP128 |H2v|              = {:.16e}", H2v.norm());
+    //         tools::log->info("FP128 v_H1v              = {:.16e}", v_H1v);
+    //         tools::log->info("FP128 v_H2v              = {:.16e}", v_H2v);
+    //         tools::log->info("FP128 energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
+    //         tools::log->info("FP128 |enveL|            = {:.16e}", enveLnorm);
+    //         tools::log->info("FP128 |enveR|            = {:.16e}", enveRnorm);
+    //         tools::log->info("FP128 |envvL|            = {:.16e}", envvLnorm);
+    //         tools::log->info("FP128 |envvR|            = {:.16e}", envvRnorm);
+    //     }
+    //
+    //     std::vector<std::string> msg1;
+    //     std::vector<std::string> msg2;
+    //     {
+    //         // tensors.get_state().clear_cache();
+    //         // tensors.get_state().clear_measurements();
+    //         // tensors.get_edges().eject_edges_all();
+    //         // TODO: Temporary environment rebuild diagnostic. Remove after deciding whether stale or numerically degraded environments cause negative
+    //         variance. using EnvAccReal   = fp128; using EnvAccScalar = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<EnvAccReal>,
+    //         EnvAccReal>; struct EnvSnapshot {
+    //             std::string                    label;
+    //             std::string                    side;
+    //             size_t                         position  = 0;
+    //             size_t                         unique_id = 0;
+    //             bool                           has_block = false;
+    //             std::array<Eigen::Index, 3>    dims      = {0, 0, 0};
+    //             Eigen::Tensor<EnvAccScalar, 3> block;
+    //             EnvAccReal                     norm = 0;
+    //         };
+    //         auto env_to_acc = [](const auto &z) -> EnvAccScalar {
+    //             using Z = std::decay_t<decltype(z)>;
+    //             if constexpr(Eigen::NumTraits<Z>::IsComplex == 1)
+    //                 return EnvAccScalar{static_cast<EnvAccReal>(std::real(z)), static_cast<EnvAccReal>(std::imag(z))};
+    //             else
+    //                 return static_cast<EnvAccReal>(z);
+    //         };
+    //         auto env_conj_acc = [](const EnvAccScalar &z) -> EnvAccScalar {
+    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
+    //                 return std::conj(z);
+    //             else
+    //                 return z;
+    //         };
+    //         auto env_real_acc = [](const EnvAccScalar &z) -> EnvAccReal {
+    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
+    //                 return std::real(z);
+    //             else
+    //                 return z;
+    //         };
+    //         auto env_x2_to_acc_tensor = [&](const auto &t) {
+    //             auto out = Eigen::Tensor<EnvAccScalar, 3>(t.dimensions());
+    //             for(Eigen::Index i = 0; i < t.size(); ++i) out.data()[i] = env_to_acc(t.hi_data()[i]) + env_to_acc(t.lo_data()[i]);
+    //             return out;
+    //         };
+    //         auto env_norm_acc = [&](const Eigen::Tensor<EnvAccScalar, 3> &t) -> EnvAccReal {
+    //             EnvAccReal sum = EnvAccReal{0};
+    //             for(Eigen::Index i = 0; i < t.size(); ++i) sum += env_real_acc(env_conj_acc(t.data()[i]) * t.data()[i]);
+    //             return std::sqrt(sum);
+    //         };
+    //         auto env_diff_norm_acc = [&](const Eigen::Tensor<EnvAccScalar, 3> &a, const Eigen::Tensor<EnvAccScalar, 3> &b) -> EnvAccReal {
+    //             EnvAccReal sum = EnvAccReal{0};
+    //             for(Eigen::Index i = 0; i < a.size(); ++i) {
+    //                 const auto d  = a.data()[i] - b.data()[i];
+    //                 sum          += env_real_acc(env_conj_acc(d) * d);
+    //             }
+    //             return std::sqrt(sum);
+    //         };
+    //         auto env_relevant_to_active_sites = [&](std::string_view side, size_t pos) {
+    //             if(tensors.active_sites.empty()) return true;
+    //             if(side == "L") return pos <= tensors.active_sites.front();
+    //             if(side == "R") return pos >= tensors.active_sites.back();
+    //             return true;
+    //         };
+    //         auto env_x2_component_norms = [&](const auto &t) {
+    //             EnvAccReal hi2   = EnvAccReal{0};
+    //             EnvAccReal lo2   = EnvAccReal{0};
+    //             EnvAccReal full2 = EnvAccReal{0};
+    //             for(Eigen::Index i = 0; i < t.size(); ++i) {
+    //                 const auto hi  = env_to_acc(t.hi_data()[i]);
+    //                 const auto lo  = env_to_acc(t.lo_data()[i]);
+    //                 hi2           += env_real_acc(env_conj_acc(hi) * hi);
+    //                 lo2           += env_real_acc(env_conj_acc(lo) * lo);
+    //                 full2         += env_real_acc(env_conj_acc(hi + lo) * (hi + lo));
+    //             }
+    //             return std::array<EnvAccReal, 3>{std::sqrt(hi2), std::sqrt(lo2), std::sqrt(full2)};
+    //         };
+    //         auto log_env_x2_components = [&](const auto &envs, std::string_view label, std::string_view side) {
+    //             for(const auto &env : envs) {
+    //                 const auto pos = env->get_position();
+    //                 if(not env_relevant_to_active_sites(side, pos)) continue;
+    //                 if(not env->has_block()) continue;
+    //                 const auto norms = env_x2_component_norms(env->get_blkx2());
+    //                 tools::log->info("env x2 components {}{}[{:2}] dims [{},{},{}] |hi| {:.16e} |lo| {:.16e} |hi+lo| {:.16e}", label, side, pos,
+    //                                  env->get_blkx2().dimension(0), env->get_blkx2().dimension(1), env->get_blkx2().dimension(2), norms[0], norms[1],
+    //                                  norms[2]);
+    //             }
+    //         };
+    //         auto env_norm4_acc = [&](const auto &t) -> EnvAccReal {
+    //             EnvAccReal sum = EnvAccReal{0};
+    //             for(Eigen::Index i = 0; i < t.size(); ++i) {
+    //                 const auto z  = env_to_acc(t.data()[i]);
+    //                 sum          += env_real_acc(env_conj_acc(z) * z);
+    //             }
+    //             return std::sqrt(sum);
+    //         };
+    //         auto env_diff_norm4_acc = [&](const auto &a, const auto &b) -> EnvAccReal {
+    //             EnvAccReal sum = EnvAccReal{0};
+    //             for(Eigen::Index i = 0; i < a.size(); ++i) {
+    //                 const auto d  = env_to_acc(a.data()[i]) - env_to_acc(b.data()[i]);
+    //                 sum          += env_real_acc(env_conj_acc(d) * d);
+    //             }
+    //             return std::sqrt(sum);
+    //         };
+    //         auto log_mpo2_site_diffs = [&](std::string_view label, const auto &model_ref) {
+    //             for(size_t pos = 0; pos < tensors.template get_length<size_t>(); ++pos) {
+    //                 const auto &mpo2_live = tensors.get_model().get_mpo(pos).MPO2();
+    //                 const auto &mpo2_ref  = model_ref.get_mpo(pos).MPO2();
+    //                 const auto  live_norm = env_norm4_acc(mpo2_live);
+    //                 const auto  ref_norm  = env_norm4_acc(mpo2_ref);
+    //                 const auto  live_dims = mpo2_live.dimensions();
+    //                 const auto  ref_dims  = mpo2_ref.dimensions();
+    //                 if(live_dims != ref_dims) {
+    //                     tools::log->info("mpo2 compressed diff {} site[{:2}] dims live [{},{},{},{}] ref [{},{},{},{}]", label, pos, live_dims[0],
+    //                     live_dims[1],
+    //                                      live_dims[2], live_dims[3], ref_dims[0], ref_dims[1], ref_dims[2], ref_dims[3]);
+    //                     continue;
+    //                 }
+    //                 const auto diff = env_diff_norm4_acc(mpo2_live, mpo2_ref);
+    //                 const auto den  = std::max(live_norm, ref_norm);
+    //                 const auto rel  = den > EnvAccReal{0} ? diff / den : diff;
+    //                 tools::log->info("mpo2 compressed diff {} site[{:2}] dims [{},{},{},{}] | live {:.16e} ref {:.16e} | diff {:.16e} rel {:.16e}", label,
+    //                 pos,
+    //                                  live_dims[0], live_dims[1], live_dims[2], live_dims[3], live_norm, ref_norm, diff, rel);
+    //             }
+    //         };
+    //         std::vector<EnvSnapshot> env_snapshots;
+    //         auto                     collect_env_snapshots = [&](const auto &envs, std::string_view label, std::string_view side) {
+    //             for(const auto &env : envs) {
+    //                 const auto pos = env->get_position();
+    //                 if(not env_relevant_to_active_sites(side, pos)) continue;
+    //                 EnvSnapshot snap;
+    //                 snap.label     = std::string(label);
+    //                 snap.side      = std::string(side);
+    //                 snap.position  = pos;
+    //                 snap.has_block = env->has_block();
+    //                 if(snap.has_block) {
+    //                     snap.unique_id = env->get_unique_id();
+    //                     snap.dims      = env->get_blkx2().dimensions();
+    //                     snap.block     = env_x2_to_acc_tensor(env->get_blkx2());
+    //                     snap.norm      = env_norm_acc(snap.block);
+    //                 }
+    //                 env_snapshots.emplace_back(std::move(snap));
+    //             }
+    //         };
+    //         auto log_env_rebuild_diffs = [&](const auto &envs, std::string_view label, std::string_view side) {
+    //             for(const auto &snap : env_snapshots) {
+    //                 if(snap.label != label or snap.side != side) continue;
+    //                 auto env_it = std::find_if(envs.begin(), envs.end(), [&](const auto &env) { return env->get_position() == snap.position; });
+    //                 if(env_it == envs.end()) {
+    //                     tools::log->info("env rebuild diff {}{}[{:2}] missing after rebuild", label, side, snap.position);
+    //                     continue;
+    //                 }
+    //                 const auto &env       = **env_it;
+    //                 const auto  has_after = env.has_block();
+    //                 if(not snap.has_block or not has_after) {
+    //                     tools::log->info("env rebuild diff {}{}[{:2}] block before {} after {}", label, side, snap.position, snap.has_block, has_after);
+    //                     continue;
+    //                 }
+    //                 const auto id_after   = env.get_unique_id();
+    //                 const auto blk_after  = env_x2_to_acc_tensor(env.get_blkx2());
+    //                 const auto norm_after = env_norm_acc(blk_after);
+    //                 if(snap.dims != env.get_blkx2().dimensions()) {
+    //                     tools::log->info("env rebuild diff {}{}[{:2}] id {} -> {} dims [{},{},{}] -> [{},{},{}]", label, side, snap.position, snap.unique_id,
+    //                                      id_after, snap.dims[0], snap.dims[1], snap.dims[2], env.get_blkx2().dimension(0), env.get_blkx2().dimension(1),
+    //                                      env.get_blkx2().dimension(2));
+    //                     continue;
+    //                 }
+    //                 const auto diff = env_diff_norm_acc(snap.block, blk_after);
+    //                 const auto den  = std::max(snap.norm, norm_after);
+    //                 const auto rel  = den > EnvAccReal{0} ? diff / den : diff;
+    //                 tools::log->info("env rebuild diff {}{}[{:2}] id {} -> {} | norm {:.16e} -> {:.16e} | diff {:.16e} rel {:.16e}", label, side,
+    //                 snap.position,
+    //                                  snap.unique_id, id_after, snap.norm, norm_after, diff, rel);
+    //             }
+    //         };
+    //         auto log_env_ref_diffs = [&](const auto &envs_ref, std::string_view ref_label, std::string_view label, std::string_view side) {
+    //             for(const auto &snap : env_snapshots) {
+    //                 if(snap.label != label or snap.side != side) continue;
+    //                 auto env_it = std::find_if(envs_ref.begin(), envs_ref.end(), [&](const auto &env) { return env->get_position() == snap.position; });
+    //                 if(env_it == envs_ref.end()) {
+    //                     tools::log->info("env {} diff {}{}[{:2}] missing in ref rebuild", ref_label, label, side, snap.position);
+    //                     continue;
+    //                 }
+    //                 const auto &env_ref       = **env_it;
+    //                 const auto  has_ref_block = env_ref.has_block();
+    //                 if(not snap.has_block or not has_ref_block) {
+    //                     tools::log->info("env {} diff {}{}[{:2}] block current {} ref {}", ref_label, label, side, snap.position, snap.has_block,
+    //                                      has_ref_block);
+    //                     continue;
+    //                 }
+    //                 const auto blk_ref  = env_x2_to_acc_tensor(env_ref.get_blkx2());
+    //                 const auto norm_ref = env_norm_acc(blk_ref);
+    //                 if(snap.dims != env_ref.get_blkx2().dimensions()) {
+    //                     tools::log->info("env {} diff {}{}[{:2}] dims current [{},{},{}] ref [{},{},{}]", ref_label, label, side, snap.position,
+    //                     snap.dims[0],
+    //                                      snap.dims[1], snap.dims[2], env_ref.get_blkx2().dimension(0), env_ref.get_blkx2().dimension(1),
+    //                                      env_ref.get_blkx2().dimension(2));
+    //                     continue;
+    //                 }
+    //                 const auto diff = env_diff_norm_acc(snap.block, blk_ref);
+    //                 const auto den  = std::max(snap.norm, norm_ref);
+    //                 const auto rel  = den > EnvAccReal{0} ? diff / den : diff;
+    //                 tools::log->info("env {} diff {}{}[{:2}] | norm current {:.16e} ref {:.16e} | diff {:.16e} rel {:.16e}", ref_label, label, side,
+    //                                  snap.position, snap.norm, norm_ref, diff, rel);
+    //             }
+    //         };
+    //         auto env_dot_acc = [&](const Eigen::Tensor<EnvAccScalar, 3> &x, const Eigen::Tensor<EnvAccScalar, 3> &y) -> EnvAccReal {
+    //             EnvAccScalar sum = EnvAccScalar{0};
+    //             for(Eigen::Index i = 0; i < x.size(); ++i) sum += env_conj_acc(x.data()[i]) * y.data()[i];
+    //             return env_real_acc(sum);
+    //         };
+    //
+    //         for(const auto &env : tensors.get_edges().eneL) {
+    //             msg1.emplace_back(fmt::format("eneL[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
+    //         }
+    //         for(const auto &env : tensors.get_edges().eneR) {
+    //             msg1.emplace_back(fmt::format("eneR[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
+    //         }
+    //
+    //         tools::log->info("env rebuild diff active sites {}", tensors.active_sites);
+    //         collect_env_snapshots(tensors.get_edges().eneL, "ene", "L");
+    //         collect_env_snapshots(tensors.get_edges().eneR, "ene", "R");
+    //         collect_env_snapshots(tensors.get_edges().varL, "var", "L");
+    //         collect_env_snapshots(tensors.get_edges().varR, "var", "R");
+    //         tensors.get_edges().eject_edges_all();
+    //         {
+    //             const auto envinfo_live = tools::common::contraction::internal::get_info_env();
+    //             tools::log->info("live env rebuild policy backend {} precision {}", enum2sv(envinfo_live.backend), enum2sv(envinfo_live.precision));
+    //         }
+    //         tensors.rebuild_edges();
+    //         log_env_rebuild_diffs(tensors.get_edges().eneL, "ene", "L");
+    //         log_env_rebuild_diffs(tensors.get_edges().eneR, "ene", "R");
+    //         log_env_rebuild_diffs(tensors.get_edges().varL, "var", "L");
+    //         log_env_rebuild_diffs(tensors.get_edges().varR, "var", "R");
+    //         log_env_x2_components(tensors.get_edges().varL, "live-var", "L");
+    //         log_env_x2_components(tensors.get_edges().varR, "live-var", "R");
+    //         {
+    //             // TODO: Temporary FP128 environment comparison. Remove after locating whether MPO2 compression or environment construction causes negative
+    //             // variance.
+    //             auto tensors_fp128 = tensors.template cast<EnvAccScalar>();
+    //             auto envinfo_fp128 = SetEnvInfo(ContractionBackend::EIGEN);
+    //             tensors_fp128.get_model().build_mpo();
+    //             tensors_fp128.get_model().build_mpo_squared();
+    //             auto mpo_squared_compress_postmortem = settings::model::use_compressed_mpo_squared;
+    //             if(mpo_squared_compress_before_postmortem == MpoCompress::AUTO) mpo_squared_compress_before_postmortem = MpoCompress::DPL;
+    //             settings::model::use_compressed_mpo_squared = mpo_squared_compress_before_postmortem;
+    //             // TODO: Temporary diagnostic override. The surrounding post-mortem disables MPO2 compression; force the original mode here so the FP128
+    //             // comparison uses the same compressed operator family as the live variance path.
+    //             tensors_fp128.compress_mpo_squared();
+    //             settings::model::use_compressed_mpo_squared = mpo_squared_compress_postmortem;
+    //             tools::log->info("FP128 forced MPO2 compression mode {} | has_compressed {}", enum2sv(mpo_squared_compress_before_postmortem),
+    //                              tensors_fp128.get_model().has_compressed_mpo_squared());
+    //             log_mpo2_site_diffs("live/fp128", tensors_fp128.get_model());
+    //             auto tensors_fp128_down = tensors;
+    //             for(size_t pos = 0; pos < tensors.template get_length<size_t>(); ++pos) {
+    //                 const auto mpo2_down = Eigen::Tensor<Scalar, 4>(tensors_fp128.get_model().get_mpo(pos).template MPO2_as<Scalar>());
+    //                 tensors_fp128_down.get_model().get_mpo(pos).set_mpo_squared(mpo2_down);
+    //             }
+    //             tensors_fp128_down.clear_cache();
+    //             tensors_fp128_down.clear_measurements();
+    //             tools::log->info("FP128-compressed MPO2 downcast to live scalar | has_compressed {}",
+    //                              tensors_fp128_down.get_model().has_compressed_mpo_squared());
+    //             log_mpo2_site_diffs("live/fp128down", tensors_fp128_down.get_model());
+    //             tensors_fp128_down.get_edges().eject_edges_all();
+    //             {
+    //                 auto       envinfo_down         = SetEnvInfo(ContractionBackend::AUTO, ContractionPrecision::X2);
+    //                 const auto envinfo_down_rebuild = tools::common::contraction::internal::get_info_env();
+    //                 tools::log->info("FP128-downcast env rebuild policy backend {} precision {}", enum2sv(envinfo_down_rebuild.backend),
+    //                                  enum2sv(envinfo_down_rebuild.precision));
+    //                 tensors_fp128_down.rebuild_edges();
+    //             }
+    //             tensors_fp128_down.clear_cache();
+    //             tensors_fp128_down.clear_measurements();
+    //             tensors_fp128.get_edges().eject_edges_all();
+    //             {
+    //                 const auto envinfo_fp128_rebuild = tools::common::contraction::internal::get_info_env();
+    //                 tools::log->info("FP128 env rebuild policy backend {} precision {}", enum2sv(envinfo_fp128_rebuild.backend),
+    //                                  enum2sv(envinfo_fp128_rebuild.precision));
+    //             }
+    //             tensors_fp128.rebuild_edges();
+    //             tensors_fp128.clear_cache();
+    //             tensors_fp128.clear_measurements();
+    //             const auto &mps_fp128               = tensors_fp128.get_state().template get_multisite_mps<EnvAccScalar>();
+    //             const auto &mpo2_fp128              = tensors_fp128.get_model().template get_multisite_mpo_squared<EnvAccScalar>();
+    //             const auto &envv_fp128              = tensors_fp128.get_edges().get_multisite_env_var();
+    //             const auto &mps_fp128_down          = tensors_fp128_down.get_state().template get_multisite_mps<Scalar>();
+    //             const auto &mpo2_fp128_down         = tensors_fp128_down.get_model().template get_multisite_mpo_squared<Scalar>();
+    //             const auto &envv_fp128_down         = tensors_fp128_down.get_edges().get_multisite_env_var();
+    //             const auto &mps_live                = tensors.get_state().template get_multisite_mps<Scalar>();
+    //             const auto &mpo2_live               = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
+    //             const auto &envv_live               = tensors.get_edges().get_multisite_env_var();
+    //             auto        mps_live_acc            = Eigen::Tensor<EnvAccScalar, 3>(mps_live.template cast<EnvAccScalar>());
+    //             auto        mpo2_live_acc           = Eigen::Tensor<EnvAccScalar, 4>(mpo2_live.template cast<EnvAccScalar>());
+    //             auto        envvL_live_acc          = env_x2_to_acc_tensor(envv_live.L.get_blkx2());
+    //             auto        envvR_live_acc          = env_x2_to_acc_tensor(envv_live.R.get_blkx2());
+    //             auto        mps_fp128_down_acc      = Eigen::Tensor<EnvAccScalar, 3>(mps_fp128_down.template cast<EnvAccScalar>());
+    //             auto        mpo2_fp128_down_acc     = Eigen::Tensor<EnvAccScalar, 4>(mpo2_fp128_down.template cast<EnvAccScalar>());
+    //             auto        envvL_fp128_down_acc    = env_x2_to_acc_tensor(envv_fp128_down.L.get_blkx2());
+    //             auto        envvR_fp128_down_acc    = env_x2_to_acc_tensor(envv_fp128_down.R.get_blkx2());
+    //             auto        envvL_fp128_scalar_down = Eigen::Tensor<Scalar, 3>(envv_fp128.L.template get_block_as<Scalar>());
+    //             auto        envvR_fp128_scalar_down = Eigen::Tensor<Scalar, 3>(envv_fp128.R.template get_block_as<Scalar>());
+    //             auto        envvL_fp128_sdown_acc   = Eigen::Tensor<EnvAccScalar, 3>(envvL_fp128_scalar_down.template cast<EnvAccScalar>());
+    //             auto        envvR_fp128_sdown_acc   = Eigen::Tensor<EnvAccScalar, 3>(envvR_fp128_scalar_down.template cast<EnvAccScalar>());
+    //             auto        split_acc_to_x2         = [](const Eigen::Tensor<EnvAccScalar, 3> &src) {
+    //                 auto dst = x2::Tensor<Scalar, 3>(src.dimension(0), src.dimension(1), src.dimension(2));
+    //                 for(Eigen::Index i = 0; i < src.size(); ++i) {
+    //                     if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1) {
+    //                         using LiveReal   = typename Eigen::NumTraits<Scalar>::Real;
+    //                         const auto z     = src.data()[i];
+    //                         const auto rhi   = static_cast<LiveReal>(std::real(z));
+    //                         const auto ihi   = static_cast<LiveReal>(std::imag(z));
+    //                         const auto rlo   = static_cast<LiveReal>(std::real(z) - static_cast<EnvAccReal>(rhi));
+    //                         const auto ilo   = static_cast<LiveReal>(std::imag(z) - static_cast<EnvAccReal>(ihi));
+    //                         dst.hi_data()[i] = Scalar{rhi, ihi};
+    //                         dst.lo_data()[i] = Scalar{rlo, ilo};
+    //                     } else {
+    //                         const auto hi    = static_cast<Scalar>(src.data()[i]);
+    //                         const auto lo    = static_cast<Scalar>(src.data()[i] - static_cast<EnvAccScalar>(hi));
+    //                         dst.hi_data()[i] = hi;
+    //                         dst.lo_data()[i] = lo;
+    //                     }
+    //                 }
+    //                 return dst;
+    //             };
+    //             auto envvL_fp128_split_x2    = split_acc_to_x2(env_x2_to_acc_tensor(envv_fp128.L.get_blkx2()));
+    //             auto envvR_fp128_split_x2    = split_acc_to_x2(env_x2_to_acc_tensor(envv_fp128.R.get_blkx2()));
+    //             auto H2t_fp128               = Eigen::Tensor<EnvAccScalar, 3>(mps_fp128.dimensions());
+    //             auto h2info_fp128_compressed = SetH2MvInfo(ContractionBackend::EIGEN, mpo2_fp128.dimensions());
+    //             tools::common::contraction::matrix_vector_product(H2t_fp128, mps_fp128, mpo2_fp128, envv_fp128.L.get_blkx2(), envv_fp128.R.get_blkx2());
+    //             tools::log->info("FP128 compressed |mpo2| dims [{},{},{},{}]", mpo2_fp128.dimension(0), mpo2_fp128.dimension(1), mpo2_fp128.dimension(2),
+    //                              mpo2_fp128.dimension(3));
+    //             tools::log->info("FP128 compressed v_H2v = {:.16e}", env_dot_acc(mps_fp128, H2t_fp128));
+    //             // TODO: Temporary mixed-input diagnostic. Remove after identifying whether live FP64-compressed MPO2 or live variance environments dominate
+    //             // the H2 expectation error.
+    //             auto log_mixed_h2 = [&](std::string_view label, const auto &mps_in, const auto &mpo2_in, const auto &envL_in, const auto &envR_in) {
+    //                 auto H2t_mix = Eigen::Tensor<EnvAccScalar, 3>(mps_in.dimensions());
+    //                 auto h2info  = SetH2MvInfo(ContractionBackend::EIGEN, mpo2_in.dimensions());
+    //                 tools::common::contraction::matrix_vector_product(H2t_mix, mps_in, mpo2_in, envL_in, envR_in);
+    //                 auto envLdim = envL_in.dimensions();
+    //                 auto envRdim = envR_in.dimensions();
+    //                 tools::log->info("mixed H2 {:>18} | mpo2 [{},{},{},{}] envL [{},{},{}] envR [{},{},{}] v_H2v {:.16e}", label, mpo2_in.dimension(0),
+    //                                  mpo2_in.dimension(1), mpo2_in.dimension(2), mpo2_in.dimension(3), envLdim[0], envLdim[1], envLdim[2], envRdim[0],
+    //                                  envRdim[1], envRdim[2], env_dot_acc(mps_in, H2t_mix));
+    //             };
+    //             log_mixed_h2("live_mpo live_env", mps_live_acc, mpo2_live_acc, envvL_live_acc, envvR_live_acc);
+    //             log_mixed_h2("fp128_mpo fp128_env", mps_fp128, mpo2_fp128, envv_fp128.L.get_blkx2(), envv_fp128.R.get_blkx2());
+    //             log_mixed_h2("fp128_mpo live_env", mps_fp128, mpo2_fp128, envvL_live_acc, envvR_live_acc);
+    //             log_mixed_h2("live_mpo fp128_env", mps_live_acc, mpo2_live_acc, envv_fp128.L.get_blkx2(), envv_fp128.R.get_blkx2());
+    //             log_mixed_h2("live_mpo fp128_sdown", mps_live_acc, mpo2_live_acc, envvL_fp128_sdown_acc, envvR_fp128_sdown_acc);
+    //             {
+    //                 auto h2info_split = SetH2MvInfo(ContractionPrecision::X2, mpo2_live.dimensions());
+    //                 auto H2t_fp128_split =
+    //                     tools::common::contraction::matrix_vector_product_x2(mps_live, mpo2_live, envvL_fp128_split_x2, envvR_fp128_split_x2);
+    //                 auto H2t_split_acc = env_x2_to_acc_tensor(H2t_fp128_split);
+    //                 tools::log->info("mixed H2 {:>18} | mpo2 [{},{},{},{}] envL [{},{},{}] envR [{},{},{}] v_H2v {:.16e}", "live_mpo fp128_x2split",
+    //                                  mpo2_live.dimension(0), mpo2_live.dimension(1), mpo2_live.dimension(2), mpo2_live.dimension(3),
+    //                                  envvL_fp128_split_x2.dimension(0), envvL_fp128_split_x2.dimension(1), envvL_fp128_split_x2.dimension(2),
+    //                                  envvR_fp128_split_x2.dimension(0), envvR_fp128_split_x2.dimension(1), envvR_fp128_split_x2.dimension(2),
+    //                                  env_dot_acc(mps_live_acc, H2t_split_acc));
+    //             }
+    //             log_mixed_h2("down_mpo down_env", mps_fp128_down_acc, mpo2_fp128_down_acc, envvL_fp128_down_acc, envvR_fp128_down_acc);
+    //             log_mixed_h2("fp128_mpo down_env", mps_fp128, mpo2_fp128, envvL_fp128_down_acc, envvR_fp128_down_acc);
+    //             log_mixed_h2("down_mpo fp128_env", mps_fp128_down_acc, mpo2_fp128_down_acc, envv_fp128.L.get_blkx2(), envv_fp128.R.get_blkx2());
+    //             log_env_ref_diffs(tensors_fp128_down.get_edges().varL, "fp128down", "var", "L");
+    //             log_env_ref_diffs(tensors_fp128_down.get_edges().varR, "fp128down", "var", "R");
+    //             log_env_x2_components(tensors_fp128_down.get_edges().varL, "down-var", "L");
+    //             log_env_x2_components(tensors_fp128_down.get_edges().varR, "down-var", "R");
+    //             log_env_ref_diffs(tensors_fp128.get_edges().eneL, "fp128", "ene", "L");
+    //             log_env_ref_diffs(tensors_fp128.get_edges().eneR, "fp128", "ene", "R");
+    //             log_env_ref_diffs(tensors_fp128.get_edges().varL, "fp128", "var", "L");
+    //             log_env_ref_diffs(tensors_fp128.get_edges().varR, "fp128", "var", "R");
+    //             log_env_x2_components(tensors_fp128.get_edges().varL, "fp128-var", "L");
+    //             log_env_x2_components(tensors_fp128.get_edges().varR, "fp128-var", "R");
+    //         }
+    //         tensors.clear_cache();
+    //         tensors.clear_measurements();
+    //
+    //         const auto &mps  = tensors.get_state().template get_multisite_mps<Scalar>();
+    //         const auto &mpo1 = tensors.get_model().template get_multisite_mpo<Scalar>();
+    //         const auto &mpo2 = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
+    //         const auto &enve = tensors.get_edges().get_multisite_env_ene();
+    //         const auto &envv = tensors.get_edges().get_multisite_env_var();
+    //         tools::log->info("live MPO2 compression mode {} | has_compressed {} | mpo2 dims [{},{},{},{}]", enum2sv(mpo_squared_compress_before_postmortem),
+    //                          tensors.get_model().has_compressed_mpo_squared(), mpo2.dimension(0), mpo2.dimension(1), mpo2.dimension(2), mpo2.dimension(3));
+    //
+    //         auto H1t         = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto H1tx2       = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto H1tQ        = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto H2t         = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto H2tx2       = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto H2tQ        = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto H1t_x2_full = x2::Tensor<Scalar, 3>();
+    //         auto H2t_x2_full = x2::Tensor<Scalar, 3>();
+    //         {
+    //             auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, mpo1.dimensions());
+    //             auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo2.dimensions());
+    //             tools::log->info("contracting with tblis");
+    //             tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+    //             tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
+    //         }
+    //         {
+    //             auto h1info = SetH1MvInfo(ContractionPrecision::X2, mpo1.dimensions());
+    //             auto h2info = SetH2MvInfo(ContractionPrecision::X2, mpo2.dimensions());
+    //             tools::log->info("contracting with x2");
+    //             H1t_x2_full = tools::common::contraction::matrix_vector_product_x2(mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+    //             H2t_x2_full = tools::common::contraction::matrix_vector_product_x2(mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
+    //             H1tx2       = H1t_x2_full.to_EigenTensor();
+    //             H2tx2       = H2t_x2_full.to_EigenTensor();
+    //         }
+    //         {
+    //             auto h2info = SetH2MvInfo(ContractionBackend::EIGEN, mpo2.dimensions());
+    //             tools::log->info("contracting with fp128");
+    //             using ScalarQ = std::conditional_t<std::is_floating_point_v<Scalar>, fp128, cx128>;
+    //             Eigen::Tensor<ScalarQ, 3> H1t_q(mps.dimensions());
+    //             Eigen::Tensor<ScalarQ, 3> H2t_q(mps.dimensions());
+    //             Eigen::Tensor<ScalarQ, 3> mps_q   = mps.template cast<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 4> mpo1_q  = mpo1.template cast<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 4> mpo2_q  = mpo2.template cast<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 3> enveL_q = enve.L.template get_block_as<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 3> enveR_q = enve.R.template get_block_as<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 3> envvL_q = envv.L.template get_block_as<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 3> envvR_q = envv.R.template get_block_as<ScalarQ>();
+    //             tools::common::contraction::matrix_vector_product(H1t_q, mps_q, mpo1_q, enveL_q, enveR_q);
+    //             tools::common::contraction::matrix_vector_product(H2t_q, mps_q, mpo2_q, envvL_q, envvR_q);
+    //             H1tQ = H1t_q.template cast<Scalar>();
+    //             H2tQ = H2t_q.template cast<Scalar>();
+    //         }
+    //         using VectorType   = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+    //         auto       v       = tenx::VectorMap(mps);
+    //         auto       H1v     = tenx::VectorMap(H1t);
+    //         auto       H1vx2   = tenx::VectorMap(H1tx2);
+    //         auto       H1vQ    = tenx::VectorMap(H1tQ);
+    //         auto       H2v     = tenx::VectorMap(H2t);
+    //         auto       H2vx2   = tenx::VectorMap(H2tx2);
+    //         auto       H2vQ    = tenx::VectorMap(H2tQ);
+    //         RealScalar vH1_H1v = std::real(H1v.dot(H1v));
+    //         RealScalar v_H1v   = std::real(v.dot(H1v));
+    //         RealScalar v_H1vx2 = std::real(v.dot(H1vx2));
+    //         RealScalar v_H1vQ  = std::real(v.dot(H1vQ));
+    //         RealScalar v_H2v   = std::real(v.dot(H2v));
+    //         RealScalar v_H2vx2 = std::real(v.dot(H2vx2));
+    //         RealScalar v_H2vQ  = std::real(v.dot(H2vQ));
+    //
+    //         using AccReal   = fp128;
+    //         using AccScalar = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<AccReal>, AccReal>;
+    //         auto to_acc     = [](const Scalar &z) -> AccScalar {
+    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
+    //                 return AccScalar{static_cast<AccReal>(std::real(z)), static_cast<AccReal>(std::imag(z))};
+    //             else
+    //                 return static_cast<AccReal>(z);
+    //         };
+    //         auto conj_acc = [](const AccScalar &z) -> AccScalar {
+    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
+    //                 return std::conj(z);
+    //             else
+    //                 return z;
+    //         };
+    //         auto real_acc = [](const AccScalar &z) -> AccReal {
+    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
+    //                 return std::real(z);
+    //             else
+    //                 return z;
+    //         };
+    //         auto dot_x2_real = [&](const x2::Tensor<Scalar, 3> &y) -> AccReal {
+    //             AccScalar sum = AccScalar{0};
+    //             for(Eigen::Index i = 0; i < mps.size(); ++i) {
+    //                 const auto xacc  = to_acc(mps.data()[i]);
+    //                 const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
+    //                 sum             += conj_acc(xacc) * yacc;
+    //             }
+    //             return real_acc(sum);
+    //         };
+    //         auto norm2_x2 = [&](const x2::Tensor<Scalar, 3> &y) -> AccReal {
+    //             AccReal sum = AccReal{0};
+    //             for(Eigen::Index i = 0; i < y.size(); ++i) {
+    //                 const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
+    //                 sum             += real_acc(conj_acc(yacc) * yacc);
+    //             }
+    //             return sum;
+    //         };
+    //         auto residual_norm2_x2 = [&](const x2::Tensor<Scalar, 3> &y, AccReal E) -> AccReal {
+    //             AccReal sum = AccReal{0};
+    //             for(Eigen::Index i = 0; i < mps.size(); ++i) {
+    //                 const auto xacc  = to_acc(mps.data()[i]);
+    //                 const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
+    //                 const auto racc  = yacc - E * xacc;
+    //                 sum             += real_acc(conj_acc(racc) * racc);
+    //             }
+    //             return sum;
+    //         };
+    //
+    //         AccReal v_H1v_x2_full     = dot_x2_real(H1t_x2_full);
+    //         AccReal v_H2v_x2_full     = dot_x2_real(H2t_x2_full);
+    //         AccReal vH1_H1v_x2_full   = norm2_x2(H1t_x2_full);
+    //         AccReal proj_res2_x2_full = residual_norm2_x2(H1t_x2_full, v_H1v_x2_full);
+    //         AccReal leak2_raw_x2_full = v_H2v_x2_full - vH1_H1v_x2_full;
+    //         AccReal res2_est_x2_full  = proj_res2_x2_full + leak2_raw_x2_full;
+    //         AccReal res2_psd_x2_full  = std::max(AccReal{0}, proj_res2_x2_full) + std::max(AccReal{0}, leak2_raw_x2_full);
+    //         AccReal variance_x2_full  = v_H2v_x2_full - v_H1v_x2_full * v_H1v_x2_full;
+    //
+    //         // TODO: Temporary x2 isolation diagnostic. Remove after deciding whether H2 x2 error comes from gemm_x2 or from the x2 MPO2/environments.
+    //         auto x2_to_acc_tensor = [&](const x2::Tensor<Scalar, 3> &t) {
+    //             auto out = Eigen::Tensor<AccScalar, 3>(t.dimensions());
+    //             for(Eigen::Index i = 0; i < t.size(); ++i) out.data()[i] = to_acc(t.hi_data()[i]) + to_acc(t.lo_data()[i]);
+    //             return out;
+    //         };
+    //         auto diff_norm_x2 = [&](const Eigen::Tensor<AccScalar, 3> &ref, const x2::Tensor<Scalar, 3> &x2res) -> AccReal {
+    //             AccReal sum = AccReal{0};
+    //             for(Eigen::Index i = 0; i < ref.size(); ++i) {
+    //                 const auto x2val  = to_acc(x2res.hi_data()[i]) + to_acc(x2res.lo_data()[i]);
+    //                 const auto d      = ref.data()[i] - x2val;
+    //                 sum              += real_acc(conj_acc(d) * d);
+    //             }
+    //             return std::sqrt(sum);
+    //         };
+    //         auto residual_norm2_acc = [&](const Eigen::Tensor<AccScalar, 3> &y, const Eigen::Tensor<AccScalar, 3> &x, AccReal E) -> AccReal {
+    //             AccReal sum = AccReal{0};
+    //             for(Eigen::Index i = 0; i < x.size(); ++i) {
+    //                 const auto r  = y.data()[i] - E * x.data()[i];
+    //                 sum          += real_acc(conj_acc(r) * r);
+    //             }
+    //             return sum;
+    //         };
+    //         Eigen::Tensor<AccScalar, 3> mps_acc       = mps.template cast<AccScalar>();
+    //         Eigen::Tensor<AccScalar, 4> mpo1_acc      = mpo1.template cast<AccScalar>();
+    //         Eigen::Tensor<AccScalar, 4> mpo2_acc      = mpo2.template cast<AccScalar>();
+    //         auto                        enveL_x2_acc  = x2_to_acc_tensor(enve.L.get_blkx2());
+    //         auto                        enveR_x2_acc  = x2_to_acc_tensor(enve.R.get_blkx2());
+    //         auto                        envvL_x2_acc  = x2_to_acc_tensor(envv.L.get_blkx2());
+    //         auto                        envvR_x2_acc  = x2_to_acc_tensor(envv.R.get_blkx2());
+    //         auto                        H1t_x2env_acc = Eigen::Tensor<AccScalar, 3>(mps.dimensions());
+    //         auto                        H2t_x2env_acc = Eigen::Tensor<AccScalar, 3>(mps.dimensions());
+    //         auto                        h1info_x2env  = SetH1MvInfo(ContractionBackend::EIGEN, mpo1.dimensions());
+    //         auto                        h2info_x2env  = SetH2MvInfo(ContractionBackend::EIGEN, mpo2.dimensions());
+    //         tools::common::contraction::matrix_vector_product(H1t_x2env_acc, mps_acc, mpo1_acc, enveL_x2_acc, enveR_x2_acc);
+    //         tools::common::contraction::matrix_vector_product(H2t_x2env_acc, mps_acc, mpo2_acc, envvL_x2_acc, envvR_x2_acc);
+    //         auto    v_acc                   = tenx::VectorMap(mps_acc);
+    //         auto    H1v_x2env_acc           = tenx::VectorMap(H1t_x2env_acc);
+    //         auto    H2v_x2env_acc           = tenx::VectorMap(H2t_x2env_acc);
+    //         AccReal v_H1v_x2env_acc         = real_acc(v_acc.dot(H1v_x2env_acc));
+    //         AccReal v_H2v_x2env_acc         = real_acc(v_acc.dot(H2v_x2env_acc));
+    //         AccReal vH1_H1v_x2env_acc       = real_acc(H1v_x2env_acc.dot(H1v_x2env_acc));
+    //         AccReal proj_res2_x2env_acc     = residual_norm2_acc(H1t_x2env_acc, mps_acc, v_H1v_x2env_acc);
+    //         AccReal leak2_raw_x2env_acc     = v_H2v_x2env_acc - vH1_H1v_x2env_acc;
+    //         AccReal res2_est_x2env_acc      = proj_res2_x2env_acc + leak2_raw_x2env_acc;
+    //         AccReal variance_x2env_acc      = v_H2v_x2env_acc - v_H1v_x2env_acc * v_H1v_x2env_acc;
+    //         AccReal H1_x2_vs_x2env_acc_norm = diff_norm_x2(H1t_x2env_acc, H1t_x2_full);
+    //         AccReal H2_x2_vs_x2env_acc_norm = diff_norm_x2(H2t_x2env_acc, H2t_x2_full);
+    //
+    //         VectorType resid1    = H1v - v_H1v * v;
+    //         RealScalar rnorm1    = resid1.norm();
+    //         RealScalar proj_res2 = std::real(resid1.dot(resid1));
+    //         RealScalar leak2_raw = v_H2v - vH1_H1v;
+    //         RealScalar res2_est  = proj_res2 + leak2_raw;
+    //         RealScalar res2_psd  = std::max(RealScalar{0}, proj_res2) + std::max(RealScalar{0}, leak2_raw);
+    //         RealScalar delta     = v_H2v - vH1_H1v;
+    //
+    //         tools::log->info("var_opt             = {:.16e}", opt_state.get_variance());
+    //         tools::log->info("var_mrg             = {:.16e}", var_mrg);
+    //         tools::log->info("vH1_H1v             = {:.16e}", vH1_H1v);
+    //         tools::log->info("v_H1v               = {:.16e} diff {:.16e}", v_H1v, v_H1v - std::sqrt(vH1_H1v));
+    //         tools::log->info("v_H1v X2            = {:.16e}", v_H1vx2);
+    //         tools::log->info("v_H1v Q             = {:.16e}", v_H1vQ);
+    //         tools::log->info("v_H1v²              = {:.16e} diff {:.16e}", v_H1v * v_H1v, v_H1v * v_H1v - vH1_H1v);
+    //         tools::log->info("v_H2v               = {:.16e}", v_H2v);
+    //         tools::log->info("v_H2v X2            = {:.16e}", v_H2vx2);
+    //         tools::log->info("v_H2v X2 full       = {:.16e}", v_H2v_x2_full);
+    //         tools::log->info("v_H2v X2env fp128   = {:.16e}", v_H2v_x2env_acc);
+    //         tools::log->info("v_H2v Q             = {:.16e}", v_H2vQ);
+    //         tools::log->info("vH1_H1v X2 full     = {:.16e}", vH1_H1v_x2_full);
+    //         tools::log->info("vH1_H1v X2env fp128 = {:.16e}", vH1_H1v_x2env_acc);
+    //         tools::log->info("|H1x2-X2env_fp128|  = {:.16e}", H1_x2_vs_x2env_acc_norm);
+    //         tools::log->info("|H2x2-X2env_fp128|  = {:.16e}", H2_x2_vs_x2env_acc_norm);
+    //         tools::log->info("|H1v-vH1v*v|        = {:.16e}", rnorm1);
+    //         tools::log->info("proj_res2           = {:.16e}", proj_res2);
+    //         tools::log->info("proj_res2 X2 full   = {:.16e}", proj_res2_x2_full);
+    //         tools::log->info("proj_res2 X2env fp128 = {:.16e}", proj_res2_x2env_acc);
+    //         tools::log->info("leak2_raw           = {:.16e}", leak2_raw);
+    //         tools::log->info("leak2_raw X2 full   = {:.16e}", leak2_raw_x2_full);
+    //         tools::log->info("leak2_raw X2env fp128 = {:.16e}", leak2_raw_x2env_acc);
+    //         tools::log->info("delta               = {:.16e}", delta);
+    //         tools::log->info("E_local est         = {:.16e}", std::sqrt(vH1_H1v + rnorm1));
+    //         tools::log->info("sqrt(|H1v-v_H1v*v|) = {:.16e}", std::sqrt(rnorm1));
+    //         tools::log->info("res2_est            = {:.16e}", res2_est);
+    //         tools::log->info("res2_est X2 full    = {:.16e}", res2_est_x2_full);
+    //         tools::log->info("res2_est X2env fp128 = {:.16e}", res2_est_x2env_acc);
+    //         tools::log->info("res2_psd            = {:.16e}", res2_psd);
+    //         tools::log->info("res2_psd X2 full    = {:.16e}", res2_psd_x2_full);
+    //         tools::log->info("energy variance     = {:.16e}", v_H2v - v_H1v * v_H1v);
+    //         tools::log->info("energy variance X2f = {:.16e}", variance_x2_full);
+    //         tools::log->info("energy variance X2env fp128 = {:.16e}", variance_x2env_acc);
+    //     }
+    //
+    //     {
+    //         // tensors.get_state().clear_cache();
+    //         // tensors.get_state().clear_measurements();
+    //         tensors.get_edges().eject_edges_all();
+    //         tensors.rebuild_edges();
+    //         tensors.clear_cache();
+    //         tensors.clear_measurements();
+    //         for(const auto &env : tensors.get_edges().eneL) {
+    //             msg2.emplace_back(fmt::format("eneL[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
+    //         }
+    //         for(const auto &env : tensors.get_edges().eneR) {
+    //             msg2.emplace_back(fmt::format("eneR[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
+    //         }
+    //         const auto &mps         = tensors.get_state().template get_multisite_mps<Scalar>();
+    //         const auto &mpo1        = tensors.get_model().template get_multisite_mpo<Scalar>();
+    //         const auto &mpo2        = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
+    //         const auto &enve        = tensors.get_edges().get_multisite_env_ene();
+    //         const auto &envv        = tensors.get_edges().get_multisite_env_var();
+    //         auto        H1t         = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto        H1tx2       = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto        H1tQ        = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto        H2t         = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto        H2tx2       = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto        H2tQ        = Eigen::Tensor<Scalar, 3>(mps.dimensions());
+    //         auto        H1t_x2_full = x2::Tensor<Scalar, 3>();
+    //         auto        H2t_x2_full = x2::Tensor<Scalar, 3>();
+    //         {
+    //             auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, mpo1.dimensions());
+    //             auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo2.dimensions());
+    //             tools::log->info("contracting with tblis");
+    //             tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+    //             tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
+    //         }
+    //         {
+    //             auto h1info = SetH1MvInfo(ContractionPrecision::X2, mpo1.dimensions());
+    //             auto h2info = SetH2MvInfo(ContractionPrecision::X2, mpo2.dimensions());
+    //             tools::log->info("contracting with x2");
+    //             H1t_x2_full = tools::common::contraction::matrix_vector_product_x2(mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
+    //             H2t_x2_full = tools::common::contraction::matrix_vector_product_x2(mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
+    //             H1tx2       = H1t_x2_full.to_EigenTensor();
+    //             H2tx2       = H2t_x2_full.to_EigenTensor();
+    //         }
+    //         {
+    //             auto h2info = SetH2MvInfo(ContractionBackend::EIGEN, mpo2.dimensions());
+    //             tools::log->info("contracting with fp128");
+    //             using ScalarQ = std::conditional_t<std::is_floating_point_v<Scalar>, fp128, cx128>;
+    //             Eigen::Tensor<ScalarQ, 3> H1t_q(mps.dimensions());
+    //             Eigen::Tensor<ScalarQ, 3> H2t_q(mps.dimensions());
+    //             Eigen::Tensor<ScalarQ, 3> mps_q   = mps.template cast<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 4> mpo1_q  = mpo1.template cast<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 4> mpo2_q  = mpo2.template cast<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 3> enveL_q = enve.L.template get_block_as<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 3> enveR_q = enve.R.template get_block_as<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 3> envvL_q = envv.L.template get_block_as<ScalarQ>();
+    //             Eigen::Tensor<ScalarQ, 3> envvR_q = envv.R.template get_block_as<ScalarQ>();
+    //             tools::common::contraction::matrix_vector_product(H1t_q, mps_q, mpo1_q, enveL_q, enveR_q);
+    //             tools::common::contraction::matrix_vector_product(H2t_q, mps_q, mpo2_q, envvL_q, envvR_q);
+    //             H1tQ = H1t_q.template cast<Scalar>();
+    //             H2tQ = H2t_q.template cast<Scalar>();
+    //         }
+    //         using VectorType   = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
+    //         auto       v       = tenx::VectorMap(mps);
+    //         auto       H1v     = tenx::VectorMap(H1t);
+    //         auto       H1vx2   = tenx::VectorMap(H1tx2);
+    //         auto       H1vQ    = tenx::VectorMap(H1tQ);
+    //         auto       H2v     = tenx::VectorMap(H2t);
+    //         auto       H2vx2   = tenx::VectorMap(H2tx2);
+    //         auto       H2vQ    = tenx::VectorMap(H2tQ);
+    //         RealScalar vH1_H1v = std::real(H1v.dot(H1v));
+    //         RealScalar v_H1v   = std::real(v.dot(H1v));
+    //         RealScalar v_H1vx2 = std::real(v.dot(H1vx2));
+    //         RealScalar v_H1vQ  = std::real(v.dot(H1vQ));
+    //         RealScalar v_H2v   = std::real(v.dot(H2v));
+    //         RealScalar v_H2vx2 = std::real(v.dot(H2vx2));
+    //         RealScalar v_H2vQ  = std::real(v.dot(H2vQ));
+    //
+    //         using AccReal   = fp128;
+    //         using AccScalar = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<AccReal>, AccReal>;
+    //         auto to_acc     = [](const Scalar &z) -> AccScalar {
+    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
+    //                 return AccScalar{static_cast<AccReal>(std::real(z)), static_cast<AccReal>(std::imag(z))};
+    //             else
+    //                 return static_cast<AccReal>(z);
+    //         };
+    //         auto conj_acc = [](const AccScalar &z) -> AccScalar {
+    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
+    //                 return std::conj(z);
+    //             else
+    //                 return z;
+    //         };
+    //         auto real_acc = [](const AccScalar &z) -> AccReal {
+    //             if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
+    //                 return std::real(z);
+    //             else
+    //                 return z;
+    //         };
+    //         auto dot_x2_real = [&](const x2::Tensor<Scalar, 3> &y) -> AccReal {
+    //             AccScalar sum = AccScalar{0};
+    //             for(Eigen::Index i = 0; i < mps.size(); ++i) {
+    //                 const auto xacc  = to_acc(mps.data()[i]);
+    //                 const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
+    //                 sum             += conj_acc(xacc) * yacc;
+    //             }
+    //             return real_acc(sum);
+    //         };
+    //         auto norm2_x2 = [&](const x2::Tensor<Scalar, 3> &y) -> AccReal {
+    //             AccReal sum = AccReal{0};
+    //             for(Eigen::Index i = 0; i < y.size(); ++i) {
+    //                 const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
+    //                 sum             += real_acc(conj_acc(yacc) * yacc);
+    //             }
+    //             return sum;
+    //         };
+    //         auto residual_norm2_x2 = [&](const x2::Tensor<Scalar, 3> &y, AccReal E) -> AccReal {
+    //             AccReal sum = AccReal{0};
+    //             for(Eigen::Index i = 0; i < mps.size(); ++i) {
+    //                 const auto xacc  = to_acc(mps.data()[i]);
+    //                 const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
+    //                 const auto racc  = yacc - E * xacc;
+    //                 sum             += real_acc(conj_acc(racc) * racc);
+    //             }
+    //             return sum;
+    //         };
+    //
+    //         AccReal v_H1v_x2_full     = dot_x2_real(H1t_x2_full);
+    //         AccReal v_H2v_x2_full     = dot_x2_real(H2t_x2_full);
+    //         AccReal vH1_H1v_x2_full   = norm2_x2(H1t_x2_full);
+    //         AccReal proj_res2_x2_full = residual_norm2_x2(H1t_x2_full, v_H1v_x2_full);
+    //         AccReal leak2_raw_x2_full = v_H2v_x2_full - vH1_H1v_x2_full;
+    //         AccReal res2_est_x2_full  = proj_res2_x2_full + leak2_raw_x2_full;
+    //         AccReal res2_psd_x2_full  = std::max(AccReal{0}, proj_res2_x2_full) + std::max(AccReal{0}, leak2_raw_x2_full);
+    //         AccReal variance_x2_full  = v_H2v_x2_full - v_H1v_x2_full * v_H1v_x2_full;
+    //
+    //         // TODO: Temporary x2 isolation diagnostic. Remove after deciding whether H2 x2 error comes from gemm_x2 or from the x2 MPO2/environments.
+    //         auto x2_to_acc_tensor = [&](const x2::Tensor<Scalar, 3> &t) {
+    //             auto out = Eigen::Tensor<AccScalar, 3>(t.dimensions());
+    //             for(Eigen::Index i = 0; i < t.size(); ++i) out.data()[i] = to_acc(t.hi_data()[i]) + to_acc(t.lo_data()[i]);
+    //             return out;
+    //         };
+    //         auto diff_norm_x2 = [&](const Eigen::Tensor<AccScalar, 3> &ref, const x2::Tensor<Scalar, 3> &x2res) -> AccReal {
+    //             AccReal sum = AccReal{0};
+    //             for(Eigen::Index i = 0; i < ref.size(); ++i) {
+    //                 const auto x2val  = to_acc(x2res.hi_data()[i]) + to_acc(x2res.lo_data()[i]);
+    //                 const auto d      = ref.data()[i] - x2val;
+    //                 sum              += real_acc(conj_acc(d) * d);
+    //             }
+    //             return std::sqrt(sum);
+    //         };
+    //         auto residual_norm2_acc = [&](const Eigen::Tensor<AccScalar, 3> &y, const Eigen::Tensor<AccScalar, 3> &x, AccReal E) -> AccReal {
+    //             AccReal sum = AccReal{0};
+    //             for(Eigen::Index i = 0; i < x.size(); ++i) {
+    //                 const auto r  = y.data()[i] - E * x.data()[i];
+    //                 sum          += real_acc(conj_acc(r) * r);
+    //             }
+    //             return sum;
+    //         };
+    //         Eigen::Tensor<AccScalar, 3> mps_acc       = mps.template cast<AccScalar>();
+    //         Eigen::Tensor<AccScalar, 4> mpo1_acc      = mpo1.template cast<AccScalar>();
+    //         Eigen::Tensor<AccScalar, 4> mpo2_acc      = mpo2.template cast<AccScalar>();
+    //         auto                        enveL_x2_acc  = x2_to_acc_tensor(enve.L.get_blkx2());
+    //         auto                        enveR_x2_acc  = x2_to_acc_tensor(enve.R.get_blkx2());
+    //         auto                        envvL_x2_acc  = x2_to_acc_tensor(envv.L.get_blkx2());
+    //         auto                        envvR_x2_acc  = x2_to_acc_tensor(envv.R.get_blkx2());
+    //         auto                        H1t_x2env_acc = Eigen::Tensor<AccScalar, 3>(mps.dimensions());
+    //         auto                        H2t_x2env_acc = Eigen::Tensor<AccScalar, 3>(mps.dimensions());
+    //         auto                        h1info_x2env  = SetH1MvInfo(ContractionBackend::EIGEN, mpo1.dimensions());
+    //         auto                        h2info_x2env  = SetH2MvInfo(ContractionBackend::EIGEN, mpo2.dimensions());
+    //         tools::common::contraction::matrix_vector_product(H1t_x2env_acc, mps_acc, mpo1_acc, enveL_x2_acc, enveR_x2_acc);
+    //         tools::common::contraction::matrix_vector_product(H2t_x2env_acc, mps_acc, mpo2_acc, envvL_x2_acc, envvR_x2_acc);
+    //         auto    v_acc                   = tenx::VectorMap(mps_acc);
+    //         auto    H1v_x2env_acc           = tenx::VectorMap(H1t_x2env_acc);
+    //         auto    H2v_x2env_acc           = tenx::VectorMap(H2t_x2env_acc);
+    //         AccReal v_H1v_x2env_acc         = real_acc(v_acc.dot(H1v_x2env_acc));
+    //         AccReal v_H2v_x2env_acc         = real_acc(v_acc.dot(H2v_x2env_acc));
+    //         AccReal vH1_H1v_x2env_acc       = real_acc(H1v_x2env_acc.dot(H1v_x2env_acc));
+    //         AccReal proj_res2_x2env_acc     = residual_norm2_acc(H1t_x2env_acc, mps_acc, v_H1v_x2env_acc);
+    //         AccReal leak2_raw_x2env_acc     = v_H2v_x2env_acc - vH1_H1v_x2env_acc;
+    //         AccReal res2_est_x2env_acc      = proj_res2_x2env_acc + leak2_raw_x2env_acc;
+    //         AccReal variance_x2env_acc      = v_H2v_x2env_acc - v_H1v_x2env_acc * v_H1v_x2env_acc;
+    //         AccReal H1_x2_vs_x2env_acc_norm = diff_norm_x2(H1t_x2env_acc, H1t_x2_full);
+    //         AccReal H2_x2_vs_x2env_acc_norm = diff_norm_x2(H2t_x2env_acc, H2t_x2_full);
+    //
+    //         VectorType resid1    = H1v - v_H1v * v;
+    //         RealScalar rnorm1    = resid1.norm();
+    //         RealScalar proj_res2 = std::real(resid1.dot(resid1));
+    //         RealScalar leak2_raw = v_H2v - vH1_H1v;
+    //         RealScalar res2_est  = proj_res2 + leak2_raw;
+    //         RealScalar res2_psd  = std::max(RealScalar{0}, proj_res2) + std::max(RealScalar{0}, leak2_raw);
+    //         RealScalar delta     = v_H2v - vH1_H1v;
+    //
+    //         tools::log->info("var_opt             = {:.16e}", opt_state.get_variance());
+    //         tools::log->info("var_mrg             = {:.16e}", var_mrg);
+    //         tools::log->info("vH1_H1v             = {:.16e}", vH1_H1v);
+    //         tools::log->info("v_H1v               = {:.16e} diff {:.16e}", v_H1v, v_H1v - std::sqrt(vH1_H1v));
+    //         tools::log->info("v_H1v X2            = {:.16e}", v_H1vx2);
+    //         tools::log->info("v_H1v Q             = {:.16e}", v_H1vQ);
+    //         tools::log->info("v_H1v²              = {:.16e} diff {:.16e}", v_H1v * v_H1v, v_H1v * v_H1v - vH1_H1v);
+    //         tools::log->info("v_H2v               = {:.16e}", v_H2v);
+    //         tools::log->info("v_H2v X2            = {:.16e}", v_H2vx2);
+    //         tools::log->info("v_H2v X2 full       = {:.16e}", v_H2v_x2_full);
+    //         tools::log->info("v_H2v X2env fp128   = {:.16e}", v_H2v_x2env_acc);
+    //         tools::log->info("v_H2v Q             = {:.16e}", v_H2vQ);
+    //         tools::log->info("vH1_H1v X2 full     = {:.16e}", vH1_H1v_x2_full);
+    //         tools::log->info("vH1_H1v X2env fp128 = {:.16e}", vH1_H1v_x2env_acc);
+    //         tools::log->info("|H1x2-X2env_fp128|  = {:.16e}", H1_x2_vs_x2env_acc_norm);
+    //         tools::log->info("|H2x2-X2env_fp128|  = {:.16e}", H2_x2_vs_x2env_acc_norm);
+    //         tools::log->info("|H1v-vH1v*v|        = {:.16e}", rnorm1);
+    //         tools::log->info("proj_res2           = {:.16e}", proj_res2);
+    //         tools::log->info("proj_res2 X2 full   = {:.16e}", proj_res2_x2_full);
+    //         tools::log->info("proj_res2 X2env fp128 = {:.16e}", proj_res2_x2env_acc);
+    //         tools::log->info("leak2_raw           = {:.16e}", leak2_raw);
+    //         tools::log->info("leak2_raw X2 full   = {:.16e}", leak2_raw_x2_full);
+    //         tools::log->info("leak2_raw X2env fp128 = {:.16e}", leak2_raw_x2env_acc);
+    //         tools::log->info("delta               = {:.16e}", delta);
+    //         tools::log->info("E_local est         = {:.16e}", std::sqrt(vH1_H1v + rnorm1));
+    //         tools::log->info("sqrt(|H1v-v_H1v*v|) = {:.16e}", std::sqrt(rnorm1));
+    //         tools::log->info("res2_est            = {:.16e}", res2_est);
+    //         tools::log->info("res2_est X2 full    = {:.16e}", res2_est_x2_full);
+    //         tools::log->info("res2_est X2env fp128 = {:.16e}", res2_est_x2env_acc);
+    //         tools::log->info("res2_psd            = {:.16e}", res2_psd);
+    //         tools::log->info("res2_psd X2 full    = {:.16e}", res2_psd_x2_full);
+    //         tools::log->info("energy variance     = {:.16e}", v_H2v - v_H1v * v_H1v);
+    //         tools::log->info("energy variance X2f = {:.16e}", variance_x2_full);
+    //         tools::log->info("energy variance X2env fp128 = {:.16e}", variance_x2env_acc);
+    //     }
+    //     for(size_t i = 0; i < msg1.size(); ++i) { tools::log->info("{} | {}", msg1.at(i), msg2.at(i)); }
+    //
+    //     exit(1);
+    // }
 
-        {
-            auto                t_res      = tid::tic_token("<ψ|H²_global ψ>");
-            StateFinite<Scalar> tmp_state1 = tensors.get_state();
-            StateFinite<Scalar> tmp_state2 = tensors.get_state();
-            auto                mpos1      = tensors.get_model().get_mpo_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
-            auto                mpos2      = tensors.get_model().get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
-            auto                svdcfg     = svd::config(8192, 1e-20);
-            svdcfg.svd_lib                 = svd::lib::lapack;
-            svdcfg.svd_rtn                 = svd::rtn::gesdd;
-            tools::finite::ops::apply_mpos_general(tmp_state1, mpos1, svdcfg);
-            tools::finite::ops::apply_mpos_general(tmp_state2, mpos2, svdcfg);
-            RealScalar E1_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state1, tensors.get_state()));
-            RealScalar E2_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state2, tensors.get_state()));
-            tools::log->info("H²              <ψ| H²_global ψ>                                = {:.16e} | t = {:.4e}", E2_global, t_res->get_last_interval());
-
-            RealScalar VarH = E2_global - E1_global * E1_global;
-            tools::log->info("energy variance <H²_global> - <H_global>²                       = {:.16e} | t = {:.4e}", VarH, t_res->get_last_interval());
-        }
-        {
-            auto                t_res        = tid::tic_token("<ψ (H_global-E_local) | (H_global-E_local) ψ>");
-            StateFinite<Scalar> tmp_state    = tensors.get_state();
-            auto                L            = tensors.template get_length<RealScalar>();
-            auto                mpos_shifted = tensors.get_model().get_mpo_tensors(ene_mrg / L, MposWithEdges::ON, MpoCompress::NONE);
-            auto                svdcfg       = svd::config(8192, 1e-20);
-            tools::finite::ops::apply_mpos_general(tmp_state, mpos_shifted, svdcfg);
-            RealScalar VarH_global = std::real(tools::finite::ops::overlap<Scalar>(tmp_state, tmp_state));
-            tools::log->info("energy variance <ψ (H_global-E_local) | (H_global-E_local) ψ>   = {:.16e} | t = {:.4e}", VarH_global, t_res->get_last_interval());
-        }
-        {
-            using ScalarL       = Scalar;
-            using RealScalarL   = Eigen::NumTraits<ScalarL>::Real;
-            using RealScalar128 = fp128;
-            using Scalar128     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalar128>, RealScalar128>;
-
-            auto tensorsL = tensors.template cast<ScalarL>();
-            auto envi     = SetEnvInfo(ContractionPrecision::X2);
-            auto mv1i     = SetH1MvInfo(ContractionPrecision::X2);
-            auto mv2i     = SetH2MvInfo(ContractionPrecision::X2);
-            tensorsL.get_model().build_mpo();
-            tensorsL.get_model().build_mpo_squared();
-            tensorsL.get_edges().eject_edges_all();
-            tensorsL.rebuild_edges();
-            tensorsL.clear_measurements();
-            tensorsL.clear_cache();
-            auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
-            auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
-            auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
-
-            auto enve = tensorsL.get_edges().get_multisite_env_ene();
-            auto envv = tensorsL.get_edges().get_multisite_env_var();
-            auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
-            auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
-            tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L, enve.R);
-            tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L, envv.R);
-
-            auto          v           = tenx::VectorMap(mps);
-            auto          H1v         = tenx::VectorMap(H1t);
-            auto          H2v         = tenx::VectorMap(H2t);
-            RealScalarL   v_H1v       = std::real(v.dot(H1v));
-            RealScalarL   v_H2v       = std::real(v.dot(H2v));
-            RealScalar128 v_H2v_fp128 = std::real(v.template cast<Scalar128>().dot(H2v.template cast<Scalar128>()));
-
-            RealScalarL enveLnorm = enve.L.get_blkx2().norm();
-            RealScalarL enveRnorm = enve.R.get_blkx2().norm();
-            RealScalarL envvLnorm = envv.L.get_blkx2().norm();
-            RealScalarL envvRnorm = envv.R.get_blkx2().norm();
-            auto        envvLdims = envv.L.get_block().dimensions();
-            auto        envvRdims = envv.R.get_block().dimensions();
-
-            tools::log->info("X2    var_opt            = {:.16e}", opt_state.get_variance());
-            tools::log->info("X2    var_mrg            = {:.16e}", var_mrg);
-            tools::log->info("X2    active sites       = {} | first {} | last {}", tensorsL.active_sites.size(),
-                             tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.front()),
-                             tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.back()));
-            tools::log->info("X2    envv dims          = L[{},{},{}] R[{},{},{}]", envvLdims[0], envvLdims[1], envvLdims[2], envvRdims[0], envvRdims[1],
-                             envvRdims[2]);
-            tools::log->info("X2    |H1v|              = {:.16e}", H1v.norm());
-            tools::log->info("X2    |H2v|              = {:.16e}", H2v.norm());
-            tools::log->info("X2    v_H1v              = {:.16e}", v_H1v);
-            tools::log->info("X2    v_H2v              = {:.16e}", v_H2v);
-            tools::log->info("X2    v_H2v    (fp128)   = {:.16e}", v_H2v_fp128);
-            tools::log->info("X2    energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
-            tools::log->info("X2    |enveL|            = {:.16e}", enveLnorm);
-            tools::log->info("X2    |enveR|            = {:.16e}", enveRnorm);
-            tools::log->info("X2    |envvL|            = {:.16e}", envvLnorm);
-            tools::log->info("X2    |envvR|            = {:.16e}", envvRnorm);
-        }
-        {
-            using RealScalarL = fp64;
-            using ScalarL     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalarL>, RealScalarL>;
-            auto tensorsL     = tensors.template cast<ScalarL>();
-            auto envi         = SetEnvInfo(ContractionBackend::EIGEN);
-            auto mv1i         = SetH1MvInfo(ContractionBackend::EIGEN);
-            auto mv2i         = SetH2MvInfo(ContractionBackend::EIGEN);
-            tensorsL.get_model().build_mpo();
-            tensorsL.get_model().build_mpo_squared();
-            tensorsL.get_edges().eject_edges_all();
-            tensorsL.rebuild_edges();
-            tensorsL.clear_measurements();
-            tensorsL.clear_cache();
-            auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
-            auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
-            auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
-            auto enve = tensorsL.get_edges().get_multisite_env_ene();
-            auto envv = tensorsL.get_edges().get_multisite_env_var();
-            auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
-            auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
-            tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
-            tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
-
-            auto        v     = tenx::VectorMap(mps);
-            auto        H1v   = tenx::VectorMap(H1t);
-            auto        H2v   = tenx::VectorMap(H2t);
-            RealScalarL v_H1v = std::real(v.dot(H1v));
-            RealScalarL v_H2v = std::real(v.dot(H2v));
-
-            RealScalarL enveLnorm = enve.L.get_blkx2().norm();
-            RealScalarL enveRnorm = enve.R.get_blkx2().norm();
-            RealScalarL envvLnorm = envv.L.get_blkx2().norm();
-            RealScalarL envvRnorm = envv.R.get_blkx2().norm();
-            auto        envvLdims = envv.L.get_block().dimensions();
-            auto        envvRdims = envv.R.get_block().dimensions();
-
-            tools::log->info("FP64  active sites       = {} | first {} | last {}", tensorsL.active_sites.size(),
-                             tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.front()),
-                             tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.back()));
-            tools::log->info("FP64  envv dims          = L[{},{},{}] R[{},{},{}]", envvLdims[0], envvLdims[1], envvLdims[2], envvRdims[0], envvRdims[1],
-                             envvRdims[2]);
-            tools::log->info("FP64  |H1v|              = {:.16e}", H1v.norm());
-            tools::log->info("FP64  |H2v|              = {:.16e}", H2v.norm());
-            tools::log->info("FP64  v_H1v              = {:.16e}", v_H1v);
-            tools::log->info("FP64  v_H2v              = {:.16e}", v_H2v);
-            tools::log->info("FP64  energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
-            tools::log->info("FP64  |enveL|            = {:.16e}", enveLnorm);
-            tools::log->info("FP64  |enveR|            = {:.16e}", enveRnorm);
-            tools::log->info("FP64  |envvL|            = {:.16e}", envvLnorm);
-            tools::log->info("FP64  |envvR|            = {:.16e}", envvRnorm);
-        }
-
-        {
-            using RealScalarL = fp128;
-            using ScalarL     = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<RealScalarL>, RealScalarL>;
-            auto tensorsL     = tensors.template cast<ScalarL>();
-            auto envi         = SetEnvInfo(ContractionBackend::EIGEN);
-            auto mv1i         = SetH1MvInfo(ContractionBackend::EIGEN);
-            auto mv2i         = SetH2MvInfo(ContractionBackend::EIGEN);
-            tensorsL.get_model().build_mpo();
-            tensorsL.get_model().build_mpo_squared();
-            tensorsL.get_edges().eject_edges_all();
-            tensorsL.rebuild_edges();
-            tensorsL.clear_measurements();
-            tensorsL.clear_cache();
-            auto mps  = tensorsL.get_state().template get_multisite_mps<ScalarL>();
-            auto mpo1 = tensorsL.get_model().template get_multisite_mpo<ScalarL>();
-            auto mpo2 = tensorsL.get_model().template get_multisite_mpo_squared<ScalarL>();
-            auto enve = tensorsL.get_edges().get_multisite_env_ene();
-            auto envv = tensorsL.get_edges().get_multisite_env_var();
-            auto H1t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
-            auto H2t  = Eigen::Tensor<ScalarL, 3>(mps.dimensions());
-            tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
-            tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
-
-            auto        v     = tenx::VectorMap(mps);
-            auto        H1v   = tenx::VectorMap(H1t);
-            auto        H2v   = tenx::VectorMap(H2t);
-            RealScalarL v_H1v = std::real(v.dot(H1v));
-            RealScalarL v_H2v = std::real(v.dot(H2v));
-
-            RealScalarL enveLnorm = enve.L.get_blkx2().norm();
-            RealScalarL enveRnorm = enve.R.get_blkx2().norm();
-            RealScalarL envvLnorm = envv.L.get_blkx2().norm();
-            RealScalarL envvRnorm = envv.R.get_blkx2().norm();
-            auto        envvLdims = envv.L.get_block().dimensions();
-            auto        envvRdims = envv.R.get_block().dimensions();
-
-            tools::log->info("FP128 active sites       = {} | first {} | last {}", tensorsL.active_sites.size(),
-                             tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.front()),
-                             tensorsL.active_sites.empty() ? -1 : static_cast<long>(tensorsL.active_sites.back()));
-            tools::log->info("FP128 envv dims          = L[{},{},{}] R[{},{},{}]", envvLdims[0], envvLdims[1], envvLdims[2], envvRdims[0], envvRdims[1],
-                             envvRdims[2]);
-            tools::log->info("FP128 |H1v|              = {:.16e}", H1v.norm());
-            tools::log->info("FP128 |H2v|              = {:.16e}", H2v.norm());
-            tools::log->info("FP128 v_H1v              = {:.16e}", v_H1v);
-            tools::log->info("FP128 v_H2v              = {:.16e}", v_H2v);
-            tools::log->info("FP128 energy variance    = {:.16e}", v_H2v - v_H1v * v_H1v);
-            tools::log->info("FP128 |enveL|            = {:.16e}", enveLnorm);
-            tools::log->info("FP128 |enveR|            = {:.16e}", enveRnorm);
-            tools::log->info("FP128 |envvL|            = {:.16e}", envvLnorm);
-            tools::log->info("FP128 |envvR|            = {:.16e}", envvRnorm);
-        }
-
-        std::vector<std::string> msg1;
-        std::vector<std::string> msg2;
-        {
-            // tensors.get_state().clear_cache();
-            // tensors.get_state().clear_measurements();
-            // tensors.get_edges().eject_edges_all();
-            // TODO: Temporary environment rebuild diagnostic. Remove after deciding whether stale or numerically degraded environments cause negative variance.
-            using EnvAccReal   = fp128;
-            using EnvAccScalar = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<EnvAccReal>, EnvAccReal>;
-            struct EnvSnapshot {
-                std::string                    label;
-                std::string                    side;
-                size_t                         position  = 0;
-                size_t                         unique_id = 0;
-                bool                           has_block = false;
-                std::array<Eigen::Index, 3>    dims      = {0, 0, 0};
-                Eigen::Tensor<EnvAccScalar, 3> block;
-                EnvAccReal                     norm = 0;
-            };
-            auto env_to_acc = [](const auto &z) -> EnvAccScalar {
-                using Z = std::decay_t<decltype(z)>;
-                if constexpr(Eigen::NumTraits<Z>::IsComplex == 1)
-                    return EnvAccScalar{static_cast<EnvAccReal>(std::real(z)), static_cast<EnvAccReal>(std::imag(z))};
-                else
-                    return static_cast<EnvAccReal>(z);
-            };
-            auto env_conj_acc = [](const EnvAccScalar &z) -> EnvAccScalar {
-                if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
-                    return std::conj(z);
-                else
-                    return z;
-            };
-            auto env_real_acc = [](const EnvAccScalar &z) -> EnvAccReal {
-                if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
-                    return std::real(z);
-                else
-                    return z;
-            };
-            auto env_x2_to_acc_tensor = [&](const auto &t) {
-                auto out = Eigen::Tensor<EnvAccScalar, 3>(t.dimensions());
-                for(Eigen::Index i = 0; i < t.size(); ++i) out.data()[i] = env_to_acc(t.hi_data()[i]) + env_to_acc(t.lo_data()[i]);
-                return out;
-            };
-            auto env_norm_acc = [&](const Eigen::Tensor<EnvAccScalar, 3> &t) -> EnvAccReal {
-                EnvAccReal sum = EnvAccReal{0};
-                for(Eigen::Index i = 0; i < t.size(); ++i) sum += env_real_acc(env_conj_acc(t.data()[i]) * t.data()[i]);
-                return std::sqrt(sum);
-            };
-            auto env_diff_norm_acc = [&](const Eigen::Tensor<EnvAccScalar, 3> &a, const Eigen::Tensor<EnvAccScalar, 3> &b) -> EnvAccReal {
-                EnvAccReal sum = EnvAccReal{0};
-                for(Eigen::Index i = 0; i < a.size(); ++i) {
-                    const auto d  = a.data()[i] - b.data()[i];
-                    sum          += env_real_acc(env_conj_acc(d) * d);
-                }
-                return std::sqrt(sum);
-            };
-            auto env_relevant_to_active_sites = [&](std::string_view side, size_t pos) {
-                if(tensors.active_sites.empty()) return true;
-                if(side == "L") return pos <= tensors.active_sites.front();
-                if(side == "R") return pos >= tensors.active_sites.back();
-                return true;
-            };
-            auto env_x2_component_norms = [&](const auto &t) {
-                EnvAccReal hi2   = EnvAccReal{0};
-                EnvAccReal lo2   = EnvAccReal{0};
-                EnvAccReal full2 = EnvAccReal{0};
-                for(Eigen::Index i = 0; i < t.size(); ++i) {
-                    const auto hi  = env_to_acc(t.hi_data()[i]);
-                    const auto lo  = env_to_acc(t.lo_data()[i]);
-                    hi2           += env_real_acc(env_conj_acc(hi) * hi);
-                    lo2           += env_real_acc(env_conj_acc(lo) * lo);
-                    full2         += env_real_acc(env_conj_acc(hi + lo) * (hi + lo));
-                }
-                return std::array<EnvAccReal, 3>{std::sqrt(hi2), std::sqrt(lo2), std::sqrt(full2)};
-            };
-            auto log_env_x2_components = [&](const auto &envs, std::string_view label, std::string_view side) {
-                for(const auto &env : envs) {
-                    const auto pos = env->get_position();
-                    if(not env_relevant_to_active_sites(side, pos)) continue;
-                    if(not env->has_block()) continue;
-                    const auto norms = env_x2_component_norms(env->get_blkx2());
-                    tools::log->info("env x2 components {}{}[{:2}] dims [{},{},{}] |hi| {:.16e} |lo| {:.16e} |hi+lo| {:.16e}", label, side, pos,
-                                     env->get_blkx2().dimension(0), env->get_blkx2().dimension(1), env->get_blkx2().dimension(2), norms[0], norms[1], norms[2]);
-                }
-            };
-            auto env_norm4_acc = [&](const auto &t) -> EnvAccReal {
-                EnvAccReal sum = EnvAccReal{0};
-                for(Eigen::Index i = 0; i < t.size(); ++i) {
-                    const auto z  = env_to_acc(t.data()[i]);
-                    sum          += env_real_acc(env_conj_acc(z) * z);
-                }
-                return std::sqrt(sum);
-            };
-            auto env_diff_norm4_acc = [&](const auto &a, const auto &b) -> EnvAccReal {
-                EnvAccReal sum = EnvAccReal{0};
-                for(Eigen::Index i = 0; i < a.size(); ++i) {
-                    const auto d  = env_to_acc(a.data()[i]) - env_to_acc(b.data()[i]);
-                    sum          += env_real_acc(env_conj_acc(d) * d);
-                }
-                return std::sqrt(sum);
-            };
-            auto log_mpo2_site_diffs = [&](std::string_view label, const auto &model_ref) {
-                for(size_t pos = 0; pos < tensors.template get_length<size_t>(); ++pos) {
-                    const auto &mpo2_live = tensors.get_model().get_mpo(pos).MPO2();
-                    const auto &mpo2_ref  = model_ref.get_mpo(pos).MPO2();
-                    const auto  live_norm = env_norm4_acc(mpo2_live);
-                    const auto  ref_norm  = env_norm4_acc(mpo2_ref);
-                    const auto  live_dims = mpo2_live.dimensions();
-                    const auto  ref_dims  = mpo2_ref.dimensions();
-                    if(live_dims != ref_dims) {
-                        tools::log->info("mpo2 compressed diff {} site[{:2}] dims live [{},{},{},{}] ref [{},{},{},{}]", label, pos, live_dims[0], live_dims[1],
-                                         live_dims[2], live_dims[3], ref_dims[0], ref_dims[1], ref_dims[2], ref_dims[3]);
-                        continue;
-                    }
-                    const auto diff = env_diff_norm4_acc(mpo2_live, mpo2_ref);
-                    const auto den  = std::max(live_norm, ref_norm);
-                    const auto rel  = den > EnvAccReal{0} ? diff / den : diff;
-                    tools::log->info("mpo2 compressed diff {} site[{:2}] dims [{},{},{},{}] | live {:.16e} ref {:.16e} | diff {:.16e} rel {:.16e}", label, pos,
-                                     live_dims[0], live_dims[1], live_dims[2], live_dims[3], live_norm, ref_norm, diff, rel);
-                }
-            };
-            std::vector<EnvSnapshot> env_snapshots;
-            auto                     collect_env_snapshots = [&](const auto &envs, std::string_view label, std::string_view side) {
-                for(const auto &env : envs) {
-                    const auto pos = env->get_position();
-                    if(not env_relevant_to_active_sites(side, pos)) continue;
-                    EnvSnapshot snap;
-                    snap.label     = std::string(label);
-                    snap.side      = std::string(side);
-                    snap.position  = pos;
-                    snap.has_block = env->has_block();
-                    if(snap.has_block) {
-                        snap.unique_id = env->get_unique_id();
-                        snap.dims      = env->get_blkx2().dimensions();
-                        snap.block     = env_x2_to_acc_tensor(env->get_blkx2());
-                        snap.norm      = env_norm_acc(snap.block);
-                    }
-                    env_snapshots.emplace_back(std::move(snap));
-                }
-            };
-            auto log_env_rebuild_diffs = [&](const auto &envs, std::string_view label, std::string_view side) {
-                for(const auto &snap : env_snapshots) {
-                    if(snap.label != label or snap.side != side) continue;
-                    auto env_it = std::find_if(envs.begin(), envs.end(), [&](const auto &env) { return env->get_position() == snap.position; });
-                    if(env_it == envs.end()) {
-                        tools::log->info("env rebuild diff {}{}[{:2}] missing after rebuild", label, side, snap.position);
-                        continue;
-                    }
-                    const auto &env       = **env_it;
-                    const auto  has_after = env.has_block();
-                    if(not snap.has_block or not has_after) {
-                        tools::log->info("env rebuild diff {}{}[{:2}] block before {} after {}", label, side, snap.position, snap.has_block, has_after);
-                        continue;
-                    }
-                    const auto id_after   = env.get_unique_id();
-                    const auto blk_after  = env_x2_to_acc_tensor(env.get_blkx2());
-                    const auto norm_after = env_norm_acc(blk_after);
-                    if(snap.dims != env.get_blkx2().dimensions()) {
-                        tools::log->info("env rebuild diff {}{}[{:2}] id {} -> {} dims [{},{},{}] -> [{},{},{}]", label, side, snap.position, snap.unique_id,
-                                         id_after, snap.dims[0], snap.dims[1], snap.dims[2], env.get_blkx2().dimension(0), env.get_blkx2().dimension(1),
-                                         env.get_blkx2().dimension(2));
-                        continue;
-                    }
-                    const auto diff = env_diff_norm_acc(snap.block, blk_after);
-                    const auto den  = std::max(snap.norm, norm_after);
-                    const auto rel  = den > EnvAccReal{0} ? diff / den : diff;
-                    tools::log->info("env rebuild diff {}{}[{:2}] id {} -> {} | norm {:.16e} -> {:.16e} | diff {:.16e} rel {:.16e}", label, side, snap.position,
-                                     snap.unique_id, id_after, snap.norm, norm_after, diff, rel);
-                }
-            };
-            auto log_env_ref_diffs = [&](const auto &envs_ref, std::string_view ref_label, std::string_view label, std::string_view side) {
-                for(const auto &snap : env_snapshots) {
-                    if(snap.label != label or snap.side != side) continue;
-                    auto env_it = std::find_if(envs_ref.begin(), envs_ref.end(), [&](const auto &env) { return env->get_position() == snap.position; });
-                    if(env_it == envs_ref.end()) {
-                        tools::log->info("env {} diff {}{}[{:2}] missing in ref rebuild", ref_label, label, side, snap.position);
-                        continue;
-                    }
-                    const auto &env_ref       = **env_it;
-                    const auto  has_ref_block = env_ref.has_block();
-                    if(not snap.has_block or not has_ref_block) {
-                        tools::log->info("env {} diff {}{}[{:2}] block current {} ref {}", ref_label, label, side, snap.position, snap.has_block,
-                                         has_ref_block);
-                        continue;
-                    }
-                    const auto blk_ref  = env_x2_to_acc_tensor(env_ref.get_blkx2());
-                    const auto norm_ref = env_norm_acc(blk_ref);
-                    if(snap.dims != env_ref.get_blkx2().dimensions()) {
-                        tools::log->info("env {} diff {}{}[{:2}] dims current [{},{},{}] ref [{},{},{}]", ref_label, label, side, snap.position, snap.dims[0],
-                                         snap.dims[1], snap.dims[2], env_ref.get_blkx2().dimension(0), env_ref.get_blkx2().dimension(1),
-                                         env_ref.get_blkx2().dimension(2));
-                        continue;
-                    }
-                    const auto diff = env_diff_norm_acc(snap.block, blk_ref);
-                    const auto den  = std::max(snap.norm, norm_ref);
-                    const auto rel  = den > EnvAccReal{0} ? diff / den : diff;
-                    tools::log->info("env {} diff {}{}[{:2}] | norm current {:.16e} ref {:.16e} | diff {:.16e} rel {:.16e}", ref_label, label, side,
-                                     snap.position, snap.norm, norm_ref, diff, rel);
-                }
-            };
-            auto env_dot_acc = [&](const Eigen::Tensor<EnvAccScalar, 3> &x, const Eigen::Tensor<EnvAccScalar, 3> &y) -> EnvAccReal {
-                EnvAccScalar sum = EnvAccScalar{0};
-                for(Eigen::Index i = 0; i < x.size(); ++i) sum += env_conj_acc(x.data()[i]) * y.data()[i];
-                return env_real_acc(sum);
-            };
-
-            for(const auto &env : tensors.get_edges().eneL) {
-                msg1.emplace_back(fmt::format("eneL[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
-            }
-            for(const auto &env : tensors.get_edges().eneR) {
-                msg1.emplace_back(fmt::format("eneR[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
-            }
-
-            tools::log->info("env rebuild diff active sites {}", tensors.active_sites);
-            collect_env_snapshots(tensors.get_edges().eneL, "ene", "L");
-            collect_env_snapshots(tensors.get_edges().eneR, "ene", "R");
-            collect_env_snapshots(tensors.get_edges().varL, "var", "L");
-            collect_env_snapshots(tensors.get_edges().varR, "var", "R");
-            tensors.get_edges().eject_edges_all();
-            {
-                const auto envinfo_live = tools::common::contraction::internal::get_info_env();
-                tools::log->info("live env rebuild policy backend {} precision {}", enum2sv(envinfo_live.backend), enum2sv(envinfo_live.precision));
-            }
-            tensors.rebuild_edges();
-            log_env_rebuild_diffs(tensors.get_edges().eneL, "ene", "L");
-            log_env_rebuild_diffs(tensors.get_edges().eneR, "ene", "R");
-            log_env_rebuild_diffs(tensors.get_edges().varL, "var", "L");
-            log_env_rebuild_diffs(tensors.get_edges().varR, "var", "R");
-            log_env_x2_components(tensors.get_edges().varL, "live-var", "L");
-            log_env_x2_components(tensors.get_edges().varR, "live-var", "R");
-            {
-                // TODO: Temporary FP128 environment comparison. Remove after locating whether MPO2 compression or environment construction causes negative
-                // variance.
-                auto tensors_fp128 = tensors.template cast<EnvAccScalar>();
-                auto envinfo_fp128 = SetEnvInfo(ContractionBackend::EIGEN);
-                tensors_fp128.get_model().build_mpo();
-                tensors_fp128.get_model().build_mpo_squared();
-                auto mpo_squared_compress_postmortem = settings::model::use_compressed_mpo_squared;
-                if(mpo_squared_compress_before_postmortem == MpoCompress::AUTO) mpo_squared_compress_before_postmortem = MpoCompress::DPL;
-                settings::model::use_compressed_mpo_squared = mpo_squared_compress_before_postmortem;
-                // TODO: Temporary diagnostic override. The surrounding post-mortem disables MPO2 compression; force the original mode here so the FP128
-                // comparison uses the same compressed operator family as the live variance path.
-                tensors_fp128.compress_mpo_squared();
-                settings::model::use_compressed_mpo_squared = mpo_squared_compress_postmortem;
-                tools::log->info("FP128 forced MPO2 compression mode {} | has_compressed {}", enum2sv(mpo_squared_compress_before_postmortem),
-                                 tensors_fp128.get_model().has_compressed_mpo_squared());
-                log_mpo2_site_diffs("live/fp128", tensors_fp128.get_model());
-                auto tensors_fp128_down = tensors;
-                for(size_t pos = 0; pos < tensors.template get_length<size_t>(); ++pos) {
-                    const auto mpo2_down = Eigen::Tensor<Scalar, 4>(tensors_fp128.get_model().get_mpo(pos).template MPO2_as<Scalar>());
-                    tensors_fp128_down.get_model().get_mpo(pos).set_mpo_squared(mpo2_down);
-                }
-                tensors_fp128_down.clear_cache();
-                tensors_fp128_down.clear_measurements();
-                tools::log->info("FP128-compressed MPO2 downcast to live scalar | has_compressed {}",
-                                 tensors_fp128_down.get_model().has_compressed_mpo_squared());
-                log_mpo2_site_diffs("live/fp128down", tensors_fp128_down.get_model());
-                tensors_fp128_down.get_edges().eject_edges_all();
-                {
-                    auto       envinfo_down         = SetEnvInfo(ContractionBackend::AUTO, ContractionPrecision::X2);
-                    const auto envinfo_down_rebuild = tools::common::contraction::internal::get_info_env();
-                    tools::log->info("FP128-downcast env rebuild policy backend {} precision {}", enum2sv(envinfo_down_rebuild.backend),
-                                     enum2sv(envinfo_down_rebuild.precision));
-                    tensors_fp128_down.rebuild_edges();
-                }
-                tensors_fp128_down.clear_cache();
-                tensors_fp128_down.clear_measurements();
-                tensors_fp128.get_edges().eject_edges_all();
-                {
-                    const auto envinfo_fp128_rebuild = tools::common::contraction::internal::get_info_env();
-                    tools::log->info("FP128 env rebuild policy backend {} precision {}", enum2sv(envinfo_fp128_rebuild.backend),
-                                     enum2sv(envinfo_fp128_rebuild.precision));
-                }
-                tensors_fp128.rebuild_edges();
-                tensors_fp128.clear_cache();
-                tensors_fp128.clear_measurements();
-                const auto &mps_fp128               = tensors_fp128.get_state().template get_multisite_mps<EnvAccScalar>();
-                const auto &mpo2_fp128              = tensors_fp128.get_model().template get_multisite_mpo_squared<EnvAccScalar>();
-                const auto &envv_fp128              = tensors_fp128.get_edges().get_multisite_env_var();
-                const auto &mps_fp128_down          = tensors_fp128_down.get_state().template get_multisite_mps<Scalar>();
-                const auto &mpo2_fp128_down         = tensors_fp128_down.get_model().template get_multisite_mpo_squared<Scalar>();
-                const auto &envv_fp128_down         = tensors_fp128_down.get_edges().get_multisite_env_var();
-                const auto &mps_live                = tensors.get_state().template get_multisite_mps<Scalar>();
-                const auto &mpo2_live               = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
-                const auto &envv_live               = tensors.get_edges().get_multisite_env_var();
-                auto        mps_live_acc            = Eigen::Tensor<EnvAccScalar, 3>(mps_live.template cast<EnvAccScalar>());
-                auto        mpo2_live_acc           = Eigen::Tensor<EnvAccScalar, 4>(mpo2_live.template cast<EnvAccScalar>());
-                auto        envvL_live_acc          = env_x2_to_acc_tensor(envv_live.L.get_blkx2());
-                auto        envvR_live_acc          = env_x2_to_acc_tensor(envv_live.R.get_blkx2());
-                auto        mps_fp128_down_acc      = Eigen::Tensor<EnvAccScalar, 3>(mps_fp128_down.template cast<EnvAccScalar>());
-                auto        mpo2_fp128_down_acc     = Eigen::Tensor<EnvAccScalar, 4>(mpo2_fp128_down.template cast<EnvAccScalar>());
-                auto        envvL_fp128_down_acc    = env_x2_to_acc_tensor(envv_fp128_down.L.get_blkx2());
-                auto        envvR_fp128_down_acc    = env_x2_to_acc_tensor(envv_fp128_down.R.get_blkx2());
-                auto        envvL_fp128_scalar_down = Eigen::Tensor<Scalar, 3>(envv_fp128.L.template get_block_as<Scalar>());
-                auto        envvR_fp128_scalar_down = Eigen::Tensor<Scalar, 3>(envv_fp128.R.template get_block_as<Scalar>());
-                auto        envvL_fp128_sdown_acc   = Eigen::Tensor<EnvAccScalar, 3>(envvL_fp128_scalar_down.template cast<EnvAccScalar>());
-                auto        envvR_fp128_sdown_acc   = Eigen::Tensor<EnvAccScalar, 3>(envvR_fp128_scalar_down.template cast<EnvAccScalar>());
-                auto        split_acc_to_x2         = [](const Eigen::Tensor<EnvAccScalar, 3> &src) {
-                    auto dst = x2::Tensor<Scalar, 3>(src.dimension(0), src.dimension(1), src.dimension(2));
-                    for(Eigen::Index i = 0; i < src.size(); ++i) {
-                        if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1) {
-                            using LiveReal   = typename Eigen::NumTraits<Scalar>::Real;
-                            const auto z     = src.data()[i];
-                            const auto rhi   = static_cast<LiveReal>(std::real(z));
-                            const auto ihi   = static_cast<LiveReal>(std::imag(z));
-                            const auto rlo   = static_cast<LiveReal>(std::real(z) - static_cast<EnvAccReal>(rhi));
-                            const auto ilo   = static_cast<LiveReal>(std::imag(z) - static_cast<EnvAccReal>(ihi));
-                            dst.hi_data()[i] = Scalar{rhi, ihi};
-                            dst.lo_data()[i] = Scalar{rlo, ilo};
-                        } else {
-                            const auto hi    = static_cast<Scalar>(src.data()[i]);
-                            const auto lo    = static_cast<Scalar>(src.data()[i] - static_cast<EnvAccScalar>(hi));
-                            dst.hi_data()[i] = hi;
-                            dst.lo_data()[i] = lo;
-                        }
-                    }
-                    return dst;
-                };
-                auto envvL_fp128_split_x2    = split_acc_to_x2(env_x2_to_acc_tensor(envv_fp128.L.get_blkx2()));
-                auto envvR_fp128_split_x2    = split_acc_to_x2(env_x2_to_acc_tensor(envv_fp128.R.get_blkx2()));
-                auto H2t_fp128               = Eigen::Tensor<EnvAccScalar, 3>(mps_fp128.dimensions());
-                auto h2info_fp128_compressed = SetH2MvInfo(ContractionBackend::EIGEN, mpo2_fp128.dimensions());
-                tools::common::contraction::matrix_vector_product(H2t_fp128, mps_fp128, mpo2_fp128, envv_fp128.L.get_blkx2(), envv_fp128.R.get_blkx2());
-                tools::log->info("FP128 compressed |mpo2| dims [{},{},{},{}]", mpo2_fp128.dimension(0), mpo2_fp128.dimension(1), mpo2_fp128.dimension(2),
-                                 mpo2_fp128.dimension(3));
-                tools::log->info("FP128 compressed v_H2v = {:.16e}", env_dot_acc(mps_fp128, H2t_fp128));
-                // TODO: Temporary mixed-input diagnostic. Remove after identifying whether live FP64-compressed MPO2 or live variance environments dominate
-                // the H2 expectation error.
-                auto log_mixed_h2 = [&](std::string_view label, const auto &mps_in, const auto &mpo2_in, const auto &envL_in, const auto &envR_in) {
-                    auto H2t_mix = Eigen::Tensor<EnvAccScalar, 3>(mps_in.dimensions());
-                    auto h2info  = SetH2MvInfo(ContractionBackend::EIGEN, mpo2_in.dimensions());
-                    tools::common::contraction::matrix_vector_product(H2t_mix, mps_in, mpo2_in, envL_in, envR_in);
-                    auto envLdim = envL_in.dimensions();
-                    auto envRdim = envR_in.dimensions();
-                    tools::log->info("mixed H2 {:>18} | mpo2 [{},{},{},{}] envL [{},{},{}] envR [{},{},{}] v_H2v {:.16e}", label, mpo2_in.dimension(0),
-                                     mpo2_in.dimension(1), mpo2_in.dimension(2), mpo2_in.dimension(3), envLdim[0], envLdim[1], envLdim[2], envRdim[0],
-                                     envRdim[1], envRdim[2], env_dot_acc(mps_in, H2t_mix));
-                };
-                log_mixed_h2("live_mpo live_env", mps_live_acc, mpo2_live_acc, envvL_live_acc, envvR_live_acc);
-                log_mixed_h2("fp128_mpo fp128_env", mps_fp128, mpo2_fp128, envv_fp128.L.get_blkx2(), envv_fp128.R.get_blkx2());
-                log_mixed_h2("fp128_mpo live_env", mps_fp128, mpo2_fp128, envvL_live_acc, envvR_live_acc);
-                log_mixed_h2("live_mpo fp128_env", mps_live_acc, mpo2_live_acc, envv_fp128.L.get_blkx2(), envv_fp128.R.get_blkx2());
-                log_mixed_h2("live_mpo fp128_sdown", mps_live_acc, mpo2_live_acc, envvL_fp128_sdown_acc, envvR_fp128_sdown_acc);
-                {
-                    auto h2info_split = SetH2MvInfo(ContractionPrecision::X2, mpo2_live.dimensions());
-                    auto H2t_fp128_split =
-                        tools::common::contraction::matrix_vector_product_x2(mps_live, mpo2_live, envvL_fp128_split_x2, envvR_fp128_split_x2);
-                    auto H2t_split_acc = env_x2_to_acc_tensor(H2t_fp128_split);
-                    tools::log->info("mixed H2 {:>18} | mpo2 [{},{},{},{}] envL [{},{},{}] envR [{},{},{}] v_H2v {:.16e}", "live_mpo fp128_x2split",
-                                     mpo2_live.dimension(0), mpo2_live.dimension(1), mpo2_live.dimension(2), mpo2_live.dimension(3),
-                                     envvL_fp128_split_x2.dimension(0), envvL_fp128_split_x2.dimension(1), envvL_fp128_split_x2.dimension(2),
-                                     envvR_fp128_split_x2.dimension(0), envvR_fp128_split_x2.dimension(1), envvR_fp128_split_x2.dimension(2),
-                                     env_dot_acc(mps_live_acc, H2t_split_acc));
-                }
-                log_mixed_h2("down_mpo down_env", mps_fp128_down_acc, mpo2_fp128_down_acc, envvL_fp128_down_acc, envvR_fp128_down_acc);
-                log_mixed_h2("fp128_mpo down_env", mps_fp128, mpo2_fp128, envvL_fp128_down_acc, envvR_fp128_down_acc);
-                log_mixed_h2("down_mpo fp128_env", mps_fp128_down_acc, mpo2_fp128_down_acc, envv_fp128.L.get_blkx2(), envv_fp128.R.get_blkx2());
-                log_env_ref_diffs(tensors_fp128_down.get_edges().varL, "fp128down", "var", "L");
-                log_env_ref_diffs(tensors_fp128_down.get_edges().varR, "fp128down", "var", "R");
-                log_env_x2_components(tensors_fp128_down.get_edges().varL, "down-var", "L");
-                log_env_x2_components(tensors_fp128_down.get_edges().varR, "down-var", "R");
-                log_env_ref_diffs(tensors_fp128.get_edges().eneL, "fp128", "ene", "L");
-                log_env_ref_diffs(tensors_fp128.get_edges().eneR, "fp128", "ene", "R");
-                log_env_ref_diffs(tensors_fp128.get_edges().varL, "fp128", "var", "L");
-                log_env_ref_diffs(tensors_fp128.get_edges().varR, "fp128", "var", "R");
-                log_env_x2_components(tensors_fp128.get_edges().varL, "fp128-var", "L");
-                log_env_x2_components(tensors_fp128.get_edges().varR, "fp128-var", "R");
-            }
-            tensors.clear_cache();
-            tensors.clear_measurements();
-
-            const auto &mps  = tensors.get_state().template get_multisite_mps<Scalar>();
-            const auto &mpo1 = tensors.get_model().template get_multisite_mpo<Scalar>();
-            const auto &mpo2 = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
-            const auto &enve = tensors.get_edges().get_multisite_env_ene();
-            const auto &envv = tensors.get_edges().get_multisite_env_var();
-            tools::log->info("live MPO2 compression mode {} | has_compressed {} | mpo2 dims [{},{},{},{}]", enum2sv(mpo_squared_compress_before_postmortem),
-                             tensors.get_model().has_compressed_mpo_squared(), mpo2.dimension(0), mpo2.dimension(1), mpo2.dimension(2), mpo2.dimension(3));
-
-            auto H1t         = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H1tx2       = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H1tQ        = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H2t         = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H2tx2       = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H2tQ        = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto H1t_x2_full = x2::Tensor<Scalar, 3>();
-            auto H2t_x2_full = x2::Tensor<Scalar, 3>();
-            {
-                auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, mpo1.dimensions());
-                auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo2.dimensions());
-                tools::log->info("contracting with tblis");
-                tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
-                tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
-            }
-            {
-                auto h1info = SetH1MvInfo(ContractionPrecision::X2, mpo1.dimensions());
-                auto h2info = SetH2MvInfo(ContractionPrecision::X2, mpo2.dimensions());
-                tools::log->info("contracting with x2");
-                H1t_x2_full = tools::common::contraction::matrix_vector_product_x2(mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
-                H2t_x2_full = tools::common::contraction::matrix_vector_product_x2(mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
-                H1tx2       = H1t_x2_full.to_EigenTensor();
-                H2tx2       = H2t_x2_full.to_EigenTensor();
-            }
-            {
-                auto h2info = SetH2MvInfo(ContractionBackend::EIGEN, mpo2.dimensions());
-                tools::log->info("contracting with fp128");
-                using ScalarQ = std::conditional_t<std::is_floating_point_v<Scalar>, fp128, cx128>;
-                Eigen::Tensor<ScalarQ, 3> H1t_q(mps.dimensions());
-                Eigen::Tensor<ScalarQ, 3> H2t_q(mps.dimensions());
-                Eigen::Tensor<ScalarQ, 3> mps_q   = mps.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 4> mpo1_q  = mpo1.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 4> mpo2_q  = mpo2.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> enveL_q = enve.L.template get_block_as<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> enveR_q = enve.R.template get_block_as<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> envvL_q = envv.L.template get_block_as<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> envvR_q = envv.R.template get_block_as<ScalarQ>();
-                tools::common::contraction::matrix_vector_product(H1t_q, mps_q, mpo1_q, enveL_q, enveR_q);
-                tools::common::contraction::matrix_vector_product(H2t_q, mps_q, mpo2_q, envvL_q, envvR_q);
-                H1tQ = H1t_q.template cast<Scalar>();
-                H2tQ = H2t_q.template cast<Scalar>();
-            }
-            using VectorType   = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-            auto       v       = tenx::VectorMap(mps);
-            auto       H1v     = tenx::VectorMap(H1t);
-            auto       H1vx2   = tenx::VectorMap(H1tx2);
-            auto       H1vQ    = tenx::VectorMap(H1tQ);
-            auto       H2v     = tenx::VectorMap(H2t);
-            auto       H2vx2   = tenx::VectorMap(H2tx2);
-            auto       H2vQ    = tenx::VectorMap(H2tQ);
-            RealScalar vH1_H1v = std::real(H1v.dot(H1v));
-            RealScalar v_H1v   = std::real(v.dot(H1v));
-            RealScalar v_H1vx2 = std::real(v.dot(H1vx2));
-            RealScalar v_H1vQ  = std::real(v.dot(H1vQ));
-            RealScalar v_H2v   = std::real(v.dot(H2v));
-            RealScalar v_H2vx2 = std::real(v.dot(H2vx2));
-            RealScalar v_H2vQ  = std::real(v.dot(H2vQ));
-
-            using AccReal   = fp128;
-            using AccScalar = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<AccReal>, AccReal>;
-            auto to_acc     = [](const Scalar &z) -> AccScalar {
-                if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
-                    return AccScalar{static_cast<AccReal>(std::real(z)), static_cast<AccReal>(std::imag(z))};
-                else
-                    return static_cast<AccReal>(z);
-            };
-            auto conj_acc = [](const AccScalar &z) -> AccScalar {
-                if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
-                    return std::conj(z);
-                else
-                    return z;
-            };
-            auto real_acc = [](const AccScalar &z) -> AccReal {
-                if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
-                    return std::real(z);
-                else
-                    return z;
-            };
-            auto dot_x2_real = [&](const x2::Tensor<Scalar, 3> &y) -> AccReal {
-                AccScalar sum = AccScalar{0};
-                for(Eigen::Index i = 0; i < mps.size(); ++i) {
-                    const auto xacc  = to_acc(mps.data()[i]);
-                    const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
-                    sum             += conj_acc(xacc) * yacc;
-                }
-                return real_acc(sum);
-            };
-            auto norm2_x2 = [&](const x2::Tensor<Scalar, 3> &y) -> AccReal {
-                AccReal sum = AccReal{0};
-                for(Eigen::Index i = 0; i < y.size(); ++i) {
-                    const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
-                    sum             += real_acc(conj_acc(yacc) * yacc);
-                }
-                return sum;
-            };
-            auto residual_norm2_x2 = [&](const x2::Tensor<Scalar, 3> &y, AccReal E) -> AccReal {
-                AccReal sum = AccReal{0};
-                for(Eigen::Index i = 0; i < mps.size(); ++i) {
-                    const auto xacc  = to_acc(mps.data()[i]);
-                    const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
-                    const auto racc  = yacc - E * xacc;
-                    sum             += real_acc(conj_acc(racc) * racc);
-                }
-                return sum;
-            };
-
-            AccReal v_H1v_x2_full     = dot_x2_real(H1t_x2_full);
-            AccReal v_H2v_x2_full     = dot_x2_real(H2t_x2_full);
-            AccReal vH1_H1v_x2_full   = norm2_x2(H1t_x2_full);
-            AccReal proj_res2_x2_full = residual_norm2_x2(H1t_x2_full, v_H1v_x2_full);
-            AccReal leak2_raw_x2_full = v_H2v_x2_full - vH1_H1v_x2_full;
-            AccReal res2_est_x2_full  = proj_res2_x2_full + leak2_raw_x2_full;
-            AccReal res2_psd_x2_full  = std::max(AccReal{0}, proj_res2_x2_full) + std::max(AccReal{0}, leak2_raw_x2_full);
-            AccReal variance_x2_full  = v_H2v_x2_full - v_H1v_x2_full * v_H1v_x2_full;
-
-            // TODO: Temporary x2 isolation diagnostic. Remove after deciding whether H2 x2 error comes from gemm_x2 or from the x2 MPO2/environments.
-            auto x2_to_acc_tensor = [&](const x2::Tensor<Scalar, 3> &t) {
-                auto out = Eigen::Tensor<AccScalar, 3>(t.dimensions());
-                for(Eigen::Index i = 0; i < t.size(); ++i) out.data()[i] = to_acc(t.hi_data()[i]) + to_acc(t.lo_data()[i]);
-                return out;
-            };
-            auto diff_norm_x2 = [&](const Eigen::Tensor<AccScalar, 3> &ref, const x2::Tensor<Scalar, 3> &x2res) -> AccReal {
-                AccReal sum = AccReal{0};
-                for(Eigen::Index i = 0; i < ref.size(); ++i) {
-                    const auto x2val  = to_acc(x2res.hi_data()[i]) + to_acc(x2res.lo_data()[i]);
-                    const auto d      = ref.data()[i] - x2val;
-                    sum              += real_acc(conj_acc(d) * d);
-                }
-                return std::sqrt(sum);
-            };
-            auto residual_norm2_acc = [&](const Eigen::Tensor<AccScalar, 3> &y, const Eigen::Tensor<AccScalar, 3> &x, AccReal E) -> AccReal {
-                AccReal sum = AccReal{0};
-                for(Eigen::Index i = 0; i < x.size(); ++i) {
-                    const auto r  = y.data()[i] - E * x.data()[i];
-                    sum          += real_acc(conj_acc(r) * r);
-                }
-                return sum;
-            };
-            Eigen::Tensor<AccScalar, 3> mps_acc       = mps.template cast<AccScalar>();
-            Eigen::Tensor<AccScalar, 4> mpo1_acc      = mpo1.template cast<AccScalar>();
-            Eigen::Tensor<AccScalar, 4> mpo2_acc      = mpo2.template cast<AccScalar>();
-            auto                        enveL_x2_acc  = x2_to_acc_tensor(enve.L.get_blkx2());
-            auto                        enveR_x2_acc  = x2_to_acc_tensor(enve.R.get_blkx2());
-            auto                        envvL_x2_acc  = x2_to_acc_tensor(envv.L.get_blkx2());
-            auto                        envvR_x2_acc  = x2_to_acc_tensor(envv.R.get_blkx2());
-            auto                        H1t_x2env_acc = Eigen::Tensor<AccScalar, 3>(mps.dimensions());
-            auto                        H2t_x2env_acc = Eigen::Tensor<AccScalar, 3>(mps.dimensions());
-            auto                        h1info_x2env  = SetH1MvInfo(ContractionBackend::EIGEN, mpo1.dimensions());
-            auto                        h2info_x2env  = SetH2MvInfo(ContractionBackend::EIGEN, mpo2.dimensions());
-            tools::common::contraction::matrix_vector_product(H1t_x2env_acc, mps_acc, mpo1_acc, enveL_x2_acc, enveR_x2_acc);
-            tools::common::contraction::matrix_vector_product(H2t_x2env_acc, mps_acc, mpo2_acc, envvL_x2_acc, envvR_x2_acc);
-            auto    v_acc                   = tenx::VectorMap(mps_acc);
-            auto    H1v_x2env_acc           = tenx::VectorMap(H1t_x2env_acc);
-            auto    H2v_x2env_acc           = tenx::VectorMap(H2t_x2env_acc);
-            AccReal v_H1v_x2env_acc         = real_acc(v_acc.dot(H1v_x2env_acc));
-            AccReal v_H2v_x2env_acc         = real_acc(v_acc.dot(H2v_x2env_acc));
-            AccReal vH1_H1v_x2env_acc       = real_acc(H1v_x2env_acc.dot(H1v_x2env_acc));
-            AccReal proj_res2_x2env_acc     = residual_norm2_acc(H1t_x2env_acc, mps_acc, v_H1v_x2env_acc);
-            AccReal leak2_raw_x2env_acc     = v_H2v_x2env_acc - vH1_H1v_x2env_acc;
-            AccReal res2_est_x2env_acc      = proj_res2_x2env_acc + leak2_raw_x2env_acc;
-            AccReal variance_x2env_acc      = v_H2v_x2env_acc - v_H1v_x2env_acc * v_H1v_x2env_acc;
-            AccReal H1_x2_vs_x2env_acc_norm = diff_norm_x2(H1t_x2env_acc, H1t_x2_full);
-            AccReal H2_x2_vs_x2env_acc_norm = diff_norm_x2(H2t_x2env_acc, H2t_x2_full);
-
-            VectorType resid1    = H1v - v_H1v * v;
-            RealScalar rnorm1    = resid1.norm();
-            RealScalar proj_res2 = std::real(resid1.dot(resid1));
-            RealScalar leak2_raw = v_H2v - vH1_H1v;
-            RealScalar res2_est  = proj_res2 + leak2_raw;
-            RealScalar res2_psd  = std::max(RealScalar{0}, proj_res2) + std::max(RealScalar{0}, leak2_raw);
-            RealScalar delta     = v_H2v - vH1_H1v;
-
-            tools::log->info("var_opt             = {:.16e}", opt_state.get_variance());
-            tools::log->info("var_mrg             = {:.16e}", var_mrg);
-            tools::log->info("vH1_H1v             = {:.16e}", vH1_H1v);
-            tools::log->info("v_H1v               = {:.16e} diff {:.16e}", v_H1v, v_H1v - std::sqrt(vH1_H1v));
-            tools::log->info("v_H1v X2            = {:.16e}", v_H1vx2);
-            tools::log->info("v_H1v Q             = {:.16e}", v_H1vQ);
-            tools::log->info("v_H1v²              = {:.16e} diff {:.16e}", v_H1v * v_H1v, v_H1v * v_H1v - vH1_H1v);
-            tools::log->info("v_H2v               = {:.16e}", v_H2v);
-            tools::log->info("v_H2v X2            = {:.16e}", v_H2vx2);
-            tools::log->info("v_H2v X2 full       = {:.16e}", v_H2v_x2_full);
-            tools::log->info("v_H2v X2env fp128   = {:.16e}", v_H2v_x2env_acc);
-            tools::log->info("v_H2v Q             = {:.16e}", v_H2vQ);
-            tools::log->info("vH1_H1v X2 full     = {:.16e}", vH1_H1v_x2_full);
-            tools::log->info("vH1_H1v X2env fp128 = {:.16e}", vH1_H1v_x2env_acc);
-            tools::log->info("|H1x2-X2env_fp128|  = {:.16e}", H1_x2_vs_x2env_acc_norm);
-            tools::log->info("|H2x2-X2env_fp128|  = {:.16e}", H2_x2_vs_x2env_acc_norm);
-            tools::log->info("|H1v-vH1v*v|        = {:.16e}", rnorm1);
-            tools::log->info("proj_res2           = {:.16e}", proj_res2);
-            tools::log->info("proj_res2 X2 full   = {:.16e}", proj_res2_x2_full);
-            tools::log->info("proj_res2 X2env fp128 = {:.16e}", proj_res2_x2env_acc);
-            tools::log->info("leak2_raw           = {:.16e}", leak2_raw);
-            tools::log->info("leak2_raw X2 full   = {:.16e}", leak2_raw_x2_full);
-            tools::log->info("leak2_raw X2env fp128 = {:.16e}", leak2_raw_x2env_acc);
-            tools::log->info("delta               = {:.16e}", delta);
-            tools::log->info("E_local est         = {:.16e}", std::sqrt(vH1_H1v + rnorm1));
-            tools::log->info("sqrt(|H1v-v_H1v*v|) = {:.16e}", std::sqrt(rnorm1));
-            tools::log->info("res2_est            = {:.16e}", res2_est);
-            tools::log->info("res2_est X2 full    = {:.16e}", res2_est_x2_full);
-            tools::log->info("res2_est X2env fp128 = {:.16e}", res2_est_x2env_acc);
-            tools::log->info("res2_psd            = {:.16e}", res2_psd);
-            tools::log->info("res2_psd X2 full    = {:.16e}", res2_psd_x2_full);
-            tools::log->info("energy variance     = {:.16e}", v_H2v - v_H1v * v_H1v);
-            tools::log->info("energy variance X2f = {:.16e}", variance_x2_full);
-            tools::log->info("energy variance X2env fp128 = {:.16e}", variance_x2env_acc);
-        }
-
-        {
-            // tensors.get_state().clear_cache();
-            // tensors.get_state().clear_measurements();
-            tensors.get_edges().eject_edges_all();
-            tensors.rebuild_edges();
-            tensors.clear_cache();
-            tensors.clear_measurements();
-            for(const auto &env : tensors.get_edges().eneL) {
-                msg2.emplace_back(fmt::format("eneL[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
-            }
-            for(const auto &env : tensors.get_edges().eneR) {
-                msg2.emplace_back(fmt::format("eneR[{:2}]: {} norm {:.8e}", env->get_position(), env->get_unique_id(), fp(tenx::norm(env->get_block()))));
-            }
-            const auto &mps         = tensors.get_state().template get_multisite_mps<Scalar>();
-            const auto &mpo1        = tensors.get_model().template get_multisite_mpo<Scalar>();
-            const auto &mpo2        = tensors.get_model().template get_multisite_mpo_squared<Scalar>();
-            const auto &enve        = tensors.get_edges().get_multisite_env_ene();
-            const auto &envv        = tensors.get_edges().get_multisite_env_var();
-            auto        H1t         = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto        H1tx2       = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto        H1tQ        = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto        H2t         = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto        H2tx2       = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto        H2tQ        = Eigen::Tensor<Scalar, 3>(mps.dimensions());
-            auto        H1t_x2_full = x2::Tensor<Scalar, 3>();
-            auto        H2t_x2_full = x2::Tensor<Scalar, 3>();
-            {
-                auto h1info = SetH1MvInfo(ContractionBackend::TBLIS, mpo1.dimensions());
-                auto h2info = SetH2MvInfo(ContractionBackend::TBLIS, mpo2.dimensions());
-                tools::log->info("contracting with tblis");
-                tools::common::contraction::matrix_vector_product(H1t, mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
-                tools::common::contraction::matrix_vector_product(H2t, mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
-            }
-            {
-                auto h1info = SetH1MvInfo(ContractionPrecision::X2, mpo1.dimensions());
-                auto h2info = SetH2MvInfo(ContractionPrecision::X2, mpo2.dimensions());
-                tools::log->info("contracting with x2");
-                H1t_x2_full = tools::common::contraction::matrix_vector_product_x2(mps, mpo1, enve.L.get_blkx2(), enve.R.get_blkx2());
-                H2t_x2_full = tools::common::contraction::matrix_vector_product_x2(mps, mpo2, envv.L.get_blkx2(), envv.R.get_blkx2());
-                H1tx2       = H1t_x2_full.to_EigenTensor();
-                H2tx2       = H2t_x2_full.to_EigenTensor();
-            }
-            {
-                auto h2info = SetH2MvInfo(ContractionBackend::EIGEN, mpo2.dimensions());
-                tools::log->info("contracting with fp128");
-                using ScalarQ = std::conditional_t<std::is_floating_point_v<Scalar>, fp128, cx128>;
-                Eigen::Tensor<ScalarQ, 3> H1t_q(mps.dimensions());
-                Eigen::Tensor<ScalarQ, 3> H2t_q(mps.dimensions());
-                Eigen::Tensor<ScalarQ, 3> mps_q   = mps.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 4> mpo1_q  = mpo1.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 4> mpo2_q  = mpo2.template cast<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> enveL_q = enve.L.template get_block_as<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> enveR_q = enve.R.template get_block_as<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> envvL_q = envv.L.template get_block_as<ScalarQ>();
-                Eigen::Tensor<ScalarQ, 3> envvR_q = envv.R.template get_block_as<ScalarQ>();
-                tools::common::contraction::matrix_vector_product(H1t_q, mps_q, mpo1_q, enveL_q, enveR_q);
-                tools::common::contraction::matrix_vector_product(H2t_q, mps_q, mpo2_q, envvL_q, envvR_q);
-                H1tQ = H1t_q.template cast<Scalar>();
-                H2tQ = H2t_q.template cast<Scalar>();
-            }
-            using VectorType   = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
-            auto       v       = tenx::VectorMap(mps);
-            auto       H1v     = tenx::VectorMap(H1t);
-            auto       H1vx2   = tenx::VectorMap(H1tx2);
-            auto       H1vQ    = tenx::VectorMap(H1tQ);
-            auto       H2v     = tenx::VectorMap(H2t);
-            auto       H2vx2   = tenx::VectorMap(H2tx2);
-            auto       H2vQ    = tenx::VectorMap(H2tQ);
-            RealScalar vH1_H1v = std::real(H1v.dot(H1v));
-            RealScalar v_H1v   = std::real(v.dot(H1v));
-            RealScalar v_H1vx2 = std::real(v.dot(H1vx2));
-            RealScalar v_H1vQ  = std::real(v.dot(H1vQ));
-            RealScalar v_H2v   = std::real(v.dot(H2v));
-            RealScalar v_H2vx2 = std::real(v.dot(H2vx2));
-            RealScalar v_H2vQ  = std::real(v.dot(H2vQ));
-
-            using AccReal   = fp128;
-            using AccScalar = std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, std::complex<AccReal>, AccReal>;
-            auto to_acc     = [](const Scalar &z) -> AccScalar {
-                if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
-                    return AccScalar{static_cast<AccReal>(std::real(z)), static_cast<AccReal>(std::imag(z))};
-                else
-                    return static_cast<AccReal>(z);
-            };
-            auto conj_acc = [](const AccScalar &z) -> AccScalar {
-                if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
-                    return std::conj(z);
-                else
-                    return z;
-            };
-            auto real_acc = [](const AccScalar &z) -> AccReal {
-                if constexpr(Eigen::NumTraits<Scalar>::IsComplex == 1)
-                    return std::real(z);
-                else
-                    return z;
-            };
-            auto dot_x2_real = [&](const x2::Tensor<Scalar, 3> &y) -> AccReal {
-                AccScalar sum = AccScalar{0};
-                for(Eigen::Index i = 0; i < mps.size(); ++i) {
-                    const auto xacc  = to_acc(mps.data()[i]);
-                    const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
-                    sum             += conj_acc(xacc) * yacc;
-                }
-                return real_acc(sum);
-            };
-            auto norm2_x2 = [&](const x2::Tensor<Scalar, 3> &y) -> AccReal {
-                AccReal sum = AccReal{0};
-                for(Eigen::Index i = 0; i < y.size(); ++i) {
-                    const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
-                    sum             += real_acc(conj_acc(yacc) * yacc);
-                }
-                return sum;
-            };
-            auto residual_norm2_x2 = [&](const x2::Tensor<Scalar, 3> &y, AccReal E) -> AccReal {
-                AccReal sum = AccReal{0};
-                for(Eigen::Index i = 0; i < mps.size(); ++i) {
-                    const auto xacc  = to_acc(mps.data()[i]);
-                    const auto yacc  = to_acc(y.hi_data()[i]) + to_acc(y.lo_data()[i]);
-                    const auto racc  = yacc - E * xacc;
-                    sum             += real_acc(conj_acc(racc) * racc);
-                }
-                return sum;
-            };
-
-            AccReal v_H1v_x2_full     = dot_x2_real(H1t_x2_full);
-            AccReal v_H2v_x2_full     = dot_x2_real(H2t_x2_full);
-            AccReal vH1_H1v_x2_full   = norm2_x2(H1t_x2_full);
-            AccReal proj_res2_x2_full = residual_norm2_x2(H1t_x2_full, v_H1v_x2_full);
-            AccReal leak2_raw_x2_full = v_H2v_x2_full - vH1_H1v_x2_full;
-            AccReal res2_est_x2_full  = proj_res2_x2_full + leak2_raw_x2_full;
-            AccReal res2_psd_x2_full  = std::max(AccReal{0}, proj_res2_x2_full) + std::max(AccReal{0}, leak2_raw_x2_full);
-            AccReal variance_x2_full  = v_H2v_x2_full - v_H1v_x2_full * v_H1v_x2_full;
-
-            // TODO: Temporary x2 isolation diagnostic. Remove after deciding whether H2 x2 error comes from gemm_x2 or from the x2 MPO2/environments.
-            auto x2_to_acc_tensor = [&](const x2::Tensor<Scalar, 3> &t) {
-                auto out = Eigen::Tensor<AccScalar, 3>(t.dimensions());
-                for(Eigen::Index i = 0; i < t.size(); ++i) out.data()[i] = to_acc(t.hi_data()[i]) + to_acc(t.lo_data()[i]);
-                return out;
-            };
-            auto diff_norm_x2 = [&](const Eigen::Tensor<AccScalar, 3> &ref, const x2::Tensor<Scalar, 3> &x2res) -> AccReal {
-                AccReal sum = AccReal{0};
-                for(Eigen::Index i = 0; i < ref.size(); ++i) {
-                    const auto x2val  = to_acc(x2res.hi_data()[i]) + to_acc(x2res.lo_data()[i]);
-                    const auto d      = ref.data()[i] - x2val;
-                    sum              += real_acc(conj_acc(d) * d);
-                }
-                return std::sqrt(sum);
-            };
-            auto residual_norm2_acc = [&](const Eigen::Tensor<AccScalar, 3> &y, const Eigen::Tensor<AccScalar, 3> &x, AccReal E) -> AccReal {
-                AccReal sum = AccReal{0};
-                for(Eigen::Index i = 0; i < x.size(); ++i) {
-                    const auto r  = y.data()[i] - E * x.data()[i];
-                    sum          += real_acc(conj_acc(r) * r);
-                }
-                return sum;
-            };
-            Eigen::Tensor<AccScalar, 3> mps_acc       = mps.template cast<AccScalar>();
-            Eigen::Tensor<AccScalar, 4> mpo1_acc      = mpo1.template cast<AccScalar>();
-            Eigen::Tensor<AccScalar, 4> mpo2_acc      = mpo2.template cast<AccScalar>();
-            auto                        enveL_x2_acc  = x2_to_acc_tensor(enve.L.get_blkx2());
-            auto                        enveR_x2_acc  = x2_to_acc_tensor(enve.R.get_blkx2());
-            auto                        envvL_x2_acc  = x2_to_acc_tensor(envv.L.get_blkx2());
-            auto                        envvR_x2_acc  = x2_to_acc_tensor(envv.R.get_blkx2());
-            auto                        H1t_x2env_acc = Eigen::Tensor<AccScalar, 3>(mps.dimensions());
-            auto                        H2t_x2env_acc = Eigen::Tensor<AccScalar, 3>(mps.dimensions());
-            auto                        h1info_x2env  = SetH1MvInfo(ContractionBackend::EIGEN, mpo1.dimensions());
-            auto                        h2info_x2env  = SetH2MvInfo(ContractionBackend::EIGEN, mpo2.dimensions());
-            tools::common::contraction::matrix_vector_product(H1t_x2env_acc, mps_acc, mpo1_acc, enveL_x2_acc, enveR_x2_acc);
-            tools::common::contraction::matrix_vector_product(H2t_x2env_acc, mps_acc, mpo2_acc, envvL_x2_acc, envvR_x2_acc);
-            auto    v_acc                   = tenx::VectorMap(mps_acc);
-            auto    H1v_x2env_acc           = tenx::VectorMap(H1t_x2env_acc);
-            auto    H2v_x2env_acc           = tenx::VectorMap(H2t_x2env_acc);
-            AccReal v_H1v_x2env_acc         = real_acc(v_acc.dot(H1v_x2env_acc));
-            AccReal v_H2v_x2env_acc         = real_acc(v_acc.dot(H2v_x2env_acc));
-            AccReal vH1_H1v_x2env_acc       = real_acc(H1v_x2env_acc.dot(H1v_x2env_acc));
-            AccReal proj_res2_x2env_acc     = residual_norm2_acc(H1t_x2env_acc, mps_acc, v_H1v_x2env_acc);
-            AccReal leak2_raw_x2env_acc     = v_H2v_x2env_acc - vH1_H1v_x2env_acc;
-            AccReal res2_est_x2env_acc      = proj_res2_x2env_acc + leak2_raw_x2env_acc;
-            AccReal variance_x2env_acc      = v_H2v_x2env_acc - v_H1v_x2env_acc * v_H1v_x2env_acc;
-            AccReal H1_x2_vs_x2env_acc_norm = diff_norm_x2(H1t_x2env_acc, H1t_x2_full);
-            AccReal H2_x2_vs_x2env_acc_norm = diff_norm_x2(H2t_x2env_acc, H2t_x2_full);
-
-            VectorType resid1    = H1v - v_H1v * v;
-            RealScalar rnorm1    = resid1.norm();
-            RealScalar proj_res2 = std::real(resid1.dot(resid1));
-            RealScalar leak2_raw = v_H2v - vH1_H1v;
-            RealScalar res2_est  = proj_res2 + leak2_raw;
-            RealScalar res2_psd  = std::max(RealScalar{0}, proj_res2) + std::max(RealScalar{0}, leak2_raw);
-            RealScalar delta     = v_H2v - vH1_H1v;
-
-            tools::log->info("var_opt             = {:.16e}", opt_state.get_variance());
-            tools::log->info("var_mrg             = {:.16e}", var_mrg);
-            tools::log->info("vH1_H1v             = {:.16e}", vH1_H1v);
-            tools::log->info("v_H1v               = {:.16e} diff {:.16e}", v_H1v, v_H1v - std::sqrt(vH1_H1v));
-            tools::log->info("v_H1v X2            = {:.16e}", v_H1vx2);
-            tools::log->info("v_H1v Q             = {:.16e}", v_H1vQ);
-            tools::log->info("v_H1v²              = {:.16e} diff {:.16e}", v_H1v * v_H1v, v_H1v * v_H1v - vH1_H1v);
-            tools::log->info("v_H2v               = {:.16e}", v_H2v);
-            tools::log->info("v_H2v X2            = {:.16e}", v_H2vx2);
-            tools::log->info("v_H2v X2 full       = {:.16e}", v_H2v_x2_full);
-            tools::log->info("v_H2v X2env fp128   = {:.16e}", v_H2v_x2env_acc);
-            tools::log->info("v_H2v Q             = {:.16e}", v_H2vQ);
-            tools::log->info("vH1_H1v X2 full     = {:.16e}", vH1_H1v_x2_full);
-            tools::log->info("vH1_H1v X2env fp128 = {:.16e}", vH1_H1v_x2env_acc);
-            tools::log->info("|H1x2-X2env_fp128|  = {:.16e}", H1_x2_vs_x2env_acc_norm);
-            tools::log->info("|H2x2-X2env_fp128|  = {:.16e}", H2_x2_vs_x2env_acc_norm);
-            tools::log->info("|H1v-vH1v*v|        = {:.16e}", rnorm1);
-            tools::log->info("proj_res2           = {:.16e}", proj_res2);
-            tools::log->info("proj_res2 X2 full   = {:.16e}", proj_res2_x2_full);
-            tools::log->info("proj_res2 X2env fp128 = {:.16e}", proj_res2_x2env_acc);
-            tools::log->info("leak2_raw           = {:.16e}", leak2_raw);
-            tools::log->info("leak2_raw X2 full   = {:.16e}", leak2_raw_x2_full);
-            tools::log->info("leak2_raw X2env fp128 = {:.16e}", leak2_raw_x2env_acc);
-            tools::log->info("delta               = {:.16e}", delta);
-            tools::log->info("E_local est         = {:.16e}", std::sqrt(vH1_H1v + rnorm1));
-            tools::log->info("sqrt(|H1v-v_H1v*v|) = {:.16e}", std::sqrt(rnorm1));
-            tools::log->info("res2_est            = {:.16e}", res2_est);
-            tools::log->info("res2_est X2 full    = {:.16e}", res2_est_x2_full);
-            tools::log->info("res2_est X2env fp128 = {:.16e}", res2_est_x2env_acc);
-            tools::log->info("res2_psd            = {:.16e}", res2_psd);
-            tools::log->info("res2_psd X2 full    = {:.16e}", res2_psd_x2_full);
-            tools::log->info("energy variance     = {:.16e}", v_H2v - v_H1v * v_H1v);
-            tools::log->info("energy variance X2f = {:.16e}", variance_x2_full);
-            tools::log->info("energy variance X2env fp128 = {:.16e}", variance_x2env_acc);
-        }
-        for(size_t i = 0; i < msg1.size(); ++i) { tools::log->info("{} | {}", msg1.at(i), msg2.at(i)); }
-
-        exit(1);
-    }
-
-    status.energy_variance_lowest = std::min(static_cast<double>(var_mrg), status.energy_variance_lowest);
-    var_delta                     = var_mrg - var_latest;
-    ene_delta                     = ene_mrg - ene_latest;
-    var_latest                    = var_mrg;
-    ene_latest                    = ene_mrg;
-    auto bondexp_result           = tools::finite::bex::expand_bonds(tensors, get_bond_expansion_config(BondExpansionOrder::POSTOPT));
+    apply_energy_variance_policy(var_mrg);
+    ene_delta           = ene_mrg - ene_latest;
+    ene_latest          = ene_mrg;
+    auto bondexp_result = tools::finite::bex::expand_bonds(tensors, get_bond_expansion_config(BondExpansionOrder::POSTOPT));
 
     auto ene_ini = initial_state.get_energy();
     auto ene_opt = opt_state.get_energy();
