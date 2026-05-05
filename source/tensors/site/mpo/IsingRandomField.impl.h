@@ -56,7 +56,7 @@ void IsingRandomField<Scalar>::set_parameters(const TableMap &parameters) {
     h5tb.param.h_wdth       = std::any_cast<double>(parameters.at("h_wdth"));
     h5tb.param.h_rand       = std::any_cast<double>(parameters.at("h_rand"));
     h5tb.param.spin_dim     = std::any_cast<long>(parameters.at("spin_dim"));
-    h5tb.param.distribution = std::any_cast<h5pp::vstr_t>(parameters.at("distribution"));
+    h5tb.param.distribution = std::any_cast<decltype(h5tb.param.distribution)>(parameters.at("distribution"));
 
     if(h5tb.param.J2 != 0.0) throw except::runtime_error("mpo({}): use of [J2] - Next-nearest neighbor coupling - is not implemented yet", get_position());
     all_mpo_parameters_have_been_set = true;

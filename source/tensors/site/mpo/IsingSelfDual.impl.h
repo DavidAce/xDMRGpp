@@ -58,7 +58,7 @@ void IsingSelfDual<Scalar>::set_parameters(const TableMap &parameters) {
     h5tb.param.lambda                = std::any_cast<double>(parameters.at("lambda"));
     h5tb.param.delta                 = std::any_cast<double>(parameters.at("delta"));
     h5tb.param.spin_dim              = std::any_cast<long>(parameters.at("spin_dim"));
-    h5tb.param.distribution          = std::any_cast<h5pp::vstr_t>(parameters.at("distribution"));
+    h5tb.param.distribution          = std::any_cast<decltype(h5tb.param.distribution)>(parameters.at("distribution"));
     all_mpo_parameters_have_been_set = true;
 }
 

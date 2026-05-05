@@ -57,8 +57,8 @@ namespace settings {
 
     /*!  \namespace settings::input Settings for initialization */
     namespace input{
-        inline long        seed                                 = 1;                            /*!< Main seed for the random number generator. */
-        inline std::string config_filename                      = "input/input.cfg";            /*!< Default config filename. Can either be a .cfg file or a .h5 file with a config stored as a string in /common/config_file_contents */
+        inline long        seed                                 = 1;                           /*!< Main seed for the random number generator. */
+        inline std::string config_filename                      = "input/input.cfg";           /*!< Default config filename. Can either be a .cfg file or a .h5 file with a config stored as a string in /common/config_file_contents */
         inline std::string config_file_contents;                                               /*!< Copy of the loaded config file, stored for internal use and HDF5 output */
     }
 
@@ -83,7 +83,7 @@ namespace settings {
         /*! \namespace settings::model::ising_tf_rf Settings for the Transverse-field Ising model with a random on-site field */
         namespace ising_tf_rf {
             inline double       J1         = 1;                 /*!< Ferromagnetic coupling for nearest neighbors.*/
-            inline double       J2         = 1;                 /*!< Ferromagnetic coupling for next-nearest neighbors.*/
+            inline double       J2         = 0;                 /*!< Ferromagnetic coupling for next-nearest neighbors.*/
             inline double       h_tran     = 1;                 /*!< Transverse field strength */
             inline double       h_mean     = 0;                 /*!< Random field mean of distribution */
             inline double       h_wdth     = 0;                 /*!< Random field width of distribution */
