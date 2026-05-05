@@ -18,6 +18,7 @@
 using tools::finite::mps::RealScalar;
 
 inline std::vector<long> tools::finite::mps::init::get_valid_bond_dimensions(size_t sizeplusone, long spin_dim, long bond_lim) {
+    if(bond_lim < 1) throw except::logic_error("Invalid bond_lim: {}", bond_lim);
     // Construct a valid set of bond dimensions
     std::vector<long> bond_dimensions(sizeplusone, 1);
     bond_dimensions.front() = 1;
@@ -52,16 +53,16 @@ Eigen::Tensor<Scalar, 2> get_random_unitary_matrix(long rows, long cols) {
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
-    tools::log->debug("Setting Néel state of type {} on axis {} with a midchain singlet {}", enum2sv(type), axis,
-                      pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
+void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    tools::log->debug("Setting Néel state of type {} on axis {} with a midchain singlet {}", enum2sv(config.type), config.axis,
+                      config.pattern.empty() ? "" : fmt::format(" | from pattern: {}", config.pattern));
     move_center_point_to_middle(state);
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
     Eigen::Tensor<cx64, 1> LC(2); // L for the singlet
     LC.setConstant(RealScalar<Scalar>(1.0 / std::sqrt(2)));
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
-    if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
+    if(config.type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
     std::array<Eigen::Tensor<cx64, 3>, 2> spinors = {get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1}), //
                                                      get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1})};
@@ -71,7 +72,7 @@ void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scala
     singlet_a.slice(std::array<long, 3>{0, 0, 1}, std::array<long, 3>{2, 1, 1}) = spinors[1];  // a_down
     singlet_b.slice(std::array<long, 3>{0, 0, 0}, std::array<long, 3>{2, 1, 1}) = spinors[1];  // b_down
     singlet_b.slice(std::array<long, 3>{0, 1, 0}, std::array<long, 3>{2, 1, 1}) = -spinors[0]; // b_up // Minus sign for singlet instead of triplet state
-    auto bitfield                                                               = tools::get_bitfield(state.get_length(), pattern);
+    auto bitfield                                                               = tools::get_bitfield(state.get_length(), config.pattern);
     if(bitfield.empty() or bitfield.size() != state.get_length()) {
         bitfield.resize(state.get_length(), 0);
         for(auto &&[i, p] : iter::enumerate(bitfield)) {
@@ -109,7 +110,7 @@ void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scala
             mps.set_LC(LC);
         }
     }
-    pattern        = fmt::format("b{}", bitfield);
+    config.pattern = fmt::format("b{}", bitfield);
     state.popcount = 1 + safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1')); // Add one because of the singlet
     move_center_point_to_pos_dir(state, 0, 1);
     state.clear_measurements();
@@ -118,10 +119,10 @@ void tools::finite::mps::init::set_midchain_singlet_neel_state(StateFinite<Scala
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<Scalar> &state, StateInitType type, long bond_lim) {
-    tools::log->info("Setting random entangled state with Haar distribution | bond_lim {}", bond_lim);
+void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    tools::log->info("Setting random entangled state with Haar distribution | bond_lim {}", config.bond_lim);
     const auto  spin_dim        = state.template get_mps_site<size_t>(0).spin_dim();
-    auto        bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, bond_lim);
+    auto        bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, config.bond_lim);
     bool        pastCenter      = false;
     std::string label           = "A";
     using VectorReal            = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
@@ -132,15 +133,15 @@ void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<Scala
         Eigen::Tensor<Scalar, 2> U;
         Eigen::Tensor<Scalar, 3> G(spin_dim, chiL, chiR);
         if(label == "A") {
-            if(type == StateInitType::REAL) U = get_random_unitary_matrix<RealScalar<Scalar>>(spin_dim * chiL, chiR).template cast<Scalar>();
-            if(type == StateInitType::CPLX) U = get_random_unitary_matrix<Scalar>(spin_dim * chiL, chiR);
+            if(config.type == StateInitType::REAL) U = get_random_unitary_matrix<RealScalar<Scalar>>(spin_dim * chiL, chiR).template cast<Scalar>();
+            if(config.type == StateInitType::CPLX) U = get_random_unitary_matrix<Scalar>(spin_dim * chiL, chiR);
             chiR     = U.dimension(1);
             auto rsh = std::array<long, 3>{spin_dim, chiL, chiR};
             G        = U.reshape(rsh);
         }
         if(label == "B") {
-            if(type == StateInitType::REAL) U = get_random_unitary_matrix<RealScalar<Scalar>>(spin_dim * chiR, chiL).template cast<Scalar>();
-            if(type == StateInitType::CPLX) U = get_random_unitary_matrix<Scalar>(spin_dim * chiR, chiL);
+            if(config.type == StateInitType::REAL) U = get_random_unitary_matrix<RealScalar<Scalar>>(spin_dim * chiR, chiL).template cast<Scalar>();
+            if(config.type == StateInitType::CPLX) U = get_random_unitary_matrix<Scalar>(spin_dim * chiR, chiL);
             chiL     = U.dimension(1);
             auto rsh = std::array<long, 3>{spin_dim, chiR, chiL};
             auto shf = std::array<long, 3>{0, 2, 1};
@@ -162,18 +163,17 @@ void tools::finite::mps::init::set_random_entangled_state_haar(StateFinite<Scala
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::random_entangled_state(StateFinite<Scalar> &state, StateInitType type, [[maybe_unused]] std::string_view axis,
-                                                      [[maybe_unused]] bool use_eigenspinors, long bond_lim) {
+void tools::finite::mps::init::random_entangled_state(StateFinite<Scalar> &state, const StateInitConfig &config) {
     // TODO: Make version with/without eigenspinors
-    set_random_entangled_state_with_random_spinors(state, type, bond_lim);
+    set_random_entangled_state_with_random_spinors(state, config);
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<Scalar> &state, StateInitType type, long bond_lim) {
+void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(StateFinite<Scalar> &state, const StateInitConfig &config) {
     tools::log->info("Setting random entangled state with random unit spinors");
     // static_assert(sfinae::is_std_complex_v<Scalar>);
     const auto  spin_dim        = state.template get_mps_site<size_t>(0).spin_dim();
-    auto        bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, bond_lim);
+    auto        bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, config.bond_lim);
     bool        pastCenter      = false;
     std::string label           = "A";
     using VectorReal            = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
@@ -189,10 +189,10 @@ void tools::finite::mps::init::set_random_entangled_state_with_random_spinors(St
         std::sort(Ltmp.data(), Ltmp.data() + Ltmp.size(), std::greater<RealScalar<Scalar>>());
         Eigen::Tensor<Scalar, 1> L = tenx::TensorCast(Ltmp.normalized()).template cast<Scalar>();
         Eigen::Tensor<Scalar, 3> G(spin_dim, chiL, chiR);
-        if(type == StateInitType::REAL) {
+        if(config.type == StateInitType::REAL) {
             VectorReal Gtmp = VectorReal(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform<RealScalar<Scalar>>(-1, 1); });
             G               = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).template cast<Scalar>();
-        } else if(type == StateInitType::CPLX) {
+        } else if(config.type == StateInitType::CPLX) {
             if constexpr(sfinae::is_std_complex_v<Scalar>) {
                 VectorType Gtmp = VectorType(size).unaryExpr([]([[maybe_unused]] auto dummy) { return rnd::uniform_complex_in_circle<RealScalar<Scalar>>(1); });
                 G               = tenx::TensorCast(Gtmp.normalized(), spin_dim, chiL, chiR).template cast<Scalar>();
@@ -255,16 +255,17 @@ Eigen::Tensor<Scalar, 3> get_random_spinor_tensor(const std::array<long, 3> &dim
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<Scalar> &state, StateInitType type,
-                                                                                     const std::vector<std::string> &axes, long bond_lim) {
+void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<Scalar>          &state,
+                                                                                     const std::vector<std::string> &axes,
+                                                                                     const StateInitConfig         &config) {
     auto spin_dim        = state.template get_mps_site<size_t>(0).spin_dim();
-    auto bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, bond_lim);
+    auto bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, config.bond_lim);
     auto eigenspinors    = std::vector<Eigen::VectorXcd>();
     tools::log->info("Setting random entangled state on axes {}: bond dims {}", axes, bond_dimensions);
     using VectorReal = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
     for(const auto &axis : axes) {
         auto axus = qm::spin::half::get_axis_unsigned(axis);
-        if(type == StateInitType::REAL and axus == "y") throw except::logic_error("axis y is incompatible with StateInitType::REAL");
+        if(config.type == StateInitType::REAL and axus == "y") throw except::logic_error("axis y is incompatible with StateInitType::REAL");
         eigenspinors.emplace_back(qm::spin::half::get_spinor(axus, 1));
         eigenspinors.emplace_back(qm::spin::half::get_spinor(axus, -1));
     }
@@ -291,14 +292,13 @@ void tools::finite::mps::init::set_random_entangled_state_on_axes_using_eigenspi
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
-                                                                                     long bond_lim) {
+void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<Scalar> &state, const StateInitConfig &config) {
     const auto spin_dim        = state.template get_mps_site<size_t>(0).spin_dim();
-    auto       bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, bond_lim);
-    auto       axus            = qm::spin::half::get_axis_unsigned(axis);
-    auto       sign            = qm::spin::half::get_sign(axis);
-    tools::log->info("Setting random entangled state on axis {} using eigenspinors of the pauli matrix σ{}: bond dims {}", axis, axus, bond_dimensions);
-    if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state in axis [y] which impliex CPLX");
+    auto       bond_dimensions = init::get_valid_bond_dimensions(state.get_length() + 1, spin_dim, config.bond_lim);
+    auto       axus            = qm::spin::half::get_axis_unsigned(config.axis);
+    auto       sign            = qm::spin::half::get_sign(config.axis);
+    tools::log->info("Setting random entangled state on axis {} using eigenspinors of the pauli matrix σ{}: bond dims {}", config.axis, axus, bond_dimensions);
+    if(config.type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state in axis [y] which impliex CPLX");
     bool        past_center = false;
     std::string label       = "A";
     using MatrixType        = Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>;
@@ -375,9 +375,9 @@ void tools::finite::mps::init::set_random_entangled_state_on_axis_using_eigenspi
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::randomize_given_state(StateFinite<Scalar> &state, StateInitType type) {
+void tools::finite::mps::init::randomize_given_state(StateFinite<Scalar> &state, const StateInitConfig &config) {
     using namespace qm::spin::half::matrix;
-    switch(type) {
+    switch(config.type) {
         case StateInitType::REAL: tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::MatrixXcd>{id, 1.0 / std::sqrt(2.0) * (sx + sz)}); break;
         case StateInitType::CPLX:
             tools::finite::mps::apply_random_paulis(state, std::vector<Eigen::MatrixXcd>{id, 1.0 / std::sqrt(3.0) * (sx + sy + sz)});

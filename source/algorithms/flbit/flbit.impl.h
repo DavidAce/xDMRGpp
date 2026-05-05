@@ -107,8 +107,12 @@ void flbit<Scalar>::resume() {
         if(settings::state::init::initial_axis.find("z") == std::string::npos)
             tools::log->warn("Expected initial_axis == z. Got {}", settings::state::init::initial_axis);
 
-        tensors.initialize_state(ResetReason::INIT, settings::state::init::initial_state, StateInitType::REAL, settings::state::init::initial_axis,
-                                 settings::state::init::use_eigenspinors, settings::get_bond_min(status.algo_type), settings::state::init::initial_pattern);
+        tensors.initialize_state(ResetReason::INIT, settings::state::init::initial_state,
+                                 tools::finite::mps::StateInitConfig{.type             = StateInitType::REAL,
+                                                                     .axis             = settings::state::init::initial_axis,
+                                                                     .use_eigenspinors = settings::state::init::use_eigenspinors,
+                                                                     .bond_lim         = settings::get_bond_min(status.algo_type),
+                                                                     .pattern          = settings::state::init::initial_pattern});
 
         tools::finite::pos::move_center_point_to_inward_edge(tensors);
 
@@ -402,7 +406,9 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
             auto pattern = fmt::format("b{}", tools::get_bitfield(sites.size(), bitseqs[idx],
                                                                                        BitOrder::Reverse)); // Sort states with "1" appearing left to right
             auto state_i = StateFinite<Scalar>(AlgorithmType::fLBIT, sites.size(), 0, 2);
-            tools::finite::mps::init::set_product_state_on_axis_using_pattern(state_i, StateInitType::REAL, "z", pattern);
+            tools::finite::mps::init::set_product_state_on_axis_using_pattern(
+                state_i,
+                tools::finite::mps::StateInitConfig{.type = StateInitType::REAL, .axis = "z", .use_eigenspinors = false, .bond_lim = 1, .pattern = pattern});
             tools::finite::mps::apply_circuit(state_i, u_and, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_circuit(state_i, u_mbl, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
             auto eigen_idx                              = static_cast<Eigen::Index>(idx);
@@ -1029,7 +1035,12 @@ void flbit<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_po
             auto eig_sol        = eig::solver();
             auto pattern        = std::string();
             auto state_lbit_rps = StateFinite<Scalar>(AlgorithmType::fLBIT, settings::model::model_size, 0);
-            tools::finite::mps::initialize_state(state_lbit_rps, StateInit::PRODUCT_STATE_NEEL_SHUFFLED, StateInitType::REAL, "+z", false, 1, pattern);
+            tools::finite::mps::initialize_state(state_lbit_rps, StateInit::PRODUCT_STATE_NEEL_SHUFFLED,
+                                                 tools::finite::mps::StateInitConfig{.type             = StateInitType::REAL,
+                                                                                     .axis             = "+z",
+                                                                                     .use_eigenspinors = false,
+                                                                                     .bond_lim         = 1,
+                                                                                     .pattern          = pattern});
             tools::finite::mps::normalize_state(state_lbit_rps, svd_cfg, NormPolicy::ALWAYS);
             auto state_real_rps = qm::lbit::transform_to_real_basis(state_lbit_rps, unitary_gates_2site_layers,
                                                                     svd_cfg); // Applies U^\dagger

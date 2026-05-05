@@ -38,6 +38,14 @@ namespace tools{
 namespace tools::finite::mps {
     template<typename Scalar> using RealScalar = decltype(std::real(std::declval<Scalar>()));
 
+    struct StateInitConfig {
+        StateInitType    type;
+        std::string_view axis;
+        bool             use_eigenspinors;
+        long             bond_lim;
+        std::string     &pattern;
+    };
+
     /* clang-format off */
 
     template<typename CalcType, typename Scalar> [[nodiscard]] Eigen::Tensor<Scalar,1> mps2tensor   (const std::vector<std::unique_ptr<MpsSite<Scalar>>> & mps_sites, std::string_view name);
@@ -51,7 +59,7 @@ namespace tools::finite::mps {
     template<typename Scalar>  size_t move_center_point_to_middle        (StateFinite<Scalar>& state, std::optional<svd::config> svd_cfg = std::nullopt);
     template<typename Scalar>  size_t merge_multisite_mps                (StateFinite<Scalar>& state, const Eigen::Tensor<Scalar,3> & multisite_mps, const std::vector<size_t> & sites, long center_position, MergeEvent mevent, std::optional<svd::config> svd_cfg = std::nullopt, std::optional<LogPolicy> logPolicy = std::nullopt);
     template<typename Scalar>  bool normalize_state                      (StateFinite<Scalar>& state, std::optional<svd::config> svd_cfg = std::nullopt, NormPolicy norm_policy = NormPolicy::IFNEEDED);
-    template<typename Scalar>  void initialize_state                     (StateFinite<Scalar>& state, StateInit state_type, StateInitType type, std::string_view sector, bool use_eigenspinors, long bond_lim, std::string & pattern);
+    template<typename Scalar>  void initialize_state                     (StateFinite<Scalar>& state, StateInit state_type, const StateInitConfig & config);
     template<typename Scalar>  StateFinite<Scalar> add_states            (const StateFinite<Scalar>& stateA, const StateFinite<Scalar>& stateB);
 
     template<typename Scalar>  void apply_random_paulis                  (StateFinite<Scalar>& state, const std::vector<Eigen::MatrixXcd> & paulimatrices);
@@ -78,47 +86,46 @@ namespace tools::finite::mps {
         extern bool bitfield_is_valid (size_t bitfield);
         extern std::vector<long> get_valid_bond_dimensions(size_t sizeplusone, long spin_dim, long bond_lim);
 
-        template<typename Scalar>  void random_product_state        (StateFinite<Scalar>& state, StateInitType type, std::string_view axis, bool use_eigenspinors, std::string &pattern);
-        template<typename Scalar>  void random_entangled_state      (StateFinite<Scalar>& state, StateInitType type, std::string_view axis, bool use_eigenspinors, long bond_lim);
+        template<typename Scalar>  void random_product_state        (StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void random_entangled_state      (StateFinite<Scalar>& state, const StateInitConfig & config);
 
         // Product states
-        template<typename Scalar>  void set_random_product_state_with_random_spinors(StateFinite<Scalar>& state, StateInitType type, std::string &pattern);
-        template<typename Scalar>  void set_random_product_state_on_axis_using_eigenspinors(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string &pattern);
-        template<typename Scalar>  void set_random_product_state_on_axis(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string &pattern);
-        template<typename Scalar>  void set_product_state_domain_wall(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string  & pattern);
-        template<typename Scalar>  void set_product_state_aligned(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string &pattern);
-        template<typename Scalar>  void set_product_state_neel(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string  &pattern);
-        template<typename Scalar>  void set_product_state_neel_shuffled (StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string & pattern);
-        template<typename Scalar>  void set_product_state_neel_dislocated (StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string & pattern);
-        template<typename Scalar>  void set_product_state_on_axis_using_pattern(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string & pattern);
-        template<typename Scalar>  void set_sum_of_random_product_states(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string & pattern);
+        template<typename Scalar>  void set_random_product_state_with_random_spinors(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_random_product_state_on_axis_using_eigenspinors(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_random_product_state_on_axis(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_product_state_domain_wall(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_product_state_aligned(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_product_state_neel(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_product_state_neel_shuffled (StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_product_state_neel_dislocated (StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_product_state_on_axis_using_pattern(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_sum_of_random_product_states(StateFinite<Scalar>& state, const StateInitConfig & config);
 
         // Entangled states
-        template<typename Scalar>  void randomize_given_state (StateFinite<Scalar>& state, StateInitType type);
-        template<typename Scalar>  void set_midchain_singlet_neel_state(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, std::string &pattern);
-        template<typename Scalar>  void set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<Scalar>& state, StateInitType type, const std::vector<std::string> & axes, long bond_lim);
-        template<typename Scalar>  void set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<Scalar>& state, StateInitType type, std::string_view axis, long bond_lim);
-        template<typename Scalar>  void set_random_entangled_state_with_random_spinors(StateFinite<Scalar>& state, StateInitType type, long bond_lim);
-        template<typename Scalar>  void set_random_entangled_state_haar(StateFinite<Scalar>& state, StateInitType type, long bond_lim);
+        template<typename Scalar>  void randomize_given_state (StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_midchain_singlet_neel_state(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_random_entangled_state_on_axes_using_eigenspinors(StateFinite<Scalar>& state, const std::vector<std::string> & axes, const StateInitConfig & config);
+        template<typename Scalar>  void set_random_entangled_state_on_axis_using_eigenspinors(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_random_entangled_state_with_random_spinors(StateFinite<Scalar>& state, const StateInitConfig & config);
+        template<typename Scalar>  void set_random_entangled_state_haar(StateFinite<Scalar>& state, const StateInitConfig & config);
     }
 
     /* clang-format on */
 
     template<typename Scalar>
-    void initialize_state(StateFinite<Scalar> &state, StateInit init, StateInitType type, std::string_view axis, bool use_eigenspinors, long bond_lim,
-                          std::string &pattern) {
+    void initialize_state(StateFinite<Scalar> &state, StateInit init, const StateInitConfig &config) {
         switch(init) {
-            case StateInit::RANDOM_PRODUCT_STATE: return init::random_product_state(state, type, axis, use_eigenspinors, pattern);
-            case StateInit::RANDOM_ENTANGLED_STATE: return init::random_entangled_state(state, type, axis, bond_lim, use_eigenspinors);
-            case StateInit::RANDOMIZE_PREVIOUS_STATE: return init::randomize_given_state(state, type);
-            case StateInit::MIDCHAIN_SINGLET_NEEL_STATE: return init::set_midchain_singlet_neel_state(state, type, axis, pattern);
-            case StateInit::PRODUCT_STATE_DOMAIN_WALL: return init::set_product_state_domain_wall(state, type, axis, pattern);
-            case StateInit::PRODUCT_STATE_ALIGNED: return init::set_product_state_aligned(state, type, axis, pattern);
-            case StateInit::PRODUCT_STATE_NEEL: return init::set_product_state_neel(state, type, axis, pattern);
-            case StateInit::PRODUCT_STATE_NEEL_SHUFFLED: return init::set_product_state_neel_shuffled(state, type, axis, pattern);
-            case StateInit::PRODUCT_STATE_NEEL_DISLOCATED: return init::set_product_state_neel_dislocated(state, type, axis, pattern);
-            case StateInit::PRODUCT_STATE_PATTERN: return init::set_product_state_on_axis_using_pattern(state, type, axis, pattern);
-            case StateInit::SUM_OF_RANDOM_PRODUCT_STATES: return init::set_sum_of_random_product_states(state, type, axis, pattern);
+            case StateInit::RANDOM_PRODUCT_STATE: return init::random_product_state(state, config);
+            case StateInit::RANDOM_ENTANGLED_STATE: return init::random_entangled_state(state, config);
+            case StateInit::RANDOMIZE_PREVIOUS_STATE: return init::randomize_given_state(state, config);
+            case StateInit::MIDCHAIN_SINGLET_NEEL_STATE: return init::set_midchain_singlet_neel_state(state, config);
+            case StateInit::PRODUCT_STATE_DOMAIN_WALL: return init::set_product_state_domain_wall(state, config);
+            case StateInit::PRODUCT_STATE_ALIGNED: return init::set_product_state_aligned(state, config);
+            case StateInit::PRODUCT_STATE_NEEL: return init::set_product_state_neel(state, config);
+            case StateInit::PRODUCT_STATE_NEEL_SHUFFLED: return init::set_product_state_neel_shuffled(state, config);
+            case StateInit::PRODUCT_STATE_NEEL_DISLOCATED: return init::set_product_state_neel_dislocated(state, config);
+            case StateInit::PRODUCT_STATE_PATTERN: return init::set_product_state_on_axis_using_pattern(state, config);
+            case StateInit::SUM_OF_RANDOM_PRODUCT_STATES: return init::set_sum_of_random_product_states(state, config);
         }
     }
 

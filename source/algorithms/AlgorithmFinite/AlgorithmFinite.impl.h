@@ -1037,7 +1037,12 @@ void AlgorithmFinite<Scalar>::initialize_state(ResetReason reason, StateInit sta
     }
     tools::finite::pos::activate_sites(tensors, settings::solvers::eig::max_size_shift_invert, 1);
     tensors.rebuild_edges();
-    tensors.initialize_state(reason, state_init, state_type.value(), axis.value(), use_eigenspinors.value(), bond_lim.value(), pattern.value());
+    tensors.initialize_state(reason, state_init,
+                             tools::finite::mps::StateInitConfig{.type             = state_type.value(),
+                                                                 .axis             = axis.value(),
+                                                                 .use_eigenspinors = use_eigenspinors.value(),
+                                                                 .bond_lim         = bond_lim.value(),
+                                                                 .pattern          = pattern.value()});
     tensors.get_state().assert_validity();
     tensors.normalize_state(svd::config(bond_lim, trnc_lim), NormPolicy::ALWAYS);
     tensors.get_state().assert_validity();

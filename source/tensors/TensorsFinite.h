@@ -8,6 +8,7 @@
 #include "tensors/site/env/EnvPair.h"
 #include "tid/tid.h"
 #include "tools/common/log.h"
+#include "tools/finite/mps.h"
 #include <array>
 #include <complex>
 #include <memory>
@@ -102,8 +103,7 @@ class TensorsFinite {
 
     void initialize(AlgorithmType algo_type, ModelType model_type, size_t model_size, long position);
     void initialize_model();
-    void initialize_state(ResetReason reason, StateInit state_init, StateInitType state_type, std::string_view axis, bool use_eigenspinors, long bond_lim,
-                          std::string &pattern);
+    void initialize_state(ResetReason reason, StateInit state_init, const tools::finite::mps::StateInitConfig &config);
     void normalize_state(std::optional<svd::config> svd_cfg = std::nullopt, NormPolicy policy = NormPolicy::IFNEEDED);
     /* clang-format off */
     template<typename T> [[nodiscard]] const Eigen::Tensor<T, 3>            &get_multisite_mps() const { return state-> template get_multisite_mps<T>();}

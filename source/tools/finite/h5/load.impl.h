@@ -18,6 +18,7 @@
 #include "tools/common/log.h"
 #include "tools/finite/h5.h"
 #include "tools/finite/measure/hamiltonian.h"
+#include "tools/finite/mps.h"
 #include "tools/finite/pos.h"
 #include "tools/finite/print.h"
 #include <complex>
@@ -33,9 +34,12 @@ void tools::finite::h5::load::simulation(const h5pp::File &h5file, std::string_v
             // To successfully load a simulation there has to be a clearly defined initial state, either a pattern or an initial state selection
             tensors = TensorsFinite<Scalar>(algo_type, settings::model::model_type, settings::model::model_size, 0);
             tools::common::h5::load::initial_state_attrs(h5file, state_prefix, settings::state::init::initial_pattern);
-            tensors.initialize_state(ResetReason::INIT, settings::state::init::initial_state, settings::state::init::initial_type,
-                                     settings::state::init::initial_axis, settings::state::init::use_eigenspinors, status.bond_lim,
-                                     settings::state::init::initial_pattern);
+            tensors.initialize_state(ResetReason::INIT, settings::state::init::initial_state,
+                                     tools::finite::mps::StateInitConfig{.type             = settings::state::init::initial_type,
+                                                                         .axis             = settings::state::init::initial_axis,
+                                                                         .use_eigenspinors = settings::state::init::use_eigenspinors,
+                                                                         .bond_lim         = status.bond_lim,
+                                                                         .pattern          = settings::state::init::initial_pattern});
             tools::common::h5::load::status(h5file, state_prefix, status);
             tools::finite::h5::load::model(h5file, algo_type, *tensors.model);
             tools::common::h5::load::timer(h5file, state_prefix, status);

@@ -1332,7 +1332,8 @@ Eigen::Tensor<fp64, 2> qm::lbit::get_lbit_correlation_matrix(const std::vector<s
     for(const auto &[idx, b] : iter::enumerate(bitseqs)) {
         t_r.tic();
         auto bstr = std::to_string(b);
-        tools::finite::mps::init::set_product_state_on_axis_using_pattern(state, StateInitType::REAL, "x", bstr);
+        tools::finite::mps::init::set_product_state_on_axis_using_pattern(
+            state, tools::finite::mps::StateInitConfig{.type = StateInitType::REAL, .axis = "x", .use_eigenspinors = false, .bond_lim = 1, .pattern = bstr});
         auto lbit_corrmat = Eigen::Tensor<cx64, 2>(ssites, ssites);
         lbit_corrmat.setZero();
         StateFinite<fp64> state_ud = state;

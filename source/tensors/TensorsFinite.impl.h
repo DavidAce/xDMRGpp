@@ -203,16 +203,15 @@ void TensorsFinite<Scalar>::initialize_model() {
 }
 
 template<typename Scalar>
-void TensorsFinite<Scalar>::initialize_state(ResetReason reason, StateInit state_init, StateInitType state_type, std::string_view axis, bool use_eigenspinors,
-                                             long bond_lim, std::string &pattern) {
+void TensorsFinite<Scalar>::initialize_state(ResetReason reason, StateInit state_init, const tools::finite::mps::StateInitConfig &config) {
     state->clear_measurements();
     tools::log->debug("Initializing state [{}] to [{}] | Reason [{}] | Type [{}] | Sector [{}] | bond_lim {} | eigspinors {} | pattern {}", state->get_name(),
-                      enum2sv(state_init), enum2sv(reason), enum2sv(state_type), axis, bond_lim, use_eigenspinors, pattern);
+                      enum2sv(state_init), enum2sv(reason), enum2sv(config.type), config.axis, config.bond_lim, config.use_eigenspinors, config.pattern);
 
     tools::log->debug("Initializing state - Before: norm {:.16f} | spin components {::+.16f}", tools::finite::measure::norm_state(get_state()),
                       tools::finite::measure::spin_components(get_state()));
 
-    tools::finite::mps::initialize_state(get_state(), state_init, state_type, axis, use_eigenspinors, bond_lim, pattern);
+    tools::finite::mps::initialize_state(get_state(), state_init, config);
     state->assert_validity();
     tools::log->debug("Initializing state - After : norm {:.16f} | spin components {::+.16f}", tools::finite::measure::norm_state(get_state()),
                       tools::finite::measure::spin_components(get_state()));

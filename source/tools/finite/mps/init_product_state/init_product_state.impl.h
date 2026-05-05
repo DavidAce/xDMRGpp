@@ -43,38 +43,37 @@
  * Note: we "use" the bitfield only once. Subsequent calls do not keep resetting the seed.
 */
 template<typename Scalar>
-void tools::finite::mps::init::random_product_state(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, bool use_eigenspinors,
-                                                    std::string &pattern) {
-    tools::log->debug("Setting random product state of type {} on axis {}", enum2sv(type), axis);
+void tools::finite::mps::init::random_product_state(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    tools::log->debug("Setting random product state of type {} on axis {}", enum2sv(config.type), config.axis);
     state.clear_measurements();
     state.clear_cache();
-    auto axis_valid = qm::spin::half::is_valid_axis(axis);
-    if(axis == "random") {
-        init::set_random_product_state_with_random_spinors(state, type, pattern); // a)
-    } else if(not pattern.empty()) {
-        init::set_product_state_on_axis_using_pattern(state, type, axis, pattern); // b)
-    } else if(use_eigenspinors and axis_valid) {
-        init::set_random_product_state_on_axis_using_eigenspinors(state, type, axis, pattern); // c)
+    auto axis_valid = qm::spin::half::is_valid_axis(config.axis);
+    if(config.axis == "random") {
+        init::set_random_product_state_with_random_spinors(state, config); // a)
+    } else if(not config.pattern.empty()) {
+        init::set_product_state_on_axis_using_pattern(state, config); // b)
+    } else if(config.use_eigenspinors and axis_valid) {
+        init::set_random_product_state_on_axis_using_eigenspinors(state, config); // c)
     } else if(axis_valid) {
-        init::set_random_product_state_on_axis(state, type, axis, pattern); // d)
+        init::set_random_product_state_on_axis(state, config); // d)
     } else {
-        throw except::runtime_error("Expected initial axis string (+ or -)x,y,z,i, or id (e.g., -z). Got {}", axis);
+        throw except::runtime_error("Expected initial axis string (+ or -)x,y,z,i, or id (e.g., -z). Got {}", config.axis);
     }
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
-    tools::log->debug("Setting randomly shuffled Néel state of type {} on axis {} {}", enum2sv(type), axis,
-                      pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
+void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    tools::log->debug("Setting randomly shuffled Néel state of type {} on axis {} {}", enum2sv(config.type), config.axis,
+                      config.pattern.empty() ? "" : fmt::format(" | from pattern: {}", config.pattern));
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
-    if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
+    if(config.type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
     Eigen::Tensor<cx64, 3> spin_up = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
     Eigen::Tensor<cx64, 3> spin_dn = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
 
-    auto bitfield = tools::get_bitfield(state.get_length(), pattern);
+    auto bitfield = tools::get_bitfield(state.get_length(), config.pattern);
     if(bitfield.size() != state.get_length()) {
         bitfield.resize(state.get_length(), 0);
         for(auto &&[i, b] : iter::enumerate(bitfield)) b = num::mod<size_t>(i, 2) == 0 ? '0' : '1'; // Set Neel pattern 0101010 or 10101010..
@@ -91,25 +90,25 @@ void tools::finite::mps::init::set_product_state_neel_shuffled(StateFinite<Scala
         }
     }
     tools::log->info("Initial state: {}", bitfield);
-    pattern        = fmt::format("b{}", bitfield);
+    config.pattern = fmt::format("b{}", bitfield);
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
-    tools::log->debug("Setting a dislocated Néel state of type {} on axis {} {}", enum2sv(type), axis,
-                      pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
+void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    tools::log->debug("Setting a dislocated Néel state of type {} on axis {} {}", enum2sv(config.type), config.axis,
+                      config.pattern.empty() ? "" : fmt::format(" | from pattern: {}", config.pattern));
 
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
-    if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
+    if(config.type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
     Eigen::Tensor<cx64, 3> spin_up  = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
     Eigen::Tensor<cx64, 3> spin_dn  = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
-    auto                   bitfield = tools::get_bitfield(state.get_length(), pattern);
+    auto                   bitfield = tools::get_bitfield(state.get_length(), config.pattern);
     if(bitfield.empty() or bitfield.size() != state.get_length()) {
         bitfield.resize(state.get_length(), 0);
         // Sets pattern 010101101010
@@ -134,7 +133,7 @@ void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<Sca
             label = "B";
         }
     }
-    pattern        = fmt::format("b{}", bitfield);
+    config.pattern = fmt::format("b{}", bitfield);
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
@@ -142,14 +141,14 @@ void tools::finite::mps::init::set_product_state_neel_dislocated(StateFinite<Sca
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
-    tools::log->debug("Setting domain-wall initial state of type {} on axis {} {}", enum2sv(type), axis,
-                      pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
+void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    tools::log->debug("Setting domain-wall initial state of type {} on axis {} {}", enum2sv(config.type), config.axis,
+                      config.pattern.empty() ? "" : fmt::format(" | from pattern: {}", config.pattern));
 
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
-    if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
+    if(config.type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
     Eigen::Tensor<cx64, 3> spin_up = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
     Eigen::Tensor<cx64, 3> spin_dn = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
@@ -171,28 +170,28 @@ void tools::finite::mps::init::set_product_state_domain_wall(StateFinite<Scalar>
         }
     }
     tools::log->debug("Initial state: {}", bitfield);
-    pattern        = fmt::format("b{}", bitfield);
+    config.pattern = fmt::format("b{}", bitfield);
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_product_state_aligned(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
-                                                         [[maybe_unused]] std::string &pattern) {
-    tools::log->debug("Setting Néel state of type {} on axis {} {}", enum2sv(type), axis, pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
+void tools::finite::mps::init::set_product_state_aligned(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    tools::log->debug("Setting Néel state of type {} on axis {} {}", enum2sv(config.type), config.axis,
+                      config.pattern.empty() ? "" : fmt::format(" | from pattern: {}", config.pattern));
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
-    int  sign = qm::spin::half::get_sign(axis);
-    if(type == StateInitType::REAL and axis == "y") throw std::runtime_error("StateInitType REAL incompatible with state in axis [y] which impliex CPLX");
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
+    int  sign = qm::spin::half::get_sign(config.axis);
+    if(config.type == StateInitType::REAL and config.axis == "y") throw std::runtime_error("StateInitType REAL incompatible with state in axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
     Eigen::Tensor<cx64, 3> spin_up = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
     Eigen::Tensor<cx64, 3> spin_dn = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
 
     Eigen::Tensor<cx64, 3> spinor = tenx::TensorCast(qm::spin::half::get_spinor(axus, sign), 2, 1, 1);
 
-    tools::log->debug("Setting product state aligned using the |{}> eigenspinor of the pauli matrix σ{} on all sites", sign, axis);
+    tools::log->debug("Setting product state aligned using the |{}> eigenspinor of the pauli matrix σ{} on all sites", sign, config.axis);
     std::string label = "A";
     std::string bitfield(state.template get_length<size_t>(), sign >= 0 ? '0' : '1');
     for(const auto &mps_ptr : state.mps_sites) {
@@ -205,7 +204,7 @@ void tools::finite::mps::init::set_product_state_aligned(StateFinite<Scalar> &st
             label = "B";
         }
     }
-    pattern        = fmt::format("b{}", bitfield);
+    config.pattern = fmt::format("b{}", bitfield);
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
@@ -213,22 +212,23 @@ void tools::finite::mps::init::set_product_state_aligned(StateFinite<Scalar> &st
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_product_state_neel(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
-    tools::log->debug("Setting Néel state of type {} on axis {} {}", enum2sv(type), axis, pattern.empty() ? "" : fmt::format(" | from pattern: {}", pattern));
+void tools::finite::mps::init::set_product_state_neel(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    tools::log->debug("Setting Néel state of type {} on axis {} {}", enum2sv(config.type), config.axis,
+                      config.pattern.empty() ? "" : fmt::format(" | from pattern: {}", config.pattern));
 
     using Real = typename StateFinite<Scalar>::RealScalar;
     using Cplx = std::complex<Real>;
 
     Eigen::Tensor<Real, 1> L(1);
     L.setConstant(Real{1});
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
-    if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
+    if(config.type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
     Eigen::Tensor<Cplx, 3> spin_up = tenx::asScalarType<Cplx>(get_spinor(axus, +1)).reshape(tenx::array3{2, 1, 1});
     Eigen::Tensor<Cplx, 3> spin_dn = tenx::asScalarType<Cplx>(get_spinor(axus, -1)).reshape(tenx::array3{2, 1, 1});
     // Eigen::Tensor<cx64, 3> spin_up = tenx::TensorCast(qm::spin::half::get_spinor(axus, +1), 2, 1, 1);
     // Eigen::Tensor<cx64, 3> spin_dn = tenx::TensorCast(qm::spin::half::get_spinor(axus, -1), 2, 1, 1);
-    auto bitfield = tools::get_bitfield(state.get_length(), pattern);
+    auto bitfield = tools::get_bitfield(state.get_length(), config.pattern);
     if(bitfield.empty() or bitfield.size() != state.get_length()) {
         bitfield.resize(state.get_length(), 0);
         for(auto &&[i, p] : iter::enumerate(bitfield)) p = num::mod<size_t>(i, 2) == 0 ? '0' : '1'; // Set Neel pattern 0101010
@@ -247,7 +247,7 @@ void tools::finite::mps::init::set_product_state_neel(StateFinite<Scalar> &state
             label = "B";
         }
     }
-    pattern        = fmt::format("b{}", bitfield);
+    config.pattern = fmt::format("b{}", bitfield);
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
@@ -255,30 +255,29 @@ void tools::finite::mps::init::set_product_state_neel(StateFinite<Scalar> &state
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<Scalar> &state, StateInitType type, std::string &pattern) {
+void tools::finite::mps::init::set_random_product_state_with_random_spinors(StateFinite<Scalar> &state, const StateInitConfig &config) {
     tools::log->debug("Setting random product state with spinors in C²");
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
     std::string label = "A";
     for(auto &mps_ptr : state.mps_sites) {
         auto &mps = *mps_ptr;
-        if(type == StateInitType::CPLX)
+        if(config.type == StateInitType::CPLX)
             mps.set_mps(tenx::TensorCast(Eigen::VectorXcd::Random(2).normalized(), 2, 1, 1), L, 0, label);
-        else if(type == StateInitType::REAL)
+        else if(config.type == StateInitType::REAL)
             mps.set_mps(tenx::TensorCast(Eigen::VectorXd::Random(2).normalized().cast<cx64>(), 2, 1, 1), L, 0, label);
         if(mps.isCenter()) {
             mps.set_LC(L);
             label = "B";
         }
     }
-    pattern.clear();
+    config.pattern.clear();
     state.clear_measurements();
     state.clear_cache();
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
-                                                                       std::string &pattern) {
+void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFinite<Scalar> &state, const StateInitConfig &config) {
     /* The pattern is a string containing either an unsigned number or a binary string. Binary strings are preceded by the character 'b'.
      * For example
      *      pattern == "536" for L=16 sites is interpreted with fmt as "{:0>16b}": 0000001000011000
@@ -286,13 +285,13 @@ void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFini
      *
      */
 
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
-    if(type == StateInitType::REAL and axus == "y") throw except::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
-    if(pattern.empty()) throw except::runtime_error("Initial state pattern is an empty string.");
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
+    if(config.type == StateInitType::REAL and axus == "y") throw except::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    if(config.pattern.empty()) throw except::runtime_error("Initial state pattern is an empty string.");
     using namespace qm::spin::half::tensor;
     Eigen::Tensor<cx64, 3> spin_up  = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
     Eigen::Tensor<cx64, 3> spin_dn  = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
-    auto                   bitfield = tools::get_bitfield(state.get_length(), pattern);
+    auto                   bitfield = tools::get_bitfield(state.get_length(), config.pattern);
 
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
@@ -306,50 +305,49 @@ void tools::finite::mps::init::set_product_state_on_axis_using_pattern(StateFini
             label = "B";
         }
     }
-    tools::log->debug("Initial state on axis {}: {}", axis, bitfield);
-    pattern        = fmt::format("b{}", bitfield);
+    tools::log->debug("Initial state on axis {}: {}", config.axis, bitfield);
+    config.pattern = fmt::format("b{}", bitfield);
     state.popcount = safe_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<Scalar> &state, StateInitType type, std::string_view axis, std::string &pattern) {
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
-    if(type == StateInitType::REAL and axus == "y") throw except::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+void tools::finite::mps::init::set_sum_of_random_product_states(StateFinite<Scalar> &state, const StateInitConfig &config) {
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
+    if(config.type == StateInitType::REAL and axus == "y") throw except::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     using namespace qm::spin::half::tensor;
 
     size_t                   nsum = state.template get_length<size_t>();
     std::vector<std::string> patterns(nsum);
-    set_product_state_neel_shuffled(state, type, axis, patterns[0]);
+    set_product_state_neel_shuffled(state, StateInitConfig{.type = config.type, .axis = config.axis, .use_eigenspinors = config.use_eigenspinors, .bond_lim = config.bond_lim, .pattern = patterns[0]});
 
     auto other = StateFinite<Scalar>(state.get_algorithm(), state.template get_length<size_t>(), state.template get_position<long>(), state.get_spin_dim());
     for(size_t n = 1; n < nsum; ++n) {
-        set_product_state_neel_shuffled(other, type, axis, patterns[n]);
+        set_product_state_neel_shuffled(other, StateInitConfig{.type = config.type, .axis = config.axis, .use_eigenspinors = config.use_eigenspinors, .bond_lim = config.bond_lim, .pattern = patterns[n]});
         tools::log->info("{}", patterns[n]);
         state = add_states(state, other);
     }
-    pattern = patterns.back();
+    config.pattern = patterns.back();
 
     state.clear_measurements();
     state.clear_cache();
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
-                                                                                   std::string &pattern) {
+void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspinors(StateFinite<Scalar> &state, const StateInitConfig &config) {
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
-    auto axus     = qm::spin::half::get_axis_unsigned(axis);
-    int  sign_tgt = qm::spin::half::get_sign(axis);
+    auto axus     = qm::spin::half::get_axis_unsigned(config.axis);
+    int  sign_tgt = qm::spin::half::get_sign(config.axis);
     int  sign_now = 1;
-    if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    if(config.type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     std::string label = "A";
     using namespace qm::spin::half::tensor;
     Eigen::Tensor<cx64, 3> spin_up = get_spinor(axus, +1).reshape(tenx::array3{2, 1, 1});
     Eigen::Tensor<cx64, 3> spin_dn = get_spinor(axus, -1).reshape(tenx::array3{2, 1, 1});
 
-    auto bitfield = tools::get_bitfield(state.get_length(), pattern);
+    auto bitfield = tools::get_bitfield(state.get_length(), config.pattern);
     if(bitfield.empty() or bitfield.size() != state.get_length()) {
         bitfield.resize(state.get_length() + 1, 0);
         for(auto &&[i, b] : iter::enumerate(bitfield)) {
@@ -375,21 +373,20 @@ void tools::finite::mps::init::set_random_product_state_on_axis_using_eigenspino
         }
     }
 
-    tools::log->debug("Set random product state on axis {} using eigenspinors of the pauli matrix σ{}: {}", axis, axus, bitfield);
-    pattern        = fmt::format("b{}", bitfield);
+    tools::log->debug("Set random product state on axis {} using eigenspinors of the pauli matrix σ{}: {}", config.axis, axus, bitfield);
+    config.pattern = fmt::format("b{}", bitfield);
     state.popcount = static_cast<size_t>(std::count(bitfield.begin(), bitfield.end(), '1'));
     state.clear_measurements();
     state.clear_cache();
 }
 
 template<typename Scalar>
-void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<Scalar> &state, StateInitType type, std::string_view axis,
-                                                                [[maybe_unused]] std::string &pattern) {
+void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<Scalar> &state, const StateInitConfig &config) {
     Eigen::Tensor<cx64, 1> L(1);
     L.setConstant(cx64{1.0, 0.0});
-    auto axus = qm::spin::half::get_axis_unsigned(axis);
+    auto axus = qm::spin::half::get_axis_unsigned(config.axis);
     tools::log->debug("Setting random product state on axis {} using linear combinations of eigenspinors a|+> + b|-> of the pauli matrix σ{}", axus, axus);
-    if(type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
+    if(config.type == StateInitType::REAL and axus == "y") throw std::runtime_error("StateInitType REAL incompatible with state on axis [y] which impliex CPLX");
     auto spinor_up = qm::spin::half::get_spinor(axus, +1);
     auto spinor_dn = qm::spin::half::get_spinor(axus, -1);
 
@@ -397,7 +394,7 @@ void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<Scal
     for(auto &mps_ptr : state.mps_sites) {
         auto            &mps = *mps_ptr;
         Eigen::Vector2cd ab;
-        if(type == StateInitType::REAL)
+        if(config.type == StateInitType::REAL)
             ab = Eigen::Vector2d::Random().normalized();
         else
             ab = Eigen::Vector2cd::Random().normalized();
@@ -409,7 +406,7 @@ void tools::finite::mps::init::set_random_product_state_on_axis(StateFinite<Scal
             label = "B";
         }
     }
-    pattern.clear();
+    config.pattern.clear();
     state.clear_measurements();
     state.clear_cache();
 }
