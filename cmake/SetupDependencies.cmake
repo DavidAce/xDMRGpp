@@ -28,6 +28,7 @@ endif ()
 find_package(Threads                      REQUIRED BYPASS_PROVIDER)
 find_package(OpenMP                       REQUIRED BYPASS_PROVIDER COMPONENTS CXX)
 find_package(gfortran                     REQUIRED BYPASS_PROVIDER)
+find_package(atomic                       QUIET MODULE BYPASS_PROVIDER)
 find_package(BLAS                         REQUIRED MODULE BYPASS_PROVIDER)
 find_package(LAPACK                       REQUIRED MODULE BYPASS_PROVIDER)
 find_package(pcg-cpp                      REQUIRED)
@@ -88,6 +89,10 @@ target_link_libraries(xdmrg++-deps INTERFACE
             cppoptlib::cppoptlib
             # We link Backward::Backward on the xdmrg++-stacktrace object directly
             )
+
+if(TARGET atomic::atomic)
+    target_link_libraries(xdmrg++-deps INTERFACE atomic::atomic)
+endif()
 
 if(DMRG_ENABLE_TBLIS)
 #    pkg_install(tblis)

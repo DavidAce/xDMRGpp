@@ -1,0 +1,57 @@
+function(find_atomic)
+    if(DEFINED ATOMIC_LIBRARY AND NOT ATOMIC_LIBRARY)
+        unset(ATOMIC_LIBRARY)
+        unset(ATOMIC_LIBRARY CACHE)
+    elseif(ATOMIC_LIBRARY AND NOT IS_ABSOLUTE "${ATOMIC_LIBRARY}")
+        unset(ATOMIC_LIBRARY)
+        unset(ATOMIC_LIBRARY CACHE)
+    elseif(ATOMIC_LIBRARY AND NOT EXISTS "${ATOMIC_LIBRARY}")
+        unset(ATOMIC_LIBRARY)
+        unset(ATOMIC_LIBRARY CACHE)
+    endif()
+
+    if(NOT BUILD_SHARED_LIBS)
+        set(ATOMIC_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX} ${CMAKE_SHARED_LIBRARY_SUFFIX})
+    else()
+        set(ATOMIC_LIBRARY_SUFFIXES ${CMAKE_SHARED_LIBRARY_SUFFIX} ${CMAKE_STATIC_LIBRARY_SUFFIX})
+    endif()
+
+    foreach(LIB_SUFFIX IN LISTS ATOMIC_LIBRARY_SUFFIXES)
+        foreach(COMPILER IN ITEMS CMAKE_CXX_COMPILER CMAKE_C_COMPILER)
+            if(${COMPILER})
+                execute_process(COMMAND ${${COMPILER}} -print-file-name=libatomic${LIB_SUFFIX}
+                                OUTPUT_VARIABLE ATOMIC_LIBRARY_CANDIDATE
+                                OUTPUT_STRIP_TRAILING_WHITESPACE
+                                ERROR_QUIET
+                                )
+                if(IS_ABSOLUTE "${ATOMIC_LIBRARY_CANDIDATE}" AND EXISTS "${ATOMIC_LIBRARY_CANDIDATE}")
+                    set(ATOMIC_LIBRARY "${ATOMIC_LIBRARY_CANDIDATE}" CACHE FILEPATH "Path to atomic library")
+                    break()
+                endif()
+            endif()
+        endforeach()
+        if(ATOMIC_LIBRARY)
+            break()
+        endif()
+    endforeach()
+
+    if(NOT ATOMIC_LIBRARY)
+        set(_ATOMIC_ORIGINAL_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ${ATOMIC_LIBRARY_SUFFIXES})
+        find_library(ATOMIC_LIBRARY NAMES atomic)
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ${_ATOMIC_ORIGINAL_CMAKE_FIND_LIBRARY_SUFFIXES})
+    endif()
+endfunction()
+
+find_atomic()
+
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(atomic DEFAULT_MSG ATOMIC_LIBRARY)
+
+if(atomic_FOUND AND ATOMIC_LIBRARY)
+    if(NOT TARGET atomic::atomic)
+        add_library(atomic::atomic UNKNOWN IMPORTED)
+        message(DEBUG "Defined target atomic::atomic for library: ${ATOMIC_LIBRARY}")
+    endif()
+    set_target_properties(atomic::atomic PROPERTIES IMPORTED_LOCATION "${ATOMIC_LIBRARY}")
+endif()

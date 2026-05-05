@@ -39,6 +39,7 @@ set(algorithms_finite_deps
         xdmrg++-tools-finite-measure-information
         xdmrg++-tools-finite-measure-norm
         xdmrg++-tools-finite-measure-number-entropy
+        xdmrg++-tools-finite-measure-residual
         xdmrg++-tools-finite-measure-spin
         xdmrg++-tools-finite-mps-normalize
         xdmrg++-tools-finite-ops-apply

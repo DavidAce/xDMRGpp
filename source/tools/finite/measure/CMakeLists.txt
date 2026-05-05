@@ -127,6 +127,9 @@ add_source_target(xdmrg++-tools-finite-measure-residual
         ${tools_finite_measure_state_deps}
         xdmrg++-tensors-finite
         xdmrg++-tools-common-contraction
+        xdmrg++-tools-finite-measure-hamiltonian
+        xdmrg++-tools-finite-measure-norm
+        xdmrg++-tools-finite-ops-apply
         )
 
 add_source_target(xdmrg++-tools-finite-measure-spin
