@@ -1,26 +1,79 @@
 function(find_quadmath)
-    find_library(QUADMATH_LIBRARY NAMES quadmath)
+    if(DEFINED QUADMATH_LIBRARY AND NOT QUADMATH_LIBRARY)
+        unset(QUADMATH_LIBRARY)
+        unset(QUADMATH_LIBRARY CACHE)
+    elseif(QUADMATH_LIBRARY AND NOT IS_ABSOLUTE "${QUADMATH_LIBRARY}")
+        unset(QUADMATH_LIBRARY)
+        unset(QUADMATH_LIBRARY CACHE)
+    elseif(QUADMATH_LIBRARY AND NOT EXISTS "${QUADMATH_LIBRARY}")
+        unset(QUADMATH_LIBRARY)
+        unset(QUADMATH_LIBRARY CACHE)
+    endif()
+
+    if(NOT BUILD_SHARED_LIBS)
+        set(QUADMATH_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX} ${CMAKE_SHARED_LIBRARY_SUFFIX})
+    else()
+        set(QUADMATH_LIBRARY_SUFFIXES ${CMAKE_SHARED_LIBRARY_SUFFIX} ${CMAKE_STATIC_LIBRARY_SUFFIX})
+    endif()
+
+    foreach(LIB_SUFFIX IN LISTS QUADMATH_LIBRARY_SUFFIXES)
+        foreach(COMPILER IN ITEMS CMAKE_CXX_COMPILER CMAKE_Fortran_COMPILER CMAKE_C_COMPILER)
+            if(${COMPILER})
+                execute_process(COMMAND ${${COMPILER}} -print-file-name=libquadmath${LIB_SUFFIX}
+                                OUTPUT_VARIABLE QUADMATH_LIBRARY_CANDIDATE
+                                OUTPUT_STRIP_TRAILING_WHITESPACE
+                                ERROR_QUIET
+                                )
+                if(IS_ABSOLUTE "${QUADMATH_LIBRARY_CANDIDATE}" AND EXISTS "${QUADMATH_LIBRARY_CANDIDATE}")
+                    set(QUADMATH_LIBRARY "${QUADMATH_LIBRARY_CANDIDATE}" CACHE FILEPATH "Path to quadmath library")
+                    break()
+                endif()
+            endif()
+        endforeach()
+        if(QUADMATH_LIBRARY)
+            break()
+        endif()
+    endforeach()
+
+    if(NOT QUADMATH_LIBRARY)
+        set(_QUADMATH_ORIGINAL_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ${QUADMATH_LIBRARY_SUFFIXES})
+        find_library(QUADMATH_LIBRARY NAMES quadmath)
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ${_QUADMATH_ORIGINAL_CMAKE_FIND_LIBRARY_SUFFIXES})
+    endif()
+
     find_path(QUADMATH_INCLUDE_DIR NAMES quadmath.h PATH_SUFFIXES include)
-    if(NOT QUADMATH_LIBRARY OR NOT QUADMATH_INCLUDE_DIR)
-        include(CMakePushCheckState)
-        include(CheckCXXSourceCompiles)
-        include(CheckTypeSize)
-        cmake_push_check_state(RESET)
-        set(CMAKE_EXTRA_INCLUDE_FILES "quadmath.h")
+
+    include(CMakePushCheckState)
+    include(CheckCXXSourceCompiles)
+    include(CheckTypeSize)
+    cmake_push_check_state(RESET)
+    set(CMAKE_EXTRA_INCLUDE_FILES "quadmath.h")
+    if(QUADMATH_LIBRARY)
+        set(CMAKE_REQUIRED_LIBRARIES "${QUADMATH_LIBRARY}")
+    else()
         set(CMAKE_REQUIRED_LIBRARIES "quadmath")
-        set(CMAKE_REQUIRED_QUIET TRUE)
-        check_type_size(__float128 SIZEOF__float128 BUILTIN_TYPES_ONLY LANGUAGE CXX)
-        check_cxx_source_compiles("
-            #include <quadmath.h>
-            int main(void){
-                __float128 foo = ::sqrtq(123.456);
-            }"
-            QUADMATH_LINK_ONLY
-        )
-        cmake_pop_check_state()
-        if (QUADMATH_LINK_ONLY)
-            set(QUADMATH_INCLUDE_DIR "unused" CACHE PATH "" FORCE)
-            set(QUADMATH_LIBRARY "quadmath" CACHE FILEPATH "" FORCE)
+    endif()
+    set(CMAKE_REQUIRED_QUIET TRUE)
+    check_type_size(__float128 SIZEOF__float128 BUILTIN_TYPES_ONLY LANGUAGE CXX)
+    check_cxx_source_compiles("
+        #include <quadmath.h>
+        int main(void){
+            __float128 foo = ::sqrtq(123.456);
+            return foo == 0;
+        }"
+        QUADMATH_LINK_ONLY
+    )
+    cmake_pop_check_state()
+
+    if(NOT QUADMATH_LIBRARY OR NOT QUADMATH_INCLUDE_DIR)
+        if(QUADMATH_LINK_ONLY)
+            if(NOT QUADMATH_LIBRARY)
+                set(QUADMATH_LIBRARY "quadmath" CACHE FILEPATH "" FORCE)
+            endif()
+            if(NOT QUADMATH_INCLUDE_DIR)
+                set(QUADMATH_INCLUDE_DIR "unused" CACHE PATH "" FORCE)
+            endif()
         elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
             if(NOT quadmath_FIND_QUIETLY)
                 message(STATUS "Failed to compile a simple quadmath program: Note that Clang does not support quadmath.")
@@ -40,7 +93,7 @@ find_package_handle_standard_args(quadmath DEFAULT_MSG QUADMATH_LIBRARY QUADMATH
 
 if(quadmath_FOUND)
     if(NOT TARGET quadmath::quadmath)
-        if(QUADMATH_LINK_ONLY)
+        if(NOT IS_ABSOLUTE "${QUADMATH_LIBRARY}")
 #            message(STATUS "Defining INTERFACE target quadmath::quadmath")
             add_library(quadmath::quadmath INTERFACE IMPORTED)
             target_link_libraries(quadmath::quadmath INTERFACE ${QUADMATH_LIBRARY})

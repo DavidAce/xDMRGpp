@@ -24,13 +24,14 @@ find_package_handle_standard_args(arpack-ng
                                   )
 
 
-if(TARGET ${ARPACK_TARGET} AND NOT BUILD_SHARED_LIBS)
+if(TARGET ${ARPACK_TARGET})
     get_target_property(ARPACK_ALIASED_TARGET ${ARPACK_TARGET} ALIASED_TARGET)
     if(ARPACK_ALIASED_TARGET)
         set(ARPACK_TARGET ${ARPACK_ALIASED_TARGET})
     endif()
 
-    find_package(gfortran BYPASS_PROVIDER OPTIONAL_COMPONENTS quadmath)
+    find_package(gfortran BYPASS_PROVIDER)
+    find_package(quadmath QUIET BYPASS_PROVIDER)
 
     if(TARGET gfortran::gfortran)
         target_link_libraries(${ARPACK_TARGET} INTERFACE gfortran::gfortran)

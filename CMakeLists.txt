@@ -107,9 +107,9 @@ target_link_precompiled_headers(xDMRG++)
 # let cmake find our Find<package>.cmake modules
 include(cmake/SetupPaths.cmake)
 
+include(cmake/SetupLapackFortranInterface.cmake)
 ### Find or install all the dependencies
 include(cmake/SetupDependencies.cmake)
-include(cmake/SetupLapackFortranInterface.cmake)
 
 ###  Add all source files
 add_subdirectory(source)

@@ -1,37 +1,49 @@
 function(find_gfortran)
-    if(NOT BUILD_SHARED_LIBS)
-        set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX} ${CMAKE_SHARED_LIBRARY_SUFFIX})
-        set(LIB_SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
-    else()
-        set(LIB_SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
-
-    endif()
-    include(${CMAKE_ROOT}/Modules/CMakeDetermineFortranCompiler.cmake)
-
-    if(CMAKE_Fortran_COMPILER)
-        execute_process(COMMAND ${CMAKE_Fortran_COMPILER} -print-file-name=libgfortran${LIB_SUFFIX}
-                        OUTPUT_VARIABLE GFORTRAN_LIBRARY
-                        OUTPUT_STRIP_TRAILING_WHITESPACE
-                        )
-    endif()
-    if(IS_ABSOLUTE "${GFORTRAN_LIBRARY}" AND EXISTS "${GFORTRAN_LIBRARY}")
-        set(GFORTRAN_LIBRARY "${GFORTRAN_LIBRARY}" CACHE PATH "Path to gfortran library")
-    else()
-        message(STATUS "GFORTRAN_LIBRARY does not exist: ${GFORTRAN_LIBRARY}")
+    if(DEFINED GFORTRAN_LIBRARY AND NOT GFORTRAN_LIBRARY)
         unset(GFORTRAN_LIBRARY)
         unset(GFORTRAN_LIBRARY CACHE)
+    elseif(GFORTRAN_LIBRARY AND NOT IS_ABSOLUTE "${GFORTRAN_LIBRARY}")
+        unset(GFORTRAN_LIBRARY)
+        unset(GFORTRAN_LIBRARY CACHE)
+    elseif(GFORTRAN_LIBRARY AND NOT EXISTS "${GFORTRAN_LIBRARY}")
+        unset(GFORTRAN_LIBRARY)
+        unset(GFORTRAN_LIBRARY CACHE)
+    endif()
+
+    if(NOT BUILD_SHARED_LIBS)
+        set(GFORTRAN_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX} ${CMAKE_SHARED_LIBRARY_SUFFIX})
+    else()
+        set(GFORTRAN_LIBRARY_SUFFIXES ${CMAKE_SHARED_LIBRARY_SUFFIX} ${CMAKE_STATIC_LIBRARY_SUFFIX})
+    endif()
+
+    foreach(LIB_SUFFIX IN LISTS GFORTRAN_LIBRARY_SUFFIXES)
+        foreach(COMPILER IN ITEMS CMAKE_Fortran_COMPILER CMAKE_CXX_COMPILER CMAKE_C_COMPILER)
+            if(${COMPILER})
+                execute_process(COMMAND ${${COMPILER}} -print-file-name=libgfortran${LIB_SUFFIX}
+                                OUTPUT_VARIABLE GFORTRAN_LIBRARY_CANDIDATE
+                                OUTPUT_STRIP_TRAILING_WHITESPACE
+                                ERROR_QUIET
+                                )
+                if(IS_ABSOLUTE "${GFORTRAN_LIBRARY_CANDIDATE}" AND EXISTS "${GFORTRAN_LIBRARY_CANDIDATE}")
+                    set(GFORTRAN_LIBRARY "${GFORTRAN_LIBRARY_CANDIDATE}" CACHE FILEPATH "Path to gfortran library")
+                    break()
+                endif()
+            endif()
+        endforeach()
+        if(GFORTRAN_LIBRARY)
+            break()
+        endif()
+    endforeach()
+
+    if(NOT GFORTRAN_LIBRARY)
+        set(_GFORTRAN_ORIGINAL_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ${GFORTRAN_LIBRARY_SUFFIXES})
         find_library(GFORTRAN_LIBRARY gfortran)
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ${_GFORTRAN_ORIGINAL_CMAKE_FIND_LIBRARY_SUFFIXES})
     endif()
 endfunction()
 
 find_gfortran()
-
-if(quadmath IN_LIST gfortran_FIND_COMPONENTS)
-    if(gfortran_FIND_REQUIRED_quadmath)
-        set(REQUIRED REQUIRED)
-    endif()
-    find_package(quadmath ${REQUIRED} BYPASS_PROVIDER)
-endif()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(gfortran DEFAULT_MSG GFORTRAN_LIBRARY)
@@ -42,7 +54,4 @@ if(gfortran_FOUND AND GFORTRAN_LIBRARY)
         message(DEBUG "Defined target gfortran::gfortran for library: ${GFORTRAN_LIBRARY}")
     endif()
     set_target_properties(gfortran::gfortran PROPERTIES IMPORTED_LOCATION "${GFORTRAN_LIBRARY}")
-    if(quadmath IN_LIST gfortran_FIND_COMPONENTS AND TARGET quadmath::quadmath)
-        target_link_libraries(gfortran::gfortran INTERFACE quadmath::quadmath)
-    endif()
 endif()

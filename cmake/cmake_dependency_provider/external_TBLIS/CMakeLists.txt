@@ -16,6 +16,8 @@ option(ENABLE_HWLOC ON "Enable use of the memkind library for MCDRAM allocation 
 
 set(cc ${CMAKE_C_COMPILER})
 set(cxx ${CMAKE_CXX_COMPILER})
+file(REAL_PATH "${cc}" cc)
+file(REAL_PATH "${cxx}" cxx)
 set(cflags "-O3 -DNDEBUG -std=c17 -fPIC ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE}")
 set(cxxflags "-O3 -DNDEBUG -std=c++23 -fPIC ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
 set(ldflags "${CMAKE_EXE_LINKER_FLAGS}")
@@ -55,6 +57,8 @@ ExternalProject_Add(external_TBLIS
 
                     CMAKE_ARGS
                     ${INIT_CACHE_ARG}
+                    -DCMAKE_C_COMPILER:FILEPATH=${cc}
+                    -DCMAKE_CXX_COMPILER:FILEPATH=${cxx}
                     -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
                     -DCMAKE_INSTALL_MESSAGE=NEVER
                     # TBLIS flags

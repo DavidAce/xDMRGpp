@@ -27,7 +27,7 @@ endif ()
 # Setup dependencies
 find_package(Threads                      REQUIRED BYPASS_PROVIDER)
 find_package(OpenMP                       REQUIRED BYPASS_PROVIDER COMPONENTS CXX)
-find_package(gfortran                     REQUIRED BYPASS_PROVIDER OPTIONAL_COMPONENTS quadmath)
+find_package(gfortran                     REQUIRED BYPASS_PROVIDER)
 find_package(BLAS                         REQUIRED MODULE BYPASS_PROVIDER)
 find_package(LAPACK                       REQUIRED MODULE BYPASS_PROVIDER)
 find_package(pcg-cpp                      REQUIRED)

@@ -1,3 +1,9 @@
+include(CheckLanguage)
+check_language(Fortran)
+if(NOT CMAKE_Fortran_COMPILER)
+    message(FATAL_ERROR "A Fortran compiler is required to build/install arpack-ng and generate the LAPACK Fortran interface. "
+                        "Install gfortran or set FC/CMAKE_Fortran_COMPILER to a working Fortran compiler.")
+endif()
 enable_language(Fortran)
 
 include(FortranCInterface)
