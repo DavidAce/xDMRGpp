@@ -507,6 +507,7 @@ Eigen::Tensor<Scalar, 4> MpoSite<Scalar>::get_parity_shifted_mpo_squared(const E
 
 template<typename Scalar>
 void MpoSite<Scalar>::set_parity_shift_mpo_squared(int sign, std::string_view axis) {
+    if(axis.empty()) return;
     if(not qm::spin::half::is_valid_axis(axis)) {
         tools::log->warn("MpoSite[{}]::set_parity_shift_mpo_squared: invalid axis {} | expected one of {}", get_position(), axis,
                          qm::spin::half::valid_axis_str);

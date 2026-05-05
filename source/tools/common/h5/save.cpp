@@ -239,9 +239,12 @@ namespace tools::common::h5 {
             // Determine whether enough is stored about this state for the algorithm to resume
             auto mps_is_saved   = h5file.readAttribute<std::optional<std::string>>(state_prefix, "mps_is_saved");
             auto model_is_saved = h5file.readAttribute<std::optional<std::string>>(state_prefix, "model_is_saved");
-            if(not mps_is_saved.has_value() and h5file.linkExists(fmt::format("{}/mps", state_prefix))) {
-                mps_is_saved = fmt::format("{}/mps", state_prefix);
-                h5file.writeAttribute(mps_is_saved.value(), state_prefix, "mps_is_saved");
+            if(not mps_is_saved.has_value()) {
+                auto mps_info = resume::find_fully_stored_mps(h5file, state_prefix);
+                if(not mps_info.empty()) {
+                    mps_is_saved = mps_info.back().pfx;
+                    h5file.writeAttribute(mps_is_saved.value(), state_prefix, "mps_is_saved");
+                }
             }
             if(not model_is_saved.has_value() and h5file.linkExists(fmt::format("{}/model/hamiltonian", enum2sv(sinfo.algo_type)))) {
                 model_is_saved = fmt::format("{}/model/hamiltonian", enum2sv(sinfo.algo_type));

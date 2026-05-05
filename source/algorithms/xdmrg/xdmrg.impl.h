@@ -50,7 +50,6 @@
 
 template<typename Scalar>
 xdmrg<Scalar>::xdmrg(std::shared_ptr<h5pp::File> h5ppFile_) : AlgorithmFinite<Scalar>(std::move(h5ppFile_), settings::xdmrg::ritz, AlgorithmType::xDMRG) {
-    tools::log->trace("Constructing class_xdmrg");
     tensors.state->set_name("state_emid");
 }
 
