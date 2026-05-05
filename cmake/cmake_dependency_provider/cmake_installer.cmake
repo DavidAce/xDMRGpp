@@ -18,7 +18,7 @@ function(pkg_install_dependencies  package_name)
         pkg_install(arpack++)
 
         # Eigen3 numerical library
-        pkg_install(Eigen3)
+        pkg_install(Eigen3 CMAKE_ARGS -DXDMRG_EIGEN_BUILD_BLAS_LAPACK:BOOL=OFF)
 
         # C++ re-implementation of arpack
         pkg_install(spectra)
