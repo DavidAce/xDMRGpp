@@ -7,6 +7,7 @@
 #include "tools/common/h5.h"
 #include "tools/common/log.h"
 #include <h5pp/h5pp.h>
+#include <tuple>
 
 std::string tools::common::h5::resume::extract_state_name(std::string_view state_prefix) {
     constexpr std::string_view state_pattern = "state_";
@@ -37,15 +38,36 @@ std::vector<std::string> tools::common::h5::resume::find_state_prefixes(const h5
 
 std::vector<tools::common::h5::MpsInfo> tools::common::h5::resume::find_fully_stored_mps(const h5pp::File &h5file, std::string_view state_prefix) {
     std::vector<MpsInfo> mps_info;
-    for(const auto &pfx : h5file.findGroups("mps", state_prefix)) {
-        auto path  = fmt::format("{}/{}", state_prefix, pfx);
-        auto iter  = h5file.readAttribute<size_t>(path, "iter");
-        auto step  = h5file.readAttribute<size_t>(path, "step");
-        auto event = h5file.readAttribute<std::optional<StorageEvent>>(path, "storage_event").value();
-        mps_info.emplace_back(MpsInfo{path, iter, step, event});
+
+    auto mps_root = fmt::format("{}/mps", state_prefix);
+    if(not h5file.linkExists(mps_root)) {
+        tools::log->trace("No mps root found under state prefix [{}]", state_prefix);
+        return mps_info;
     }
-    // Sort according to step
-    std::sort(begin(mps_info), end(mps_info), [](const MpsInfo &i1, const MpsInfo &i2) { return i1.step < i2.step; });
+
+    for(const auto &pfx : h5file.findGroups("", mps_root)) {
+        auto path  = pfx == "." ? mps_root : fmt::format("{}/{}", mps_root, pfx);
+        auto iter  = h5file.readAttribute<std::optional<size_t>>(path, "iter");
+        auto step  = h5file.readAttribute<std::optional<size_t>>(path, "step");
+        auto event = h5file.readAttribute<std::optional<StorageEvent>>(path, "storage_event");
+        if(not iter) {
+            tools::log->trace("Skipping incomplete mps group [{}]: missing iter", path);
+            continue;
+        }
+        if(not step) {
+            tools::log->trace("Skipping incomplete mps group [{}]: missing step", path);
+            continue;
+        }
+        if(not event) {
+            tools::log->trace("Skipping incomplete mps group [{}]: missing storage_event", path);
+            continue;
+        }
+        mps_info.emplace_back(MpsInfo{path, iter.value(), step.value(), event.value()});
+    }
+    // Sort according to step and make ties deterministic
+    std::sort(begin(mps_info), end(mps_info), [](const MpsInfo &i1, const MpsInfo &i2) {
+        return std::tie(i1.step, i1.iter, i1.pfx) < std::tie(i2.step, i2.iter, i2.pfx);
+    });
     return mps_info;
 }
 
@@ -71,14 +93,14 @@ std::optional<AlgorithmStop> tools::common::h5::resume::find_algorithm_stop_reas
 
 bool tools::common::h5::resume::check_algorithm_can_resume(const h5pp::File &h5file, std::string_view state_prefix) {
     auto algorithm_can_resume = h5file.readAttribute<std::optional<bool>>(state_prefix, "algorithm_can_resume");
+    auto mps_is_saved         = not find_fully_stored_mps(h5file, state_prefix).empty();
     if(not algorithm_can_resume.has_value()) {
         // This may be an old file. We can detect the required mps and model manually and hope for the best
         auto algo_prefix     = state_prefix.substr(0, state_prefix.find_first_of('/'));
-        auto mps_is_saved    = h5file.linkExists(fmt::format("{}/mps", state_prefix));
         auto model_is_saved  = h5file.linkExists(fmt::format("{}/model/hamiltonian", algo_prefix));
         algorithm_can_resume = mps_is_saved and model_is_saved;
     }
-    return algorithm_can_resume.value();
+    return algorithm_can_resume.value() and mps_is_saved;
 }
 
 std::vector<std::pair<std::string, AlgorithmStop>> tools::common::h5::resume::find_states_that_may_resume(const h5pp::File &h5file, ResumePolicy resume_policy,
