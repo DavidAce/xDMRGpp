@@ -238,7 +238,7 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
 
         if(pos < pos_center) {
             auto [U, S, V] = svd.decompose_multisite(mpo_mps, d0, 1l, d1, d2);
-            auto dst = safe_cast<size_t>(pos + 1);
+            auto dst       = safe_cast<size_t>(pos + 1);
             mps_site.set_M(U);
             mps_site.stash_S(S, svd.get_truncation_error(), dst);
             mps_site.stash_V(V, dst);
@@ -288,7 +288,7 @@ void tools::finite::ops::apply_mpos_general(StateFinite<Scalar> &state, const st
 
         if(pos > pos_center + 1) {
             auto [U, S, V] = svd.decompose_multisite(mpo_mps, 1l, d0, d1, d2);
-            auto dst = safe_cast<size_t>(pos - 1);
+            auto dst       = safe_cast<size_t>(pos - 1);
             mps_site.set_M(V);
             mps_site.stash_U(U, dst);
             mps_site.stash_S(S, svd.get_truncation_error(), dst);
@@ -457,7 +457,9 @@ template<typename T, typename Scalar>
 Scalar tools::finite::ops::overlap(const StateFinite<Scalar> &state1, const StateFinite<Scalar> &state2) {
     if constexpr(sfinae::is_std_complex_v<Scalar>) {
         using Real = decltype(std::real(std::declval<Scalar>()));
-        if(state1.is_real() and state2.is_real()) return overlap<Real>(state1, state2);
+        if constexpr(not std::is_same_v<T, Real>) {
+            if(state1.is_real() and state2.is_real()) return overlap<Real>(state1, state2);
+        }
     }
     if(state1.get_length() != state2.get_length()) throw except::logic_error("overlap: States have different lengths!");
     // if(state1.template get_position<long>() != state2.template get_position<long>())
