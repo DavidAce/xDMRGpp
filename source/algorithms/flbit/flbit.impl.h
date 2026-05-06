@@ -38,7 +38,6 @@
 #include "tensors/state/StateFinite.h"
 #include "tid/tid.h"
 #include "tools/common/h5.h"
-#include <limits>
 #include "tools/common/log.h"
 #include "tools/common/prof.h"
 #include "tools/finite/h5.h"
@@ -52,7 +51,16 @@
 #include "tools/finite/print.h"
 #include <complex>
 #include <h5pp/h5pp.h>
+#include <limits>
 #include <unsupported/Eigen/CXX11/Tensor>
+
+namespace {
+    [[nodiscard]] std::string format_flbit_status_time(fp128 value) { return f128_t(value).string(std::numeric_limits<fp128>::max_digits10, 0, 'e'); }
+
+    [[nodiscard]] std::string format_flbit_status_time(cx128 value) {
+        return fmt::format("({},{})", format_flbit_status_time(std::real(value)), format_flbit_status_time(std::imag(value)));
+    }
+}
 
 template<typename Scalar>
 flbit<Scalar>::flbit(std::shared_ptr<h5pp::File> h5file_) : AlgorithmFinite<Scalar>(std::move(h5file_), OptRitz::NONE, AlgorithmType::fLBIT) {
@@ -394,7 +402,7 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
         if(num_states > static_cast<size_t>(std::numeric_limits<Eigen::Index>::max()))
             throw except::logic_error("Too many basis states for Eigen::Index: 2^{} = {}", sites.size(), num_states);
         auto eigen_num_states = static_cast<Eigen::Index>(num_states);
-        auto bitseqs    = std::vector<size_t>();
+        auto bitseqs          = std::vector<size_t>();
         bitseqs.reserve(num_states);
         for(auto b : num::range<size_t>(0, num_states)) { bitseqs.emplace_back(b); }
         hamiltonian_eff_diagonal.resize(eigen_num_states);
@@ -411,8 +419,8 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
                 tools::finite::mps::StateInitConfig{.type = StateInitType::REAL, .axis = "z", .use_eigenspinors = false, .bond_lim = 1, .pattern = pattern});
             tools::finite::mps::apply_circuit(state_i, u_and, CircuitOp::NONE, true, GateMove::AUTO, svd_cfg);
             tools::finite::mps::apply_circuit(state_i, u_mbl, CircuitOp::ADJ, true, GateMove::AUTO, svd_cfg);
-            auto eigen_idx                              = static_cast<Eigen::Index>(idx);
-            hamiltonian_eff_diagonal[eigen_idx]         = tools::finite::measure::expectation_value<Scalar>(state_i, state_i, mpos);
+            auto eigen_idx                      = static_cast<Eigen::Index>(idx);
+            hamiltonian_eff_diagonal[eigen_idx] = tools::finite::measure::expectation_value<Scalar>(state_i, state_i, mpos);
             if(num::mod<size_t>(idx, bitseqs.size() / 64) == 0)
                 tools::log->info("{0:>6}/{1} {2} {3:.3e} s (thread {4:<2}/{5}): ⟨Ψ_i U_and† U_mbl H' U_mbl† U_and |Ψ_i⟩ = {6:.16f}{7:+.16f}", idx,
                                                       bitseqs.size(), pattern, t_eff->get_time(), omp_get_thread_num(), omp_get_num_threads(),
@@ -439,7 +447,7 @@ template<typename Scalar> void flbit<Scalar>::run_algorithm2() {
 
             state_eff.set_name("state_eff");
             status_eff.algo_type = AlgorithmType::fLBIT;
-            status_eff.delta_t   = time;
+            status_eff.delta_t   = format_flbit_status_time(time);
             using namespace std::complex_literals;
             auto t_f64 = std::complex<fp64>(static_cast<fp64>(time.real()), static_cast<fp64>(time.imag()));
             if(t_f64.real() > 1e8 or t_f64.imag() > 1e8) { tools::log->warn("Precision is bad when time > 1e8 | current time == {:.2e}", fp(t_f64)); }
@@ -511,7 +519,7 @@ void flbit<Scalar>::update_state() {
 
     tensors.clear_measurements();
     tensors.clear_cache();
-    status.phys_time = abs(time_points[std::min(status.iter, time_points.size() - 1)]);
+    status.phys_time = format_flbit_status_time(abs(time_points[std::min(status.iter, time_points.size() - 1)]));
 
     status.iter      += 1;
     status.step      += settings::model::model_size;
@@ -524,11 +532,11 @@ template<typename Scalar> void flbit<Scalar>::update_time_step() {
     tools::log->trace("Updating time step");
     auto t_updtstep = tid::tic_scope("update_time_step");
     if(status.iter >= time_points.size()) {
-        status.delta_t   = time_points.back();
+        status.delta_t   = format_flbit_status_time(time_points.back());
         status.algo_stop = AlgorithmStop::SUCCESS;
         return;
     }
-    status.delta_t = time_points[status.iter];
+    status.delta_t = format_flbit_status_time(time_points[status.iter]);
     if(settings::flbit::time_scale == TimeScale::LOGSPACED)
         if(cmp_t(status.delta_t.template to_floating_point<cx128>(), 0.0)) throw except::logic_error("Expected nonzero delta_t after time step update");
     tools::log->debug("Time step iter {} | Δt = {} | t = {:8.2e}", status.iter, fp(status.delta_t.template to_floating_point<cx64>()),
@@ -658,8 +666,9 @@ void flbit<Scalar>::create_hamiltonian_gates() {
             tools::log->debug("Generating {}-body hamiltonian on sites {}", nbody, sites);
             ham_swap_gates_1body.emplace_back(tensors.model->get_multisite_ham_t({pos}, nbody), sites, spins);
         }
-        auto J2_ctof = settings::model::lbit::J2_span < 0 ? L - 1 : std::min(safe_cast<size_t>(settings::model::lbit::J2_span),
-                                                                              L - 1); // Max distance |i-j| to the furthest interacting site L-1
+        auto J2_ctof = settings::model::lbit::J2_span < 0 ? L - 1
+                                                          : std::min(safe_cast<size_t>(settings::model::lbit::J2_span),
+                                                                     L - 1); // Max distance |i-j| to the furthest interacting site L-1
         for(auto posL : list_2body) {
             auto maxR = std::min<size_t>(posL + J2_ctof, L - 1);
             if(maxR == posL) continue;
@@ -716,8 +725,9 @@ void flbit<Scalar>::create_hamiltonian_gates() {
         }
         tensors.model->clear_cache();
 
-        auto J2_ctof = settings::model::lbit::J2_span < 0 ? L - 1 : std::min(safe_cast<size_t>(settings::model::lbit::J2_span),
-                                                                              L - 1); // Max distance |i-j| to the furthest interacting site L-1
+        auto J2_ctof = settings::model::lbit::J2_span < 0 ? L - 1
+                                                          : std::min(safe_cast<size_t>(settings::model::lbit::J2_span),
+                                                                     L - 1); // Max distance |i-j| to the furthest interacting site L-1
         for(auto posL : list_2body) {
             auto posR = posL + J2_ctof;
             if(J2_ctof == 0) break;
@@ -1035,12 +1045,9 @@ void flbit<Scalar>::write_to_file(StorageEvent storage_event, CopyPolicy copy_po
             auto eig_sol        = eig::solver();
             auto pattern        = std::string();
             auto state_lbit_rps = StateFinite<Scalar>(AlgorithmType::fLBIT, settings::model::model_size, 0);
-            tools::finite::mps::initialize_state(state_lbit_rps, StateInit::PRODUCT_STATE_NEEL_SHUFFLED,
-                                                 tools::finite::mps::StateInitConfig{.type             = StateInitType::REAL,
-                                                                                     .axis             = "+z",
-                                                                                     .use_eigenspinors = false,
-                                                                                     .bond_lim         = 1,
-                                                                                     .pattern          = pattern});
+            tools::finite::mps::initialize_state(
+                state_lbit_rps, StateInit::PRODUCT_STATE_NEEL_SHUFFLED,
+                tools::finite::mps::StateInitConfig{.type = StateInitType::REAL, .axis = "+z", .use_eigenspinors = false, .bond_lim = 1, .pattern = pattern});
             tools::finite::mps::normalize_state(state_lbit_rps, svd_cfg, NormPolicy::ALWAYS);
             auto state_real_rps = qm::lbit::transform_to_real_basis(state_lbit_rps, unitary_gates_2site_layers,
                                                                     svd_cfg); // Applies U^\dagger
