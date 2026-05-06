@@ -198,6 +198,7 @@ void TensorsFinite<Scalar>::initialize_model() {
     auto tic = tid::tic_scope("init_model");
     model->randomize();
     rebuild_mpo();
+    if(state->get_algorithm() == AlgorithmType::fLBIT) return;
     rebuild_mpo_squared();
     compress_mpo_squared();
 }
@@ -443,6 +444,7 @@ void TensorsFinite<Scalar>::rebuild_mpo_squared() {
 
 template<typename Scalar>
 void TensorsFinite<Scalar>::compress_mpo_squared() {
+    if(state->get_algorithm() == AlgorithmType::fLBIT) return;
     if(settings::model::use_compressed_mpo_squared == MpoCompress::NONE) return;
 
     if(model->has_compressed_mpo_squared()) {
