@@ -106,7 +106,6 @@ jobs:
             echo "tools.files.download:retry_wait=5"
           } >> ~/.conan2/global.conf
           conan profile detect --force
-          conan remote add conan-dmrg https://neumann.theophys.kth.se/artifactory/api/conan/conan-dmrg --force
 
       - name: Setup OpenBLAS core type
         run: echo "OPENBLAS_CORETYPE=NEHALEM" >> $GITHUB_ENV
