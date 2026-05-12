@@ -413,14 +413,11 @@ def emit_input_toml(specs: list[Spec]) -> str:
     out = [
         "# Generated from tests/tomlpp_parser/settings.def. Do not edit by hand.",
     ]
-    idx = 0
-    while idx < len(specs):
-        section = specs[idx].section
-        group: list[Spec] = []
-        while idx < len(specs) and specs[idx].section == section:
-            group.append(specs[idx])
-            idx += 1
+    sections: dict[str, list[Spec]] = {}
+    for spec in specs:
+        sections.setdefault(spec.section, []).append(spec)
 
+    for section, group in sections.items():
         if out:
             out.append("")
         for comment in group[0].leading_comments:
@@ -450,11 +447,14 @@ def main(argv: list[str]) -> int:
     spec_path, enums_h, settings_h, specs_h, enum_choices_h, parse_cpp, toml_path_out = argv[1:]
     specs = parse_specs(spec_path)
     enum_defs = parse_enum_definitions(enums_h, {spec.ctype for spec in specs if is_generated_enum_type(spec.ctype)})
+    input_toml = emit_input_toml(specs)
+    tomllib.loads(input_toml)
+
     Path(settings_h).write_text(emit_settings_generated_h(specs))
     Path(specs_h).write_text(emit_setting_specs_generated_h(specs))
     Path(enum_choices_h).write_text(emit_enum_choices_generated_h(enum_defs))
     Path(parse_cpp).write_text(emit_parse_generated_cpp())
-    Path(toml_path_out).write_text(emit_input_toml(specs))
+    Path(toml_path_out).write_text(input_toml)
     return 0
 
 
