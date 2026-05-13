@@ -16,7 +16,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      cache-name: cache-v4-${{ matrix.compiler }}-${{ matrix.manager }}
+      cache-name: cache-v5-${{ matrix.compiler }}-${{ matrix.manager }}
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_SLOPPINESS: include_file_mtime,pch_defines,time_macros
@@ -49,23 +49,34 @@ jobs:
       - name: Prepare cache directories
         run: mkdir -p "$CCACHE_DIR" ~/.conan2 "$INSTALL_DIR"
 
-      - name: Setup ccache + dependency-provider cache
-        if: matrix.manager == 'cmake'
-        uses: actions/cache@v5
+      - name: Restore ccache
+        id: restore-ccache
+        uses: actions/cache/restore@v5
         with:
-          path: |
-            ${{ env.CCACHE_DIR }}
-            ${{ env.INSTALL_DIR }}
-          key: ${{ github.workflow }}-${{ env.cache-name }}
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ github.workflow }}-${{ env.cache-name }}-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-${{ env.cache-name }}-ccache-
 
-      - name: Setup ccache + conan cache
-        if: matrix.manager == 'conan'
-        uses: actions/cache@v5
+      - name: Restore dependency install cache
+        id: restore-deps
+        uses: actions/cache/restore@v5
         with:
-          path: |
-            ${{ env.CCACHE_DIR }}
-            ~/.conan2
-          key: ${{ github.workflow }}-${{ env.cache-name }}
+          path: ${{ env.INSTALL_DIR }}
+          key: ${{ github.workflow }}-${{ env.cache-name }}-deps-${{ hashFiles('CMakePresets.json', 'cmake/**/*.cmake', 'conanfile.*') }}
+          restore-keys: |
+            ${{ github.workflow }}-${{ env.cache-name }}-deps-
+
+      - name: Restore conan cache
+        if: matrix.manager == 'conan'
+        id: restore-conan
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.conan2
+          key: ${{ github.workflow }}-${{ env.cache-name }}-conan-${{ hashFiles('conanfile.*') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-${{ env.cache-name }}-conan-${{ hashFiles('conanfile.*') }}-
+            ${{ github.workflow }}-${{ env.cache-name }}-conan-
 
       - name: Setup gcc
         if: matrix.compiler == 'gcc'
@@ -92,6 +103,7 @@ jobs:
         run: |
           ccache --set-config=max_size=${CCACHE_MAXSIZE}
           ccache --show-config
+          ccache --zero-stats
 
       - name: Install conan
         if: matrix.manager == 'conan'
@@ -110,16 +122,43 @@ jobs:
       - name: Setup OpenBLAS core type
         run: echo "OPENBLAS_CORETYPE=NEHALEM" >> $GITHUB_ENV
 
-      - name: Run CMakePreset
+      - name: Configure and build
         uses: lukka/run-cmake@v10.9
         with:
           configurePreset: 'github-actions-${{ matrix.manager }}'
           configurePresetAdditionalArgs: "['-DCMAKE_INSTALL_PREFIX=${{ env.INSTALL_DIR }}','-DCOMPILER_ENABLE_COVERAGE=${{ matrix.coverage && 'TRUE' || 'FALSE' }}']"
           buildPreset: 'github-actions-${{ matrix.manager }}'
-          testPreset: 'github-actions-${{ matrix.manager }}'
 
       - name: Show ccache stats
+        if: always()
         run: ccache --show-stats
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.restore-ccache.outputs.cache-primary-key }}
+
+      - name: Save dependency install cache
+        if: success() && steps.restore-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ env.INSTALL_DIR }}
+          key: ${{ steps.restore-deps.outputs.cache-primary-key }}
+
+      - name: Save conan cache
+        if: matrix.manager == 'conan' && success()
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ~/.conan2
+          key: ${{ steps.restore-conan.outputs.cache-primary-key }}
+
+      - name: Test
+        run: ctest --preset github-actions-${{ matrix.manager }} --output-on-failure
 
       - name: Coverage
         if: matrix.compiler == 'gcc' && matrix.manager == 'cmake'
