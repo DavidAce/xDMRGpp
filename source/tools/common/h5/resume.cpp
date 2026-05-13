@@ -45,24 +45,30 @@ std::vector<tools::common::h5::MpsInfo> tools::common::h5::resume::find_fully_st
         return mps_info;
     }
 
-    for(const auto &pfx : h5file.findGroups("", mps_root)) {
-        auto path  = pfx == "." ? mps_root : fmt::format("{}/{}", mps_root, pfx);
+    auto add_mps_if_complete = [&](const std::string &path) {
         auto iter  = h5file.readAttribute<std::optional<size_t>>(path, "iter");
         auto step  = h5file.readAttribute<std::optional<size_t>>(path, "step");
         auto event = h5file.readAttribute<std::optional<StorageEvent>>(path, "storage_event");
         if(not iter) {
             tools::log->trace("Skipping incomplete mps group [{}]: missing iter", path);
-            continue;
+            return;
         }
         if(not step) {
             tools::log->trace("Skipping incomplete mps group [{}]: missing step", path);
-            continue;
+            return;
         }
         if(not event) {
             tools::log->trace("Skipping incomplete mps group [{}]: missing storage_event", path);
-            continue;
+            return;
         }
         mps_info.emplace_back(MpsInfo{path, iter.value(), step.value(), event.value()});
+    };
+
+    add_mps_if_complete(mps_root);
+    for(const auto &pfx : h5file.findGroups("", mps_root)) {
+        auto path  = pfx == "." ? mps_root : fmt::format("{}/{}", mps_root, pfx);
+        if(path == mps_root) continue;
+        add_mps_if_complete(path);
     }
     // Sort according to step and make ties deterministic
     std::sort(begin(mps_info), end(mps_info), [](const MpsInfo &i1, const MpsInfo &i2) {
@@ -108,7 +114,8 @@ std::vector<std::pair<std::string, AlgorithmStop>> tools::common::h5::resume::fi
                                                                                                           std::string_view state_pattern) {
     // Let's first consider the new resume check method, which looks for attributes on the state_prefix.
     auto algo_prefix    = algo_type == AlgorithmType::ANY ? "/" : enum2sv(algo_type);
-    auto state_prefixes = h5file.findGroups(state_pattern, algo_prefix, -1, 1); // MaxDepth == 1 considers states directly under algo, e.g. xDMRG/state_emid
+    auto max_depth      = algo_type == AlgorithmType::ANY ? 2 : 1; // ANY starts at the file root, so states are one level deeper.
+    auto state_prefixes = h5file.findGroups(state_pattern, algo_prefix, -1, max_depth); // MaxDepth == 1 considers states directly under algo, e.g. xDMRG/state_emid
     if(state_prefixes.empty()) return {};
     // Prepend the algo_prefix to each match
     if(algo_type != AlgorithmType::ANY)
