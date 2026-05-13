@@ -28,6 +28,45 @@ from slurm2.common import (
 from slurm2.models import PointSpec, PointStatus
 
 
+def gpu_policy_value(value: str) -> str:
+    policy = value.upper()
+    if policy not in {"ON", "OFF", "TRY"}:
+        raise argparse.ArgumentTypeError("expected one of ON, OFF, or TRY")
+    return policy
+
+
+def gpu_id_value(value: str) -> str:
+    if value.lower() == "auto":
+        return "auto"
+    try:
+        gpu_id = int(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("expected 'auto', -1, or a non-negative integer") from err
+    if gpu_id < -1:
+        raise argparse.ArgumentTypeError("expected 'auto', -1, or a non-negative integer")
+    return str(gpu_id)
+
+
+def fraction_0_to_1(value: str) -> float:
+    try:
+        fraction = float(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("expected a floating-point value in [0, 1]") from err
+    if fraction < 0.0 or fraction > 1.0:
+        raise argparse.ArgumentTypeError("expected a floating-point value in [0, 1]")
+    return fraction
+
+
+def non_negative_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("expected a non-negative integer") from err
+    if number < 0:
+        raise argparse.ArgumentTypeError("expected a non-negative integer")
+    return number
+
+
 @dataclass
 class RuntimeContext:
     args: argparse.Namespace
@@ -58,6 +97,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force-run", action="store_true", help="MISSING and TIMEOUT seeds are already runnable. This flag additionally reopens FAILED seeds and ignores remote RUNNING locks for the scheduled seeds. Seeds already marked FINISHED or SKIP in the scanned status are still skipped.")
     parser.add_argument("--replace", action="store_true", help="Pass --replace to xDMRG++ instead of relying only on the cfg file's collision policy.")
     parser.add_argument("--rclone-remove", action="store_true", help="After a successful upload, delete the local .h5 and .txt runtime files. Event JSONL files are always kept locally.")
+    parser.add_argument("--gpu-policy", type=gpu_policy_value, default=None, help="Pass --gpu-policy to xDMRG++. Leave unset to use the generated cfg value.")
+    parser.add_argument("--gpu-id", type=gpu_id_value, default=None, help="Pass --gpu-id to xDMRG++. Accepts auto, -1, or a non-negative device id.")
+    parser.add_argument("--gpu-switchsize", type=non_negative_int, default=None, help="Pass --gpu-switchsize to xDMRG++.")
+    parser.add_argument("--gpu-max-alloc-fraction", type=fraction_0_to_1, default=None, help="Pass --gpu-max-alloc-fraction to xDMRG++.")
     return parser
 
 
@@ -259,6 +302,14 @@ def run_seed(ctx: RuntimeContext, seed: int, active_seed: dict[str, int | None])
     ]
     if ctx.args.replace:
         cmd.append("--replace")
+    if ctx.args.gpu_policy is not None:
+        cmd.append(f"--gpu-policy={ctx.args.gpu_policy}")
+    if ctx.args.gpu_id is not None:
+        cmd.append(f"--gpu-id={ctx.args.gpu_id}")
+    if ctx.args.gpu_switchsize is not None:
+        cmd.append(f"--gpu-switchsize={ctx.args.gpu_switchsize}")
+    if ctx.args.gpu_max_alloc_fraction is not None:
+        cmd.append(f"--gpu-max-alloc-fraction={ctx.args.gpu_max_alloc_fraction}")
 
     active_seed["seed"] = seed
     with log_file.open("a", encoding="utf-8") as handle:

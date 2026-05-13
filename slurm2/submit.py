@@ -38,6 +38,99 @@ from slurm2.defaults import DEFAULT_REMOTE_ROOT
 from slurm2.models import ChunkPlan, PointSpec, PointStatus
 
 
+def gpu_policy_value(value: str) -> str:
+    policy = value.upper()
+    if policy not in {"ON", "OFF", "TRY"}:
+        raise argparse.ArgumentTypeError("expected one of ON, OFF, or TRY")
+    return policy
+
+
+def gpu_id_value(value: str) -> str:
+    if value.lower() == "auto":
+        return "auto"
+    try:
+        gpu_id = int(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("expected 'auto', -1, or a non-negative integer") from err
+    if gpu_id < -1:
+        raise argparse.ArgumentTypeError("expected 'auto', -1, or a non-negative integer")
+    return str(gpu_id)
+
+
+def fraction_0_to_1(value: str) -> float:
+    try:
+        fraction = float(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("expected a floating-point value in [0, 1]") from err
+    if fraction < 0.0 or fraction > 1.0:
+        raise argparse.ArgumentTypeError("expected a floating-point value in [0, 1]")
+    return fraction
+
+
+def non_negative_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("expected a non-negative integer") from err
+    if number < 0:
+        raise argparse.ArgumentTypeError("expected a non-negative integer")
+    return number
+
+
+SUBMIT_EXAMPLES = """examples:
+  Full CPU submission with GPU TRY policy from the cfg/CLI layer:
+    python -m slurm2 submit \\
+      --name xdmrg6-gdplusk \\
+      --rclone-prefix xdmrg6-gdplusk \\
+      --pattern L12 \\
+      --job-name xdmrg6-L12 \\
+      --mem-per-cpu 2500M \\
+      --time 4:00:00 \\
+      --sims-per-array 1000 \\
+      --cpus-per-task 2 \\
+      --omp-num-threads 2 \\
+      --threads-per-core 1 \\
+      --ntasks 1 \\
+      --ntasks-per-core 1 \\
+      --requeue \\
+      --sims-per-task 50 \\
+      --build-type Release \\
+      --rclone-remove \\
+      --gpu-policy TRY
+
+  Same shape, but requesting one GPU per worker task from Slurm:
+    python -m slurm2 submit \\
+      --name xdmrg6-gdplusk \\
+      --rclone-prefix xdmrg6-gdplusk \\
+      --pattern L12 \\
+      --job-name xdmrg6-L12 \\
+      --mem-per-cpu 2500M \\
+      --time 4:00:00 \\
+      --sims-per-array 1000 \\
+      --cpus-per-task 2 \\
+      --omp-num-threads 2 \\
+      --threads-per-core 1 \\
+      --ntasks 1 \\
+      --ntasks-per-core 1 \\
+      --requeue \\
+      --sims-per-task 50 \\
+      --build-type Release \\
+      --rclone-remove \\
+      --gpus-per-task 1 \\
+      --gpu-policy TRY \\
+      --gpu-id auto
+
+  Some clusters allocate GPUs through generic resources instead:
+    replace --gpus-per-task 1 with --gres gpu:1
+
+notes:
+  --gpu-policy TRY lets xDMRG++ use a usable GPU when one is visible, but it
+  does not request a GPU allocation from Slurm by itself. Use --gpus-per-task,
+  --gpus, --gpus-per-node, or --gres when the cluster requires an explicit GPU
+  request.
+"""
+
+
 # Load the last scanned status for one point before planning chunks.
 def load_point_status(experiment_dir: Path, point: PointSpec) -> PointStatus | None:
     payload = load_json(experiment_dir / point.status_relpath)
@@ -80,7 +173,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Plan and submit Slurm job arrays for a generated slurm2 experiment. "
             "submit first refreshes local metadata from the remote experiment when rclone is enabled, "
             "then computes which seed chunks are still worth running, and finally emits one sbatch array per chunk."
-        )
+        ),
+        epilog=SUBMIT_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--name", dest="name", type=str, default=None, help="Experiment directory name under --base-dir. This lets you target 'xdmrg6-gdplusk' without typing the full path.")
     parser.add_argument("--base-dir", "--basedir", dest="base_dir", type=str, default=None, help="Base directory prepended to --name. Defaults to /mnt/WDB-AN1500/mbl_transition when that path exists, otherwise the current working directory.")
@@ -88,11 +183,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--remote-experiment", dest="remote_experiment", type=str, default=None, help="Explicit rclone remote path for the experiment, for example 'neumann:/mnt/WDB-AN1500/mbl_transition/xdmrg6-gdplusk'. This overrides --remote-root and --rclone-prefix.")
     parser.add_argument("--remote-root", type=str, default=DEFAULT_REMOTE_ROOT, help="Base rclone remote used together with --rclone-prefix when --remote-experiment is not given.")
     parser.add_argument("--rclone-prefix", type=str, default=None, help="Experiment path appended under --remote-root, usually the experiment name such as 'xdmrg6-gdplusk'.")
-    parser.add_argument("-b", "--build-type", type=str, default="Release", help="Build directory under build/ used to locate xDMRG++ when --exec is not given.")
+    parser.add_argument("--build-type", "-b", type=str, default="Release", help="Build directory under build/ used to locate xDMRG++ when --exec is not given.")
     parser.add_argument("--execname", type=str, default="xDMRG++", help="Executable name looked up inside build/<build-type>/ when --exec is not given.")
     parser.add_argument("--exec", dest="explicit_exec", type=str, default=None, help="Explicit executable path. Use this to bypass the build/<type>/ lookup logic entirely.")
-    parser.add_argument("-M", "--clusters", type=str, default=None, help="Value passed through to sbatch --clusters, for example 'draken' or 'kraken'.")
-    parser.add_argument("-w", "--nodelist", type=str, default=None, help="Restrict submission to a specific Slurm nodelist by passing --nodelist to sbatch.")
+    parser.add_argument("--clusters", "-M", type=str, default=None, help="Value passed through to sbatch --clusters, for example 'draken' or 'kraken'.")
+    parser.add_argument("--nodelist", "-w", type=str, default=None, help="Restrict submission to a specific Slurm nodelist by passing --nodelist to sbatch.")
     parser.add_argument("--account", type=str, default=None, help="Slurm account name passed through unchanged to sbatch.")
     parser.add_argument("--reservation", type=str, default=None, help="Slurm reservation name passed through unchanged to sbatch.")
     parser.add_argument("--pattern", type=str, default=None, help="Only consider points whose point id, config stem, or tags contain this substring, for example 'L20'.")
@@ -102,6 +197,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--omp-places", type=str, choices=["threads", "cores", "sockets"], default=None, help="Value exported as OMP_PLACES for the submitted jobs.")
     parser.add_argument("--omp-proc-bind", type=str, choices=["true", "false", "close", "spread", "master"], default=None, help="Value exported as OMP_PROC_BIND for the submitted jobs.")
     parser.add_argument("--cpus-per-task", type=int, default=1, help="Number of CPU cores requested for each Slurm task. This usually matches the thread count used by xDMRG++.")
+    parser.add_argument("--gpus", type=str, default=None, help="Value passed through to sbatch --gpus, for example '1' or 'v100:1'.")
+    parser.add_argument("--gpus-per-node", type=str, default=None, help="Value passed through to sbatch --gpus-per-node.")
+    parser.add_argument("--gpus-per-task", type=str, default=None, help="Value passed through to sbatch --gpus-per-task. This is usually the right allocation flag for one GPU per xDMRG++ worker task.")
+    parser.add_argument("--gres", type=str, default=None, help="Value passed through to sbatch --gres, for clusters that allocate GPUs through generic resources, for example 'gpu:1'.")
     parser.add_argument("--nodes", type=int, default=1, help="Number of nodes requested for each sbatch submission. The normal xDMRG workflow uses one node per array job.")
     parser.add_argument("--ntasks", type=int, default=1, help="Number of Slurm tasks per submitted job.")
     parser.add_argument("--ntasks-per-core", type=int, default=1, help="Value passed through to sbatch --ntasks-per-core.")
@@ -112,17 +211,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--debug", action="store_true", help="Keep extra debug output enabled while planning submissions.")
     parser.add_argument("--exclusive", action="store_true", help="Request exclusive node allocation from Slurm by passing --exclusive to sbatch.")
     parser.add_argument("--hint", type=str, default=None, choices=["multithread", "nomultithread", "compute_bound", "memory_bound"], help="Slurm scheduling hint passed through to sbatch --hint.")
-    parser.add_argument("-J", "--job-name", type=str, default="DMRG", help="Job name used for all sbatch submissions.")
-    parser.add_argument("-m", "--mem-per-cpu", type=str, default="1G", help="Memory requested per CPU, for example 3000M or 4G.")
-    parser.add_argument("-n", "--sims-per-array", type=int, default=1000, help="Maximum number of seeds grouped into one Slurm array submission for a given point or subrange.")
+    parser.add_argument("--job-name", "-J", type=str, default="DMRG", help="Job name used for all sbatch submissions.")
+    parser.add_argument("--mem-per-cpu", "-m", type=str, default="1G", help="Memory requested per CPU, for example 3000M or 4G.")
+    parser.add_argument("--sims-per-array", "-n", type=int, default=1000, help="Maximum number of seeds grouped into one Slurm array submission for a given point or subrange.")
     parser.add_argument("--sims-per-task", type=int, default=10, help="Number of seeds handled sequentially by one array task. This becomes the Slurm array step size.")
-    parser.add_argument("-o", "--other", type=str, default=None, help="Extra raw sbatch options split on spaces and appended verbatim to each generated sbatch command.")
+    parser.add_argument("--other", "-o", type=str, default=None, help="Extra raw sbatch options split on spaces and appended verbatim to each generated sbatch command.")
     parser.add_argument("--open-mode", type=str, default="append", choices=["append", "truncate"], help="Value passed through to sbatch --open-mode for the Slurm log file.")
-    parser.add_argument("-p", "--partition", type=str, default=None, help="Slurm partition passed through to sbatch.")
-    parser.add_argument("-q", "--qos", type=str, default=None, help="Slurm QoS passed through to sbatch.")
+    parser.add_argument("--partition", "-p", type=str, default=None, help="Slurm partition passed through to sbatch.")
+    parser.add_argument("--qos", "-q", type=str, default=None, help="Slurm QoS passed through to sbatch.")
     parser.add_argument("--requeue", action="store_true", help="Pass --requeue to sbatch so Slurm may requeue interrupted jobs according to cluster policy.")
-    parser.add_argument("-t", "--time", type=str, default="0-01:00:00", help="Wall-clock limit passed through to sbatch --time, for example '4-00:00:00'.")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Pass -v to sbatch for verbose submission output.")
+    parser.add_argument("--time", "-t", type=str, default="0-01:00:00", help="Wall-clock limit passed through to sbatch --time, for example '4-00:00:00'.")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Pass -v to sbatch for verbose submission output.")
     parser.add_argument("--default-kraken", action="store_true", help="Shortcut that fills in the current kraken defaults for partition and QoS unless you override them explicitly.")
     parser.add_argument("--default-tetralith", action="store_true", help="Shortcut that fills in the current tetralith partition unless you override it explicitly.")
     parser.add_argument("--rclone-remove", action="store_true", default=None, help="After a successful remote copy, delete the local .h5 and .txt runtime files. Event logs are kept. This gives safe copy-then-remove semantics rather than deleting on failure.")
@@ -130,6 +229,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--maxseed", type=int, default=None, help="Do not submit any seed greater than or equal to this absolute seed value.")
     parser.add_argument("--force-run", action="store_true", help="MISSING and TIMEOUT seeds are already runnable. This flag additionally reopens FAILED seeds and tells workers to ignore remote RUNNING locks for the explicitly scheduled seeds. Seeds already marked FINISHED or SKIP remain done.")
     parser.add_argument("--replace", action="store_true", help="Pass --replace to xDMRG++ for each scheduled seed instead of relying on the file-collision behavior encoded in the cfg.")
+    parser.add_argument("--gpu-policy", type=gpu_policy_value, default=None, help="Pass --gpu-policy to xDMRG++ for each scheduled seed. Leave unset to use the generated cfg value.")
+    parser.add_argument("--gpu-id", type=gpu_id_value, default=None, help="Pass --gpu-id to xDMRG++ for each scheduled seed. Accepts auto, -1, or a non-negative device id.")
+    parser.add_argument("--gpu-switchsize", type=non_negative_int, default=None, help="Pass --gpu-switchsize to xDMRG++ for each scheduled seed.")
+    parser.add_argument("--gpu-max-alloc-fraction", type=fraction_0_to_1, default=None, help="Pass --gpu-max-alloc-fraction to xDMRG++ for each scheduled seed.")
     parser.add_argument("--ignore-seed-order", action="store_true", help="Accepted for compatibility with the legacy CLI. slurm2 status lookups are keyed by seed, so seed order is not required.")
     return parser
 
@@ -175,6 +278,14 @@ def base_sbatch_args(args: argparse.Namespace, slurm_log_dir: Path) -> list[str]
         sbatch_args.append(f"--reservation={args.reservation}")
     if args.cpus_per_task:
         sbatch_args.append(f"--cpus-per-task={args.cpus_per_task}")
+    if args.gpus:
+        sbatch_args.append(f"--gpus={args.gpus}")
+    if args.gpus_per_node:
+        sbatch_args.append(f"--gpus-per-node={args.gpus_per_node}")
+    if args.gpus_per_task:
+        sbatch_args.append(f"--gpus-per-task={args.gpus_per_task}")
+    if args.gres:
+        sbatch_args.append(f"--gres={args.gres}")
     if args.nodes:
         sbatch_args.append(f"--nodes={args.nodes}")
     if args.ntasks_per_core:
@@ -299,6 +410,14 @@ def build_worker_wrap(
         worker_cmd.append("--replace")
     if args.rclone_remove:
         worker_cmd.append("--rclone-remove")
+    if args.gpu_policy is not None:
+        worker_cmd.extend(["--gpu-policy", args.gpu_policy])
+    if args.gpu_id is not None:
+        worker_cmd.extend(["--gpu-id", args.gpu_id])
+    if args.gpu_switchsize is not None:
+        worker_cmd.extend(["--gpu-switchsize", str(args.gpu_switchsize)])
+    if args.gpu_max_alloc_fraction is not None:
+        worker_cmd.extend(["--gpu-max-alloc-fraction", str(args.gpu_max_alloc_fraction)])
     return render_command(worker_cmd)
 
 

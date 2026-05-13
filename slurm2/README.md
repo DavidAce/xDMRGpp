@@ -41,10 +41,10 @@ python slurm2/submit.py \
   --name xdmrg6-gdplusk \
   --rclone-prefix xdmrg6-gdplusk \
   --pattern L20 \
-  -J xdmrg6-L20 \
+  --job-name xdmrg6-L20 \
   --clusters=draken \
-  -m 3000M \
-  -t 4-00:00:00 \
+  --mem-per-cpu 3000M \
+  --time 4-00:00:00 \
   --sims-per-array=1000 \
   --cpus-per-task=4 \
   --threads-per-core=1 \
@@ -58,6 +58,20 @@ python slurm2/submit.py \
   --qos=lowprio \
   --force-run
 ```
+
+For GPU runs, request a GPU from Slurm and separately choose the `xDMRG++` GPU policy:
+
+```bash
+python slurm2/submit.py \
+  --name xdmrg6-gdplusk \
+  --rclone-prefix xdmrg6-gdplusk \
+  --pattern L20 \
+  --gpus-per-task=1 \
+  --gpu-policy=TRY \
+  --gpu-id=auto
+```
+
+The Slurm allocation flags `--gpus`, `--gpus-per-node`, `--gpus-per-task`, and `--gres` are passed to `sbatch`. The runtime flags `--gpu-policy`, `--gpu-id`, `--gpu-switchsize`, and `--gpu-max-alloc-fraction` are forwarded to `xDMRG++` by each worker. Leave the runtime flags unset to use the values already written in the generated cfg files. Some clusters allocate GPUs through generic resources; on those systems, replace `--gpus-per-task=1` with `--gres=gpu:1`.
 
 `--name` is the one canonical experiment identifier. It selects the TOML file `slurm2/specs/<name>.toml`, the experiment metadata name, and the default subdirectory name under the base directory. When the experiment lives under the default base directory `/mnt/WDB-AN1500/mbl_transition`, `--name xdmrg6-gdplusk` is enough. Use `--base-dir /some/other/root` to override that base, or `--experiment-dir /full/path/xdmrg6-gdplusk` when you want to bypass name-based resolution entirely.
 
