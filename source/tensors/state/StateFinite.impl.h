@@ -695,7 +695,7 @@ bool StateFinite<Scalar>::is_at_bond_limit(long bond_lim, double fraction) const
 template<typename Scalar>
 size_t StateFinite<Scalar>::num_bonds_at_maximum(const std::vector<size_t> &sites) const {
     if(sites.empty()) return 0;
-    auto L            = get_length<long>();
+    [[maybe_unused]] auto L            = get_length<size_t>();
     auto bond_dims    = tools::finite::measure::bond_dimensions(*this);
     auto spin_dims    = tools::finite::measure::spin_dimensions(*this);
     auto get_bond_max = [&](long bond_idx) {
