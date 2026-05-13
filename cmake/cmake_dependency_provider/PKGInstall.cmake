@@ -215,6 +215,7 @@ function(pkg_install pkg_name)
     execute_process(
             COMMAND
             ${CMAKE_COMMAND}
+            -Wno-unused-cli
             -C ${PKG_INIT_CACHE_FILE}                # For the subproject in external_<libname>
             -DINIT_CACHE_FILE=${PKG_INIT_CACHE_FILE} # For externalproject_add inside the subproject
             -DCMAKE_INSTALL_PREFIX:PATH=${PKG_INSTALL_DIR}
