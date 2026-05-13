@@ -3,8 +3,8 @@
 #include "math/float.h"
 #include "math/rnd.h"
 #include <fmt/format.h>
-#include <cassert>
 #include <fmt/std.h>
+#include <stdexcept>
 
 
 
@@ -16,7 +16,10 @@ int main() {
         if (std::abs(num) > 5) throw std::runtime_error("rnd1 > 5");
         auto str = fmt::format("[{:.36f}]", num);
         fmt::print("str1:  {} | size {}\n", str, str.size());
-        if (i == 0) assert( str == "[0.438341628573894261816701310882243285]");
+#if defined(DMRG_USE_QUADMATH) || defined(DMRG_USE_FLOAT128)
+        if(i == 0 and str != "[0.438341628573894261816701310882243285]")
+            throw std::runtime_error(fmt::format("unexpected fp128 random value: {}", str));
+#endif
     }
     rnd::seed(1);
     for (size_t i=0; i < 10; i++) fmt::print("rnd2:  [{:.36f}]\n", f128_t(rnd::random<fp128>(rnd::dist::uniform,0,10)));
