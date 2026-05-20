@@ -58,7 +58,7 @@ namespace settings {
     /*!  \namespace settings::input Settings for initialization */
     namespace input{
         inline long        seed                                 = 1;                           /*!< Main seed for the random number generator. */
-        inline std::string config_filename                      = "input/input.cfg";           /*!< Default config filename. Can either be a .cfg file or a .h5 file with a config stored as a string in /common/config_file_contents */
+        inline std::string config_filename                      = "input/default.cfg";         /*!< Default config filename. Can either be a .cfg file or a .h5 file with a config stored as a string in /common/config_file_contents */
         inline std::string config_file_contents;                                               /*!< Copy of the loaded config file, stored for internal use and HDF5 output */
     }
 
@@ -232,9 +232,9 @@ namespace settings {
     namespace state {
         namespace init {
             inline bool          use_eigenspinors = false;                             /*!< Use random Pauli-matrix eigenvectors when initializing each MPS site along x, y or z */
-            inline std::string   initial_axis     = "none";                            /*!< Axis used to build the initial state. Choose {none, +/-x, +/-y, +/-z} */
+            inline std::string   initial_axis     = "+z";                              /*!< Axis used to build the initial state. Choose {none, +/-x, +/-y, +/-z} */
             inline StateInitType initial_type     = StateInitType::REAL;               /*!< Whether the initial-state amplitudes are real or complex */
-            inline StateInit     initial_state    = StateInit::RANDOM_ENTANGLED_STATE; /*!< Initialization mode for the starting state */
+            inline StateInit     initial_state    = StateInit::PRODUCT_STATE_NEEL;     /*!< Initialization mode for the starting state */
             inline std::string   initial_pattern  = {};                                /*!< Product-state pattern supplied by the user or generated internally, and stored for reuse/resume */
         }
         namespace sector {
