@@ -1,4 +1,37 @@
 
+if(DEFINED DMRG_ENABLE_FP32)
+    message(FATAL_ERROR "The option [DMRG_ENABLE_FP32] has been removed. Replace by:\n"
+            "DMRG_ENABLE_32BIT:BOOL=[TRUE|FALSE]")
+endif()
+if(DEFINED DMRG_ENABLE_CX32)
+    message(FATAL_ERROR "The option [DMRG_ENABLE_CX32] has been removed. Replace by:\n"
+            "DMRG_ENABLE_32BIT:BOOL=[TRUE|FALSE]")
+endif()
+if(DEFINED DMRG_ENABLE_FP64)
+    message(FATAL_ERROR "The option [DMRG_ENABLE_FP64] has been removed. Replace by:\n"
+            "DMRG_ENABLE_64BIT:BOOL=[TRUE|FALSE]")
+endif()
+if(DEFINED DMRG_ENABLE_CX64)
+    message(FATAL_ERROR "The option [DMRG_ENABLE_CX64] has been removed. Replace by:\n"
+            "DMRG_ENABLE_64BIT:BOOL=[TRUE|FALSE]")
+endif()
+if(DEFINED DMRG_ENABLE_FP80)
+    message(FATAL_ERROR "The option [DMRG_ENABLE_FP80] has been removed. Replace by:\n"
+            "DMRG_ENABLE_80BIT:BOOL=[TRUE|FALSE]")
+endif()
+if(DEFINED DMRG_ENABLE_CX80)
+    message(FATAL_ERROR "The option [DMRG_ENABLE_CX80] has been removed. Replace by:\n"
+            "DMRG_ENABLE_80BIT:BOOL=[TRUE|FALSE]")
+endif()
+if(DEFINED DMRG_ENABLE_FP128)
+    message(FATAL_ERROR "The option [DMRG_ENABLE_FP128] has been removed. Replace by:\n"
+            "DMRG_ENABLE_128BIT:BOOL=[TRUE|FALSE]")
+endif()
+if(DEFINED DMRG_ENABLE_CX128)
+    message(FATAL_ERROR "The option [DMRG_ENABLE_CX128] has been removed. Replace by:\n"
+            "DMRG_ENABLE_128BIT:BOOL=[TRUE|FALSE]")
+endif()
+
 if(DMRG_DOWNLOAD_METHOD)
     message(FATAL_ERROR "The variable [DMRG_DOWNLOAD_METHOD] has been deprecated. Replace by:\n"
             "DMRG_PACKAGE_MANAGER:STRING=[find|cmake|fetch|find-or-cmake|find-or-fetch|conan]")
