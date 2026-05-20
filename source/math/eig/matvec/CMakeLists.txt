@@ -51,6 +51,7 @@ add_source_target(xdmrg++-math-eig-matvec-mpos
         matvec_mpos/internal/get_op_norm.inst.cpp.in
         INST_PAIR_TEMPLATE_FILES
         matvec_mpos/matvec_mpos.pair.inst.cpp.in
+        INST_PAIR_DIAGONAL
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

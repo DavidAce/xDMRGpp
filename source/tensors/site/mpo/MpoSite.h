@@ -24,7 +24,7 @@ template<typename Scalar>
 class MpoSite {
     public:
     using RealScalar = decltype(std::real(std::declval<Scalar>()));
-    using QuadScalar = std::conditional_t<sfinae::is_std_complex_v<Scalar>, cx128, fp128>;
+    using QuadScalar = std::conditional_t<sfinae::is_std_complex_v<Scalar>, cxX, fpX>;
     using TableMap   = std::map<std::string, std::any>;
     const ModelType model_type;
     bool            all_mpo_parameters_have_been_set = false;
@@ -240,6 +240,9 @@ class MpoSite {
             return tenx::asScalarType<T>(get_MPO_edge_right(mpo_internal));
         }
     }
+
+    [[nodiscard]] Eigen::Tensor<QuadScalar, 1> get_MPO_edge_left_q() const;
+    [[nodiscard]] Eigen::Tensor<QuadScalar, 1> get_MPO_edge_right_q() const;
 
     template<typename T>
     [[nodiscard]] Eigen::Tensor<T, 1> get_MPO2_edge_left() const;

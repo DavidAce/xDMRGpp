@@ -23,6 +23,7 @@ add_source_target(xdmrg++-tools-finite-opt
 
         INST_PAIR_TEMPLATE_FILES
             extract_results/extract_results.pair.inst.cpp.in
+        INST_PAIR_DIAGONAL
 
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags

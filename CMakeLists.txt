@@ -12,12 +12,15 @@ list(INSERT CMAKE_MODULE_PATH 0 ${PROJECT_SOURCE_DIR}/cmake/modules)
 # Set options for this build
 option(DMRG_USE_QUADMATH            "Use __float128 from quadmath.h for fLBIT time evolution"           FALSE)
 option(DMRG_USE_FLOAT128            "Use std::float128_t for fLBIT time evolution"                      FALSE)
-option(DMRG_ENABLE_FP32             "Build explicit instantiations for fp32"                            ON)
-option(DMRG_ENABLE_FP64             "Build explicit instantiations for fp64"                            ON)
-option(DMRG_ENABLE_FP128            "Build explicit instantiations for fp128 aliases"                   ON)
-option(DMRG_ENABLE_CX32             "Build explicit instantiations for cx32"                            ON)
-option(DMRG_ENABLE_CX64             "Build explicit instantiations for cx64"                            ON)
-option(DMRG_ENABLE_CX128            "Build explicit instantiations for cx128 aliases"                   ON)
+option(DMRG_ENABLE_32BIT            "Build explicit instantiations for fp32/cx32"                       ON)
+option(DMRG_ENABLE_64BIT            "Build explicit instantiations for fp64/cx64"                       ON)
+option(DMRG_ENABLE_128BIT           "Build explicit instantiations for true fp128/cx128"                OFF)
+option(DMRG_ENABLE_FP32             "Deprecated alias: enables DMRG_ENABLE_32BIT"                       OFF)
+option(DMRG_ENABLE_FP64             "Deprecated alias: enables DMRG_ENABLE_64BIT"                       OFF)
+option(DMRG_ENABLE_FP128            "Deprecated alias: enables DMRG_ENABLE_128BIT"                      OFF)
+option(DMRG_ENABLE_CX32             "Deprecated alias: enables DMRG_ENABLE_32BIT"                       OFF)
+option(DMRG_ENABLE_CX64             "Deprecated alias: enables DMRG_ENABLE_64BIT"                       OFF)
+option(DMRG_ENABLE_CX128            "Deprecated alias: enables DMRG_ENABLE_128BIT"                      OFF)
 option(DMRG_ENABLE_TBLIS            "Use TBLIS for faster tensor contractions (FP64) instead of Eigen3" FALSE)
 option(DMRG_ENABLE_CUTENSOR         "Use cuTENSOR for selected tensor contractions on CUDA GPUs"       FALSE)
 option(DMRG_ENABLE_TESTS            "Enable unit testing with ctest"                                    FALSE)
@@ -39,18 +42,39 @@ option(EIGEN_USE_THREADS            "Use STL threads to parallelize Eigen::Tenso
 option(THREADS_PREFER_PTHREAD_FLAG  "Prefer -pthread flag over -lpthread or similar"                    TRUE)
 
 set(DMRG_ENABLED_SCALARS "")
-foreach(dmrg_scalar IN ITEMS fp32 fp64 fp128 cx32 cx64 cx128)
-    string(TOUPPER "${dmrg_scalar}" dmrg_scalar_upper)
-    if(DMRG_ENABLE_${dmrg_scalar_upper})
-        list(APPEND DMRG_ENABLED_SCALARS "${dmrg_scalar}")
-    endif()
+foreach(dmrg_width IN ITEMS 32 64 128)
+    foreach(dmrg_kind IN ITEMS FP CX)
+        if(DMRG_ENABLE_${dmrg_kind}${dmrg_width})
+            message(DEPRECATION "DMRG_ENABLE_${dmrg_kind}${dmrg_width} is deprecated; use DMRG_ENABLE_${dmrg_width}BIT. Enabling the full ${dmrg_width}-bit scalar family.")
+            set(DMRG_ENABLE_${dmrg_width}BIT ON CACHE BOOL "Build explicit instantiations for ${dmrg_width}-bit real/complex scalars" FORCE)
+        endif()
+    endforeach()
 endforeach()
+
+if(DMRG_ENABLE_32BIT)
+    list(APPEND DMRG_ENABLED_SCALARS fp32 cx32)
+endif()
+if(DMRG_ENABLE_64BIT)
+    list(APPEND DMRG_ENABLED_SCALARS fp64 cx64)
+endif()
+if(DMRG_ENABLE_128BIT)
+    if(NOT DMRG_USE_FLOAT128)
+        message(FATAL_ERROR "DMRG_ENABLE_128BIT requires DMRG_USE_FLOAT128=ON so fp128/cx128 are true 128-bit types")
+    endif()
+    list(APPEND DMRG_ENABLED_SCALARS fp128 cx128)
+endif()
 
 if(NOT DMRG_ENABLED_SCALARS)
     message(FATAL_ERROR "At least one explicit-instantiation scalar must be enabled")
 endif()
 
 set(DMRG_ENABLED_SCALARS "${DMRG_ENABLED_SCALARS}" CACHE INTERNAL "Enabled explicit-instantiation scalars" FORCE)
+
+set(DMRG_INTERNAL_HIGHPREC_SCALARS "")
+if(DMRG_USE_FLOAT128)
+    list(APPEND DMRG_INTERNAL_HIGHPREC_SCALARS fp128 cx128)
+endif()
+set(DMRG_INTERNAL_HIGHPREC_SCALARS "${DMRG_INTERNAL_HIGHPREC_SCALARS}" CACHE INTERNAL "Internal high-precision helper scalars" FORCE)
 
 
 
@@ -77,6 +101,10 @@ include(cmake/PrintBuildInfo.cmake)
 add_library(xdmrg++-flags INTERFACE)
 add_library(xdmrg++-deps INTERFACE)
 target_include_directories(xdmrg++-flags INTERFACE source)
+foreach(dmrg_scalar IN LISTS DMRG_ENABLED_SCALARS)
+    string(TOUPPER "${dmrg_scalar}" dmrg_scalar_upper)
+    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_ENABLE_${dmrg_scalar_upper})
+endforeach()
 
 ###  Apply compiler flags
 include(cmake/CompilerFlags.cmake)
@@ -151,7 +179,7 @@ add_subdirectory(docs)  # Build documentation with doxygen
 if(CMAKE_GENERATOR MATCHES Ninja)
     add_custom_command(
             TARGET xDMRG++ POST_BUILD
-            COMMAND ninja -C ${CMAKE_BINARY_DIR} -t recompact
+            COMMAND ${CMAKE_MAKE_PROGRAM} -C ${CMAKE_BINARY_DIR} -t recompact
             COMMAND python ${CMAKE_CURRENT_LIST_DIR}/ninjatracing --showall ${CMAKE_BINARY_DIR}/.ninja_log > ${CMAKE_BINARY_DIR}/.ninja_trace.json
             BYPRODUCTS ${CMAKE_BINARY_DIR}/.ninja_trace.json
             WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}

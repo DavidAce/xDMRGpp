@@ -86,19 +86,7 @@ opt_mps<Scalar> internal::optimize_energy_eig(const TensorsFinite<Scalar> &tenso
 
     auto                         t_gs = tid::tic_scope("eig-ene", tid::level::higher);
     std::vector<opt_mps<Scalar>> results;
-    if constexpr(sfinae::is_std_complex_v<Scalar>) {
-        switch(meta.optType) {
-            case OptType::FP64: optimize_energy_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CX64: optimize_energy_eig_executor<cx64>(tensors, initial_mps, results, meta); break;
-            default: throw except::runtime_error("optimize_energy_eig(): not implemented for type {}", enum2sv(meta.optType));
-        }
-    } else {
-        switch(meta.optType) {
-            case OptType::FP64: optimize_energy_eig_executor<fp64>(tensors, initial_mps, results, meta); break;
-            case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
-            default: throw except::runtime_error("optimize_energy_eig(): not implemented for type {}", enum2sv(meta.optType));
-        }
-    }
+    optimize_energy_eig_executor<Scalar>(tensors, initial_mps, results, meta);
 
     if(results.empty()) {
         meta.optExit = OptExit::FAIL_ERROR;

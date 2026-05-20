@@ -118,31 +118,35 @@ add_source_target(xdmrg++-algorithms-fdmrg
         xdmrg++-tools-common-prof
 
         )
-add_source_target(xdmrg++-algorithms-flbit
-        INST_TEMPLATE_FILES
-        flbit/flbit.inst.cpp.in
-        flbit/flbit.tmpl.inst.cpp.in
-        INST_SCALARS
-        cx64
+if(cx64 IN_LIST DMRG_ENABLED_SCALARS)
+    add_source_target(xdmrg++-algorithms-flbit
+            INST_TEMPLATE_FILES
+            flbit/flbit.inst.cpp.in
+            flbit/flbit.tmpl.inst.cpp.in
+            INST_SCALARS
+            cx64
 
-        OBJECT_LINK_LIBRARIES
-        xdmrg++-deps xdmrg++-flags
-        INTERFACE_LINK_LIBRARIES
-        xdmrg++-algorithms-finite-cx64
-        xdmrg++-math-tenx
-        xdmrg++-qm-lbit
-        xdmrg++-tools-common-plot
-        xdmrg++-tools-finite-h5
-        xdmrg++-tools-finite-mps-gates
-        xdmrg++-tools-finite-mps-init-product-state
-        xdmrg++-tools-finite-mps-merge
-        xdmrg++-tools-finite-mps-normalize
-        xdmrg++-tools-finite-mps-to-tensor
-        xdmrg++-tools-finite-ops-overlap
-        xdmrg++-tools-common-h5
-        xdmrg++-tools-common-prof
+            OBJECT_LINK_LIBRARIES
+            xdmrg++-deps xdmrg++-flags
+            INTERFACE_LINK_LIBRARIES
+            xdmrg++-algorithms-finite-cx64
+            xdmrg++-math-tenx
+            xdmrg++-qm-lbit
+            xdmrg++-tools-common-plot
+            xdmrg++-tools-finite-h5
+            xdmrg++-tools-finite-mps-gates
+            xdmrg++-tools-finite-mps-init-product-state
+            xdmrg++-tools-finite-mps-merge
+            xdmrg++-tools-finite-mps-normalize
+            xdmrg++-tools-finite-mps-to-tensor
+            xdmrg++-tools-finite-ops-overlap
+            xdmrg++-tools-common-h5
+            xdmrg++-tools-common-prof
 
-        )
+            )
+else()
+    add_library(xdmrg++-algorithms-flbit INTERFACE)
+endif()
 
 add_source_target(xdmrg++-algorithms-xdmrg
         INST_TEMPLATE_FILES
@@ -172,20 +176,24 @@ add_source_target(xdmrg++-algorithms-idmrg
         xdmrg++-tools-infinite-opt
         )
 
-add_source_target(xdmrg++-algorithms-itebd
-        INST_TEMPLATE_FILES
-        itebd/itebd.inst.cpp.in
-        INST_SCALARS
-        cx64
+if(cx64 IN_LIST DMRG_ENABLED_SCALARS)
+    add_source_target(xdmrg++-algorithms-itebd
+            INST_TEMPLATE_FILES
+            itebd/itebd.inst.cpp.in
+            INST_SCALARS
+            cx64
 
-        OBJECT_LINK_LIBRARIES
-        xdmrg++-deps xdmrg++-flags
-        INTERFACE_LINK_LIBRARIES
-        xdmrg++-qm-time
-        xdmrg++-algorithms-infinite
-        xdmrg++-tools-infinite-opt
+            OBJECT_LINK_LIBRARIES
+            xdmrg++-deps xdmrg++-flags
+            INTERFACE_LINK_LIBRARIES
+            xdmrg++-qm-time
+            xdmrg++-algorithms-infinite
+            xdmrg++-tools-infinite-opt
 
-        )
+            )
+else()
+    add_library(xdmrg++-algorithms-itebd INTERFACE)
+endif()
 
 add_source_target(xdmrg++-algorithms-launcher
         TARGET_SOURCES

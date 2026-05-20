@@ -10,7 +10,7 @@ template<typename Scalar>
 class LBit : public MpoSite<Scalar> {
     private:
     using RealScalar = typename MpoSite<Scalar>::RealScalar;
-    using QuadScalar = std::conditional_t<sfinae::is_std_complex_v<Scalar>, cx128, fp128>;
+    using QuadScalar = std::conditional_t<sfinae::is_std_complex_v<Scalar>, cxX, fpX>;
     using MpoSite<Scalar>::extent2;
     using MpoSite<Scalar>::extent4;
     using MpoSite<Scalar>::all_mpo_parameters_have_been_set;

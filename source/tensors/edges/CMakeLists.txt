@@ -4,6 +4,7 @@ add_source_target(xdmrg++-tensors-edges-finite
 
         INST_PAIR_TEMPLATE_FILES
         EdgesFinite/EdgesFinite.pair.inst.cpp.in
+        INST_PAIR_DIAGONAL
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

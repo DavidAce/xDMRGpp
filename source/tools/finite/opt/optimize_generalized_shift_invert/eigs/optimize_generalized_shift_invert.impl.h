@@ -202,27 +202,7 @@ opt_mps<Scalar> internal::optimize_generalized_shift_invert(const TensorsFinite<
 
     auto                         t_gdmrg = tid::tic_scope("eigs-gdmrg", tid::level::higher);
     std::vector<opt_mps<Scalar>> results;
-    if constexpr(sfinae::is_std_complex_v<Scalar>) {
-        switch(meta.optType) {
-            case OptType::FP32: eigs_manager_generalized_shift_invert<fp32>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::FP128: eigs_manager_generalized_shift_invert<fp128>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::CX32: eigs_manager_generalized_shift_invert<cx32>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::CX64: eigs_manager_generalized_shift_invert<cx64>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::CX128: eigs_manager_generalized_shift_invert<cx128>(tensors, initial_mps, results, meta, elog); break;
-            default: throw except::runtime_error("optimize_generalized_shift_invert(): not implemented for type {}", enum2sv(meta.optType));
-        }
-    } else {
-        switch(meta.optType) {
-            case OptType::FP32: eigs_manager_generalized_shift_invert<fp32>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::FP64: eigs_manager_generalized_shift_invert<fp64>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::FP128: eigs_manager_generalized_shift_invert<fp128>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
-            case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
-            case OptType::CX128: throw except::logic_error("Cannot run OptType::CX128 with Scalar type {}", sfinae::type_name<Scalar>());
-            default: throw except::runtime_error("optimize_generalized_shift_invert(): not implemented for type {}", enum2sv(meta.optType));
-        }
-    }
+    eigs_manager_generalized_shift_invert<Scalar>(tensors, initial_mps, results, meta, elog);
     auto t_post = tid::tic_scope("post");
     if(results.empty()) {
         meta.optExit = OptExit::FAIL_ERROR;

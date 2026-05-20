@@ -572,13 +572,6 @@ std::pair<MatrixType<T>, VectorReal<T>> subspace::find_subspace_lapack(const Ten
 template<typename T, typename Scalar>
 MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                                     const std::vector<opt_mps<Scalar>> &eigvecs) {
-    if constexpr(sfinae::is_std_complex_v<T>) {
-        bool eigvecs_are_real = std::all_of(eigvecs.begin(), eigvecs.end(), [](const opt_mps<Scalar> &eigvec) { return tenx::isReal(eigvec.get_tensor()); });
-        if(eigvecs_are_real and model.is_real() and edges.is_real()) {
-            using Real = decltype(std::real(std::declval<T>()));
-            return get_hamiltonian_in_subspace<Real>(model, edges, eigvecs).template cast<T>();
-        }
-    }
     // First, make sure every candidate is actually a basis vector; otherwise this computation would turn difficult if we have to skip rows and columns
     auto t_ham = tid::tic_scope("ham_sub");
     for(const auto &eigvec : eigvecs)
@@ -619,14 +612,6 @@ MatrixType<T> subspace::get_hamiltonian_in_subspace(const ModelFinite<Scalar> &m
 template<typename T, typename Scalar>
 MatrixType<T> subspace::get_hamiltonian_squared_in_subspace(const ModelFinite<Scalar> &model, const EdgesFinite<Scalar> &edges,
                                                             const std::vector<opt_mps<Scalar>> &eigvecs) {
-    if constexpr(sfinae::is_std_complex_v<T>) {
-        bool eigvecs_are_real = std::all_of(eigvecs.begin(), eigvecs.end(), [](const opt_mps<Scalar> &eigvec) { return tenx::isReal(eigvec.get_tensor()); });
-        if(eigvecs_are_real and model.is_real() and edges.is_real()) {
-            using Real = decltype(std::real(std::declval<T>()));
-            return get_hamiltonian_squared_in_subspace<Real>(model, edges, eigvecs).template cast<T>();
-        }
-    }
-
     // First, make sure every candidate is actually a basis vector, otherwise this computation would turn difficult if we have to skip rows and columns
     auto t_ham = tid::tic_scope("ham²_sub");
     for(const auto &eigvec : eigvecs)

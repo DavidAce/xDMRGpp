@@ -17,6 +17,7 @@
 #include <general/sfinae.h>
 #include <h5pp/h5pp.h>
 #include <utility>
+#include "MpoSite.tmpl.h"
 
 template<typename Scalar>
 MpoSite<Scalar>::MpoSite(ModelType model_type_, size_t position_) : model_type(model_type_), position(position_) {}
@@ -129,10 +130,11 @@ Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 4> MpoSite<Scalar>::get_mpo_
     auto ereal = energy_shift_per_site; // cx64(static_cast<fp64>(energy_shift_per_site.real(), static_cast<fp64>(energy_shift_per_site.imag())));
     auto mpo   = get_mpo(ereal, nbody, skip);
     if constexpr(sfinae::is_std_complex_v<Scalar>) {
-        return mpo.unaryExpr([](auto z) { return std::complex(static_cast<fp128>(std::real(z)), static_cast<fp128>(std::imag(z))); });
+        using RealQuad = typename QuadScalar::value_type;
+        return mpo.unaryExpr([](auto z) { return QuadScalar(static_cast<RealQuad>(std::real(z)), static_cast<RealQuad>(std::imag(z))); });
 
     } else {
-        return mpo.unaryExpr([](auto z) { return static_cast<fp128>(z); });
+        return mpo.unaryExpr([](auto z) { return static_cast<QuadScalar>(z); });
     }
 }
 
@@ -152,6 +154,16 @@ const Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 4> &MpoSite<Scalar>::M
     } else {
         throw std::runtime_error("All MPO parameters haven't been set yet.");
     }
+}
+
+template<typename Scalar>
+Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 1> MpoSite<Scalar>::get_MPO_edge_left_q() const {
+    return get_MPO_edge_left(mpo_internal_q);
+}
+
+template<typename Scalar>
+Eigen::Tensor<typename MpoSite<Scalar>::QuadScalar, 1> MpoSite<Scalar>::get_MPO_edge_right_q() const {
+    return get_MPO_edge_right(mpo_internal_q);
 }
 
 template<typename Scalar>

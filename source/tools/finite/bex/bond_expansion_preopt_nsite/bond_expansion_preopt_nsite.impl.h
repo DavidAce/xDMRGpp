@@ -35,11 +35,6 @@ void get_optimally_mixed_block(const std::vector<size_t>   &sites, //
                                const EdgesFinite<Scalar>   &edges, //
                                const BondExpansionConfig   &bcfg,  //
                                BondExpansionResult<Scalar> &res) {
-    if constexpr(sfinae::is_std_complex_v<T>) {
-        using RealT = decltype(std::real(std::declval<T>()));
-        if(state.is_real() and model.is_real() and edges.is_real()) { return get_optimally_mixed_block<RealT>(sites, state, model, edges, bcfg, res); }
-    }
-
     auto       t_mixblk = tid::tic_scope("mixblk");
     const auto K1_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRG_X, OptAlgo::DMRG_X_HYBRID, OptAlgo::DMRG_GSI, OptAlgo::DMRG);
     const auto K2_on    = has_any_flags(bcfg.optAlgo, OptAlgo::DMRG_X, OptAlgo::DMRG_X_HYBRID, OptAlgo::DMRG_GSI, OptAlgo::DMRG_FOLDED);

@@ -170,6 +170,7 @@ void AlgorithmLauncher::setup_temp_path() {
 void AlgorithmLauncher::run_algorithms() {
     if(h5file) h5file->writeDataset(false, "common/finished_all");
     switch(settings::precision::algoScalar) {
+        #if defined(DMRG_ENABLE_FP32)
         case ScalarType::FP32: {
             run_idmrg<fp32>();
             run_fdmrg<fp32>();
@@ -178,6 +179,8 @@ void AlgorithmLauncher::run_algorithms() {
             run_itebd<fp32>();
             break;
         }
+        #endif
+        #if defined(DMRG_ENABLE_FP64)
         case ScalarType::FP64: {
             run_idmrg<fp64>();
             run_fdmrg<fp64>();
@@ -186,6 +189,8 @@ void AlgorithmLauncher::run_algorithms() {
             run_itebd<fp64>();
             break;
         }
+        #endif
+        #if defined(DMRG_ENABLE_FP128)
         case ScalarType::FP128: {
             run_idmrg<fp128>();
             run_fdmrg<fp128>();
@@ -194,6 +199,8 @@ void AlgorithmLauncher::run_algorithms() {
             run_itebd<fp128>();
             break;
         }
+        #endif
+        #if defined(DMRG_ENABLE_CX32)
         case ScalarType::CX32: {
             run_idmrg<cx32>();
             run_fdmrg<cx32>();
@@ -202,6 +209,8 @@ void AlgorithmLauncher::run_algorithms() {
             run_itebd<cx32>();
             break;
         }
+        #endif
+        #if defined(DMRG_ENABLE_CX64)
         case ScalarType::CX64: {
             run_idmrg<cx64>();
             run_fdmrg<cx64>();
@@ -210,6 +219,8 @@ void AlgorithmLauncher::run_algorithms() {
             run_itebd<cx64>();
             break;
         }
+        #endif
+        #if defined(DMRG_ENABLE_CX128)
         case ScalarType::CX128: {
             run_idmrg<cx128>();
             run_fdmrg<cx128>();
@@ -218,6 +229,8 @@ void AlgorithmLauncher::run_algorithms() {
             run_itebd<cx128>();
             break;
         }
+        #endif
+        default: throw except::runtime_error("Scalar type [{}] was not enabled in this build", enum2sv(settings::precision::algoScalar));
     }
 
     if(h5file) {

@@ -50,6 +50,7 @@ add_source_target(xdmrg++-tools-finite-measure-expectation-value
         expectation_value/contract.inst.cpp.in
         INST_PAIR_TEMPLATE_FILES
         expectation_value/expectation_value.pair.inst.cpp.in
+        INST_PAIR_DIAGONAL
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

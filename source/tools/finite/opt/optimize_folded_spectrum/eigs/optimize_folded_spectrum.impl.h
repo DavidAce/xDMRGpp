@@ -327,26 +327,7 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_folded_spectrum(const Ten
 
     auto                         t_var = tid::tic_scope("eigs-xdmrg", tid::level::higher);
     std::vector<opt_mps<Scalar>> results;
-    if constexpr(sfinae::is_std_complex_v<Scalar>) {
-        switch(meta.optType) {
-            case OptType::FP32: eigs_manager_folded_spectrum<fp32>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::CX32: eigs_manager_folded_spectrum<cx32>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::CX64: eigs_manager_folded_spectrum<cx64>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::FP128: eigs_manager_folded_spectrum<fp128>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::CX128: eigs_manager_folded_spectrum<cx128>(tensors, initial_mps, results, meta, elog); break;
-            default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
-        }
-    } else {
-        switch(meta.optType) {
-            case OptType::FP32: eigs_manager_folded_spectrum<fp32>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::FP64: eigs_manager_folded_spectrum<fp64>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::FP128: eigs_manager_folded_spectrum<fp128>(tensors, initial_mps, results, meta, elog); break;
-            case OptType::CX32: throw except::logic_error("Cannot run OptType::CX32 with Scalar type {}", sfinae::type_name<Scalar>());
-            case OptType::CX64: throw except::logic_error("Cannot run OptType::CX64 with Scalar type {}", sfinae::type_name<Scalar>());
-            default: throw except::logic_error("optimize_folded_spectrum: not implemented for type {}", enum2sv(meta.optType));
-        }
-    }
+    eigs_manager_folded_spectrum<Scalar>(tensors, initial_mps, results, meta, elog);
 
     auto t_post = tid::tic_scope("post");
     if(results.empty()) {

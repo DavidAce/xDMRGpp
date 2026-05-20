@@ -488,8 +488,8 @@ Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4> ModelFinite<Scalar>::
     Eigen::Tensor<QuadScalar, 4> multisite_mpo_t, mpoL, mpoR;
     Eigen::Tensor<QuadScalar, 2> mpoR_traced;
     // The hamiltonian is the lower left corner of the full system mpo chain, which we can extract using edgeL and edgeR
-    Eigen::Tensor<QuadScalar, 1> edgeL = get_mpo(sites.front()).template get_MPO_edge_left<QuadScalar>();
-    Eigen::Tensor<QuadScalar, 1> edgeR = get_mpo(sites.back()).template get_MPO_edge_right<QuadScalar>();
+    Eigen::Tensor<QuadScalar, 1> edgeL = get_mpo(sites.front()).get_MPO_edge_left_q();
+    Eigen::Tensor<QuadScalar, 1> edgeR = get_mpo(sites.back()).get_MPO_edge_right_q();
 
     tools::log->trace("Contracting multisite mpo tensor with sites {} | nbody {} ", sites, nbody_str);
 

@@ -76,28 +76,7 @@ opt_mps<Scalar> tools::finite::opt::internal::optimize_overlap(const TensorsFini
      *  The subspace set of eigenstates obtained from full or partial diagonalization
      */
 
-    std::vector<opt_mps<Scalar>> subspace;
-    if constexpr(sfinae::is_any_v<Scalar, fp32, cx32>) {
-        switch(meta.optType) {
-            case OptType::FP32: subspace = internal::subspace::find_subspace<fp32>(tensors, meta, slog); break;
-            case OptType::CX32: subspace = internal::subspace::find_subspace<cx32>(tensors, meta, slog); break;
-            default: throw except::runtime_error("optimize_overlap<{}>(): not implemented for type {}", sfinae::type_name<Scalar>(), enum2sv(meta.optType));
-        }
-    }
-    if constexpr(sfinae::is_any_v<Scalar, fp64, cx64>) {
-        switch(meta.optType) {
-            case OptType::FP64: subspace = internal::subspace::find_subspace<fp64>(tensors, meta, slog); break;
-            case OptType::CX64: subspace = internal::subspace::find_subspace<cx64>(tensors, meta, slog); break;
-            default: throw except::runtime_error("optimize_overlap<{}>(): not implemented for type {}", sfinae::type_name<Scalar>(), enum2sv(meta.optType));
-        }
-    }
-    if constexpr(sfinae::is_any_v<Scalar, fp128, cx128>) {
-        switch(meta.optType) {
-            case OptType::FP128: subspace = internal::subspace::find_subspace<fp128>(tensors, meta, slog); break;
-            case OptType::CX128: subspace = internal::subspace::find_subspace<cx128>(tensors, meta, slog); break;
-            default: throw except::runtime_error("optimize_overlap<{}>(): not implemented for type {}", sfinae::type_name<Scalar>(), enum2sv(meta.optType));
-        }
-    }
+    std::vector<opt_mps<Scalar>> subspace = internal::subspace::find_subspace<Scalar>(tensors, meta, slog);
 
     tools::log->trace("optimize_overlap: subspace found with {} eigenvectors", subspace.size());
 

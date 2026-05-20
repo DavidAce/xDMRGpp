@@ -33,6 +33,24 @@ function(_dmrg_get_default_instantiation_output_dir out_var template_dir)
     set(${out_var} "${output_dir}" PARENT_SCOPE)
 endfunction()
 
+function(dmrg_filter_enabled_scalars out_var)
+    set(filtered_scalars)
+    foreach(dmrg_scalar IN LISTS ARGN)
+        if(dmrg_scalar IN_LIST DMRG_ENABLED_SCALARS)
+            list(APPEND filtered_scalars "${dmrg_scalar}")
+        endif()
+    endforeach()
+    set(${out_var} "${filtered_scalars}" PARENT_SCOPE)
+endfunction()
+
+function(dmrg_append_if_scalar_enabled out_var dmrg_scalar)
+    set(filtered_sources ${${out_var}})
+    if(dmrg_scalar IN_LIST DMRG_ENABLED_SCALARS)
+        list(APPEND filtered_sources ${ARGN})
+    endif()
+    set(${out_var} "${filtered_sources}" PARENT_SCOPE)
+endfunction()
+
 # generate_scalar_instantiations(<out_var>
 #     TEMPLATE <path/to/file.inst.cpp.in>
 #     SCALARS <fp32> <fp64> ...
@@ -103,6 +121,7 @@ endfunction()
 
 # generate_scalar_pair_instantiations(<out_var>
 #     TEMPLATE <path/to/file.pair.inst.cpp.in>
+#     DIAGONAL
 #     OUTER_SCALARS <fp32> <fp64> ...
 #     INNER_SCALARS <fp32> <fp64> ...
 #     OUTPUT_DIR <dir>)
@@ -111,6 +130,7 @@ endfunction()
 # scalar pair and returns the generated source list in <out_var>.
 #
 # TEMPLATE may be absolute or relative to CMAKE_CURRENT_SOURCE_DIR.
+# DIAGONAL is optional; when set, only <scalar, scalar> pairs are generated.
 # OUTER_SCALARS and INNER_SCALARS are optional; when omitted they each fall
 # back to the project-wide DMRG_ENABLED_SCALARS list from the top-level
 # DMRG_ENABLE_<SCALAR> options.
@@ -127,7 +147,7 @@ endfunction()
 # Each generated source receives the template directory as an include path so
 # local includes such as #include "../foo.impl.h" continue to work.
 function(generate_scalar_pair_instantiations out_var)
-    set(options)
+    set(options DIAGONAL)
     set(oneValueArgs TEMPLATE OUTPUT_DIR)
     set(multiValueArgs OUTER_SCALARS INNER_SCALARS)
     cmake_parse_arguments(PARSE_ARGV 1 DMRG_PAIR "${options}" "${oneValueArgs}" "${multiValueArgs}")
@@ -167,6 +187,9 @@ function(generate_scalar_pair_instantiations out_var)
         file(MAKE_DIRECTORY "${pair_output_dir}")
 
         foreach(dmrg_inner_scalar IN LISTS dmrg_inner_scalars)
+            if(DMRG_PAIR_DIAGONAL AND NOT dmrg_outer_scalar STREQUAL dmrg_inner_scalar)
+                continue()
+            endif()
             set(OUTER_SCALAR "${dmrg_outer_scalar}")
             set(INNER_SCALAR "${dmrg_inner_scalar}")
             set(STORAGE_SCALAR "${dmrg_outer_scalar}")

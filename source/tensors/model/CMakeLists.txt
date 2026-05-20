@@ -1,9 +1,18 @@
+set(xdmrg_tensors_model_inst_scalars ${DMRG_ENABLED_SCALARS} ${DMRG_INTERNAL_HIGHPREC_SCALARS})
+list(REMOVE_DUPLICATES xdmrg_tensors_model_inst_scalars)
 add_source_target(xdmrg++-tensors-model-finite
         INST_TEMPLATE_FILES
         ModelFinite/ModelFinite.inst.cpp.in
+        INST_SCALARS
+        ${xdmrg_tensors_model_inst_scalars}
 
         INST_PAIR_TEMPLATE_FILES
         ModelFinite/ModelFinite.pair.inst.cpp.in
+        INST_PAIR_DIAGONAL
+        INST_PAIR_OUTER_SCALARS
+        ${xdmrg_tensors_model_inst_scalars}
+        INST_PAIR_INNER_SCALARS
+        ${xdmrg_tensors_model_inst_scalars}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

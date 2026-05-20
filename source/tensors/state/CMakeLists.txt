@@ -5,6 +5,7 @@ add_source_target(xdmrg++-tensors-state-finite
 
         INST_PAIR_TEMPLATE_FILES
         StateFinite/StateFinite.pair.inst.cpp.in
+        INST_PAIR_DIAGONAL
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

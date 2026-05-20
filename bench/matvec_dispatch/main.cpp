@@ -60,6 +60,28 @@ namespace {
 
     double to_mib(std::size_t bytes) { return static_cast<double>(bytes) / 1024.0 / 1024.0; }
 
+    std::string enabled_dtype_list() {
+        std::vector<std::string_view> dtypes;
+#if defined(DMRG_ENABLE_FP32)
+        dtypes.emplace_back("fp32");
+#endif
+#if defined(DMRG_ENABLE_FP64)
+        dtypes.emplace_back("fp64");
+#endif
+#if defined(DMRG_ENABLE_CX32)
+        dtypes.emplace_back("cx32");
+#endif
+#if defined(DMRG_ENABLE_CX64)
+        dtypes.emplace_back("cx64");
+#endif
+        std::string result;
+        for(std::string_view dtype : dtypes) {
+            if(not result.empty()) result += ", ";
+            result += dtype;
+        }
+        return result;
+    }
+
     template<typename Scalar, int Rank>
     void fill_random(Eigen::Tensor<Scalar, Rank> &tensor) {
         Eigen::Map<VectorType<Scalar>>(tensor.data(), tensor.size()).setRandom();
@@ -237,7 +259,7 @@ int main(int argc, char **argv) {
     bool                     check_affinity_only   = false;
 
     CLI::App app{"Benchmark matrix_vector_product backend dispatch"};
-    app.add_option("--dtype", dtype, "Scalar type: fp32, fp64, cx32, cx64");
+    app.add_option("--dtype", dtype, fmt::format("Scalar type: {}", enabled_dtype_list()));
     app.add_option("-d,--physdim", d, "Physical dimension");
     app.add_option("--chiL", chiL, "Left bond dimension");
     app.add_option("--chiR", chiR, "Right bond dimension");
@@ -272,10 +294,18 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+#if defined(DMRG_ENABLE_FP32)
     if(dtype == "fp32") return run_case<fp32>(d, chiL, chiR, wL, wR, epochs, iterations, backends, profile_tblis, show_openmp_placement), 0;
+#endif
+#if defined(DMRG_ENABLE_FP64)
     if(dtype == "fp64") return run_case<fp64>(d, chiL, chiR, wL, wR, epochs, iterations, backends, profile_tblis, show_openmp_placement), 0;
+#endif
+#if defined(DMRG_ENABLE_CX32)
     if(dtype == "cx32") return run_case<cx32>(d, chiL, chiR, wL, wR, epochs, iterations, backends, profile_tblis, show_openmp_placement), 0;
+#endif
+#if defined(DMRG_ENABLE_CX64)
     if(dtype == "cx64") return run_case<cx64>(d, chiL, chiR, wL, wR, epochs, iterations, backends, profile_tblis, show_openmp_placement), 0;
+#endif
 
-    throw std::runtime_error(fmt::format("Unsupported dtype {}", dtype));
+    throw std::runtime_error(fmt::format("Unsupported dtype {}. Enabled dtypes: {}", dtype, enabled_dtype_list()));
 }

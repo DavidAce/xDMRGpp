@@ -22,6 +22,14 @@ namespace settings {
     inline constexpr bool verbose_gates = false;
 }
 
+namespace {
+    Eigen::Tensor<cx64, 2> to_cx64(const Eigen::Tensor<cx128, 2> &op) {
+        return op.unaryExpr([](auto z) { return cx64(static_cast<fp64>(z.real()), static_cast<fp64>(z.imag())); });
+    }
+
+    cx128 to_cx128(cx64 z) { return cx128(static_cast<fp128>(z.real()), static_cast<fp128>(z.imag())); }
+}
+
 template<typename T>
 std::vector<T> subset(const std::vector<T> &vec, size_t idx_start, size_t num) {
     if(idx_start + num > vec.size()) throw except::range_error("Vector subset start {} num {} out of range for vector of size {}", idx_start, num, vec.size());
@@ -203,7 +211,8 @@ qm::Gate::Gate(const Eigen::Tensor<cx64, 2> &op_, std::vector<size_t> pos_, std:
     if(dim_prod != op_.dimension(0) or dim_prod != op_.dimension(1))
         throw except::logic_error("dim {} not compatible with matrix dimensions {} x {}", dim, op_.dimension(0), op_.dimension(1));
     if(pos.size() != dim.size()) throw except::logic_error("pos.size() {} != dim.size() {}", pos, dim);
-    op = exp_internal(op_, alpha);
+    op_t = exp_internal(tenx::asScalarType<cx128>(op_), alpha);
+    op   = to_cx64(op_t);
 }
 
 qm::Gate::Gate(const Eigen::Tensor<cx128, 2> &op_, std::vector<size_t> pos_, std::vector<long> dim_, cx64 alpha) : pos(std::move(pos_)), dim(std::move(dim_)) {
@@ -211,10 +220,8 @@ qm::Gate::Gate(const Eigen::Tensor<cx128, 2> &op_, std::vector<size_t> pos_, std
     if(dim_prod != op_.dimension(0) or dim_prod != op_.dimension(1))
         throw except::logic_error("dim {} not compatible with matrix dimensions {} x {}", dim, op_.dimension(0), op_.dimension(1));
     if(pos.size() != dim.size()) throw except::logic_error("pos.size() {} != dim.size() {}", pos, dim);
-    op_t = exp_internal(op_, alpha);
-
-    // We use a unary expression to cast from std::complex<__float128> to std::complex<double>
-    op = op_t.unaryExpr([](auto z) { return std::complex<fp64>(static_cast<fp64>(z.real()), static_cast<fp64>(z.imag())); });
+    op_t = exp_internal(op_, to_cx128(alpha));
+    op   = to_cx64(op_t);
 }
 
 qm::Gate::Gate(const Eigen::Tensor<cx128, 2> &op_, std::vector<size_t> pos_, std::vector<long> dim_, cx128 alpha) : pos(std::move(pos_)), dim(std::move(dim_)) {
@@ -223,8 +230,7 @@ qm::Gate::Gate(const Eigen::Tensor<cx128, 2> &op_, std::vector<size_t> pos_, std
         throw except::logic_error("dim {} not compatible with matrix dimensions {} x {}", dim, op_.dimension(0), op_.dimension(1));
     if(pos.size() != dim.size()) throw except::logic_error("pos.size() {} != dim.size() {}", pos, dim);
     op_t = exp_internal(op_, alpha);
-    // We use a unary expression to cast from std::complex<__float128> to std::complex<double>
-    op = op_t.unaryExpr([](auto z) { return std::complex<fp64>(static_cast<fp64>(z.real()), static_cast<fp64>(z.imag())); });
+    op   = to_cx64(op_t);
 }
 
 qm::Gate qm::Gate::exp(cx64 alpha) const {

@@ -29,6 +29,12 @@ using cx128 = std::complex<fp128>;
 using fp128 = long double;
 using cx128 = std::complex<long double>;
 #endif
+#if defined(DMRG_HIGHPREC_FLOAT128)
+using fpX = fp128;
+#else
+using fpX = long double;
+#endif
+using cxX = std::complex<fpX>;
 
 namespace sfinae {
     template<typename T>

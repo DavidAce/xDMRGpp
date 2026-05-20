@@ -7,6 +7,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/GenerateInstantiationSources.cmake)
 #     INST_SCALARS <fp32> <fp64> ...
 #     INST_OUTPUT_DIR <dir>
 #     INST_PAIR_TEMPLATE_FILES <tmpl1.pair.inst.cpp.in> <tmpl2.pair.inst.cpp.in> ...
+#     INST_PAIR_DIAGONAL
 #     INST_PAIR_OUTER_SCALARS <fp32> <fp64> ...
 #     INST_PAIR_INNER_SCALARS <fp32> <fp64> ...
 #     INST_PAIR_OUTPUT_DIR <dir>
@@ -29,13 +30,14 @@ include(${CMAKE_CURRENT_LIST_DIR}/GenerateInstantiationSources.cmake)
 # CMAKE_CURRENT_BINARY_DIR/generated, mirroring the template's relative path.
 # Use INST_PAIR_TEMPLATE_FILES for explicit-instantiation templates that should
 # be expanded into one generated source per scalar pair.
+# INST_PAIR_DIAGONAL restricts pair generation to <scalar, scalar> pairs.
 # INST_PAIR_OUTER_SCALARS and INST_PAIR_INNER_SCALARS are optional; when
 # omitted, each side falls back to the project-wide DMRG_ENABLED_SCALARS list.
 # INST_PAIR_OUTPUT_DIR is optional; when omitted, generated pair sources are
 # written under CMAKE_CURRENT_BINARY_DIR/generated, mirroring the template's
 # relative path.
 function(add_source_target target_name)
-    set(options CONFIG MODULE CHECK QUIET DEBUG INSTALL_PREFIX_PKGNAME)
+    set(options CONFIG MODULE CHECK QUIET DEBUG INSTALL_PREFIX_PKGNAME INST_PAIR_DIAGONAL)
     set(oneValueArgs VERSION INSTALL_DIR INSTALL_SUBDIR BUILD_DIR BUILD_SUBDIR FIND_NAME TARGET_NAME LINK_TYPE INST_OUTPUT_DIR INST_PAIR_OUTPUT_DIR)
     set(multiValueArgs TARGET_SOURCES INST_TEMPLATE_FILES INST_SCALARS INST_PAIR_TEMPLATE_FILES INST_PAIR_OUTER_SCALARS INST_PAIR_INNER_SCALARS OBJECT_LINK_LIBRARIES PRIVATE_LINK_LIBRARIES INTERFACE_LINK_LIBRARIES COMPILE_OPTIONS COMPILE_DEFINITIONS)
     cmake_parse_arguments(PARSE_ARGV 1 ADD "${options}" "${oneValueArgs}" "${multiValueArgs}")
@@ -60,6 +62,9 @@ function(add_source_target target_name)
     # exporting conversions to fp64 or cx64.
     foreach(inst_pair_template IN LISTS ADD_INST_PAIR_TEMPLATE_FILES)
         set(dmrg_pair_args TEMPLATE "${inst_pair_template}")
+        if(ADD_INST_PAIR_DIAGONAL)
+            list(APPEND dmrg_pair_args DIAGONAL)
+        endif()
         if(ADD_INST_PAIR_OUTER_SCALARS)
             list(APPEND dmrg_pair_args OUTER_SCALARS ${ADD_INST_PAIR_OUTER_SCALARS})
         endif()
