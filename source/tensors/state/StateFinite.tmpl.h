@@ -29,12 +29,7 @@ StateFinite<Scalar>::StateFinite(const StateFinite<T> &other) noexcept {
     popcount     = other.popcount;
 
     if constexpr(std::is_same_v<Scalar, T>) {
-        cache_fp32   = other.cache_fp32;
-        cache_fp64   = other.cache_fp64;
-        cache_fp128  = other.cache_fp128;
-        cache_cx32   = other.cache_cx32;
-        cache_cx64   = other.cache_cx64;
-        cache_cx128  = other.cache_cx128;
+        cache        = other.cache;
         measurements = other.measurements;
     }
 }
@@ -56,12 +51,7 @@ StateFinite<Scalar> &StateFinite<Scalar>::operator=(const StateFinite<T> &other)
     popcount     = other.popcount;
 
     if constexpr(std::is_same_v<Scalar, T>) {
-        cache_fp32   = other.cache_fp32;
-        cache_fp64   = other.cache_fp64;
-        cache_fp128  = other.cache_fp128;
-        cache_cx32   = other.cache_cx32;
-        cache_cx64   = other.cache_cx64;
-        cache_cx128  = other.cache_cx128;
+        cache        = other.cache;
         measurements = other.measurements;
     }
     return *this;

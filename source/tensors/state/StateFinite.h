@@ -74,24 +74,12 @@ class StateFinite {
     static constexpr size_t max_mps_cache_size = 20; // Max mps cache size in units of elements
     static constexpr size_t max_trf_cache_size = 20; // Max transfer matrix cache size in units of elements
     int                     direction          = 1;
-    mutable Cache<fp32>     cache_fp32;
-    mutable Cache<fp64>     cache_fp64;
-    mutable Cache<fp128>    cache_fp128;
-    mutable Cache<cx32>     cache_cx32;
-    mutable Cache<cx64>     cache_cx64;
-    mutable Cache<cx128>    cache_cx128;
+    mutable Cache<Scalar>   cache;
 
     template<typename T>
     [[nodiscard]] Cache<T> &get_cache() const {
-        /* clang-format off */
-        if      constexpr(std::is_same_v<T, fp32>) { return cache_fp32; }
-        else if constexpr(std::is_same_v<T, fp64>) { return cache_fp64; }
-        else if constexpr(std::is_same_v<T, fp128>) { return cache_fp128; }
-        else if constexpr(std::is_same_v<T, cx32>) { return cache_cx32; }
-        else if constexpr(std::is_same_v<T, cx64>) { return cache_cx64; }
-        else if constexpr(std::is_same_v<T, cx128>) { return cache_cx128; }
-        else throw std::logic_error("unrecognized cache type T");
-        /* clang-format on */
+        static_assert(std::is_same_v<T, Scalar>, "StateFinite only caches tensors in its native Scalar type");
+        return cache;
     }
 
     // mutable std::vector<bool> tag_normalized_sites;

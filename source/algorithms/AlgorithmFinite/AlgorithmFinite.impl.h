@@ -899,7 +899,7 @@ void AlgorithmFinite<Scalar>::update_dmrg_blocksize() {
                                            .eig_max_size   = 3200,
                                            .svd_max_size   = 1024,
                                            .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
-                                           .precision      = Precision::SINGLE};
+                                           .precision      = settings::storage::dataset::subsystem_entanglement_entropies::precision};
         auto        ia        = tools::finite::measure::information_lattice_analysis(tensors.get_state(), ip);
         double      info      = ia.icom;
         double      blocksize = std::max(1.0, info);
@@ -1479,7 +1479,7 @@ AlgorithmFinite<Scalar>::log_entry::log_entry(const AlgorithmStatus &s, const Te
                                         .eig_max_size   = 3200,
                                         .svd_max_size   = 1024,
                                         .svd_trnc_lim   = std::max(status.trnc_lim, 1e-6),
-                                        .precision      = Precision::SINGLE};
+                                        .precision      = settings::storage::dataset::subsystem_entanglement_entropies::precision};
     locinfoscale           = 0.0;
     if(settings::convergence::locinfoscale_saturation_sensitivity > 0.0 and status.algo_type != AlgorithmType::fLBIT) {
         locinfoscale = tools::finite::measure::information_center_of_mass(t.get_state(), ip);

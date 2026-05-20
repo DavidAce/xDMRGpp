@@ -225,9 +225,10 @@ auto get_eigenvalues(Scalar *matrix_ptr, Eigen::Index size, Eigen::Index switchs
     return eigenvalues;
 }
 
-template<typename Scalar>
-RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite<Scalar> &state, const std::vector<size_t> &sites,
-                                                                               Precision prec, size_t eig_max_size, std::string_view side) {
+namespace information_internal {
+    template<typename Scalar>
+    RealScalar<Scalar> subsystem_entanglement_entropy_log2_impl(const StateFinite<Scalar> &state, const std::vector<size_t> &sites, size_t eig_max_size,
+                                                                std::string_view side) {
     if(sites.empty()) return 0;
     bool sites_is_contiguous = sites == num::range<size_t>(sites.front(), sites.back() + 1);
     if(not sites_is_contiguous) { throw except::logic_error("sites are not contiguous: {}", sites); }
@@ -237,8 +238,7 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     auto L = state.template get_length<size_t>();
     if(sites == num::range<size_t>(L - sites.size(), L)) { return tools::finite::measure::entanglement_entropy_log2(state, L - sites.size()); }
     if(eig_max_size > 10000) throw except::runtime_error("subsystem_entanglement_entropy_log2: eig_max_size invalid range (<= 10000). Got: {}", eig_max_size);
-    bool is_real = state.is_real();
-    auto cites   = get_subsystem_complement(L, sites); // Complement of sites
+    auto cites = get_subsystem_complement(L, sites); // Complement of sites
 
     auto chiL         = state.get_mps_site(sites.front()).get_chiL();
     auto chiR         = state.get_mps_site(sites.back()).get_chiR();
@@ -259,31 +259,9 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     auto eig_sizes = std::array{eig_size_rho, eig_size_cmp, eig_size_trf};
     // auto eig_costs = std::array{eig_cost_rho, eig_cost_cmp, eig_cost_trf};
 
-    std::array<double, 3> mat_costs_rho = {};
-    std::array<double, 3> mat_costs_cmp = {};
-    std::array<double, 2> mat_costs_trf = {};
-    switch(prec) {
-            /* clang-format off */
-        case Precision::SINGLE: {
-            mat_costs_rho = is_real ? state.template get_reduced_density_matrix_cost<fp32>(sites) : state.template get_reduced_density_matrix_cost<cx32>(sites);
-            mat_costs_cmp = is_real ? state.template get_reduced_density_matrix_cost<fp32>(cites) : state.template get_reduced_density_matrix_cost<cx32>(cites);
-            mat_costs_trf = is_real ? state.template get_transfer_matrix_costs<fp32>(sites, side) : state.template get_transfer_matrix_costs<cx32>(sites, side);
-            break;
-        }
-        case Precision::DOUBLE: {
-            mat_costs_rho = is_real ? state.template get_reduced_density_matrix_cost<fp64>(sites) : state.template get_reduced_density_matrix_cost<cx64>(sites);
-            mat_costs_cmp = is_real ? state.template get_reduced_density_matrix_cost<fp64>(cites) : state.template get_reduced_density_matrix_cost<cx64>(cites);
-            mat_costs_trf = is_real ? state.template get_transfer_matrix_costs<fp64>(sites, side) : state.template get_transfer_matrix_costs<cx64>(sites, side);
-            break;
-        }
-        case Precision::QUADRUPLE: {
-            mat_costs_rho = is_real ? state.template get_reduced_density_matrix_cost<fp128>(sites) : state.template get_reduced_density_matrix_cost<cx128>(sites);
-            mat_costs_cmp = is_real ? state.template get_reduced_density_matrix_cost<fp128>(cites) : state.template get_reduced_density_matrix_cost<cx128>(cites);
-            mat_costs_trf = is_real ? state.template get_transfer_matrix_costs<fp128>(sites, side) : state.template get_transfer_matrix_costs<cx128>(sites, side);
-            break;
-        }
-            /* clang-format on */
-    }
+    auto mat_costs_rho = state.template get_reduced_density_matrix_cost<Scalar>(sites);
+    auto mat_costs_cmp = state.template get_reduced_density_matrix_cost<Scalar>(cites);
+    auto mat_costs_trf = state.template get_transfer_matrix_costs<Scalar>(sites, side);
 
     auto min_cost_rho_idx = std::distance(mat_costs_rho.begin(), std::min_element(mat_costs_rho.begin(), mat_costs_rho.end()));
     auto min_cost_cmp_idx = std::distance(mat_costs_cmp.begin(), std::min_element(mat_costs_cmp.begin(), mat_costs_cmp.end()));
@@ -312,106 +290,22 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
         return std::numeric_limits<double>::quiet_NaN(); // No cost is smaller than max mat size
     }
 
-    auto                  solver   = eig::solver();
-    auto                  evs      = RealArrayX<Scalar>(); // Eigenvalues
+    auto                  solver = eig::solver();
+    auto                  evs    = RealArrayX<Scalar>(); // Eigenvalues
     [[maybe_unused]] auto mat_time = 0.0;
     [[maybe_unused]] auto eig_time = 0.0;
-    switch(prec) {
-        case Precision::SINGLE: {
-            if(is_real) {
-                Eigen::Tensor<fp32, 2> mat;
-                if(min_cost_idx == 0) {
-                    mat      = state.template get_reduced_density_matrix<fp32>(sites);
-                    mat_time = tid::get("rho").get_last_interval();
-                } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<fp32>(cites);
-                    mat_time = tid::get("rho").get_last_interval();
-                } else if(min_cost_idx == 2) {
-                    mat      = state.template get_transfer_matrix<fp32>(sites, side);
-                    mat_time = tid::get("trf").get_last_interval();
-                }
-                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
-            } else {
-                Eigen::Tensor<cx32, 2> mat;
-                if(min_cost_idx == 0) {
-                    mat      = state.template get_reduced_density_matrix<cx32>(sites);
-                    mat_time = tid::get("rho").get_last_interval();
-                } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<cx32>(cites);
-                    mat_time = tid::get("rho").get_last_interval();
-                } else if(min_cost_idx == 2) {
-                    mat      = state.template get_transfer_matrix<cx32>(sites, side);
-                    mat_time = tid::get("trf").get_last_interval();
-                }
-                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
-            }
-            break;
-        }
-        case Precision::DOUBLE: {
-            if(is_real) {
-                Eigen::Tensor<fp64, 2> mat;
-                if(min_cost_idx == 0) {
-                    mat      = state.template get_reduced_density_matrix<fp64>(sites);
-                    mat_time = tid::get("rho").get_last_interval();
-                    // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after rho");
-                } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<fp64>(cites);
-                    mat_time = tid::get("rho").get_last_interval();
-                    // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after cmp");
-                } else if(min_cost_idx == 2) {
-                    mat      = state.template get_transfer_matrix<fp64>(sites, side);
-                    mat_time = tid::get("trf").get_last_interval();
-                }
-                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
-            } else {
-                Eigen::Tensor<cx64, 2> mat;
-                if(min_cost_idx == 0) {
-                    mat      = state.template get_reduced_density_matrix<cx64>(sites);
-                    mat_time = tid::get("rho").get_last_interval();
-                } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<cx64>(cites);
-                    mat_time = tid::get("rho").get_last_interval();
-                } else if(min_cost_idx == 2) {
-                    mat      = state.template get_transfer_matrix<cx64>(sites, side);
-                    mat_time = tid::get("trf").get_last_interval();
-                }
-                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
-            }
-            break;
-        }
-        case Precision::QUADRUPLE: {
-            if(is_real) {
-                Eigen::Tensor<fp128, 2> mat;
-                if(min_cost_idx == 0) {
-                    mat      = state.template get_reduced_density_matrix<fp128>(sites);
-                    mat_time = tid::get("rho").get_last_interval();
-                    // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after rho");
-                } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<fp128>(cites);
-                    mat_time = tid::get("rho").get_last_interval();
-                    // if(debug::mem_hwm_in_mb() > 10000) throw except::runtime_error("Exceeded 5G high water mark after cmp");
-                } else if(min_cost_idx == 2) {
-                    mat      = state.template get_transfer_matrix<fp128>(sites, side);
-                    mat_time = tid::get("trf").get_last_interval();
-                }
-                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
-            } else {
-                Eigen::Tensor<cx128, 2> mat;
-                if(min_cost_idx == 0) {
-                    mat      = state.template get_reduced_density_matrix<cx128>(sites);
-                    mat_time = tid::get("rho").get_last_interval();
-                } else if(min_cost_idx == 1) {
-                    mat      = state.template get_reduced_density_matrix<cx128>(sites);
-                    mat_time = tid::get("rho").get_last_interval();
-                } else if(min_cost_idx == 2) {
-                    mat      = state.template get_transfer_matrix<cx128>(sites, side);
-                    mat_time = tid::get("trf").get_last_interval();
-                }
-                evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
-            }
-            break;
-        }
+    Eigen::Tensor<Scalar, 2> mat;
+    if(min_cost_idx == 0) {
+        mat      = state.template get_reduced_density_matrix<Scalar>(sites);
+        mat_time = tid::get("rho").get_last_interval();
+    } else if(min_cost_idx == 1) {
+        mat      = state.template get_reduced_density_matrix<Scalar>(cites);
+        mat_time = tid::get("rho").get_last_interval();
+    } else if(min_cost_idx == 2) {
+        mat      = state.template get_transfer_matrix<Scalar>(sites, side);
+        mat_time = tid::get("trf").get_last_interval();
     }
+    evs = get_eigenvalues<RealScalar<Scalar>>(mat.data(), mat.dimension(0), 2048l);
 
     eig_time                                     = tid::get("eigenvalues").get_last_interval();
     RealScalar<Scalar> entanglement_entropy_log2 = 0;
@@ -439,6 +333,68 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
     //                  entanglement_entropy_log2 - entanglement_entropy_log2_new);
 
     return entanglement_entropy_log2;
+}
+
+    template<typename OutScalar, typename CalcScalar>
+    RealScalar<OutScalar> subsystem_entanglement_entropy_log2_casted(const StateFinite<OutScalar> &state, const std::vector<size_t> &sites,
+                                                                     size_t eig_max_size, std::string_view side) {
+        auto state_temp = state.template cast<CalcScalar>();
+        auto entropy    = subsystem_entanglement_entropy_log2_impl(state_temp, sites, eig_max_size, side);
+        return static_cast<RealScalar<OutScalar>>(entropy);
+    }
+}
+
+template<typename Scalar>
+RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(const StateFinite<Scalar> &state, const std::vector<size_t> &sites,
+                                                                               Precision prec, size_t eig_max_size, std::string_view side) {
+    switch(prec) {
+        case Precision::SINGLE: {
+            if(state.is_real()) {
+#if defined(DMRG_ENABLE_FP32)
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, fp32>(state, sites, eig_max_size, side);
+#else
+                throw except::runtime_error("SINGLE precision subsystem entropy requested, but FP32 is disabled");
+#endif
+            } else {
+#if defined(DMRG_ENABLE_CX32)
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, cx32>(state, sites, eig_max_size, side);
+#else
+                throw except::runtime_error("SINGLE precision subsystem entropy requested, but CX32 is disabled");
+#endif
+            }
+        }
+        case Precision::DOUBLE: {
+            if(state.is_real()) {
+#if defined(DMRG_ENABLE_FP64)
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, fp64>(state, sites, eig_max_size, side);
+#else
+                throw except::runtime_error("DOUBLE precision subsystem entropy requested, but FP64 is disabled");
+#endif
+            } else {
+#if defined(DMRG_ENABLE_CX64)
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, cx64>(state, sites, eig_max_size, side);
+#else
+                throw except::runtime_error("DOUBLE precision subsystem entropy requested, but CX64 is disabled");
+#endif
+            }
+        }
+        case Precision::QUADRUPLE: {
+            if(state.is_real()) {
+#if defined(DMRG_ENABLE_FP128)
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, fpX>(state, sites, eig_max_size, side);
+#else
+                throw except::runtime_error("QUADRUPLE precision subsystem entropy requested, but the fpX StateFinite path is not enabled");
+#endif
+            } else {
+#if defined(DMRG_ENABLE_CX128)
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, cxX>(state, sites, eig_max_size, side);
+#else
+                throw except::runtime_error("QUADRUPLE precision subsystem entropy requested, but the cxX StateFinite path is not enabled");
+#endif
+            }
+        }
+    }
+    throw except::runtime_error("Unhandled subsystem entropy precision: {}", enum2sv(prec));
 }
 
 template<typename Scalar>
@@ -514,8 +470,9 @@ SeeProgress<Scalar> check_see_progress(const RealArrayXX<Scalar> &see, LogPolicy
  *  - use a positive value to indicate relative error
  *  - use a negative value to indicate absolute error (i.e. how many missing bits you can accept)
  */
+namespace information_internal {
 template<typename Scalar>
-RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite<Scalar> &state, InfoPolicy ip) {
+RealArrayXX<Scalar> subsystem_entanglement_entropies_log2_impl(const StateFinite<Scalar> &state, InfoPolicy ip) {
     ip = normalized_info_policy(ip);
     if(auto cache = state.measurements.get_cached_subsystem_entanglement_entropies(state, ip); cache) {
         if(not state.measurements.subsystem_entanglement_entropies) state.measurements.subsystem_entanglement_entropies = cache->value();
@@ -542,7 +499,7 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
     // We may get away with using slightly higher truncation_limit during the swap process, to get a controlled error.
     auto svd_cfg = svd::config(settings::get_bond_max(state.get_algorithm()), ip.svd_trnc_lim);
     tools::log->debug("subsystem_entanglement_entropies_log2: Normalizing state | svd: {}", svd_cfg.to_string());
-    finite::mps::normalize_state(state_temp, svd_cfg, NormPolicy::ALWAYS);
+    tools::finite::mps::normalize_state(state_temp, svd_cfg, NormPolicy::ALWAYS);
 
     // finite::mps::move_center_point_to_pos_dir(state_temp, 0, 1, ip.svd_cfg);
     tools::log->info("subsystem_entanglement_entropies_log2: calculating | max bit err {:.2e} | max size eig {} svd {} trnc {:.2e} | prec {}",
@@ -550,7 +507,7 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
 
     constexpr auto      nan = std::numeric_limits<RealScalar<Scalar>>::quiet_NaN();
     auto                len = state_temp.template get_length<long>();
-    auto                bee = measure::entanglement_entropies_log2(state_temp); // bipartite entanglement entropies
+    auto                bee = tools::finite::measure::entanglement_entropies_log2(state_temp); // bipartite entanglement entropies
     RealArrayXX<Scalar> see = RealArrayXX<Scalar>::Zero(len, len) * nan;        // susbsystem entanglement entropies
 
     // We begin with the low-hanging fruit (1): Bipartite entanglement entropies
@@ -569,7 +526,7 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
         for(const auto &subsystem : subsystemsL) {
             auto off          = safe_cast<long>(subsystem.front());
             auto ext          = safe_cast<long>(subsystem.size());
-            see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_temp, subsystem, ip.precision.value(), ip.eig_max_size.value(), "left");
+            see(ext - 1, off) = subsystem_entanglement_entropy_log2_impl(state_temp, subsystem, ip.eig_max_size.value(), "left");
             if(!std::isnan(see(ext - 1, off)) and num::lt(see(ext - 1, off), -1e-5))
                 throw except::runtime_error("Negative entropy: {:.16f}", fp(see(ext - 1, off)));
             if(posL != safe_cast<size_t>(off) or &subsystem == &subsystemsL.back()) {
@@ -583,7 +540,7 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
         for(const auto &subsystem : subsystemsR) {
             auto off          = safe_cast<long>(subsystem.front());
             auto ext          = safe_cast<long>(subsystem.size());
-            see(ext - 1, off) = subsystem_entanglement_entropy_log2(state_temp, subsystem, ip.precision.value(), ip.eig_max_size.value(), "right");
+            see(ext - 1, off) = subsystem_entanglement_entropy_log2_impl(state_temp, subsystem, ip.eig_max_size.value(), "right");
             if(!std::isnan(see(ext - 1, off)) and num::lt(see(ext - 1, off), -1e-5))
                 throw except::runtime_error("Negative entropy: {:.16f}", fp(see(ext - 1, off)));
             if(posR != subsystem.back() or &subsystem == &subsystemsR.back()) {
@@ -641,7 +598,7 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
                         subsystem_success = false;
                         break;
                     }
-                    mps::swap_sites(state_l2r, safe_cast<size_t>(i - 1), safe_cast<size_t>(i), sites_l2r, GateMove::OFF, std::nullopt);
+                    tools::finite::mps::swap_sites(state_l2r, safe_cast<size_t>(i - 1), safe_cast<size_t>(i), sites_l2r, GateMove::OFF, std::nullopt);
                 }
                 if(!subsystem_success) break;
             }
@@ -658,11 +615,11 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
 
                 // Now we can read off the missing entropy
                 see(ext - 1, safe_cast<long>(posL)) =
-                    subsystem_entanglement_entropy_log2(state_l2r, num::range<size_t>(0, ext), ip.precision.value(), -1ul, "");
+                    subsystem_entanglement_entropy_log2_impl(state_l2r, num::range<size_t>(0, ext), -1ul, "");
             }
             subsystemsL.pop_front();
             tools::log->info("swap l2r subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, posL,
-                             see(ext - 1, safe_cast<long>(posL)), sites_l2r, measure::bond_dimensions(state_l2r));
+                             see(ext - 1, safe_cast<long>(posL)), sites_l2r, tools::finite::measure::bond_dimensions(state_l2r));
 
             if(!subsystem_success) {
                 // Reset and pop entries that have the same posR
@@ -709,7 +666,7 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
                         subsystem_success = false;
                         break;
                     }
-                    mps::swap_sites(state_r2l, safe_cast<size_t>(i), safe_cast<size_t>(i + 1), sites_r2l, GateMove::OFF, std::nullopt);
+                    tools::finite::mps::swap_sites(state_r2l, safe_cast<size_t>(i), safe_cast<size_t>(i + 1), sites_r2l, GateMove::OFF, std::nullopt);
                 }
                 if(!subsystem_success) break;
             }
@@ -726,11 +683,11 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
                                               sites_r2l, subsystem);
                 // Now we can read off the missing entropy
                 see(ext - 1, off) =
-                    subsystem_entanglement_entropy_log2(state_r2l, num::range<size_t>(length - safe_cast<size_t>(ext), length), ip.precision.value(), -1ul, "");
+                    subsystem_entanglement_entropy_log2_impl(state_r2l, num::range<size_t>(length - safe_cast<size_t>(ext), length), -1ul, "");
             }
             subsystemsR.pop_front();
             tools::log->info("swap r2l subs [{}-{}] | see({},{})={:.6f} | sites {::2} | bonds {::3}", subsystem.front(), subsystem.back(), ext - 1, off,
-                             see(ext - 1, off), sites_r2l, measure::bond_dimensions(state_r2l));
+                             see(ext - 1, off), sites_r2l, tools::finite::measure::bond_dimensions(state_r2l));
             if(!subsystem_success) {
                 // Pop entries that have the same posR
                 while(!subsystemsR.empty() and posR == subsystemsR.front().back()) { subsystemsR.pop_front(); }
@@ -743,6 +700,84 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
     state.measurements.set_cached_subsystem_entanglement_entropies(see, state, ip);
 
     check_see_progress<Scalar>(see, LogPolicy::DEBUG, spdlog::level::info);
+    return see;
+}
+
+template<typename OutScalar, typename CalcScalar>
+RealArrayXX<OutScalar> subsystem_entanglement_entropies_log2_casted(const StateFinite<OutScalar> &state, InfoPolicy ip) {
+    auto state_temp = state.template cast<CalcScalar>();
+    auto see        = subsystem_entanglement_entropies_log2_impl(state_temp, ip);
+    return see.template cast<RealScalar<OutScalar>>();
+}
+}
+
+template<typename Scalar>
+RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    ip = normalized_info_policy(ip);
+    if(auto cache = state.measurements.get_cached_subsystem_entanglement_entropies(state, ip); cache) {
+        if(not state.measurements.subsystem_entanglement_entropies) state.measurements.subsystem_entanglement_entropies = cache->value();
+        state.measurements.info_policy = ip;
+        return cache->value();
+    }
+
+    state.measurements.information_center_of_mass.reset();
+    state.measurements.information_lattice.reset();
+    state.measurements.information_per_scale.reset();
+    state.measurements.subsystem_entanglement_entropies.reset();
+
+    RealArrayXX<Scalar> see;
+    switch(ip.precision.value()) {
+        case Precision::SINGLE: {
+            if(state.is_real()) {
+#if defined(DMRG_ENABLE_FP32)
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, fp32>(state, ip);
+#else
+                throw except::runtime_error("SINGLE precision subsystem entropies requested, but FP32 is disabled");
+#endif
+            } else {
+#if defined(DMRG_ENABLE_CX32)
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, cx32>(state, ip);
+#else
+                throw except::runtime_error("SINGLE precision subsystem entropies requested, but CX32 is disabled");
+#endif
+            }
+            break;
+        }
+        case Precision::DOUBLE: {
+            if(state.is_real()) {
+#if defined(DMRG_ENABLE_FP64)
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, fp64>(state, ip);
+#else
+                throw except::runtime_error("DOUBLE precision subsystem entropies requested, but FP64 is disabled");
+#endif
+            } else {
+#if defined(DMRG_ENABLE_CX64)
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, cx64>(state, ip);
+#else
+                throw except::runtime_error("DOUBLE precision subsystem entropies requested, but CX64 is disabled");
+#endif
+            }
+            break;
+        }
+        case Precision::QUADRUPLE: {
+            if(state.is_real()) {
+#if defined(DMRG_ENABLE_FP128)
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, fpX>(state, ip);
+#else
+                throw except::runtime_error("QUADRUPLE precision subsystem entropies requested, but the fpX StateFinite path is not enabled");
+#endif
+            } else {
+#if defined(DMRG_ENABLE_CX128)
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, cxX>(state, ip);
+#else
+                throw except::runtime_error("QUADRUPLE precision subsystem entropies requested, but the cxX StateFinite path is not enabled");
+#endif
+            }
+            break;
+        }
+    }
+    state.measurements.see_time = tid::get("see").get_last_interval();
+    state.measurements.set_cached_subsystem_entanglement_entropies(see, state, ip);
     return see;
 }
 

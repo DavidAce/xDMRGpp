@@ -43,12 +43,7 @@ StateFinite<Scalar> &StateFinite<Scalar>::operator=(StateFinite &&other) noexcep
 /* clang-format off */
 template<typename Scalar> StateFinite<Scalar>::StateFinite(const StateFinite &other) noexcept :
     direction(other.direction),
-    cache_fp32(other.cache_fp32),
-    cache_fp64(other.cache_fp64),
-    cache_fp128(other.cache_fp128),
-    cache_cx32(other.cache_cx32),
-    cache_cx64(other.cache_cx64),
-    cache_cx128(other.cache_cx128),
+    cache(other.cache),
     name(other.name),
     algo(other.algo),
     convrates(other.convrates),
@@ -68,12 +63,7 @@ StateFinite<Scalar> &StateFinite<Scalar>::operator=(const StateFinite &other) no
     if(this == &other) return *this; // check for self-assignment
 
     direction    = other.direction;
-    cache_fp32   = other.cache_fp32;
-    cache_fp64   = other.cache_fp64;
-    cache_fp128  = other.cache_fp128;
-    cache_cx32   = other.cache_cx32;
-    cache_cx64   = other.cache_cx64;
-    cache_cx128  = other.cache_cx128;
+    cache        = other.cache;
     name         = other.name;
     algo         = other.algo;
     convrates    = other.convrates;
@@ -541,40 +531,16 @@ std::string StateFinite<Scalar>::generate_cache_key(const std::vector<size_t> &s
 
 template<typename Scalar>
 double StateFinite<Scalar>::get_trf_cache_gbts() const {
-    double size_fp32 = 0, size_fp64 = 0, size_fp128 = 0, size_cx32 = 0, size_cx64 = 0, size_cx128 = 0;
-    for(const auto &elem : get_cache<fp32>().trf) size_fp32 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<fp64>().trf) size_fp64 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<fp128>().trf) size_fp128 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<cx32>().trf) size_cx32 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<cx64>().trf) size_cx64 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<cx128>().trf) size_cx128 += static_cast<double>(elem.second.size());
-
-    size_fp32  *= 4.0 / std::pow(1024.0, 3.0);
-    size_fp64  *= 8.0 / std::pow(1024.0, 3.0);
-    size_fp128 *= 16.0 / std::pow(1024.0, 3.0);
-    size_cx32  *= 8.0 / std::pow(1024.0, 3.0);
-    size_cx64  *= 16.0 / std::pow(1024.0, 3.0);
-    size_cx128 *= 16.0 / std::pow(1024.0, 3.0);
-    return size_fp32 + size_fp64 + size_fp128 + size_cx32 + size_cx64 + size_cx128;
+    double size = 0;
+    for(const auto &elem : get_cache<Scalar>().trf) size += static_cast<double>(elem.second.size());
+    return size * static_cast<double>(sizeof(Scalar)) / std::pow(1024.0, 3.0);
 }
 
 template<typename Scalar>
 double StateFinite<Scalar>::get_mps_cache_gbts() const {
-    double size_fp32 = 0, size_fp64 = 0, size_fp128 = 0, size_cx32 = 0, size_cx64 = 0, size_cx128 = 0;
-    for(const auto &elem : get_cache<fp32>().mps) size_fp32 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<fp64>().mps) size_fp64 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<fp128>().mps) size_fp128 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<cx32>().mps) size_cx32 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<cx64>().mps) size_cx64 += static_cast<double>(elem.second.size());
-    for(const auto &elem : get_cache<cx128>().mps) size_cx128 += static_cast<double>(elem.second.size());
-
-    size_fp32  *= 4.0 / std::pow(1024.0, 3.0);
-    size_fp64  *= 8.0 / std::pow(1024.0, 3.0);
-    size_fp128 *= 16.0 / std::pow(1024.0, 3.0);
-    size_cx32  *= 8.0 / std::pow(1024.0, 3.0);
-    size_cx64  *= 16.0 / std::pow(1024.0, 3.0);
-    size_cx128 *= 32.0 / std::pow(1024.0, 3.0);
-    return size_fp32 + size_fp64 + size_fp128 + size_cx32 + size_cx64 + size_cx128;
+    double size = 0;
+    for(const auto &elem : get_cache<Scalar>().mps) size += static_cast<double>(elem.second.size());
+    return size * static_cast<double>(sizeof(Scalar)) / std::pow(1024.0, 3.0);
 }
 
 template<typename Scalar>
@@ -698,7 +664,7 @@ size_t StateFinite<Scalar>::num_bonds_at_maximum(const std::vector<size_t> &site
     [[maybe_unused]] auto L            = get_length<size_t>();
     auto bond_dims    = tools::finite::measure::bond_dimensions(*this);
     auto spin_dims    = tools::finite::measure::spin_dimensions(*this);
-    auto get_bond_max = [&](long bond_idx) {
+    auto get_bond_max = [&](size_t bond_idx) {
         if(bond_idx <= L / 2) {
             return std::accumulate(spin_dims.begin(), spin_dims.begin() + bond_idx, 1l, std::multiplies<long>());
         } else {
@@ -708,7 +674,7 @@ size_t StateFinite<Scalar>::num_bonds_at_maximum(const std::vector<size_t> &site
     size_t num_bonds_at_max = 0;
     for(size_t i = 1; i < sites.size(); ++i) {
         assert(i < L);
-        num_bonds_at_max += bond_dims[sites[i]] >= get_bond_max(static_cast<long>(sites[i])) ? 1 : 0;
+        num_bonds_at_max += bond_dims[sites[i]] >= get_bond_max(sites[i]) ? 1 : 0;
     }
     return num_bonds_at_max;
 }
@@ -730,12 +696,7 @@ void StateFinite<Scalar>::clear_measurements(LogPolicy logPolicy) const {
 template<typename Scalar>
 void StateFinite<Scalar>::clear_cache(LogPolicy logPolicy) const {
     if(logPolicy == LogPolicy::VERBOSE or (settings::debug and logPolicy == LogPolicy::DEBUG)) { tools::log->trace("Clearing state cache"); }
-    cache_fp32  = Cache<fp32>();
-    cache_fp64  = Cache<fp64>();
-    cache_fp128 = Cache<fp128>();
-    cache_cx32  = Cache<cx32>();
-    cache_cx64  = Cache<cx64>();
-    cache_cx128 = Cache<cx128>();
+    cache = Cache<Scalar>();
 }
 
 template<typename Scalar>
@@ -760,30 +721,13 @@ void StateFinite<Scalar>::shrink_cache() const {
             cache.trf.pop_front();
         }
     };
-    const auto all_empty = [&] {
-        return cache_fp32.mps.empty() and cache_fp32.trf.empty() and   //
-               cache_fp64.mps.empty() and cache_fp64.trf.empty() and   //
-               cache_fp128.mps.empty() and cache_fp128.trf.empty() and //
-               cache_cx32.mps.empty() and cache_cx32.trf.empty() and   //
-               cache_cx64.mps.empty() and cache_cx64.trf.empty() and   //
-               cache_cx128.mps.empty() and cache_cx128.trf.empty();
-    };
+    const auto all_empty = [&] { return cache.mps.empty() and cache.trf.empty(); };
 
-    shrink_while(cache_fp32);
-    shrink_while(cache_fp64);
-    shrink_while(cache_fp128);
-    shrink_while(cache_cx32);
-    shrink_while(cache_cx64);
-    shrink_while(cache_cx128);
+    shrink_while(cache);
 
     while(get_mps_cache_gbts() + get_trf_cache_gbts() > std::max(0.0, settings::storage::dataset::subsystem_entanglement_entropies::cache_max_gbts)) {
         if(all_empty()) break;
-        shrink_once(cache_fp32);
-        shrink_once(cache_fp64);
-        shrink_once(cache_fp128);
-        shrink_once(cache_cx32);
-        shrink_once(cache_cx64);
-        shrink_once(cache_cx128);
+        shrink_once(cache);
     }
 }
 
