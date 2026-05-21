@@ -8,7 +8,7 @@ struct InfoPolicy {
     std::optional<size_t>    eig_max_size   = std::nullopt; /*!< Maximum matrix size to diagonalize (skip if larger). Recommend <= 8192 */
     std::optional<double>    svd_max_size   = std::nullopt; /*!< Maximum matrix size for svd during swaps (skip if larger) Recommend <= 4096 */
     std::optional<double>    svd_trnc_lim   = std::nullopt; /*!< Maximum discarded weight in the svd during swaps. Recommend <= 1e-6 */
-    std::optional<Precision> precision      = std::nullopt; /*!< Use single (fp32) or double (fp64) precision internally */
+    std::optional<Precision> precision      = std::nullopt; /*!< Use SINGLE, DOUBLE, EXTENDED, or QUADRUPLE precision internally */
     [[nodiscard]] auto       operator==(const InfoPolicy &) const -> bool = default;
     bool                     is_compatible(const std::optional<InfoPolicy> &other) const;
 };

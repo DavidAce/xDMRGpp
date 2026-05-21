@@ -38,15 +38,6 @@ namespace settings {
     inline constexpr bool debug_subsystem_entropy = false;
 }
 
-[[nodiscard]] inline InfoPolicy normalized_info_policy(InfoPolicy ip) {
-    ip.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err);
-    ip.eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size);
-    ip.svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim);
-    ip.svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim);
-    ip.precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision);
-    return ip;
-}
-
 template<typename ContainerType>
 RealScalar<typename ContainerType::Scalar> count_finite(const ContainerType &arr) {
     using real_t = RealScalar<typename ContainerType::Scalar>;
@@ -488,7 +479,6 @@ SeeProgress<Scalar> check_see_progress(const RealArrayXX<Scalar> &see, LogPolicy
 namespace information_internal {
 template<typename Scalar>
 RealArrayXX<Scalar> subsystem_entanglement_entropies_log2_impl(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    ip = normalized_info_policy(ip);
     if(auto cache = state.measurements.get_cached_subsystem_entanglement_entropies(state, ip); cache) {
         if(not state.measurements.subsystem_entanglement_entropies) state.measurements.subsystem_entanglement_entropies = cache->value();
         state.measurements.info_policy = ip;
@@ -728,7 +718,11 @@ RealArrayXX<OutScalar> subsystem_entanglement_entropies_log2_casted(const StateF
 
 template<typename Scalar>
 RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log2(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    ip = normalized_info_policy(ip);
+    ip = InfoPolicy{.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err),
+                    .eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size),
+                    .svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim),
+                    .svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim),
+                    .precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision)};
     if(auto cache = state.measurements.get_cached_subsystem_entanglement_entropies(state, ip); cache) {
         if(not state.measurements.subsystem_entanglement_entropies) state.measurements.subsystem_entanglement_entropies = cache->value();
         state.measurements.info_policy = ip;
@@ -833,7 +827,11 @@ RealArrayXX<Scalar> tools::finite::measure::information_lattice(const RealArrayX
 
 template<typename Scalar>
 RealArrayXX<Scalar> tools::finite::measure::information_lattice(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    ip = normalized_info_policy(ip);
+    ip = InfoPolicy{.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err),
+                    .eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size),
+                    .svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim),
+                    .svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim),
+                    .precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision)};
     if(auto cache = state.measurements.get_cached_information_lattice(state, ip); cache) {
         if(not state.measurements.information_lattice) state.measurements.information_lattice = cache->value();
         state.measurements.info_policy = ip;
@@ -854,7 +852,11 @@ RealArrayX<Scalar> tools::finite::measure::information_per_scale(const RealArray
 
 template<typename Scalar>
 RealArrayX<Scalar> tools::finite::measure::information_per_scale(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    ip = normalized_info_policy(ip);
+    ip = InfoPolicy{.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err),
+                    .eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size),
+                    .svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim),
+                    .svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim),
+                    .precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision)};
     if(auto cache = state.measurements.get_cached_information_per_scale(state, ip); cache) {
         if(not state.measurements.information_per_scale) state.measurements.information_per_scale = cache->value();
         state.measurements.info_policy = ip;
@@ -912,7 +914,11 @@ RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const Real
  */
 template<typename Scalar>
 RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const StateFinite<Scalar> &state, InfoPolicy ip) {
-    ip = normalized_info_policy(ip);
+    ip = InfoPolicy{.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err),
+                    .eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size),
+                    .svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim),
+                    .svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim),
+                    .precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision)};
     if(auto cache = state.measurements.get_cached_information_center_of_mass(state, ip); cache) {
         if(not state.measurements.information_center_of_mass) state.measurements.information_center_of_mass = cache->value();
         state.measurements.info_policy = ip;
@@ -925,6 +931,11 @@ RealScalar<Scalar> tools::finite::measure::information_center_of_mass(const Stat
 
 template<typename Scalar>
 InfoAnalysis<Scalar> tools::finite::measure::information_lattice_analysis(const StateFinite<Scalar> &state, InfoPolicy ip) {
+    ip = InfoPolicy{.bits_max_error = ip.bits_max_error.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bits_err),
+                    .eig_max_size   = ip.eig_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::eig_size),
+                    .svd_max_size   = ip.svd_max_size.value_or(settings::storage::dataset::subsystem_entanglement_entropies::bond_lim),
+                    .svd_trnc_lim   = ip.svd_trnc_lim.value_or(settings::storage::dataset::subsystem_entanglement_entropies::trnc_lim),
+                    .precision      = ip.precision.value_or(settings::storage::dataset::subsystem_entanglement_entropies::precision)};
     InfoAnalysis<Scalar> info_analysis             = {};
     info_analysis.ip                               = ip;
     info_analysis.subsystem_entanglement_entropies = subsystem_entanglement_entropies_log2(state, ip);
