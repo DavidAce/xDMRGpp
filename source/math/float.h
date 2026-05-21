@@ -17,6 +17,11 @@ using cx32 = std::complex<fp32>;
 using cx64 = std::complex<fp64>;
 using fp80 = long double;
 using cx80 = std::complex<long double>;
+namespace dmrg {
+    struct type_unavailable {
+        type_unavailable() = delete;
+    };
+}
 #if defined(DMRG_USE_QUADMATH)
     #include <quadmath.h>
 __extension__ typedef __float128 fp128;
@@ -26,13 +31,13 @@ using cx128 = std::complex<fp128>;
 using fp128 = std::float128_t;
 using cx128 = std::complex<fp128>;
 #else
-using fp128 = long double;
-using cx128 = std::complex<long double>;
+using fp128 = dmrg::type_unavailable;
+using cx128 = std::complex<fp128>;
 #endif
 #if defined(DMRG_HIGHPREC_FLOAT128)
 using fpX = fp128;
 #else
-using fpX = long double;
+using fpX = fp80;
 #endif
 using cxX = std::complex<fpX>;
 
@@ -56,7 +61,11 @@ namespace sfinae {
     concept is_long_double_prec_v = std::same_as<Real<T>, long double>;
 
     template<typename T>
+#if defined(DMRG_HIGHPREC_FLOAT128)
     concept is_quadruple_prec_v = std::same_as<Real<T>, fp128>;
+#else
+    concept is_quadruple_prec_v = false;
+#endif
 }
 
 template<typename Lhs, typename Rhs>

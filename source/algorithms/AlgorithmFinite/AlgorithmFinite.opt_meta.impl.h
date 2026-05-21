@@ -25,9 +25,11 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     switch(settings::precision::optScalar) {
         case ScalarType::FP32: m1.optType = OptType::FP32; break;
         case ScalarType::FP64: m1.optType = OptType::FP64; break;
+        case ScalarType::FP80: m1.optType = OptType::FP80; break;
         case ScalarType::FP128: m1.optType = OptType::FP128; break;
         case ScalarType::CX32: m1.optType = OptType::CX32; break;
         case ScalarType::CX64: m1.optType = OptType::CX64; break;
+        case ScalarType::CX80: m1.optType = OptType::CX80; break;
         case ScalarType::CX128: m1.optType = OptType::CX128; break;
     }
 
@@ -88,7 +90,7 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
     m1.optSolver = m1.problem_size <= settings::solvers::eig::max_size ? OptSolver::EIG : OptSolver::EIGS;
     m1.label     = enum2sv(m1.optAlgo);
 
-    if(has_any_flags(m1.optType, OptType::FP128, OptType::CX128)) m1.eigs_lib = "EIGSMPO";
+    if(has_any_flags(m1.optType, OptType::FP80, OptType::CX80, OptType::FP128, OptType::CX128)) m1.eigs_lib = "EIGSMPO";
     m1.validate();
     return m1;
 }

@@ -7,6 +7,7 @@
 enum class Precision {
     SINGLE,   /*!< Single-precision floating point */
     DOUBLE,   /*!< Double-precision floating point */
+    EXTENDED, /*!< Extended-precision floating point */
     QUADRUPLE /*!< Quadruple-precision floating point */
 };
 

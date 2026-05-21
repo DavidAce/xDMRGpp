@@ -18,7 +18,7 @@ if(DMRG_USE_FLOAT128)
     target_compile_definitions(xdmrg++-flags INTERFACE DMRG_USE_FLOAT128 DMRG_HIGHPREC_FLOAT128 H5PP_USE_FLOAT128)
 elseif(DMRG_USE_QUADMATH)
     find_package(quadmath REQUIRED BYPASS_PROVIDER)
-    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_USE_QUADMATH H5PP_USE_QUADMATH)
+    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_USE_QUADMATH DMRG_HIGHPREC_FLOAT128 H5PP_USE_QUADMATH)
     target_link_libraries(xdmrg++-deps INTERFACE quadmath::quadmath)
 endif ()
 

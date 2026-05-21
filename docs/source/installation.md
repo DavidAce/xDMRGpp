@@ -73,12 +73,10 @@ Pass CMake options as `-D<OPTION>=<VALUE>` during configure.
 | `DMRG_PACKAGE_MANAGER` | `find` | Select the automatic dependency manager: `find`, `cmake`, `conan`. |
 | `DMRG_USE_QUADMATH` | `FALSE` | Enable `__float128` from `quadmath.h` for `fLBIT` time evolution. |
 | `DMRG_USE_FLOAT128` | `FALSE` | Enable `std::float128_t` for `fLBIT` time evolution. |
-| `DMRG_ENABLE_FP32` | `ON` | Build explicit instantiations for `fp32`. |
-| `DMRG_ENABLE_FP64` | `ON` | Build explicit instantiations for `fp64`. |
-| `DMRG_ENABLE_FP128` | `ON` | Build explicit instantiations for the `fp128` aliases. |
-| `DMRG_ENABLE_CX32` | `ON` | Build explicit instantiations for `cx32`. |
-| `DMRG_ENABLE_CX64` | `ON` | Build explicit instantiations for `cx64`. |
-| `DMRG_ENABLE_CX128` | `ON` | Build explicit instantiations for the `cx128` aliases. |
+| `DMRG_ENABLE_32BIT` | `ON` | Build explicit instantiations for `fp32` and `cx32`. |
+| `DMRG_ENABLE_64BIT` | `ON` | Build explicit instantiations for `fp64` and `cx64`. |
+| `DMRG_ENABLE_80BIT` | `OFF` | Build explicit instantiations for `fp80` and `cx80`. |
+| `DMRG_ENABLE_128BIT` | `OFF` | Build explicit instantiations for true `fp128` and `cx128`. |
 | `DMRG_ENABLE_TBLIS` | `FALSE` | Use [TBLIS](https://github.com/MatthewsResearchGroup/tblis) for selected tensor contractions instead of Eigen. |
 | `DMRG_ENABLE_TESTS` | `FALSE` | Enable unit tests and CTest targets. |
 | `DMRG_BUILD_EXAMPLES` | `FALSE` | Build example programs. |

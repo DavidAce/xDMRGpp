@@ -16,6 +16,8 @@ namespace tools::finite::opt {
                 case OptType::FP64:
                 case OptType::CX32:
                 case OptType::CX64: return settings::tblis_enabled;
+                case OptType::FP80:
+                case OptType::CX80:
                 case OptType::FP128:
                 case OptType::CX128: return false;
             }
@@ -28,6 +30,8 @@ namespace tools::finite::opt {
                 case OptType::FP64:
                 case OptType::CX32:
                 case OptType::CX64: return true;
+                case OptType::FP80:
+                case OptType::CX80:
                 case OptType::FP128:
                 case OptType::CX128: return false;
             }

@@ -60,16 +60,6 @@ add_source_target(xdmrg++-tools-common-contraction
         xdmrg++-tools-common-log
         )
 
-# fp80/cx80 are only distinct from fp128/cx128 when true float128 support is
-# enabled, and these wrappers intentionally instantiate a smaller overload set
-# than the normal matrix_vector_product scalar template.
-if(DMRG_USE_FLOAT128 OR DMRG_USE_QUADMATH)
-    generate_scalar_instantiations(matrix_vector_product_ldbl_sources
-            TEMPLATE matrix_vector_product/matrix_vector_product.ext80.inst.cpp.in
-            SCALARS fp80 cx80)
-    target_sources(xdmrg++-tools-common-matrix-vector-product-o PRIVATE ${matrix_vector_product_ldbl_sources})
-endif()
-
 if (DMRG_ENABLE_TBLIS)
     target_compile_definitions(xdmrg++-tools-common-contraction-core-o PRIVATE DMRG_ENABLE_TBLIS)
     target_compile_definitions(xdmrg++-tools-common-matrix-vector-product-o PRIVATE DMRG_ENABLE_TBLIS)

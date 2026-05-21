@@ -190,6 +190,16 @@ void AlgorithmLauncher::run_algorithms() {
             break;
         }
         #endif
+        #if defined(DMRG_ENABLE_FP80)
+        case ScalarType::FP80: {
+            run_idmrg<fp80>();
+            run_fdmrg<fp80>();
+            run_flbit<fp80>();
+            run_xdmrg<fp80>();
+            run_itebd<fp80>();
+            break;
+        }
+        #endif
         #if defined(DMRG_ENABLE_FP128)
         case ScalarType::FP128: {
             run_idmrg<fp128>();
@@ -217,6 +227,16 @@ void AlgorithmLauncher::run_algorithms() {
             run_flbit<cx64>();
             run_xdmrg<cx64>();
             run_itebd<cx64>();
+            break;
+        }
+        #endif
+        #if defined(DMRG_ENABLE_CX80)
+        case ScalarType::CX80: {
+            run_idmrg<cx80>();
+            run_fdmrg<cx80>();
+            run_flbit<cx80>();
+            run_xdmrg<cx80>();
+            run_itebd<cx80>();
             break;
         }
         #endif

@@ -298,9 +298,11 @@ BondExpansionConfig AlgorithmFinite<Scalar>::get_bond_expansion_config(BondExpan
     switch(settings::precision::optScalar) {
         case ScalarType::FP32: bcfg.optType = OptType::FP32; break;
         case ScalarType::FP64: bcfg.optType = OptType::FP64; break;
+        case ScalarType::FP80: bcfg.optType = OptType::FP80; break;
         case ScalarType::FP128: bcfg.optType = OptType::FP128; break;
         case ScalarType::CX32: bcfg.optType = OptType::CX32; break;
         case ScalarType::CX64: bcfg.optType = OptType::CX64; break;
+        case ScalarType::CX80: bcfg.optType = OptType::CX80; break;
         case ScalarType::CX128: bcfg.optType = OptType::CX128; break;
     }
 

@@ -730,7 +730,7 @@ namespace tenx {
     template<typename Scalar, typename T>
     requires tenx::sfinae::is_eigen_matrix_v<std::remove_cvref_t<T>>
     [[nodiscard]] decltype(auto) asScalarType(T &&obj) {
-        static_assert(sfinae::is_any_v<Scalar, fp32, fp64, fp128, cx32, cx64, cx128>);
+        static_assert(sfinae::is_any_v<Scalar, fp32, fp64, fp80, fp128, cx32, cx64, cx80, cx128>);
         using EigenType = std::remove_cvref_t<decltype(obj)>;
         using OldScalar = typename EigenType::Scalar;
         if constexpr(std::is_same_v<OldScalar, Scalar>) {
@@ -751,7 +751,7 @@ namespace tenx {
     template<typename Scalar, typename T>
     requires tenx::sfinae::is_eigen_array_v<std::remove_cvref_t<T>>
     [[nodiscard]] decltype(auto) asScalarType(T &&obj) {
-        static_assert(sfinae::is_any_v<Scalar, fp32, fp64, fp128, cx32, cx64, cx128>);
+        static_assert(sfinae::is_any_v<Scalar, fp32, fp64, fp80, fp128, cx32, cx64, cx80, cx128>);
         using EigenType = std::remove_cvref_t<decltype(obj)>;
         using OldScalar = typename EigenType::Scalar;
         if constexpr(std::is_same_v<OldScalar, Scalar>) {

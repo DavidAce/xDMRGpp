@@ -25,6 +25,10 @@ namespace eig {
         mutable std::vector<fp64> eigvals_imag_fp64;
         mutable std::vector<cx64> eigvals_cx64;
 
+        mutable std::vector<fp80> eigvals_real_fp80;
+        mutable std::vector<fp80> eigvals_imag_fp80;
+        mutable std::vector<cx80> eigvals_cx80;
+
         mutable std::vector<fp128> eigvals_real_fp128;
         mutable std::vector<fp128> eigvals_imag_fp128;
         mutable std::vector<cx128> eigvals_cx128;
@@ -43,6 +47,13 @@ namespace eig {
         mutable std::vector<cx64> eigvecsR_cx64;
         mutable std::vector<cx64> eigvecsL_cx64;
 
+        mutable std::vector<fp80> eigvecsR_real_fp80;
+        mutable std::vector<fp80> eigvecsR_imag_fp80;
+        mutable std::vector<fp80> eigvecsL_real_fp80;
+        mutable std::vector<fp80> eigvecsL_imag_fp80;
+        mutable std::vector<cx80> eigvecsR_cx80;
+        mutable std::vector<cx80> eigvecsL_cx80;
+
         mutable std::vector<fp128> eigvecsR_real_fp128;
         mutable std::vector<fp128> eigvecsR_imag_fp128;
         mutable std::vector<fp128> eigvecsL_real_fp128;
@@ -59,6 +70,11 @@ namespace eig {
         void build_eigvecs_fp64() const;
         void build_eigvals_cx64() const;
         void build_eigvals_fp64() const;
+
+        void build_eigvecs_cx80() const;
+        void build_eigvecs_fp80() const;
+        void build_eigvals_cx80() const;
+        void build_eigvals_fp80() const;
 
         void build_eigvecs_cx128() const;
         void build_eigvecs_fp128() const;
@@ -129,6 +145,10 @@ namespace eig {
                 if constexpr(form == Form::SYMM) return get_eigvecs<fp64, side>();
                 if constexpr(form == Form::NSYM) return get_eigvecs<cx64, side>();
             }
+            if constexpr(type == Type::FP80) {
+                if constexpr(form == Form::SYMM) return get_eigvecs<fp80, side>();
+                if constexpr(form == Form::NSYM) return get_eigvecs<cx80, side>();
+            }
             if constexpr(type == Type::FP128) {
                 if constexpr(form == Form::SYMM) return get_eigvecs<fp128, side>();
                 if constexpr(form == Form::NSYM) return get_eigvecs<cx128, side>();
@@ -140,6 +160,10 @@ namespace eig {
             if constexpr(type == Type::CX64) {
                 if constexpr(form == Form::SYMM) return get_eigvecs<cx64, side>();
                 if constexpr(form == Form::NSYM) return get_eigvecs<cx64, side>();
+            }
+            if constexpr(type == Type::CX80) {
+                if constexpr(form == Form::SYMM) return get_eigvecs<cx80, side>();
+                if constexpr(form == Form::NSYM) return get_eigvecs<cx80, side>();
             }
             if constexpr(type == Type::CX128) {
                 if constexpr(form == Form::SYMM) return get_eigvecs<cx128, side>();
@@ -171,11 +195,13 @@ namespace eig {
             if constexpr(form == Form::SYMM) {
                 if constexpr(type == Type::FP32 or type == Type::CX32) return get_eigvals<fp32>();
                 if constexpr(type == Type::FP64 or type == Type::CX64) return get_eigvals<fp64>();
+                if constexpr(type == Type::FP80 or type == Type::CX80) return get_eigvals<fp80>();
                 if constexpr(type == Type::FP128 or type == Type::CX128) return get_eigvals<fp128>();
             }
             if constexpr(form == Form::NSYM) {
                 if constexpr(type == Type::FP32 or type == Type::CX32) return get_eigvals<cx32>();
                 if constexpr(type == Type::FP64 or type == Type::CX64) return get_eigvals<cx64>();
+                if constexpr(type == Type::FP80 or type == Type::CX80) return get_eigvals<cx80>();
                 if constexpr(type == Type::FP128 or type == Type::CX128) return get_eigvals<cx128>();
             }
         }

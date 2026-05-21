@@ -9,7 +9,7 @@ namespace eig {
     // Enums
     enum class Lib { ARPACK, SPECTRA, PRIMME, EIGSMPO };      // Choose the underlying library
     enum class Form { SYMM, NSYM };                           // Symmetric or non-symmetric problems (complex symmetric are assumed Hermitian)
-    enum class Type { FP32, FP64, FP128, CX32, CX64, CX128 }; // Real or complex, 32, 64 or 128 bit
+    enum class Type { FP32, FP64, FP80, FP128, CX32, CX64, CX80, CX128 }; // Real or complex scalar type
     enum class Side { L, R, LR };                             // Left, right or both eigenvectors (for nsym problems)
     enum class Prob { STD, GEN };                             // Standard or generalized eigenvalue problem
     enum class Ritz {
@@ -164,9 +164,11 @@ namespace eig {
         switch(type) {
             case Type::FP32: return "FP32";
             case Type::FP64: return "FP64";
+            case Type::FP80: return "FP80";
             case Type::FP128: return "FP128";
             case Type::CX32: return "CX32";
             case Type::CX64: return "CX64";
+            case Type::CX80: return "CX80";
             case Type::CX128: return "CX128";
             default: throw std::logic_error("Not a valid eig::Type");
         }
@@ -176,9 +178,11 @@ namespace eig {
     constexpr eig::Type ScalarToType() {
         if constexpr(std::is_same_v<Scalar, fp32>) return eig::Type::FP32;
         if constexpr(std::is_same_v<Scalar, fp64>) return eig::Type::FP64;
+        if constexpr(std::is_same_v<Scalar, fp80>) return eig::Type::FP80;
         if constexpr(std::is_same_v<Scalar, fp128>) return eig::Type::FP128;
         if constexpr(std::is_same_v<Scalar, cx32>) return eig::Type::CX32;
         if constexpr(std::is_same_v<Scalar, cx64>) return eig::Type::CX64;
+        if constexpr(std::is_same_v<Scalar, cx80>) return eig::Type::CX80;
         if constexpr(std::is_same_v<Scalar, cx128>) return eig::Type::CX128;
         throw std::logic_error("Not a valid Scalar for eig::Type");
     }

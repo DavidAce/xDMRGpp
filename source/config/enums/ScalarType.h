@@ -7,9 +7,11 @@
 enum class ScalarType {
     FP32,  /*!< Single-precision real scalar type */
     FP64,  /*!< Double-precision real scalar type */
+    FP80,  /*!< Extended-precision real scalar type */
     FP128, /*!< Quadruple-precision real scalar type */
     CX32,  /*!< Single-precision complex scalar type */
     CX64,  /*!< Double-precision complex scalar type */
+    CX80,  /*!< Extended-precision complex scalar type */
     CX128  /*!< Quadruple-precision complex scalar type */
 };
 

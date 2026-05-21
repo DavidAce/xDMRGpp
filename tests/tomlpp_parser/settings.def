@@ -59,7 +59,7 @@ StoragePolicy                 ; settings::storage::table::status::policy        
 StoragePolicy                 ; settings::storage::table::memory::policy                             ; "FINISH|ITER|REPLACE"                  ;                ;
 
 ## /*! Entanglement entropy (log2) of all contiguous subsystems */
-Precision                     ; settings::storage::dataset::subsystem_entanglement_entropies::precision ; "DOUBLE"                            ;                ; Use SINGLE or DOUBLE precision internally
+Precision                     ; settings::storage::dataset::subsystem_entanglement_entropies::precision ; "DOUBLE"                            ;                ; Use SINGLE, DOUBLE, EXTENDED, or QUADRUPLE precision internally
 
 ## /*! \namespace settings::state Settings for state initialization and symmetry-sector targeting */
 ProjectionPolicy              ; settings::state::sector::projection_policy                                 ; "ITER"                                 ;                ; Enum bitflag to control projections to a symmetry sector {NEVER,+INIT,WARMUP,+STUCK,ITER,+CONVERGED,FINISHED,FORCE,DEFAULT} (+ are DEFAULT)

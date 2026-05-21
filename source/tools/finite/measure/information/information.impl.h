@@ -378,18 +378,33 @@ RealScalar<Scalar> tools::finite::measure::subsystem_entanglement_entropy_log2(c
 #endif
             }
         }
+        case Precision::EXTENDED: {
+            if(state.is_real()) {
+#if defined(DMRG_ENABLE_FP80)
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, fp80>(state, sites, eig_max_size, side);
+#else
+                throw except::runtime_error("EXTENDED precision subsystem entropy requested, but FP80 is disabled");
+#endif
+            } else {
+#if defined(DMRG_ENABLE_CX80)
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, cx80>(state, sites, eig_max_size, side);
+#else
+                throw except::runtime_error("EXTENDED precision subsystem entropy requested, but CX80 is disabled");
+#endif
+            }
+        }
         case Precision::QUADRUPLE: {
             if(state.is_real()) {
 #if defined(DMRG_ENABLE_FP128)
-                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, fpX>(state, sites, eig_max_size, side);
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, fp128>(state, sites, eig_max_size, side);
 #else
-                throw except::runtime_error("QUADRUPLE precision subsystem entropy requested, but the fpX StateFinite path is not enabled");
+                throw except::runtime_error("QUADRUPLE precision subsystem entropy requested, but FP128 is disabled");
 #endif
             } else {
 #if defined(DMRG_ENABLE_CX128)
-                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, cxX>(state, sites, eig_max_size, side);
+                return information_internal::subsystem_entanglement_entropy_log2_casted<Scalar, cx128>(state, sites, eig_max_size, side);
 #else
-                throw except::runtime_error("QUADRUPLE precision subsystem entropy requested, but the cxX StateFinite path is not enabled");
+                throw except::runtime_error("QUADRUPLE precision subsystem entropy requested, but CX128 is disabled");
 #endif
             }
         }
@@ -759,18 +774,34 @@ RealArrayXX<Scalar> tools::finite::measure::subsystem_entanglement_entropies_log
             }
             break;
         }
+        case Precision::EXTENDED: {
+            if(state.is_real()) {
+#if defined(DMRG_ENABLE_FP80)
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, fp80>(state, ip);
+#else
+                throw except::runtime_error("EXTENDED precision subsystem entropies requested, but FP80 is disabled");
+#endif
+            } else {
+#if defined(DMRG_ENABLE_CX80)
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, cx80>(state, ip);
+#else
+                throw except::runtime_error("EXTENDED precision subsystem entropies requested, but CX80 is disabled");
+#endif
+            }
+            break;
+        }
         case Precision::QUADRUPLE: {
             if(state.is_real()) {
 #if defined(DMRG_ENABLE_FP128)
-                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, fpX>(state, ip);
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, fp128>(state, ip);
 #else
-                throw except::runtime_error("QUADRUPLE precision subsystem entropies requested, but the fpX StateFinite path is not enabled");
+                throw except::runtime_error("QUADRUPLE precision subsystem entropies requested, but FP128 is disabled");
 #endif
             } else {
 #if defined(DMRG_ENABLE_CX128)
-                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, cxX>(state, ip);
+                see = information_internal::subsystem_entanglement_entropies_log2_casted<Scalar, cx128>(state, ip);
 #else
-                throw except::runtime_error("QUADRUPLE precision subsystem entropies requested, but the cxX StateFinite path is not enabled");
+                throw except::runtime_error("QUADRUPLE precision subsystem entropies requested, but CX128 is disabled");
 #endif
             }
             break;

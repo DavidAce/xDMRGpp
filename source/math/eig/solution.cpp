@@ -13,6 +13,10 @@ namespace eig {
             build_eigvecs_fp64();
             if constexpr(side == Side::R) return eigvecsR_real_fp64;
             if constexpr(side == Side::L) return eigvecsL_real_fp64;
+        } else if constexpr(std::is_same_v<Scalar, fp80>) {
+            build_eigvecs_fp80();
+            if constexpr(side == Side::R) return eigvecsR_real_fp80;
+            if constexpr(side == Side::L) return eigvecsL_real_fp80;
         } else if constexpr(std::is_same_v<Scalar, fp128>) {
             build_eigvecs_fp128();
             if constexpr(side == Side::R) return eigvecsR_real_fp128;
@@ -25,6 +29,10 @@ namespace eig {
             build_eigvecs_cx64();
             if constexpr(side == Side::R) return eigvecsR_cx64;
             if constexpr(side == Side::L) return eigvecsL_cx64;
+        } else if constexpr(std::is_same_v<Scalar, cx80>) {
+            build_eigvecs_cx80();
+            if constexpr(side == Side::R) return eigvecsR_cx80;
+            if constexpr(side == Side::L) return eigvecsL_cx80;
         } else if constexpr(std::is_same_v<Scalar, cx128>) {
             build_eigvecs_cx128();
             if constexpr(side == Side::R) return eigvecsR_cx128;
@@ -35,12 +43,16 @@ namespace eig {
     template std::vector<fp32>  &solution::get_eigvecs<fp32, Side::R>() const;
     template std::vector<fp64>  &solution::get_eigvecs<fp64, Side::L>() const;
     template std::vector<fp64>  &solution::get_eigvecs<fp64, Side::R>() const;
+    template std::vector<fp80>  &solution::get_eigvecs<fp80, Side::L>() const;
+    template std::vector<fp80>  &solution::get_eigvecs<fp80, Side::R>() const;
     template std::vector<fp128> &solution::get_eigvecs<fp128, Side::L>() const;
     template std::vector<fp128> &solution::get_eigvecs<fp128, Side::R>() const;
     template std::vector<cx32>  &solution::get_eigvecs<cx32, Side::L>() const;
     template std::vector<cx32>  &solution::get_eigvecs<cx32, Side::R>() const;
     template std::vector<cx64>  &solution::get_eigvecs<cx64, Side::L>() const;
     template std::vector<cx64>  &solution::get_eigvecs<cx64, Side::R>() const;
+    template std::vector<cx80>  &solution::get_eigvecs<cx80, Side::L>() const;
+    template std::vector<cx80>  &solution::get_eigvecs<cx80, Side::R>() const;
     template std::vector<cx128> &solution::get_eigvecs<cx128, Side::L>() const;
     template std::vector<cx128> &solution::get_eigvecs<cx128, Side::R>() const;
 
@@ -52,18 +64,22 @@ namespace eig {
     }
     template std::vector<fp32>  &solution::get_eigvecs<fp32>(Side side) const;
     template std::vector<fp64>  &solution::get_eigvecs<fp64>(Side side) const;
+    template std::vector<fp80>  &solution::get_eigvecs<fp80>(Side side) const;
     template std::vector<fp128> &solution::get_eigvecs<fp128>(Side side) const;
     template std::vector<cx32>  &solution::get_eigvecs<cx32>(Side side) const;
     template std::vector<cx64>  &solution::get_eigvecs<cx64>(Side side) const;
+    template std::vector<cx80>  &solution::get_eigvecs<cx80>(Side side) const;
     template std::vector<cx128> &solution::get_eigvecs<cx128>(Side side) const;
 
     template<typename Scalar, Form form, Side side>
     std::vector<Scalar> &solution::get_eigvecs() const {
         if constexpr(std::is_same<fp32, Scalar>::value) return get_eigvecs<form, Type::FP32, side>();
         if constexpr(std::is_same<fp64, Scalar>::value) return get_eigvecs<form, Type::FP64, side>();
+        if constexpr(std::is_same<fp80, Scalar>::value) return get_eigvecs<form, Type::FP80, side>();
         if constexpr(std::is_same<fp128, Scalar>::value) return get_eigvecs<form, Type::FP128, side>();
         if constexpr(std::is_same<cx32, Scalar>::value) return get_eigvecs<form, Type::CX32, side>();
         if constexpr(std::is_same<cx64, Scalar>::value) return get_eigvecs<form, Type::CX64, side>();
+        if constexpr(std::is_same<cx80, Scalar>::value) return get_eigvecs<form, Type::CX80, side>();
         if constexpr(std::is_same<cx128, Scalar>::value) return get_eigvecs<form, Type::CX128, side>();
     }
 
@@ -79,6 +95,12 @@ namespace eig {
     template std::vector<cx64>  &solution::get_eigvecs<cx64, Form::SYMM, Side::R>() const;
     template std::vector<cx64>  &solution::get_eigvecs<cx64, Form::NSYM, Side::L>() const;
     template std::vector<cx64>  &solution::get_eigvecs<cx64, Form::NSYM, Side::R>() const;
+    template std::vector<fp80>  &solution::get_eigvecs<fp80, Form::SYMM, Side::L>() const;
+    template std::vector<fp80>  &solution::get_eigvecs<fp80, Form::SYMM, Side::R>() const;
+    template std::vector<cx80>  &solution::get_eigvecs<cx80, Form::SYMM, Side::L>() const;
+    template std::vector<cx80>  &solution::get_eigvecs<cx80, Form::SYMM, Side::R>() const;
+    template std::vector<cx80>  &solution::get_eigvecs<cx80, Form::NSYM, Side::L>() const;
+    template std::vector<cx80>  &solution::get_eigvecs<cx80, Form::NSYM, Side::R>() const;
     template std::vector<fp128> &solution::get_eigvecs<fp128, Form::SYMM, Side::L>() const;
     template std::vector<fp128> &solution::get_eigvecs<fp128, Form::SYMM, Side::R>() const;
     template std::vector<cx128> &solution::get_eigvecs<cx128, Form::SYMM, Side::L>() const;
@@ -93,6 +115,9 @@ namespace eig {
         } else if constexpr(std::is_same_v<Scalar, fp64>) {
             build_eigvals_fp64();
             return eigvals_real_fp64;
+        } else if constexpr(std::is_same_v<Scalar, fp80>) {
+            build_eigvals_fp80();
+            return eigvals_real_fp80;
         } else if constexpr(std::is_same_v<Scalar, fp128>) {
             build_eigvals_fp128();
             return eigvals_real_fp128;
@@ -102,6 +127,9 @@ namespace eig {
         } else if constexpr(std::is_same_v<Scalar, cx64>) {
             build_eigvals_cx64();
             return eigvals_cx64;
+        } else if constexpr(std::is_same_v<Scalar, cx80>) {
+            build_eigvals_cx80();
+            return eigvals_cx80;
         } else if constexpr(std::is_same_v<Scalar, cx128>) {
             build_eigvals_cx128();
             return eigvals_cx128;
@@ -110,9 +138,11 @@ namespace eig {
 
     template std::vector<fp32>  &solution::get_eigvals<fp32>() const;
     template std::vector<fp64>  &solution::get_eigvals<fp64>() const;
+    template std::vector<fp80>  &solution::get_eigvals<fp80>() const;
     template std::vector<fp128> &solution::get_eigvals<fp128>() const;
     template std::vector<cx32>  &solution::get_eigvals<cx32>() const;
     template std::vector<cx64>  &solution::get_eigvals<cx64>() const;
+    template std::vector<cx80>  &solution::get_eigvals<cx80>() const;
     template std::vector<cx128> &solution::get_eigvals<cx128>() const;
 
     const std::vector<double> &solution::get_resnorms() const { return meta.residual_norms; }
@@ -137,11 +167,31 @@ namespace eig {
         eigvecsL_imag_fp64.clear();
         eigvecsR_cx64.clear();
         eigvecsL_cx64.clear();
+
+        eigvals_real_fp80.clear();
+        eigvals_imag_fp80.clear();
+        eigvals_cx80.clear();
+        eigvecsR_real_fp80.clear();
+        eigvecsR_imag_fp80.clear();
+        eigvecsL_real_fp80.clear();
+        eigvecsL_imag_fp80.clear();
+        eigvecsR_cx80.clear();
+        eigvecsL_cx80.clear();
+
+        eigvals_real_fp128.clear();
+        eigvals_imag_fp128.clear();
+        eigvals_cx128.clear();
+        eigvecsR_real_fp128.clear();
+        eigvecsR_imag_fp128.clear();
+        eigvecsL_real_fp128.clear();
+        eigvecsL_imag_fp128.clear();
+        eigvecsR_cx128.clear();
+        eigvecsL_cx128.clear();
         meta = Meta();
     }
 
     bool solution::eigvecs_are_real() const {
-        return meta.form == Form::SYMM and (meta.type == Type::FP32 or meta.type == Type::FP64 or meta.type == Type::FP128);
+        return meta.form == Form::SYMM and (meta.type == Type::FP32 or meta.type == Type::FP64 or meta.type == Type::FP80 or meta.type == Type::FP128);
     }
 
     bool solution::eigvals_are_real() const { return meta.form == Form::SYMM; }
@@ -304,6 +354,83 @@ namespace eig {
                 eigvals_imag_fp64[i] = std::imag(eigvals_cx64[i]);
             }
             eigvals_cx64.clear();
+        }
+    }
+
+    void solution::build_eigvecs_cx80() const {
+        bool build_eigvecsR_cplx = eigvecsR_cx80.empty() and (not eigvecsR_real_fp80.empty() or not eigvecsR_imag_fp80.empty());
+        bool build_eigvecsL_cplx = eigvecsL_cx80.empty() and (not eigvecsL_real_fp80.empty() or not eigvecsL_imag_fp80.empty());
+
+        if(build_eigvecsR_cplx) {
+            eigvecsR_cx80.resize(std::max(eigvecsR_real_fp80.size(), eigvecsR_imag_fp80.size()));
+            for(size_t i = 0; i < eigvecsR_cx80.size(); i++) {
+                if(not eigvecsR_real_fp80.empty() and not eigvecsR_imag_fp80.empty() and i < eigvecsR_real_fp80.size() and i < eigvecsR_imag_fp80.size())
+                    eigvecsR_cx80[i] = cx80(eigvecsR_real_fp80[i], eigvecsR_imag_fp80[i]);
+                else if(not eigvecsR_real_fp80.empty() and i < eigvecsR_real_fp80.size())
+                    eigvecsR_cx80[i] = cx80(eigvecsR_real_fp80[i], 0.0L);
+                else if(not eigvecsR_imag_fp80.empty() and i < eigvecsR_imag_fp80.size())
+                    eigvecsR_cx80[i] = cx80(0.0L, eigvecsR_imag_fp80[i]);
+            }
+            eigvecsR_real_fp80.clear();
+            eigvecsR_imag_fp80.clear();
+        }
+        if(build_eigvecsL_cplx) {
+            eigvecsL_cx80.resize(std::max(eigvecsL_real_fp80.size(), eigvecsL_imag_fp80.size()));
+            for(size_t i = 0; i < eigvecsL_cx80.size(); i++) {
+                if(not eigvecsL_real_fp80.empty() and not eigvecsL_imag_fp80.empty() and i < eigvecsL_real_fp80.size() and i < eigvecsL_imag_fp80.size())
+                    eigvecsL_cx80[i] = cx80(eigvecsL_real_fp80[i], eigvecsL_imag_fp80[i]);
+                else if(not eigvecsL_real_fp80.empty() and i < eigvecsL_real_fp80.size())
+                    eigvecsL_cx80[i] = cx80(eigvecsL_real_fp80[i], 0.0L);
+                else if(not eigvecsL_imag_fp80.empty() and i < eigvecsL_imag_fp80.size())
+                    eigvecsL_cx80[i] = cx80(0.0L, eigvecsL_imag_fp80[i]);
+            }
+            eigvecsL_real_fp80.clear();
+            eigvecsL_imag_fp80.clear();
+        }
+    }
+
+    void solution::build_eigvecs_fp80() const {
+        bool build_eigvecsR_real = eigvecsR_real_fp80.empty() and not eigvecsR_cx80.empty();
+        bool build_eigvecsL_real = eigvecsL_real_fp80.empty() and not eigvecsL_cx80.empty();
+
+        if(build_eigvecsR_real) {
+            eigvecsR_real_fp80.resize(eigvecsR_cx80.size());
+            for(size_t i = 0; i < eigvecsR_real_fp80.size(); i++) {
+                if(std::abs(std::imag(eigvecsR_cx80[i])) > 1e-12L) throw std::runtime_error("Error building real eigvecR: Nonzero imaginary part");
+                eigvecsR_real_fp80[i] = std::real(eigvecsR_cx80[i]);
+            }
+            eigvecsR_cx80.clear();
+        }
+        if(build_eigvecsL_real) {
+            eigvecsL_real_fp80.resize(eigvecsL_cx80.size());
+            for(size_t i = 0; i < eigvecsL_real_fp80.size(); i++) {
+                if(std::abs(std::imag(eigvecsL_cx80[i])) > 1e-12L) throw std::runtime_error("Error building real eigvecL: Nonzero imaginary part");
+                eigvecsL_real_fp80[i] = std::real(eigvecsL_cx80[i]);
+            }
+            eigvecsL_cx80.clear();
+        }
+    }
+
+    void solution::build_eigvals_cx80() const {
+        bool build_cplx = eigvals_cx80.empty() and not eigvals_imag_fp80.empty() and eigvals_real_fp80.size() == eigvals_imag_fp80.size();
+        if(build_cplx) {
+            eigvals_cx80.resize(eigvals_real_fp80.size());
+            for(size_t i = 0; i < eigvals_real_fp80.size(); i++) eigvals_cx80[i] = cx80(eigvals_real_fp80[i], eigvals_imag_fp80[i]);
+            eigvals_real_fp80.clear();
+            eigvals_imag_fp80.clear();
+        }
+    }
+
+    void solution::build_eigvals_fp80() const {
+        bool build_real = (eigvals_real_fp80.empty() or eigvals_imag_fp80.empty()) and not eigvals_cx80.empty();
+        if(build_real) {
+            eigvals_real_fp80.resize(eigvals_cx80.size());
+            eigvals_imag_fp80.resize(eigvals_cx80.size());
+            for(size_t i = 0; i < eigvals_cx80.size(); i++) {
+                eigvals_real_fp80[i] = std::real(eigvals_cx80[i]);
+                eigvals_imag_fp80[i] = std::imag(eigvals_cx80[i]);
+            }
+            eigvals_cx80.clear();
         }
     }
 

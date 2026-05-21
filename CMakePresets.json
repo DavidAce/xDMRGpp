@@ -460,6 +460,7 @@
         "DMRG_BUILD_TOOLS": "TRUE",
         "DMRG_ENABLE_32BIT": "FALSE",
         "DMRG_ENABLE_64BIT": "TRUE",
+        "DMRG_ENABLE_80BIT": "FALSE",
         "DMRG_ENABLE_128BIT": "FALSE"
       }
     },

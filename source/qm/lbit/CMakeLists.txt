@@ -6,7 +6,7 @@ add_source_target(xdmrg++-qm-lbit-h5tb
         xdmrg++-deps xdmrg++-flags
         )
 
-dmrg_filter_enabled_scalars(qm_lbit_cls_scalars cx32 cx64 cx128)
+dmrg_filter_enabled_scalars(qm_lbit_cls_scalars cx32 cx64 cx80 cx128)
 if(qm_lbit_cls_scalars)
     add_source_target(xdmrg++-qm-lbit
             INST_TEMPLATE_FILES
