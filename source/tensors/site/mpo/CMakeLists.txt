@@ -1,5 +1,5 @@
 add_subdirectory(h5tb)
-set(xdmrg_tensors_mpo_inst_scalars ${DMRG_ENABLED_SCALARS} ${DMRG_INTERNAL_HIGHPREC_SCALARS})
+set(xdmrg_tensors_mpo_inst_scalars ${DMRG_ENABLED_SCALARS} ${DMRG_HIGHPREC_SCALARS})
 list(REMOVE_DUPLICATES xdmrg_tensors_mpo_inst_scalars)
 add_source_target(xdmrg++-tensors-mpo
                   INST_TEMPLATE_FILES

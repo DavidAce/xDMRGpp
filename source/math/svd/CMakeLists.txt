@@ -61,7 +61,7 @@ add_source_target(xdmrg++-math-svd
         inst/svd_rsvd.inst.cpp.in
         INST_SCALARS
         ${DMRG_ENABLED_SCALARS}
-        ${DMRG_INTERNAL_HIGHPREC_SCALARS}
+        ${DMRG_HIGHPREC_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

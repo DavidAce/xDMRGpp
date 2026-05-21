@@ -25,7 +25,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/GenerateInstantiationSources.cmake)
 # expanded into one generated source per scalar type.
 # INST_SCALARS is optional; when omitted, each template is expanded using the
 # project-wide DMRG_ENABLED_SCALARS list defined by the top-level
-# DMRG_ENABLE_<SCALAR> options.
+# DMRG_ENABLE_<WIDTH>BIT options.
 # INST_OUTPUT_DIR is optional; when omitted, generated sources are written under
 # CMAKE_CURRENT_BINARY_DIR/generated, mirroring the template's relative path.
 # Use INST_PAIR_TEMPLATE_FILES for explicit-instantiation templates that should

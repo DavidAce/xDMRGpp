@@ -61,8 +61,7 @@ endfunction()
 #
 # TEMPLATE may be absolute or relative to CMAKE_CURRENT_SOURCE_DIR.
 # SCALARS is optional; if omitted, the function falls back to the project-wide
-# DMRG_ENABLED_SCALARS list assembled from the DMRG_ENABLE_<SCALAR> options in
-# the top-level CMakeLists.txt.
+# DMRG_ENABLED_SCALARS list assembled from the DMRG_ENABLE_<WIDTH>BIT options.
 # OUTPUT_DIR is optional; if omitted, generated files are placed under
 # CMAKE_CURRENT_BINARY_DIR/generated while preserving the template's relative
 # source-tree layout.
@@ -133,7 +132,7 @@ endfunction()
 # DIAGONAL is optional; when set, only <scalar, scalar> pairs are generated.
 # OUTER_SCALARS and INNER_SCALARS are optional; when omitted they each fall
 # back to the project-wide DMRG_ENABLED_SCALARS list from the top-level
-# DMRG_ENABLE_<SCALAR> options.
+# DMRG_ENABLE_<WIDTH>BIT options.
 # OUTPUT_DIR is optional; if omitted, generated files are placed under
 # CMAKE_CURRENT_BINARY_DIR/generated while preserving the template's relative
 # source-tree layout.

@@ -1,4 +1,4 @@
-set(xdmrg_tools_finite_mpo_inst_scalars ${DMRG_ENABLED_SCALARS} ${DMRG_INTERNAL_HIGHPREC_SCALARS})
+set(xdmrg_tools_finite_mpo_inst_scalars ${DMRG_ENABLED_SCALARS} ${DMRG_HIGHPREC_SCALARS})
 
 add_source_target(xdmrg++-tools-finite-mpo
         TARGET_SOURCES

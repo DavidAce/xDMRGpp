@@ -30,44 +30,10 @@ option(COMPILER_ENABLE_ASAN         "(Development) Enable expensive runtime sani
 option(COMPILER_ENABLE_USAN         "(Development) Enable cheap runtime sanitizers (UBSan, integer overflow, and float cast/div-by-zero checks)" FALSE)
 option(COMPILER_ENABLE_PCH          "(Development) Enable precompiled headers to speed up compilation"  FALSE)
 option(COMPILER_ENABLE_CCACHE       "(Development) Enable ccache compiler launcher when available"      FALSE)
-set(COMPILER_WFLAGS_DEBUG "" CACHE STRING "Extra C++ warning flags for Debug builds")
-set(COMPILER_WFLAGS_RELWITHDEBINFO "" CACHE STRING "Extra C++ warning flags for RelWithDebInfo builds")
+set(COMPILER_EXTRA_WARNINGS         "" CACHE STRING "Extra C++ warning flags")
 option(COMPILER_ENABLE_COVERAGE     "(Development) Enable test coverage"                                FALSE)
 option(EIGEN_USE_THREADS            "Use STL threads to parallelize Eigen::Tensor"                      TRUE)
 option(THREADS_PREFER_PTHREAD_FLAG  "Prefer -pthread flag over -lpthread or similar"                    TRUE)
-
-set(DMRG_ENABLED_SCALARS "")
-if(DMRG_ENABLE_32BIT)
-    list(APPEND DMRG_ENABLED_SCALARS fp32 cx32)
-endif()
-if(DMRG_ENABLE_64BIT)
-    list(APPEND DMRG_ENABLED_SCALARS fp64 cx64)
-endif()
-if(DMRG_ENABLE_80BIT)
-    list(APPEND DMRG_ENABLED_SCALARS fp80 cx80)
-endif()
-if(DMRG_ENABLE_128BIT)
-    if(NOT (DMRG_USE_FLOAT128 OR DMRG_USE_QUADMATH))
-        message(FATAL_ERROR "DMRG_ENABLE_128BIT requires DMRG_USE_FLOAT128=ON or DMRG_USE_QUADMATH=ON so fp128/cx128 are true 128-bit types")
-    endif()
-    list(APPEND DMRG_ENABLED_SCALARS fp128 cx128)
-endif()
-
-if(NOT DMRG_ENABLED_SCALARS)
-    message(FATAL_ERROR "At least one explicit-instantiation scalar must be enabled")
-endif()
-
-set(DMRG_ENABLED_SCALARS "${DMRG_ENABLED_SCALARS}" CACHE INTERNAL "Enabled explicit-instantiation scalars" FORCE)
-
-set(DMRG_INTERNAL_HIGHPREC_SCALARS "")
-if(DMRG_USE_FLOAT128 OR DMRG_USE_QUADMATH)
-    list(APPEND DMRG_INTERNAL_HIGHPREC_SCALARS fp128 cx128)
-else()
-    list(APPEND DMRG_INTERNAL_HIGHPREC_SCALARS fp80 cx80)
-endif()
-set(DMRG_INTERNAL_HIGHPREC_SCALARS "${DMRG_INTERNAL_HIGHPREC_SCALARS}" CACHE INTERNAL "Internal high-precision helper scalars" FORCE)
-
-
 
 # Make an "enum" for valid package managers
 set(DMRG_PACKAGE_MANAGERS_VALID find cmake conan)
@@ -92,10 +58,6 @@ include(cmake/PrintBuildInfo.cmake)
 add_library(xdmrg++-flags INTERFACE)
 add_library(xdmrg++-deps INTERFACE)
 target_include_directories(xdmrg++-flags INTERFACE source)
-foreach(dmrg_scalar IN LISTS DMRG_ENABLED_SCALARS)
-    string(TOUPPER "${dmrg_scalar}" dmrg_scalar_upper)
-    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_ENABLE_${dmrg_scalar_upper})
-endforeach()
 
 ###  Apply compiler flags
 include(cmake/CompilerFlags.cmake)

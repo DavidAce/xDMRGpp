@@ -13,10 +13,44 @@ if(NOT TARGET xdmrg++-flags)
     add_library(xdmrg++-flags INTERFACE)
 endif()
 
-###  Add optional RELEASE/DEBUG compile to flags
-target_compile_options(xdmrg++-flags INTERFACE $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:DEBUG>>:${COMPILER_WFLAGS_DEBUG}>)
-target_compile_options(xdmrg++-flags INTERFACE
-                       $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:RELWITHDEBINFO>>:${COMPILER_WFLAGS_RELWITHDEBINFO}>)
+set(DMRG_ENABLED_SCALARS "")
+if(DMRG_ENABLE_32BIT)
+    list(APPEND DMRG_ENABLED_SCALARS fp32 cx32)
+endif()
+if(DMRG_ENABLE_64BIT)
+    list(APPEND DMRG_ENABLED_SCALARS fp64 cx64)
+endif()
+if(DMRG_ENABLE_80BIT)
+    list(APPEND DMRG_ENABLED_SCALARS fp80 cx80)
+endif()
+if(DMRG_ENABLE_128BIT)
+    if(NOT (DMRG_USE_FLOAT128 OR DMRG_USE_QUADMATH))
+        message(FATAL_ERROR "DMRG_ENABLE_128BIT requires DMRG_USE_FLOAT128=ON or DMRG_USE_QUADMATH=ON so fp128/cx128 are true 128-bit types")
+    endif()
+    list(APPEND DMRG_ENABLED_SCALARS fp128 cx128)
+endif()
+
+if(NOT DMRG_ENABLED_SCALARS)
+    message(FATAL_ERROR "At least one explicit-instantiation scalar must be enabled")
+endif()
+
+foreach(dmrg_scalar IN LISTS DMRG_ENABLED_SCALARS)
+    message(STATUS "Enabled scalar type: ${dmrg_scalar}")
+    string(TOUPPER "${dmrg_scalar}" dmrg_scalar_upper)
+    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_ENABLE_${dmrg_scalar_upper})
+endforeach()
+
+set(DMRG_HIGHPREC_SCALARS "")
+if(DMRG_USE_FLOAT128 OR DMRG_USE_QUADMATH)
+    list(APPEND DMRG_HIGHPREC_SCALARS fp128 cx128)
+else()
+    list(APPEND DMRG_HIGHPREC_SCALARS fp80 cx80)
+endif()
+list(JOIN DMRG_HIGHPREC_SCALARS ", " DMRG_HIGHPREC_SCALARS_MSG)
+message(STATUS "Highest available precision scalar types: ${DMRG_HIGHPREC_SCALARS_MSG}")
+
+###  Add optional extra warning flags
+target_compile_options(xdmrg++-flags INTERFACE $<$<COMPILE_LANGUAGE:CXX>:${COMPILER_EXTRA_WARNINGS}>)
 target_compile_options(xdmrg++-flags INTERFACE
                        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/W4>
                        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-Wall -Wextra -Wpedantic -Wunused -Wformat>)
