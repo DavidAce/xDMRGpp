@@ -6,4 +6,6 @@ using Scalar = @SCALAR@;
 template size_t tools::finite::mps::merge_multisite_mps(StateFinite<Scalar> &state, const Eigen::Tensor<Scalar, 3> &multisite_mps, const std::vector<size_t> &sites,
                                                         long center_position, MergeEvent mevent, std::optional<svd::config> svd_cfg,
                                                         std::optional<LogPolicy> logPolicy);
+template void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
+template void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const std::vector<std::string> &paulistrings);
 /* clang-format on */

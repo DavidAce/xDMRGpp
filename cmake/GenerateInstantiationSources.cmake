@@ -89,6 +89,7 @@ function(generate_scalar_instantiations out_var)
     else()
         set(dmrg_inst_scalars ${DMRG_ENABLED_SCALARS})
     endif()
+    list(REMOVE_DUPLICATES dmrg_inst_scalars)
 
     if(DMRG_INST_OUTPUT_DIR)
         set(output_dir "${DMRG_INST_OUTPUT_DIR}")
@@ -103,6 +104,7 @@ function(generate_scalar_instantiations out_var)
     set(generated_sources)
     foreach(dmrg_scalar IN LISTS dmrg_inst_scalars)
         set(SCALAR "${dmrg_scalar}")
+        set(SCALAR_ALIAS "Scalar_${dmrg_scalar}")
         if(dmrg_scalar MATCHES "^cx")
             set(SCALAR_IS_COMPLEX 1)
         else()
@@ -116,6 +118,53 @@ function(generate_scalar_instantiations out_var)
 
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${template_path}")
     set(${out_var} "${generated_sources}" PARENT_SCOPE)
+endfunction()
+
+# generate_scalar_instantiation_include(<out_var>
+#     TEMPLATE <path/to/file.inst.cpp.in>
+#     SCALARS <fp32> <fp64> ...
+#     OUTPUT_DIR <dir>)
+#
+# Convenience wrapper that materializes the scalar fragments with
+# generate_scalar_instantiations() and writes a single include file that pulls
+# them all into one translation unit.
+function(generate_scalar_instantiation_include out_var)
+    set(options)
+    set(oneValueArgs TEMPLATE OUTPUT_DIR)
+    set(multiValueArgs SCALARS)
+    cmake_parse_arguments(PARSE_ARGV 1 DMRG_INST "${options}" "${oneValueArgs}" "${multiValueArgs}")
+
+    if(NOT DMRG_INST_TEMPLATE)
+        message(FATAL_ERROR "generate_scalar_instantiation_include requires TEMPLATE")
+    endif()
+
+    _dmrg_resolve_instantiation_template(template_path template_dir output_stem "${DMRG_INST_TEMPLATE}")
+
+    if(DMRG_INST_SCALARS)
+        set(dmrg_inst_scalars ${DMRG_INST_SCALARS})
+    else()
+        set(dmrg_inst_scalars ${DMRG_ENABLED_SCALARS})
+    endif()
+    list(REMOVE_DUPLICATES dmrg_inst_scalars)
+
+    if(DMRG_INST_OUTPUT_DIR)
+        set(output_dir "${DMRG_INST_OUTPUT_DIR}")
+    else()
+        _dmrg_get_default_instantiation_output_dir(output_dir "${template_dir}")
+    endif()
+
+    generate_scalar_instantiations(generated_sources TEMPLATE "${template_path}" SCALARS ${dmrg_inst_scalars} OUTPUT_DIR "${output_dir}")
+
+    set(include_path "${output_dir}/${output_stem}.inst.inc")
+    file(WRITE "${include_path}" "/* clang-format off */\n")
+    foreach(generated_source IN LISTS generated_sources)
+        get_filename_component(generated_name "${generated_source}" NAME)
+        file(APPEND "${include_path}" "#include \"${generated_name}\"\n")
+    endforeach()
+    file(APPEND "${include_path}" "/* clang-format on */\n")
+
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${template_path}")
+    set(${out_var} "${include_path}" PARENT_SCOPE)
 endfunction()
 
 # generate_scalar_pair_instantiations(<out_var>
@@ -162,12 +211,14 @@ function(generate_scalar_pair_instantiations out_var)
     else()
         set(dmrg_outer_scalars ${DMRG_ENABLED_SCALARS})
     endif()
+    list(REMOVE_DUPLICATES dmrg_outer_scalars)
 
     if(DMRG_PAIR_INNER_SCALARS)
         set(dmrg_inner_scalars ${DMRG_PAIR_INNER_SCALARS})
     else()
         set(dmrg_inner_scalars ${DMRG_ENABLED_SCALARS})
     endif()
+    list(REMOVE_DUPLICATES dmrg_inner_scalars)
 
     if(DMRG_PAIR_OUTPUT_DIR)
         set(output_dir "${DMRG_PAIR_OUTPUT_DIR}")

@@ -49,6 +49,7 @@ namespace qm {
         public:
         protected:
         template<typename scalar_t, typename alpha_t>
+            requires tenx::sfinae::is_std_complex_v<scalar_t>
         Eigen::Tensor<scalar_t, 2> exp_internal(const Eigen::Tensor<scalar_t,2> & op_, alpha_t alpha) const;
         enum class Side {L, R};
 //        mutable std::optional<std::vector<Eigen::Tensor<cx64,2>>> op_split;

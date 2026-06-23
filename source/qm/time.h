@@ -11,16 +11,16 @@ namespace qm::time {
     /* clang-format off */
     template <typename T, typename Scalar>
     requires sfinae::is_std_complex_v<T>
-     extern std::vector<Eigen::Tensor<T, 2>> Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd);
+     extern std::vector<Eigen::Tensor<T, 2>> Suzuki_Trotter_1st_order(cxX delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd);
     template <typename T, typename Scalar>
     requires sfinae::is_std_complex_v<T>
-    extern std::vector<Eigen::Tensor<T, 2>> Suzuki_Trotter_2nd_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd);
+    extern std::vector<Eigen::Tensor<T, 2>> Suzuki_Trotter_2nd_order(cxX delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd);
     template <typename T, typename Scalar>
     requires sfinae::is_std_complex_v<T>
-    extern std::vector<Eigen::Tensor<T, 2>> Suzuki_Trotter_4th_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd);
+    extern std::vector<Eigen::Tensor<T, 2>> Suzuki_Trotter_4th_order(cxX delta_t, const Eigen::Tensor<Scalar, 2> &h_evn, const Eigen::Tensor<Scalar, 2> &h_odd);
 
 
-    extern std::pair<std::vector<qm::Gate>, std::vector<qm::Gate>> get_time_evolution_gates(cx128 delta_t, const std::vector<qm::Gate> &hams_nsite);
+    extern std::pair<std::vector<qm::Gate>, std::vector<qm::Gate>> get_time_evolution_gates(cxX delta_t, const std::vector<qm::Gate> &hams_nsite);
     /* clang-format on */
 
     /*! Returns a set of 2-site unitary gates, using Suzuki Trotter decomposition to order 1, 2 or 3.
@@ -28,7 +28,7 @@ namespace qm::time {
      */
     template<typename T, typename Scalar>
     requires sfinae::is_std_complex_v<T>
-    std::vector<Eigen::Tensor<T, 2>> get_twosite_time_evolution_operators(cx128 delta_t, size_t susuki_trotter_order, const Eigen::Tensor<Scalar, 2> &h_evn,
+    std::vector<Eigen::Tensor<T, 2>> get_twosite_time_evolution_operators(cxX delta_t, size_t susuki_trotter_order, const Eigen::Tensor<Scalar, 2> &h_evn,
                                                                           const Eigen::Tensor<Scalar, 2> &h_odd) {
         switch(susuki_trotter_order) {
             case 1: return Suzuki_Trotter_1st_order<T>(delta_t, h_evn, h_odd);
@@ -52,7 +52,7 @@ namespace qm::time {
     */
     template<typename T, typename Scalar>
     requires sfinae::is_std_complex_v<T>
-    std::vector<Eigen::Tensor<T, 2>> compute_G(const cx128 a, size_t susuki_trotter_order, const Eigen::Tensor<Scalar, 2> &h_evn,
+    std::vector<Eigen::Tensor<T, 2>> compute_G(const cxX a, size_t susuki_trotter_order, const Eigen::Tensor<Scalar, 2> &h_evn,
                                                const Eigen::Tensor<Scalar, 2> &h_odd)
 
     {

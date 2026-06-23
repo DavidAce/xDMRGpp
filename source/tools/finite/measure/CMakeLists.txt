@@ -19,6 +19,8 @@ set(tools_finite_measure_expectation_deps
 add_source_target(xdmrg++-tools-finite-measure-correlation
         INST_TEMPLATE_FILES
         correlation/correlation.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -29,6 +31,8 @@ add_source_target(xdmrg++-tools-finite-measure-correlation
 add_source_target(xdmrg++-tools-finite-measure-dimensions
         INST_TEMPLATE_FILES
         dimensions/dimensions.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -39,6 +43,8 @@ add_source_target(xdmrg++-tools-finite-measure-dimensions
 add_source_target(xdmrg++-tools-finite-measure-entanglement-entropy
         INST_TEMPLATE_FILES
         entanglement_entropy/entanglement_entropy.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -51,6 +57,12 @@ add_source_target(xdmrg++-tools-finite-measure-expectation-value
         INST_PAIR_TEMPLATE_FILES
         expectation_value/expectation_value.pair.inst.cpp.in
         INST_PAIR_DIAGONAL
+        INST_PAIR_OUTER_SCALARS
+        ${DMRG_ENABLED_SCALARS}
+        INST_PAIR_INNER_SCALARS
+        ${DMRG_ENABLED_SCALARS}
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -60,6 +72,8 @@ add_source_target(xdmrg++-tools-finite-measure-expectation-value
 add_source_target(xdmrg++-tools-finite-measure-hamiltonian
         INST_TEMPLATE_FILES
         hamiltonian/hamiltonian.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -74,6 +88,8 @@ add_source_target(xdmrg++-tools-finite-measure-information
         infopolicy.cpp
         INST_TEMPLATE_FILES
         information/information.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -89,6 +105,8 @@ add_source_target(xdmrg++-tools-finite-measure-information
 add_source_target(xdmrg++-tools-finite-measure-norm
         INST_TEMPLATE_FILES
         norm/norm.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -99,6 +117,8 @@ add_source_target(xdmrg++-tools-finite-measure-norm
 add_source_target(xdmrg++-tools-finite-measure-number-entropy
         INST_TEMPLATE_FILES
         number_entropy/number_entropy.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -110,6 +130,8 @@ add_source_target(xdmrg++-tools-finite-measure-number-entropy
 add_source_target(xdmrg++-tools-finite-measure-opdm
         INST_TEMPLATE_FILES
         opdm/opdm.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -122,6 +144,8 @@ add_source_target(xdmrg++-tools-finite-measure-opdm
 add_source_target(xdmrg++-tools-finite-measure-residual
         INST_TEMPLATE_FILES
         residual/residual.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -136,6 +160,8 @@ add_source_target(xdmrg++-tools-finite-measure-residual
 add_source_target(xdmrg++-tools-finite-measure-spin
         INST_TEMPLATE_FILES
         spin/spin.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -150,6 +176,8 @@ add_source_target(xdmrg++-tools-finite-measure-spin
 add_source_target(xdmrg++-tools-finite-measure-truncation
         INST_TEMPLATE_FILES
         truncation/truncation.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

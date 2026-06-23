@@ -45,6 +45,7 @@ function(add_source_target target_name)
     # Start from the hand-written source list and append any generated
     # explicit-instantiation translation units requested for this target.
     set(resolved_target_sources ${ADD_TARGET_SOURCES})
+    list(REMOVE_DUPLICATES resolved_target_sources)
     foreach(inst_template IN LISTS ADD_INST_TEMPLATE_FILES)
         set(dmrg_inst_args TEMPLATE "${inst_template}")
         if(ADD_INST_SCALARS)

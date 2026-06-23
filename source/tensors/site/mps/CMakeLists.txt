@@ -1,6 +1,8 @@
 add_source_target(xdmrg++-tensors-mps
                   INST_TEMPLATE_FILES
                   MpsSite/MpsSite.inst.cpp.in
+                  INST_SCALARS
+                  ${DMRG_ENABLED_SCALARS}
                   OBJECT_LINK_LIBRARIES
                   xdmrg++-deps xdmrg++-flags
                   INTERFACE_LINK_LIBRARIES

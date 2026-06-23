@@ -2,6 +2,8 @@ add_source_target(xdmrg++-math-eig-spectra
         TARGET_SOURCES
         INST_TEMPLATE_FILES
         solver_spectra.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -9,6 +11,3 @@ add_source_target(xdmrg++-math-eig-spectra
         xdmrg++-math-eig-matvec
         xdmrg++-math-eig-o
         )
-
-
-

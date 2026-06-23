@@ -221,12 +221,6 @@ void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const s
     auto [mpos, L, R] = qm::mpo::sum_of_pauli_mpo<Scalar>(paulimatrices, state.get_length(), RandomizerMode::SELECT1);
     tools::finite::ops::apply_mpos(state, mpos, L, R);
 }
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp32> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp64> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp128> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx32> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx64> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx128> &state, const std::vector<Eigen::MatrixXcd> &paulimatrices);
 
 template<typename Scalar>
 void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const std::vector<std::string> &paulistrings) {
@@ -235,9 +229,3 @@ void tools::finite::mps::apply_random_paulis(StateFinite<Scalar> &state, const s
     for(const auto &str : paulistrings) paulimatrices.emplace_back(qm::spin::half::get_pauli(str));
     apply_random_paulis(state, paulimatrices);
 }
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp32> &state, const std::vector<std::string> &paulistrings);
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp64> &state, const std::vector<std::string> &paulistrings);
-template void tools::finite::mps::apply_random_paulis(StateFinite<fp128> &state, const std::vector<std::string> &paulistrings);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx32> &state, const std::vector<std::string> &paulistrings);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx64> &state, const std::vector<std::string> &paulistrings);
-template void tools::finite::mps::apply_random_paulis(StateFinite<cx128> &state, const std::vector<std::string> &paulistrings);

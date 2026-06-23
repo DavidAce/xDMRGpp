@@ -2,6 +2,8 @@ add_source_target(xdmrg++-tools-infinite-mps
         TARGET_SOURCES
         INST_TEMPLATE_FILES
         merge/merge.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
 
         OBJECT_LINK_LIBRARIES

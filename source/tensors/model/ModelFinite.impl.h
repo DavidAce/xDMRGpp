@@ -31,6 +31,14 @@
 #include <complex>
 #include <vector>
 
+template<typename ToScalar, typename FromScalar>
+std::vector<Eigen::Tensor<ToScalar, 4>> cast_mpo_tensors(const std::vector<Eigen::Tensor<FromScalar, 4>> &mpos) {
+    std::vector<Eigen::Tensor<ToScalar, 4>> casted;
+    casted.reserve(mpos.size());
+    for(const auto &mpo : mpos) casted.emplace_back(mpo.template cast<ToScalar>());
+    return casted;
+}
+
 template<typename Scalar>
 ModelFinite<Scalar>::ModelFinite() = default; // Can't initialize lists since we don't know the model size yet
 template<typename Scalar>
@@ -230,15 +238,35 @@ void ModelFinite<Scalar>::compress_mpo() {
 template<typename Scalar>
 void ModelFinite<Scalar>::compress_mpo_squared() {
     clear_cache_squared();
-    if constexpr(std::is_same_v<Scalar, QuadScalar>) {
-        auto mpo_squared_compressed = get_mpo2_tensors(0, MposWithEdges::ON, MpoCompress::AUTO);
-        for(const auto &[pos, mpo] : iter::enumerate(MPO)) mpo->set_mpo_squared(mpo_squared_compressed[pos]);
-    } else {
-        auto model_quad             = this->template cast<QuadScalar>();
-        auto mpo_squared_compressed = model_quad.get_mpo2_tensors(QuadScalar{0}, MposWithEdges::ON, MpoCompress::AUTO);
+    auto mpo_squared_native = get_mpo2_tensors(Scalar{0}, MposWithEdges::ON, MpoCompress::NONE);
+    auto compress = settings::model::use_compressed_mpo_squared;
+    if(compress == MpoCompress::AUTO) compress = settings::model::use_compressed_mpo_squared;
+
+    auto set_mpo_squared = [&](const auto &mpos_compressed) {
         for(const auto &[pos, mpo] : iter::enumerate(MPO)) {
-            mpo->set_mpo_squared(Eigen::Tensor<Scalar, 4>(mpo_squared_compressed[pos].template cast<Scalar>()));
+            if constexpr(std::is_same_v<Scalar, QuadScalar>) {
+                mpo->set_mpo_squared(mpos_compressed[pos]);
+            } else {
+                mpo->set_mpo_squared(Eigen::Tensor<Scalar, 4>(mpos_compressed[pos].template cast<Scalar>()));
+            }
         }
+    };
+
+    switch(compress) {
+        case MpoCompress::NONE:
+            set_mpo_squared(mpo_squared_native);
+            break;
+        case MpoCompress::SVD:
+            set_mpo_squared(tools::finite::mpo::get_svdcompressed_mpos(mpo_squared_native));
+            break;
+        case MpoCompress::DPL:
+            set_mpo_squared(tools::finite::mpo::get_deparallelized_mpos(cast_mpo_tensors<QuadScalar>(mpo_squared_native)));
+            break;
+        case MpoCompress::AUTO:
+            throw except::logic_error("compress_mpo_squared: unexpected AUTO compression mode");
+        default:
+            set_mpo_squared(mpo_squared_native);
+            break;
     }
 }
 
@@ -303,18 +331,27 @@ template<typename Scalar>
 std::vector<Eigen::Tensor<typename ModelFinite<Scalar>::QuadScalar, 4>>
     ModelFinite<Scalar>::get_mpo_tensors_q(Scalar energy_shift_per_site, MposWithEdges withEdges, MpoCompress compress) const {
     tools::log->trace("Collecting all MPO_q: {} sites | with edges {}", MPO.size(), static_cast<std::underlying_type_t<MposWithEdges>>(withEdges));
-    // Collect all the mpo (doesn't matter if they are already compressed)
-    std::vector<Eigen::Tensor<QuadScalar, 4>> mpos_q;
-    mpos_q.reserve(MPO.size());
-
-    for(const auto &mpo : MPO) mpos_q.emplace_back(mpo->MPO_energy_shifted_view_q(energy_shift_per_site));
+    std::vector<Eigen::Tensor<Scalar, 4>> mpos;
+    mpos.reserve(MPO.size());
+    for(const auto &mpo : MPO) mpos.emplace_back(mpo->MPO_energy_shifted_view(energy_shift_per_site));
     if(withEdges == MposWithEdges::ON) {
-        Eigen::Tensor<QuadScalar, 1> ledge = MPO.front()->template get_MPO_edge_left<QuadScalar>();
-        Eigen::Tensor<QuadScalar, 1> redge = MPO.back()->template get_MPO_edge_right<QuadScalar>();
-        mpos_q                             = tools::finite::mpo::get_mpos_with_edges<QuadScalar>(mpos_q, ledge, redge);
+        auto ledge = MPO.front()->template get_MPO_edge_left<Scalar>();
+        auto redge = MPO.back()->template get_MPO_edge_right<Scalar>();
+        mpos       = tools::finite::mpo::get_mpos_with_edges(mpos, ledge, redge);
     }
     if(compress == MpoCompress::AUTO) compress = settings::model::use_compressed_mpo;
-    return tools::finite::mpo::get_compressed_mpos(mpos_q, compress);
+    switch(compress) {
+        case MpoCompress::NONE:
+            return cast_mpo_tensors<QuadScalar>(mpos);
+        case MpoCompress::SVD:
+            return cast_mpo_tensors<QuadScalar>(tools::finite::mpo::get_svdcompressed_mpos(mpos));
+        case MpoCompress::DPL:
+            return tools::finite::mpo::get_deparallelized_mpos(cast_mpo_tensors<QuadScalar>(mpos));
+        case MpoCompress::AUTO:
+            throw except::logic_error("get_mpo_tensors_q: unexpected AUTO compression mode");
+        default:
+            return cast_mpo_tensors<QuadScalar>(mpos);
+    }
 }
 
 template<typename Scalar>

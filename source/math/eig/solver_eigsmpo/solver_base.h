@@ -1,5 +1,6 @@
 #pragma once
 #include "config/enums/OptRitz.h"
+#include "debug/exceptions.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/float.h"
 #include "math/tenx.h"
@@ -21,6 +22,7 @@ inline std::string_view ResidualCorrectionToString(ResidualCorrectionType rct) {
         case ResidualCorrectionType::FULL_OLSEN: return "FULL_OLSEN";
         case ResidualCorrectionType::JACOBI_DAVIDSON: return "JACOBI_DAVIDSON";
         case ResidualCorrectionType::AUTO: return "AUTO";
+        default: return "UNDEFINED";
     }
 }
 
@@ -31,6 +33,18 @@ inline ResidualCorrectionType StringToResidualCorrection(std::string_view rct) {
     if(rct == "JACOBI_DAVIDSON") return ResidualCorrectionType::JACOBI_DAVIDSON;
     if(rct == "AUTO") return ResidualCorrectionType::AUTO;
     return ResidualCorrectionType::NONE;
+}
+
+inline bool ResidualCorrectionCanUseJD(ResidualCorrectionType rct) {
+    return rct == ResidualCorrectionType::JACOBI_DAVIDSON || rct == ResidualCorrectionType::AUTO;
+}
+
+inline void assert_valid_residual_correction_preconditioner(ResidualCorrectionType rct, eig::Preconditioner preconditioner) {
+    if(ResidualCorrectionCanUseJD(rct) && preconditioner == eig::Preconditioner::SOLVE) {
+        throw except::runtime_error("Invalid eigensolver configuration: residual correction {} can use Jacobi-Davidson, but inner preconditioner is {}. "
+                                    "Jacobi-Davidson correction equations must use the JACOBI block preconditioner, never SOLVE.",
+                                    ResidualCorrectionToString(rct), eig::PreconditionerToString(preconditioner));
+    }
 }
 
 template<typename Scalar>
@@ -413,16 +427,14 @@ class solver_base {
     void         set_jcbOverlapSize(Eigen::Index jcbOverlapSize);
     void         set_jcbNumPasses(Eigen::Index jcbNumPasses);
     void         set_preconditioner_type(eig::Preconditioner preconditioner_type_);
-    void         set_preconditioner_params(Eigen::Index maxiters = 1000, RealScalar initialTol = RealScalar{0.25f},
-                                           Eigen::Index jcbMaxBlockSize = Eigen::Index{-1});
-    void         set_chebyshevFilterRelGapThreshold(RealScalar threshold);
-    void         set_chebyshevFilterLambdaCutBias(RealScalar bias);
-    void         set_chebyshevFilterDegree(Eigen::Index degree);
+    void set_preconditioner_params(Eigen::Index maxiters = 1000, RealScalar initialTol = RealScalar{0.25f}, Eigen::Index jcbMaxBlockSize = Eigen::Index{-1});
+    void set_chebyshevFilterRelGapThreshold(RealScalar threshold);
+    void set_chebyshevFilterLambdaCutBias(RealScalar bias);
+    void set_chebyshevFilterDegree(Eigen::Index degree);
 
     MatrixType MultH(const Eigen::Ref<const MatrixType> &X);
     MatrixType MultH1(const Eigen::Ref<const MatrixType> &X);
     MatrixType MultH2(const Eigen::Ref<const MatrixType> &X);
-    MatrixType MultH2_hp(const Eigen::Ref<const MatrixType> &X);
 
     MatrixType MultP(const Eigen::Ref<const MatrixType> &X, const Eigen::Ref<const VectorReal> &evals,
                      std::optional<const Eigen::Ref<const MatrixType>> initialGuess = std::nullopt);

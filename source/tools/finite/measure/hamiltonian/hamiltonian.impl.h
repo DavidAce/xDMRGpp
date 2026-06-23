@@ -369,11 +369,10 @@ template<typename Scalar> RealScalar<Scalar> tools::finite::measure::local_hamil
 template<typename Scalar> RealScalar<Scalar>
     tools::finite::measure::local_hamiltonian_norm(const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpo_refs,
                                                    const env_pair<const EnvEne<Scalar> &> &envs, Eigen::Index maxiter, fp32 reltol) {
-    using Scalar32 = typename std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, cx32, fp32>;
     if(mpo_refs.size() != 1) { throw except::runtime_error("norm_hamiltonian_squared: Expected 1-site mpo. Got {} mpo sites.", mpo_refs.size()); }
-    x2::Tensor<Scalar32, 3>    envL = envs.L.template get_blkx2_as<Scalar32>();
-    x2::Tensor<Scalar32, 3>    envR = envs.R.template get_blkx2_as<Scalar32>();
-    Eigen::Tensor<Scalar32, 4> mpo  = mpo_refs.front().get().template MPO_as<Scalar32>();
+    x2::Tensor<Scalar, 3>    envL = envs.L.template get_blkx2_as<Scalar>();
+    x2::Tensor<Scalar, 3>    envR = envs.R.template get_blkx2_as<Scalar>();
+    Eigen::Tensor<Scalar, 4> mpo  = mpo_refs.front().get().template MPO_as<Scalar>();
     return static_cast<RealScalar<Scalar>>(local_operator_norm_estimate(mpo, envL, envR, maxiter, reltol));
 }
 
@@ -399,11 +398,10 @@ template<typename Scalar> RealScalar<Scalar> tools::finite::measure::local_hamil
 template<typename Scalar> RealScalar<Scalar>
     tools::finite::measure::local_hamiltonian_squared_norm(const std::vector<std::reference_wrapper<const MpoSite<Scalar>>> &mpo_refs,
                                                            const env_pair<const EnvVar<Scalar> &> &envs, Eigen::Index maxiter, fp32 reltol) {
-    using Scalar32 = typename std::conditional_t<Eigen::NumTraits<Scalar>::IsComplex == 1, cx32, fp32>;
     if(mpo_refs.size() != 1) { throw except::runtime_error("norm_hamiltonian_squared: Expected 1-site mpo. Got {} mpo sites.", mpo_refs.size()); }
-    x2::Tensor<Scalar32, 3>    envL = envs.L.template get_blkx2_as<Scalar32>();
-    x2::Tensor<Scalar32, 3>    envR = envs.R.template get_blkx2_as<Scalar32>();
-    Eigen::Tensor<Scalar32, 4> mpo2 = mpo_refs.front().get().template MPO2_as<Scalar32>();
+    x2::Tensor<Scalar, 3>    envL = envs.L.template get_blkx2_as<Scalar>();
+    x2::Tensor<Scalar, 3>    envR = envs.R.template get_blkx2_as<Scalar>();
+    Eigen::Tensor<Scalar, 4> mpo2 = mpo_refs.front().get().template MPO2_as<Scalar>();
     return static_cast<RealScalar<Scalar>>(local_operator_norm_estimate(mpo2, envL, envR, maxiter, reltol));
 }
 

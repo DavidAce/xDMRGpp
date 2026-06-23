@@ -1,6 +1,8 @@
 add_source_target(xdmrg++-tensors-edges-finite
         INST_TEMPLATE_FILES
         EdgesFinite/EdgesFinite.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         INST_PAIR_TEMPLATE_FILES
         EdgesFinite/EdgesFinite.pair.inst.cpp.in
@@ -16,6 +18,8 @@ add_source_target(xdmrg++-tensors-edges-finite
 add_source_target(xdmrg++-tensors-edges-infinite
         INST_TEMPLATE_FILES
         EdgesInfinite/EdgesInfinite.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

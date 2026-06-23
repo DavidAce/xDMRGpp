@@ -17,6 +17,8 @@ add_source_target(xdmrg++-tools-finite-env-edges
         INST_TEMPLATE_FILES
         env/env.inst.cpp.in
         env_x2/env_x2.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

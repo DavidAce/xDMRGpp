@@ -15,6 +15,8 @@ add_source_target(xdmrg++-tools-common-contraction-core
 add_source_target(xdmrg++-tools-common-matrix-vector-product
         INST_TEMPLATE_FILES
         matrix_vector_product/matrix_vector_product.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
 
@@ -28,6 +30,8 @@ add_source_target(xdmrg++-tools-common-matrix-vector-product
 add_source_target(xdmrg++-tools-common-matrix-vector-product-env
         INST_TEMPLATE_FILES
         matrix_vector_product/matrix_vector_product.env.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
 
@@ -47,6 +51,8 @@ add_source_target(xdmrg++-tools-common-contraction
         contract_mps_mps_partial.inst.cpp.in
         expectation_value/expectation_value.inst.cpp.in
         matrix_inverse_vector_product.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
 

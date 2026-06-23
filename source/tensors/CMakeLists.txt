@@ -7,6 +7,8 @@ add_source_target(xdmrg++-tensors-finite
                   TARGET_SOURCES
                   INST_TEMPLATE_FILES
                   TensorsFinite/TensorsFinite.inst.cpp.in
+                  INST_SCALARS
+                  ${DMRG_ENABLED_SCALARS}
 
                   OBJECT_LINK_LIBRARIES
                   xdmrg++-deps xdmrg++-flags
@@ -38,6 +40,8 @@ add_source_target(xdmrg++-tensors-infinite
         TARGET_SOURCES
         INST_TEMPLATE_FILES
         TensorsInfinite/TensorsInfinite.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

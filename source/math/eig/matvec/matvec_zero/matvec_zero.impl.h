@@ -70,15 +70,6 @@ MatVecZero<T>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite
     size_bond     = envL.dimension(0) * envR.dimension(0);
 }
 /* clang-format off */
-template MatVecZero<fp32>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<fp32>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<fp32>>> &mpos_, const env_pair<const EnvEne<fp32> &> &envs_);
-template MatVecZero<fp64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<fp64>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<fp64>>> &mpos_, const env_pair<const EnvEne<fp64> &> &envs_);
-template MatVecZero<fp128>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<fp128>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<fp128>>> &mpos_, const env_pair<const EnvEne<fp128> &> &envs_);
-template MatVecZero<fp32>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx32>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx32>>> &mpos_, const env_pair<const EnvEne<cx32> &> &envs_);
-template MatVecZero<fp64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos_, const env_pair<const EnvEne<cx64> &> &envs_);
-template MatVecZero<fp128>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos_, const env_pair<const EnvEne<cx128> &> &envs_);
-template MatVecZero<cx32>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx32>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx32>>> &mpos_, const env_pair<const EnvEne<cx32> &> &envs_);
-template MatVecZero<cx64>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx64>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx64>>> &mpos_, const env_pair<const EnvEne<cx64> &> &envs_);
-template MatVecZero<cx128>::MatVecZero(const std::vector<std::reference_wrapper<const MpsSite<cx128>>> &mpss_, const std::vector<std::reference_wrapper<const MpoSite<cx128>>> &mpos_, const env_pair<const EnvEne<cx128> &> &envs_);
 /* clang-format off */
 
 template<typename T> void MatVecZero<T>::init_timers() {
@@ -288,4 +279,3 @@ template<typename T>
 bool MatVecZero<T>::isReadyShift() const {
     return readyShift;
 }
-

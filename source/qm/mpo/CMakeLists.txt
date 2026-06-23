@@ -2,6 +2,8 @@ add_source_target(xdmrg++-qm-mpo
         TARGET_SOURCES
         INST_TEMPLATE_FILES
         mpo.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

@@ -5,6 +5,8 @@ add_source_target(xdmrg++-math-eig-eigsmpo
         solver_gdplusk/solver_gdplusk.inst.cpp.in
         solver_lanczos/solver_lanczos.inst.cpp.in
         solver_lobpcg/solver_lobpcg.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
@@ -13,4 +15,3 @@ add_source_target(xdmrg++-math-eig-eigsmpo
         xdmrg++-math-eig-matvec-mpos
         xdmrg++-math-eig-o
         )
-

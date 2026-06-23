@@ -9,6 +9,8 @@ add_source_target(xdmrg++-tools-finite-ops-apply
         TARGET_SOURCES
         INST_TEMPLATE_FILES
             ops/ops_apply.inst.cpp.in
+        INST_SCALARS
+            ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -29,6 +31,8 @@ add_source_target(xdmrg++-tools-finite-ops-overlap
         TARGET_SOURCES
         INST_TEMPLATE_FILES
             ops/ops_overlap.inst.cpp.in
+        INST_SCALARS
+            ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -40,6 +44,8 @@ add_source_target(xdmrg++-tools-finite-ops-project
         TARGET_SOURCES
         INST_TEMPLATE_FILES
             ops/ops_project.inst.cpp.in
+        INST_SCALARS
+            ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
             xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

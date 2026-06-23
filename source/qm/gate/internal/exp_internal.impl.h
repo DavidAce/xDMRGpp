@@ -1,15 +1,16 @@
 #pragma once
 
-#include "qm/gate.h"
 #include "debug/exceptions.h"
 #include "general/sfinae.h"
 #include "math/float.h"
 #include "math/tenx.h"
+#include "qm/gate.h"
 #include "tools/common/log.h"
 #include <cmath>
 #include <unsupported/Eigen/MatrixFunctions>
 
 template<typename scalar_t, typename alpha_t>
+requires tenx::sfinae::is_std_complex_v<scalar_t>
 Eigen::Tensor<scalar_t, 2> qm::Gate::exp_internal(const Eigen::Tensor<scalar_t, 2> &op_, alpha_t alpha) const {
     auto           op_map                       = tenx::MatrixMap(op_);
     constexpr bool scalar_t_is_float128         = std::is_same_v<scalar_t, __float128>;

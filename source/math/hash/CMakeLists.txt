@@ -2,6 +2,8 @@ add_source_target(xdmrg++-math-hash
         TARGET_SOURCES
         INST_TEMPLATE_FILES
         hash.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

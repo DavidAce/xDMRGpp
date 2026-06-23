@@ -12,6 +12,8 @@ set(math_eig_matvec_common_deps
 add_source_target(xdmrg++-math-eig-matvec-dense
         INST_TEMPLATE_FILES
         matvec_dense/matvec_dense.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -21,6 +23,8 @@ add_source_target(xdmrg++-math-eig-matvec-dense
 add_source_target(xdmrg++-math-eig-matvec-sparse
         INST_TEMPLATE_FILES
         matvec_sparse/matvec_sparse.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -30,6 +34,8 @@ add_source_target(xdmrg++-math-eig-matvec-sparse
 add_source_target(xdmrg++-math-eig-matvec-zero
         INST_TEMPLATE_FILES
         matvec_zero/matvec_zero.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -39,6 +45,8 @@ add_source_target(xdmrg++-math-eig-matvec-zero
 add_source_target(xdmrg++-math-eig-matvec-mpo
         INST_TEMPLATE_FILES
         matvec_mpo/matvec_mpo.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -49,6 +57,8 @@ add_source_target(xdmrg++-math-eig-matvec-mpos
         INST_TEMPLATE_FILES
         matvec_mpos/matvec_mpos.inst.cpp.in
         matvec_mpos/internal/get_op_norm.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         INST_PAIR_TEMPLATE_FILES
         matvec_mpos/matvec_mpos.pair.inst.cpp.in
         INST_PAIR_DIAGONAL

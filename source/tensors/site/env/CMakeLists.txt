@@ -6,6 +6,8 @@ add_source_target(xdmrg++-tensors-env
                   EnvBase/EnvBase.inst.cpp.in
                   EnvEne/EnvEne.inst.cpp.in
                   EnvVar/EnvVar.inst.cpp.in
+                  INST_SCALARS
+                  ${DMRG_ENABLED_SCALARS}
                   OBJECT_LINK_LIBRARIES
                   xdmrg++-deps xdmrg++-flags
                   INTERFACE_LINK_LIBRARIES

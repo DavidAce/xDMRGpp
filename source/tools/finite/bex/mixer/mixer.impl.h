@@ -41,9 +41,9 @@ void tools::finite::bex::internal::run_expansion_term_mixer(TensorsFinite<Scalar
     // Run one step of the DMRG optimizer
     auto optm                                 = tools::finite::opt::OptMeta();
     optm.eigs_iter_max                        = 1;
-    optm.eigs_lib                             = "EIGSMPO";
+    optm.eigs_lib                             = enum2sv(settings::solvers::eig::eigslib);
     optm.eigs_residual_correction_type        = "CHEAP_OLSEN";
-    optm.eigs_preconditioner_type             = "SOLVE";
+    optm.eigs_preconditioner_type             = "JACO";
     optm.eigs_nev                             = 1;
     optm.eigs_abstol                          = settings::solvers::eig::abstol_max;
     optm.eigs_reltol                          = settings::solvers::eig::reltol_max;

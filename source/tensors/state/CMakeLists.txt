@@ -2,10 +2,16 @@ add_source_target(xdmrg++-tensors-state-finite
         INST_TEMPLATE_FILES
         StateFinite/StateFinite.inst.cpp.in
         StateFinite/contract.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         INST_PAIR_TEMPLATE_FILES
         StateFinite/StateFinite.pair.inst.cpp.in
         INST_PAIR_DIAGONAL
+        INST_PAIR_OUTER_SCALARS
+        ${DMRG_ENABLED_SCALARS}
+        INST_PAIR_INNER_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
@@ -23,9 +29,15 @@ add_source_target(xdmrg++-tensors-state-finite
 add_source_target(xdmrg++-tensors-state-infinite
         INST_TEMPLATE_FILES
         StateInfinite/StateInfinite.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         INST_PAIR_TEMPLATE_FILES
         StateInfinite/StateInfinite.pair.inst.cpp.in
+        INST_PAIR_OUTER_SCALARS
+        ${DMRG_ENABLED_SCALARS}
+        INST_PAIR_INNER_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

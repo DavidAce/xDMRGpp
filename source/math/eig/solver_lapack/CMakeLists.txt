@@ -30,11 +30,16 @@ dmrg_append_if_scalar_enabled(eig_lapack_sources cx64
         zheevd.cpp
         zheevr.cpp
         )
-dmrg_append_if_scalar_enabled(eig_lapack_sources cx128
+if(DMRG_HIGHPREC_REAL STREQUAL fp128 OR DMRG_HIGHPREC_CPLX STREQUAL cx128)
+    list(APPEND eig_lapack_sources
+        qgeev_eigen.cpp
+        qsyevd_eigen.cpp
+        qsygvd_eigen.cpp
         wgeev_eigen.cpp
         wheevd_eigen.cpp
         whegvd_eigen.cpp
         )
+endif()
 
 add_source_target(xdmrg++-math-eig-lapack
         TARGET_SOURCES

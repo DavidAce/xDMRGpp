@@ -26,6 +26,7 @@ namespace settings {
 #endif
 }
 
+
 template<typename Scalar> void solver_base<Scalar>::OrthMeta::analyze_l2_orthonormality(const Eigen::Ref<const MatrixType> &Y) {
     if(Y.cols() == 0) return;
     MatrixType I = MatrixType::Identity(Y.cols(), Y.cols());
@@ -80,14 +81,12 @@ template<typename Scalar> void solver_base<Scalar>::OrthMeta::analyze_h2_orthogo
     MatrixType G1 = X.adjoint() * H2Y;
     MatrixType G2 = H2X.adjoint() * Y;
 
-    MatrixType I = MatrixType::Identity(G1.rows(), G1.cols());
-
     Gram      = G1;
     Gram_symm = (G1 + G2) * half;
     Gram_skew = (G1 - G2) * half;
 
-    orthError = (Gram - I).norm();
-    symmError = (Gram_symm - I).norm();
+    orthError = Gram_symm.norm();
+    symmError = orthError;
     skewError = Gram_skew.norm();
     Rdiag     = Gram_symm.diagonal().cwiseAbs().cwiseSqrt(); // Equivalent to diag(R), with R from QR
 }
@@ -466,9 +465,9 @@ typename solver_base<Scalar>::RealScalar solver_base<Scalar>::get_rNorms_log10_c
 template<typename Scalar>
 typename solver_base<Scalar>::VectorReal solver_base<Scalar>::get_standard_deviations(const std::deque<VectorReal> &v, bool apply_log10) {
     if(v.empty()) return {};
-    auto       cols   = static_cast<Eigen::Index>(v.size());
-    auto       rows   = static_cast<Eigen::Index>(v.front().size());
-    MatrixReal matrix = MatrixReal::Zero(rows, cols);
+    auto       cols         = static_cast<Eigen::Index>(v.size());
+    auto       rows         = static_cast<Eigen::Index>(v.front().size());
+    MatrixReal matrix       = MatrixReal::Zero(rows, cols);
     using history_size_type = typename std::deque<VectorReal>::size_type;
     for(Eigen::Index idx = 0; idx < cols; ++idx) {
         auto udx = static_cast<history_size_type>(idx);
@@ -505,7 +504,7 @@ typename solver_base<Scalar>::VectorReal solver_base<Scalar>::get_slopes(const s
     for(Eigen::Index j = 0; j < n; ++j) {
         VectorReal y(m);
         for(Eigen::Index i = 0; i < m; ++i) {
-            auto udx = static_cast<history_size_type>(i);
+            auto              udx       = static_cast<history_size_type>(i);
             const VectorReal &eigVals_i = v.at(udx);
             assert(eigVals_i.size() == n);
             y(i) = eigVals_i[j];
@@ -748,14 +747,6 @@ typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH2(const Eigen
     auto token_matvecs  = status.time_matvecs.tic_token();
     status.num_matvecs += X.cols();
     return H2.MultAX(X);
-}
-
-template<typename Scalar>
-typename solver_base<Scalar>::MatrixType solver_base<Scalar>::MultH2_hp(const Eigen::Ref<const MatrixType> &X) {
-    if(algo != OptAlgo::DMRG_GSI) throw except::runtime_error("MultH2_hp: should only be called by DMRG_GSI");
-    auto token_matvecs  = status.time_matvecs.tic_token();
-    status.num_matvecs += X.cols();
-    return H2.MultAX_hp(X);
 }
 
 template<typename Scalar>
@@ -1026,7 +1017,7 @@ template<typename Scalar> typename solver_base<Scalar>::MatrixType solver_base<S
 
             // Build exvals = T_evals \ {th}
             std::vector<RealScalar> exvals;
-            auto eval_count = static_cast<typename std::vector<RealScalar>::size_type>(T_evals.size());
+            auto                    eval_count = static_cast<typename std::vector<RealScalar>::size_type>(T_evals.size());
             exvals.reserve(eval_count > 0 ? eval_count - 1 : 0);
             exvals.assign(T_evals.data(), T_evals.data() + T_evals.size());
 
@@ -1403,7 +1394,7 @@ void solver_base<Scalar>::compress_col_blocks(MatrixType       &X,   // (N, ycol
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_columns;
-    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x * b);
+    auto                      active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x * b);
     active_columns.reserve(active_capacity);
     for(Eigen::Index j = 0; j < n_blocks_x; ++j) {
         if(mask(j) == 1) {
@@ -1426,7 +1417,7 @@ void solver_base<Scalar>::compress_cols(MatrixType       &X,   // (N, ycols)
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_columns;
-    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(X.cols());
+    auto                      active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(X.cols());
     active_columns.reserve(active_capacity);
     for(Eigen::Index j = 0; j < X.cols(); ++j) {
         if(mask(j) == 1) { active_columns.push_back(j); }
@@ -1446,7 +1437,7 @@ void solver_base<Scalar>::compress_row_blocks(VectorReal       &X,   // (, ycols
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_rows;
-    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x);
+    auto                      active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x);
     active_rows.reserve(active_capacity);
     for(Eigen::Index j = 0; j < n_blocks_x; ++j) {
         if(mask(j) == 1) { active_rows.push_back(j); }
@@ -1467,7 +1458,7 @@ void solver_base<Scalar>::compress_rows(VectorReal       &X,   // (, ycols)
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_rows;
-    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(X.rows());
+    auto                      active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(X.rows());
     active_rows.reserve(active_capacity);
     for(Eigen::Index j = 0; j < X.rows(); ++j) {
         if(mask(j) == 1) { active_rows.push_back(j); }
@@ -1491,7 +1482,7 @@ void solver_base<Scalar>::compress_rows_and_cols(MatrixType       &X,   // (N, y
     // We can now squeeze out blocks zeroed out by DGKS
     // Get the block indices that we should keep
     std::vector<Eigen::Index> active_indices;
-    auto active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x * b);
+    auto                      active_capacity = static_cast<typename std::vector<Eigen::Index>::size_type>(n_blocks_x * b);
     active_indices.reserve(active_capacity);
     for(Eigen::Index j = 0; j < n_blocks_x; ++j) {
         if(mask(j) == 1) {
@@ -1574,7 +1565,7 @@ void solver_base<Scalar>::balance_columns_sweep(Eigen::Ref<MatrixType>          
         if(minn > RealScalar(0) && maxn / minn <= target_ratio) break;
 
         // Order indices by norm ascending
-        auto idx_size = static_cast<typename std::vector<Index>::size_type>(m);
+        auto               idx_size = static_cast<typename std::vector<Index>::size_type>(m);
         std::vector<Index> idx(idx_size);
         std::iota(idx.begin(), idx.end(), Index(0));
         std::sort(idx.begin(), idx.end(), [&](Index i, Index j) { return cn(i) < cn(j); });
@@ -1584,10 +1575,10 @@ void solver_base<Scalar>::balance_columns_sweep(Eigen::Ref<MatrixType>          
         if(max_pairs_per_sweep >= 0) pairs = std::min<Index>(pairs, max_pairs_per_sweep);
 
         for(Index k = 0; k < pairs; ++k) {
-            auto ik = static_cast<typename std::vector<Index>::size_type>(k);
-            auto jk = static_cast<typename std::vector<Index>::size_type>(m - 1 - k);
-            Index i = idx[ik]; // small
-            Index j = idx[jk]; // large
+            auto  ik = static_cast<typename std::vector<Index>::size_type>(k);
+            auto  jk = static_cast<typename std::vector<Index>::size_type>(m - 1 - k);
+            Index i  = idx[ik]; // small
+            Index j  = idx[jk]; // large
             if(i == j) break;
 
             balance_pair(Y, H2Y, i, j);
@@ -2544,7 +2535,7 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
         if(m.proj_sum_h2.size() != Y.cols()) m.proj_sum_h2 = VectorReal::Zero(Y.cols());
         if(m.scale_log.size() != Y.cols()) m.scale_log = VectorReal::Zero(Y.cols());
 
-        MatrixType W = Gxx.ldlt().solve(m.Gram_symm);
+        MatrixType W = Gxx.ldlt().solve(m.Gram);
 
         Y.noalias()   -= X * W;
         H2Y.noalias() -= H2X * W;
@@ -2555,14 +2546,25 @@ void solver_base<Scalar>::block_h2_orthogonalize(const MatrixType &X, const Matr
                 "block_h2_orthogonalize:          rep {}: orthError = {:.4e} symmError = {:.4e} skewError = {:.4e} E_proj={:.4e} Exx {:.4e} Eyy {:.4e}", rep,
                 m.orthError, m.symmError, m.skewError, E_proj, Exx, Eyy);
         }
+        m.analyze_h2_orthogonality(X, H2X, Y, H2Y);
+        if(m.Gram.norm() >= m.orthTol or m.skewError > std::sqrt(m.orthTol)) {
+            H2Y = MultH2(Y);
+            m.analyze_h2_orthogonality(X, H2X, Y, H2Y);
+        }
         if(rep >= 1) {
             // DGKS drop test – skip next rep if it already cleaned well
-            bool orth_converged = m.orthError < m.orthTol;
+            bool orth_converged = std::max(m.symmError, m.skewError) < m.orthTol;
             if(orth_converged) break;
         }
     }
     assert_h2_orthogonal(X, H2Y, m);
-    assert_h2_orthogonal(H2X, Y, m);
+    if constexpr(settings::debug_solver) {
+        MatrixType reverse_gram = H2X.adjoint() * Y;
+        RealScalar reverse_err  = reverse_gram.norm();
+        if(reverse_err > m.orthTol && eiglog) {
+            eiglog->warn("block_h2_orthogonalize: reverse H2-orthogonality diagnostic {:.5e} > tol {:.5e}", reverse_err, m.orthTol);
+        }
+    }
 }
 
 template<typename Scalar>

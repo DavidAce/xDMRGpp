@@ -927,45 +927,6 @@ void MatVecMPOS<Scalar>::MultAx(Scalar *mps_in_, Scalar *mps_out_) {
 }
 
 template<typename Scalar>
-void MatVecMPOS<Scalar>::MultAx_hp(const Scalar *mps_in_, Scalar *mps_out_) const {
-    auto token   = t_multAx->tic_token();
-    auto mps_in  = Eigen::TensorMap<const Eigen::Tensor<Scalar, 3>>(mps_in_, shape_mps);
-    auto mps_out = Eigen::TensorMap<Eigen::Tensor<Scalar, 3>>(mps_out_, shape_mps);
-    assert(Eigen::Map<const VectorType>(mps_in_, size_mps).allFinite());
-
-    Eigen::Tensor<ScalarL, 3> mps_in_hp = mps_in.template cast<ScalarL>();
-    Eigen::Tensor<ScalarL, 3> mps_out_hp(shape_mps);
-
-    if(mpos_A_hp.empty()) {
-        mpos_A_hp.reserve(mpos_A.size());
-        for(const auto &mpo_A : mpos_A) mpos_A_hp.emplace_back(mpo_A.template cast<ScalarL>());
-
-        mpos_A_shf_hp.clear();
-        if(mpos_A_hp.size() > 1) {
-            mpos_A_shf_hp.reserve(mpos_A_hp.size());
-            for(const auto &mpo_A_hp : mpos_A_hp) mpos_A_shf_hp.emplace_back(mpo_A_hp.shuffle(tenx::array4{2, 3, 0, 1}));
-        }
-    }
-
-    if(envL_A_hp.size() != envL_A.size()) envL_A_hp = envL_A.template cast<ScalarL>();
-    if(envR_A_hp.size() != envR_A.size()) envR_A_hp = envR_A.template cast<ScalarL>();
-
-    if(mpos_A_hp.size() == 1) {
-        tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_hp.front(), envL_A_hp, envR_A_hp);
-    } else {
-        tools::common::contraction::matrix_vector_product(mps_out_hp, mps_in_hp, mpos_A_shf_hp, envL_A_hp, envR_A_hp);
-    }
-
-    mps_out = mps_out_hp.template cast<Scalar>();
-    num_mv++;
-}
-
-template<typename Scalar>
-void MatVecMPOS<Scalar>::MultAx_hp(Scalar *mps_in_, Scalar *mps_out_) {
-    MultAx_hp(static_cast<const Scalar *>(mps_in_), mps_out_);
-}
-
-template<typename Scalar>
 void MatVecMPOS<Scalar>::MultAx(void *x, int *ldx, void *y, int *ldy, int *blockSize, [[maybe_unused]] primme_params *primme, [[maybe_unused]] int *err) const {
     for(int i = 0; i < *blockSize; i++) {
         Scalar *mps_in_ptr  = static_cast<Scalar *>(x) + *ldx * i;
@@ -1078,20 +1039,6 @@ typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx(const Eigen::
     assert(x.rows() == get_size());
     VectorType y(x.rows());
     MultAx(x.data(), y.data());
-    return y;
-}
-template<typename Scalar>
-typename MatVecMPOS<Scalar>::MatrixType MatVecMPOS<Scalar>::MultAX_hp(const Eigen::Ref<const MatrixType> &X) const {
-    assert(X.rows() == get_size());
-    MatrixType Y(X.rows(), X.cols());
-    for(Eigen::Index i = 0; i < X.cols(); ++i) { MultAx_hp(X.col(i).data(), Y.col(i).data()); }
-    return Y;
-}
-template<typename Scalar>
-typename MatVecMPOS<Scalar>::VectorType MatVecMPOS<Scalar>::MultAx_hp(const Eigen::Ref<const VectorType> &x) const {
-    assert(x.rows() == get_size());
-    VectorType y(x.rows());
-    MultAx_hp(x.data(), y.data());
     return y;
 }
 
@@ -1534,10 +1481,30 @@ void MatVecMPOS<Scalar>::MultPc([[maybe_unused]] const Scalar *mps_in_, [[maybe_
             iLinSolvCfg.jacobi.invdiag = invJcbDiagonal.data();
         }
         if(mpos.size() == 1) {
+            auto       token         = t_multPc->tic_token();
+            const auto result_before = iLinSolvCfg.result;
+            const auto num_mv_before = num_mv;
+            const auto op_name       = mpos_B.empty() ? "A" : "B";
+            auto       log_result    = [&](const char *status) {
+                const auto &result = iLinSolvCfg.result;
+                eig::log->debug(
+                    "MatVecMPOS::MultPc SOLVE {} | op {} | size {} mps [{},{},{}] | shift {:.16e} | jcb {} | iter {} matvec {} precond {} | "
+                    "matvec counter +{} | err {:.3e} info {} | time {:.3e}s mv {:.3e}s pc {:.3e}s",
+                    status, op_name, size_mps, shape_mps[0], shape_mps[1], shape_mps[2], fp(shift), jcbMaxBlockSize, result.iters - result_before.iters,
+                    result.matvecs - result_before.matvecs, result.precond - result_before.precond, num_mv - num_mv_before, fp(result.error),
+                    static_cast<int>(result.info), result.time - result_before.time, result.time_matvecs - result_before.time_matvecs,
+                    result.time_precond - result_before.time_precond);
+            };
             auto MultOp   = [this](const Eigen::Ref<const MatrixType> &X) -> MatrixType { return mpos_B.empty() ? MultAX(X) : MultBX(X); };
             auto MatrixOp = MatrixLikeOperator<Scalar>(size_mps, MultOp);
             auto mps_out  = Eigen::Map<VectorType>(mps_out_, size_mps);
-            mps_out       = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, mps_in_, iLinSolvCfg);
+            try {
+                mps_out = tools::common::contraction::matrix_inverse_vector_product(MatrixOp, mps_in_, iLinSolvCfg);
+                log_result("done");
+            } catch(...) {
+                log_result("failed");
+                throw;
+            }
         } else if(!mpos_B_shf.empty()) {
             throw except::runtime_error("MatVecMPOS<{}>::MultInvBx(...) not implemented for multiple mpos", sfinae::type_name<Scalar>());
         }
@@ -1679,9 +1646,6 @@ void MatVecMPOS<Scalar>::set_shift(CplxScalar shift) {
     }
 
     // Invalidate hp caches, factorization, and preconditioner caches
-    mpos_A_hp.clear();
-    mpos_A_shf_hp.clear();
-
     readyShift    = true;
     readyFactorOp = false;
     readyCalcPc   = false;

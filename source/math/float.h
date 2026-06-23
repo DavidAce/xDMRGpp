@@ -34,12 +34,8 @@ using cx128 = std::complex<fp128>;
 using fp128 = dmrg::type_unavailable;
 using cx128 = std::complex<fp128>;
 #endif
-#if defined(DMRG_HIGHPREC_FLOAT128)
-using fpX = fp128;
-#else
-using fpX = fp80;
-#endif
-using cxX = std::complex<fpX>;
+using fpX = DMRG_HIGHPREC_REAL;
+using cxX = DMRG_HIGHPREC_CPLX;
 
 namespace sfinae {
     template<typename T>
@@ -60,12 +56,13 @@ namespace sfinae {
     template<typename T>
     concept is_long_double_prec_v = std::same_as<Real<T>, long double>;
 
+    #if defined(DMRG_USE_FLOAT128) || defined(DMRG_USE_QUADMATH)
     template<typename T>
-#if defined(DMRG_HIGHPREC_FLOAT128)
     concept is_quadruple_prec_v = std::same_as<Real<T>, fp128>;
-#else
+    #else
+    template<typename T>
     concept is_quadruple_prec_v = false;
-#endif
+    #endif
 }
 
 template<typename Lhs, typename Rhs>

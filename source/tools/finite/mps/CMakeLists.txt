@@ -9,6 +9,8 @@ set(tools_finite_mps_state_deps
 add_source_target(xdmrg++-tools-finite-mps-add
         INST_TEMPLATE_FILES
         add/add.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -20,6 +22,8 @@ add_source_target(xdmrg++-tools-finite-mps-gates
         gates/gates.cpp
         INST_TEMPLATE_FILES
         gates/gates.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -44,6 +48,8 @@ add_source_target(xdmrg++-tools-finite-mps-init
 add_source_target(xdmrg++-tools-finite-mps-init-entangled-state
         INST_TEMPLATE_FILES
         init_entangled_state/init_entangled_state.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -59,6 +65,8 @@ add_source_target(xdmrg++-tools-finite-mps-init-entangled-state
 add_source_target(xdmrg++-tools-finite-mps-init-product-state
         INST_TEMPLATE_FILES
         init_product_state/init_product_state.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -73,6 +81,8 @@ add_source_target(xdmrg++-tools-finite-mps-init-product-state
 add_source_target(xdmrg++-tools-finite-mps-merge
         INST_TEMPLATE_FILES
         merge/merge.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -90,6 +100,8 @@ add_source_target(xdmrg++-tools-finite-mps-merge
 add_source_target(xdmrg++-tools-finite-mps-move
         INST_TEMPLATE_FILES
         move/move.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -103,6 +115,8 @@ add_source_target(xdmrg++-tools-finite-mps-move
 add_source_target(xdmrg++-tools-finite-mps-normalize
         INST_TEMPLATE_FILES
         normalize/normalize.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES
@@ -117,6 +131,8 @@ add_source_target(xdmrg++-tools-finite-mps-normalize
 add_source_target(xdmrg++-tools-finite-mps-to-tensor
         INST_TEMPLATE_FILES
         to_tensor/to_tensor.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
         INTERFACE_LINK_LIBRARIES

@@ -13,7 +13,7 @@ using namespace std::complex_literals;
 
 template<typename T, typename Scalar>
 requires sfinae::is_std_complex_v<T>
-std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_1st_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
+std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_1st_order(cxX delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
                                                                     const Eigen::Tensor<Scalar, 2> &h_odd) {
     using RealT       = decltype(std::real(std::declval<T>()));
     auto h_evn_matrix = tenx::asScalarType<T>(tenx::MatrixMap(h_evn));
@@ -28,7 +28,7 @@ std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_1st_order(cx128 delta_
 
 template<typename T, typename Scalar>
 requires sfinae::is_std_complex_v<T>
-std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_2nd_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
+std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_2nd_order(cxX delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
                                                                     const Eigen::Tensor<Scalar, 2> &h_odd) {
     using RealT       = decltype(std::real(std::declval<T>()));
     auto h_evn_matrix = tenx::asScalarType<T>(tenx::MatrixMap(h_evn));
@@ -50,7 +50,7 @@ std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_2nd_order(cx128 delta_
  */
 template<typename T, typename Scalar>
 requires sfinae::is_std_complex_v<T>
-std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_4th_order(cx128 delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
+std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_4th_order(cxX delta_t, const Eigen::Tensor<Scalar, 2> &h_evn,
                                                                     const Eigen::Tensor<Scalar, 2> &h_odd) {
     using RealT = decltype(std::real(std::declval<T>()));
 
@@ -74,7 +74,7 @@ std::vector<Eigen::Tensor<T, 2>> qm::time::Suzuki_Trotter_4th_order(cx128 delta_
     return temp;
 }
 
-inline std::pair<std::vector<qm::Gate>, std::vector<qm::Gate>> qm::time::get_time_evolution_gates(cx128 delta_t, const std::vector<qm::Gate> &hams_nsite) {
+inline std::pair<std::vector<qm::Gate>, std::vector<qm::Gate>> qm::time::get_time_evolution_gates(cxX delta_t, const std::vector<qm::Gate> &hams_nsite) {
     /* Here we do a second-order Suzuki-Trotter decomposition which holds for n-site hamiltonians as described
      * here https://tensornetwork.org/mps/algorithms/timeevo/tebd.html
      * For instance,
@@ -95,15 +95,16 @@ inline std::pair<std::vector<qm::Gate>, std::vector<qm::Gate>> qm::time::get_tim
     std::vector<Gate> time_evolution_gates_reverse;
     time_evolution_gates_forward.reserve(hams_nsite.size());
     time_evolution_gates_reverse.reserve(hams_nsite.size());
-    auto dt = cx64(static_cast<fp64>(delta_t.real()), static_cast<fp64>(delta_t.imag()));
+    const cxX half_i = cxX{fpX{0}, fpX{-0.5}};
+    auto      dt     = cxX(static_cast<fpX>(delta_t.real()), static_cast<fpX>(delta_t.imag()));
 
     // Generate first forward layer
     for(auto &h : hams_nsite) {
-        time_evolution_gates_forward.emplace_back(h.exp(-1.0i * dt * 0.5)); // exp(-i * delta_t * h)
+        time_evolution_gates_forward.emplace_back(h.exp(half_i * dt)); // exp(-i * delta_t * h)
     }
     // Generate second reversed layer
     for(auto &h : iter::reverse(hams_nsite)) {
-        time_evolution_gates_reverse.emplace_back(h.exp(-1.0i * dt * 0.5)); // exp(-i * delta_t * h)
+        time_evolution_gates_reverse.emplace_back(h.exp(half_i * dt)); // exp(-i * delta_t * h)
     }
 
     if constexpr(settings::debug) {

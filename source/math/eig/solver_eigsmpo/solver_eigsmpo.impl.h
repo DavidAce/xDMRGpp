@@ -212,8 +212,9 @@ opt_mps<Scalar> eigs_lanczos_h1h2(const opt_mps<Scalar>                      &in
                                   reports::eigs_log<Scalar>                  &elog) {
     auto jcb_bs = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::solvers::eig::jcb_blocksize_max);
     auto jcb_os = opt_meta.eigs_jcbMaxBlockSize.value_or(settings::solvers::eig::jcb_overlap_size);
-    auto prt    = eig::StringToPreconditioner(opt_meta.eigs_preconditioner_type.value_or("SOLVE"));
+    auto prt    = eig::StringToPreconditioner(opt_meta.eigs_preconditioner_type.value_or("JACOBI"));
     auto rct    = StringToResidualCorrection(opt_meta.eigs_residual_correction_type.value_or("JACOBI_DAVIDSON"));
+    assert_valid_residual_correction_preconditioner(rct, prt);
     bool crs    = opt_meta.eigs_use_coarse_inner_preconditioner.value_or(false);
     if(jcb_bs <= 1) return eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, jcb_bs, prt, rct, crs, "");
     // eigs_lanczos_h1h2<CalcType>(initial, state, model, edges, opt_meta, elog, 0, ResidualCorrectionType::NONE, "NO 0");

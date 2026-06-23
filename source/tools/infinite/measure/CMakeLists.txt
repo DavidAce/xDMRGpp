@@ -5,6 +5,8 @@ add_source_target(xdmrg++-tools-infinite-measure
         mom/mom.inst.cpp.in
         mpo/mpo.inst.cpp.in
         measure/measure.inst.cpp.in
+        INST_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags

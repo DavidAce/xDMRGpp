@@ -18,6 +18,10 @@ add_source_target(xdmrg++-tools-common-split
         INST_PAIR_TEMPLATE_FILES
         split/split.pair.inst.cpp.in
         INST_PAIR_DIAGONAL
+        INST_PAIR_OUTER_SCALARS
+        ${DMRG_ENABLED_SCALARS}
+        INST_PAIR_INNER_SCALARS
+        ${DMRG_ENABLED_SCALARS}
 
         OBJECT_LINK_LIBRARIES
         xdmrg++-deps xdmrg++-flags
