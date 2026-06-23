@@ -1,10 +1,13 @@
 #pragma once
 #include "config/enums/OptRitz.h"
+#include "math/eig/matvec/matvec_mpos.h"
 #include "math/float.h"
 #include "tools/finite/opt.h"
 #include "tools/finite/opt/report.h"
 #include "tools/finite/opt_mps.h"
 #include <Eigen/Core>
+#include <grit/grit.h>
+#include <string_view>
 
 template<typename Scalar> class solver_gdplusk;
 
@@ -18,7 +21,6 @@ namespace tools::finite::opt::internal{
     // template<typename Scalar> using MatrixReal = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, Eigen::Dynamic>;
     // template<typename Scalar> using VectorReal = Eigen::Matrix<RealScalar<Scalar>, Eigen::Dynamic, 1>;
 
-
     template<typename Scalar> [[nodiscard]] opt_mps<Scalar> optimize_energy_eig                      (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, OptMeta & meta, reports::eigs_log<Scalar> & elog);
     template<typename Scalar> [[nodiscard]] opt_mps<Scalar> optimize_energy                          (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, OptMeta & meta, reports::eigs_log<Scalar> & elog);
     template<typename Scalar> [[nodiscard]] opt_mps<Scalar> optimize_overlap                         (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, OptMeta & meta, reports::subs_log<Scalar> & slog);
@@ -30,6 +32,8 @@ namespace tools::finite::opt::internal{
     template<typename Scalar> [[nodiscard]] opt_mps<Scalar> optimize_lanczos_h1h2                    (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, OptMeta & meta, reports::eigs_log<Scalar> & elog);
     template<typename CalcType, typename Scalar>  void       extract_results                         (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta & meta, const eig::solver &solver, std::vector<opt_mps<Scalar>> &results, bool converged_only = true, std::optional<std::vector<long>> indices = std::nullopt);
     template<typename CalcType, typename Scalar>  void       extract_results                         (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta & meta, const solver_gdplusk<CalcType> &solver, std::vector<opt_mps<Scalar>> &results);
+    template<typename CalcType, typename Scalar>  void       extract_results                         (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta & meta, const grit::Result<CalcType> &result, const grit::standard::gdplusk<CalcType> &solver, const MatVecMPOS<CalcType> &hamiltonian_squared, std::vector<opt_mps<Scalar>> &results);
+    template<typename CalcType, typename Scalar>  void       extract_results                         (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta & meta, const grit::Result<CalcType> &result, const grit::generalized::gdplusk<CalcType> &solver, const MatVecMPOS<CalcType> &hamiltonian, const MatVecMPOS<CalcType> &hamiltonian_squared, const MatVecMPOS<CalcType> &preconditioner, std::vector<opt_mps<Scalar>> &results);
     template<typename CalcType, typename Scalar>  void       extract_results_subspace                (const TensorsFinite<Scalar> & tensors, const opt_mps<Scalar> & initial_mps, const OptMeta & meta, const eig::solver &solver, const std::vector<opt_mps<Scalar>> & subspace_mps, std::vector<opt_mps<Scalar>> &results );
 
 

@@ -4,6 +4,7 @@
 #include "../../opt_mps.h"
 #include "config/enums/OptRitz.h"
 #include "config/settings.h"
+#include <grit/Result.h>
 #include "math/eig.h"
 #include "math/eig/solver_eigsmpo/solver_gdplusk.h"
 #include "math/num.h"
@@ -166,6 +167,89 @@ void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &
     res.set_hsquared(std::real(vh2v));
     // auto rnormH1_squared = rnormH1 * rnormH1;
     // tools::log->info("extract_results: variance <H²>-<H>²={:.16e}  |Hv-Ev|²= {:.16e}", variance, rnormH1_squared);
+}
+
+namespace tools::finite::opt::internal {
+    template<typename CalcType, typename Scalar, typename GritSolver>
+    void extract_grit_result(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial, const OptMeta &opt_meta,
+                             const grit::Result<CalcType> &result, const GritSolver &solver, const MatVecMPOS<CalcType> &hamiltonian,
+                             std::vector<opt_mps<Scalar>> &results, long num_op, const IterativeLinearSolverConfig<CalcType> &inner_solver) {
+        auto t_ext    = tid::tic_scope("extract");
+        auto dims_mps = initial.get_tensor().dimensions();
+        if(result.eigVal().size() == 0 or result.eigVecs().cols() == 0) return;
+        if(result.eigVecs().cols() != result.eigVal().size())
+            throw except::runtime_error("GRIT result has {} eigenvectors for {} eigenvalues", result.eigVecs().cols(), result.eigVal().size());
+
+        using Real  = decltype(std::real(std::declval<Scalar>()));
+        auto eigvals = tenx::asScalarType<Real>(result.eigVal());
+        auto eigvecs = tenx::asScalarType<Scalar>(result.eigVecs());
+
+        for(Eigen::Index idx = 0; idx < eigvals.size(); ++idx) {
+            results.emplace_back(opt_mps<Scalar>());
+            auto &res           = results.back();
+            res.is_basis_vector = false;
+            res.set_name(fmt::format("[{} grit {} {}]", enum2sv(opt_meta.optAlgo), solver.tag, grit::enum2sv(solver.config.ritz)));
+            res.set_tensor(eigvecs.col(idx).normalized(), dims_mps);
+            res.set_overlap(std::abs(initial.get_vector().dot(res.get_vector())));
+            res.set_sites(initial.get_sites());
+            res.set_eshift(initial.get_eshift());
+            res.set_eigs_idx(idx);
+            res.set_eigs_nev(result.eigVal().size());
+            res.set_eigs_ncv(solver.config.ncv);
+            res.set_eigs_tol(solver.config.abstol);
+            res.set_eigs_jcb(hamiltonian.get_jcbMaxBlockSize());
+            res.set_eigs_ritz(grit::enum2sv(solver.config.ritz));
+            res.set_eigs_type(eig::TypeToString(eig::ScalarToType<CalcType>()));
+            res.set_optalgo(opt_meta.optAlgo);
+            res.set_opttype(opt_meta.optType);
+            res.set_optsolver(opt_meta.optSolver);
+            res.set_energy_shifted(initial.get_energy_shifted());
+
+            res.set_length(initial.get_length());
+            res.set_time(result.time());
+            res.set_time_mv(solver.status.time_matvecs_total.get_time() + inner_solver.result.time_matvecs);
+            res.set_time_pc(solver.status.time_precond_total.get_time());
+            res.set_op(safe_cast<size_t>(num_op));
+            res.set_mv(safe_cast<size_t>(result.num_matvecs_total() + inner_solver.result.matvecs));
+            res.set_pc(safe_cast<size_t>(result.num_precond_total()));
+            res.set_iter(safe_cast<size_t>(result.outer_iter()));
+            if(result.rNormsAbs().size() > idx) res.set_eigs_rnorm(result.rNormsAbs()(idx));
+            res.set_eigs_eigval(eigvals(idx));
+
+            auto mpos     = tensors.get_model().get_mpo_active();
+            auto enve     = tensors.get_edges().get_ene_active();
+            auto envv     = tensors.get_edges().get_var_active();
+            auto vh1v     = tools::finite::measure::expval_hamiltonian(res.get_tensor(), mpos, enve);
+            auto vh2v     = tools::finite::measure::expval_hamiltonian_squared(res.get_tensor(), mpos, envv);
+            auto rnormH1  = tools::finite::measure::residual_norm(res.get_tensor(), mpos, enve);
+            auto rnormH2  = tools::finite::measure::residual_norm(res.get_tensor(), mpos, envv);
+            auto energy   = std::real(vh1v + tensors.get_model().get_energy_shift_mpo());
+            auto variance = std::real(vh2v - vh1v * vh1v);
+            res.set_rnorm_H1(rnormH1);
+            res.set_rnorm_H2(rnormH2);
+            res.set_energy(energy);
+            res.set_variance(variance);
+            res.set_energy_shifted(std::real(vh1v));
+            res.set_hsquared(std::real(vh2v));
+        }
+    }
+}
+
+template<typename CalcType, typename Scalar>
+void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial, const OptMeta &opt_meta,
+                                                   const grit::Result<CalcType> &result, const grit::standard::gdplusk<CalcType> &solver,
+                                                   const MatVecMPOS<CalcType> &hamiltonian_squared, std::vector<opt_mps<Scalar>> &results) {
+    extract_grit_result(tensors, initial, opt_meta, result, solver, hamiltonian_squared, results, hamiltonian_squared.num_op,
+                        hamiltonian_squared.get_iterativeLinearSolverConfig());
+}
+
+template<typename CalcType, typename Scalar>
+void tools::finite::opt::internal::extract_results(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial, const OptMeta &opt_meta,
+                                                   const grit::Result<CalcType> &result, const grit::generalized::gdplusk<CalcType> &solver,
+                                                   const MatVecMPOS<CalcType> &hamiltonian, const MatVecMPOS<CalcType> &hamiltonian_squared,
+                                                   const MatVecMPOS<CalcType> &preconditioner, std::vector<opt_mps<Scalar>> &results) {
+    extract_grit_result(tensors, initial, opt_meta, result, solver, hamiltonian, results, hamiltonian.num_op + hamiltonian_squared.num_op,
+                        preconditioner.get_iterativeLinearSolverConfig());
 }
 
 template<typename CalcType, typename Scalar>

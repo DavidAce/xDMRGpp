@@ -2,7 +2,7 @@
 
 #include "../../../opt_meta.h"
 #include "../../../opt_mps.h"
-#include "../../launch_gdplusk.h"
+#include "../../launch_eigsolver.h"
 #include "config/enums/OptAlgo.h"
 #include "config/enums/OptExit.h"
 #include "config/enums/OptRitz.h"
@@ -15,7 +15,6 @@
 #include "math/eig/matvec/matvec_mpo.h"
 #include "math/eig/matvec/matvec_mpos.h"
 #include "math/eig/matvec/matvec_zero.h"
-#include "math/eig/solver_eigsmpo/solver_gdplusk.h"
 #include "math/num.h"
 #include "tensors/edges/EdgesFinite.h"
 #include "tensors/model/ModelFinite.h"
@@ -234,6 +233,7 @@ void eigs_executor_folded_spectrum(eig::solver &solver, MatVecType &hamiltonian_
 
     tools::log->trace("eigs_folded_spectrum_executor: Defining the Hamiltonian-squared matrix-vector product");
     if(!solver.config.lib.has_value()) throw except::runtime_error("lib has not been set");
+    if(internal::launch_eigsolver_folded_spectrum<CalcType>(solver.config.lib.value(), tensors, initial_mps, meta, elog, results)) return;
     switch(solver.config.lib.value()) {
         case eig::Lib::ARPACK: {
             if(tensors.model->has_compressed_mpo_squared()) throw std::runtime_error("optimize_folded_spectrum_eigs with ARPACK requires non-compressed MPO²");
@@ -254,10 +254,8 @@ void eigs_executor_folded_spectrum(eig::solver &solver, MatVecType &hamiltonian_
             if(not solver.config.ritz) solver.config.ritz = eig::Ritz::SM;
             break;
         }
-        case eig::Lib::EIGSMPO: {
-            results = eigs_gdplusk<CalcType>(tensors, initial_mps, meta, elog);
-            return;
-        }
+        case eig::Lib::EIGSMPO:
+        case eig::Lib::GRIT: throw except::runtime_error("Internal launcher dispatch failed for {}", eig::LibToString(solver.config.lib.value()));
     }
 
     tools::log->debug("eigs_folded_spectrum_executor: Solving [H²x=λx] {} {} | sigma {} | shifts {} | maxIter {} | tol {:.2e} | nev {} ncv {} | size {} | "

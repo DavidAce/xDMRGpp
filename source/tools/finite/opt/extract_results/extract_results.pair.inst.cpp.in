@@ -9,6 +9,13 @@ template void tools::finite::opt::internal::extract_results<T>(const TensorsFini
                                                                 std::optional<std::vector<long>> indices);
 template void tools::finite::opt::internal::extract_results<T>(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial, const OptMeta &opt_meta,
                                                                 const solver_gdplusk<T> &solver, std::vector<opt_mps<Scalar>> &results);
+template void tools::finite::opt::internal::extract_results<T>(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial, const OptMeta &opt_meta,
+                                                                const grit::Result<T> &result, const grit::standard::gdplusk<T> &solver,
+                                                                const MatVecMPOS<T> &hamiltonian_squared, std::vector<opt_mps<Scalar>> &results);
+template void tools::finite::opt::internal::extract_results<T>(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial, const OptMeta &opt_meta,
+                                                                const grit::Result<T> &result, const grit::generalized::gdplusk<T> &solver,
+                                                                const MatVecMPOS<T> &hamiltonian, const MatVecMPOS<T> &hamiltonian_squared,
+                                                                const MatVecMPOS<T> &preconditioner, std::vector<opt_mps<Scalar>> &results);
 template void tools::finite::opt::internal::extract_results_subspace<T>(const TensorsFinite<Scalar> &tensors, const opt_mps<Scalar> &initial_mps,
                                                                          const OptMeta &meta, const eig::solver &solver,
                                                                          const std::vector<opt_mps<Scalar>> &subspace_mps, std::vector<opt_mps<Scalar>> &results);

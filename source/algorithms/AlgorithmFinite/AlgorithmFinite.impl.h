@@ -582,7 +582,10 @@ void AlgorithmFinite<Scalar>::try_mps_compression() {
     if(status.iter == 0) return;
     if(settings::schedule::opt::trnc_increase_iter == 0) return;
     if(settings::schedule::opt::trnc_increase_rtol <= 0) return;
-    if(status.iter % settings::schedule::opt::trnc_increase_iter != 0) return;
+
+    bool try_compression = settings::schedule::opt::trnc_increase_iter > 0 && status.iter % settings::schedule::opt::trnc_increase_iter == 0;
+    bool has_projected   = projected_iter == status.iter;
+    if(!try_compression and !has_projected) return;
     tools::log->trace("try_mps_compression: vtol {:.5e} | trnc lim {:.5e} max {:.5e} min {:.5e} | bond dims: {}", settings::schedule::opt::trnc_increase_rtol,
                       status.trnc_lim, settings::solvers::svd::truncation_max, settings::solvers::svd::truncation_min,
                       tools::finite::measure::bond_dimensions(tensors.get_state()));

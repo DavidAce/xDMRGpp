@@ -2,7 +2,7 @@
 
 #include "../../../opt_meta.h"
 #include "../../../opt_mps.h"
-#include "../../launch_gdplusk.h"
+#include "../../launch_eigsolver.h"
 #include "config/enums/OptExit.h"
 #include "config/enums/OptRitz.h"
 #include "config/enums/OptSolver.h"
@@ -112,12 +112,12 @@ void eigs_generalized_shift_invert_executor(eig::solver &solver, MatVecType &ham
     hamiltonian_squared.reset();
 
     tools::log->trace("eigs_variance_executor: Defining the Hamiltonian-squared matrix-vector product");
-    switch(solver.config.lib.value_or(eig::Lib::EIGSMPO)) {
+    const auto lib = solver.config.lib.value_or(eig::Lib::EIGSMPO);
+    if(internal::launch_eigsolver_generalized_shift_invert<CalcType>(lib, tensors, initial_mps, meta, elog, results)) return;
+    switch(lib) {
         case eig::Lib::ARPACK: throw except::logic_error("optimize_generalized_shift_invert_eigs: ARPACK is not supported");
-        case eig::Lib::EIGSMPO: {
-            results = eigs_gdplusk<CalcType>(tensors, initial_mps, meta, elog);
-            return;
-        }
+        case eig::Lib::EIGSMPO:
+        case eig::Lib::GRIT: throw except::runtime_error("Internal launcher dispatch failed for {}", eig::LibToString(lib));
         default: break;
     }
 

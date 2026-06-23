@@ -58,7 +58,7 @@ typename AlgorithmFinite<Scalar>::OptMeta AlgorithmFinite<Scalar>::get_opt_meta(
 
     m1.subspace_tol   = settings::solvers::eig::target_subspace_error;
     m1.primme_method  = "PRIMME_DYNAMIC";
-    m1.eigs_lib       = "EIGSMPO";
+    m1.eigs_lib       = enum2sv(settings::solvers::eig::eigslib);
     m1.eigv_target    = 0.0;
     m1.eigs_nev       = settings::solvers::eig::nev_min;
     m1.eigs_ncv       = settings::solvers::eig::ncv_min;

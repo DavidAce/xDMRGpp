@@ -842,6 +842,7 @@ std::vector<opt_mps<Scalar>> eigs_gdplusk(const TensorsFinite<Scalar> &tensors, 
     auto jcb_os = opt_meta.eigs_jcbOverlapSize.value_or(settings::solvers::eig::jcb_overlap_size);
     auto prt    = eig::StringToPreconditioner(opt_meta.eigs_preconditioner_type.value_or("SOLVE"));
     auto rct    = StringToResidualCorrection(opt_meta.eigs_residual_correction_type.value_or("JACOBI_DAVIDSON"));
+    assert_valid_residual_correction_preconditioner(rct, prt);
     // bool         crs        = opt_meta.eigs_use_coarse_inner_preconditioner.value_or(false);
     Eigen::Index block_size = opt_meta.eigs_blk.value_or(settings::solvers::eig::blk_min);
     Eigen::Index ncv        = opt_meta.eigs_ncv.value_or(settings::solvers::eig::ncv_min);
