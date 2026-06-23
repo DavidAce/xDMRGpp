@@ -30,7 +30,7 @@ void clean_up() {
     \return an integer 0 upon exit success
 */
 int main(int argc, char *argv[]) {
-    settings::parse(argc, argv);
+    if(auto parse_result = settings::parse(argc, argv); parse_result.action == settings::ParseAction::EXIT) return parse_result.exit_code;
 
     tools::log = tools::Logger::setLogger("xDMRG++ main", settings::console::loglevel, settings::console::timestamp);
 

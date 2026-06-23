@@ -288,6 +288,7 @@ namespace settings {
     /*! \namespace settings::solvers Settings for local eigensolver and SVD backends */
     namespace solvers {
         namespace eig {
+            inline EigsLibrary eigslib                = EigsLibrary::EIGSMPO; /*!< Backend library used for iterative few-eigenpair solvers */
             inline long       max_size               = 4096;                /*!< Maximum problem size before switching from eig to eigs */
             inline long       max_size_shift_invert  = 4096;                /*!< Maximum problem size allowed for shift-invert of the local effective Hamiltonian matrix */
             inline size_t     iter_min               = 1000;                /*!< Minimum number of iterations for the eigenvalue solver */

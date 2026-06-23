@@ -9,6 +9,7 @@
 #include "config/enums/CircuitOp.h"
 #include "config/enums/CopyPolicy.h"
 #include "config/enums/EdgeStatus.h"
+#include "config/enums/EigsLibrary.h"
 #include "config/enums/fdmrg_task.h"
 #include "config/enums/FileCollisionPolicy.h"
 #include "config/enums/FileResumePolicy.h"

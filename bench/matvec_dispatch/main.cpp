@@ -13,17 +13,18 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <CLI/CLI.hpp>
+#include <Eigen/Core>
+#include <fmt/core.h>
+#include <fmt/format.h>
 #include <limits>
 #include <map>
 #include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <vector>
-#include <CLI/CLI.hpp>
-#include <Eigen/Core>
-#include <fmt/core.h>
 #include <unsupported/Eigen/CXX11/Tensor>
+#include <vector>
 #if defined(DMRG_ENABLE_TBLIS)
     #include <tblis.h>
 #endif
@@ -45,9 +46,7 @@ namespace {
     template<typename Scalar>
     using VectorType = Eigen::Matrix<Scalar, Eigen::Dynamic, 1>;
 
-    bool has_backend(const std::vector<std::string> &backends, std::string_view needle) {
-        return std::ranges::find(backends, needle) != backends.end();
-    }
+    bool has_backend(const std::vector<std::string> &backends, std::string_view needle) { return std::ranges::find(backends, needle) != backends.end(); }
 
     std::string_view gpu_policy_name(GpuPolicy policy) {
         switch(policy) {
@@ -74,12 +73,7 @@ namespace {
 #if defined(DMRG_ENABLE_CX64)
         dtypes.emplace_back("cx64");
 #endif
-        std::string result;
-        for(std::string_view dtype : dtypes) {
-            if(not result.empty()) result += ", ";
-            result += dtype;
-        }
-        return result;
+        return fmt::format("{}", dtypes);
     }
 
     template<typename Scalar, int Rank>
@@ -109,14 +103,12 @@ namespace {
     }
 
     template<typename Scalar>
-    void profile_tblis_stages([[maybe_unused]] const Eigen::Tensor<Scalar, 3> &mps,
-                              [[maybe_unused]] const Eigen::Tensor<Scalar, 4> &mpo,
-                              [[maybe_unused]] const Eigen::Tensor<Scalar, 3> &envL,
-                              [[maybe_unused]] const Eigen::Tensor<Scalar, 3> &envR) {
+    void profile_tblis_stages([[maybe_unused]] const Eigen::Tensor<Scalar, 3> &mps, [[maybe_unused]] const Eigen::Tensor<Scalar, 4> &mpo,
+                              [[maybe_unused]] const Eigen::Tensor<Scalar, 3> &envL, [[maybe_unused]] const Eigen::Tensor<Scalar, 3> &envR) {
 #if defined(DMRG_ENABLE_TBLIS)
         if constexpr(settings::tblis_use_openmp) { tblis_set_num_threads(static_cast<unsigned int>(omp_get_max_threads())); }
         using tools::common::contraction::contract_tblis;
-        using clock = std::chrono::steady_clock;
+        using clock      = std::chrono::steady_clock;
         const auto to_ms = [](clock::duration dt) { return std::chrono::duration<double, std::milli>(dt).count(); };
 
         if(mps.dimension(1) >= mps.dimension(2)) {
@@ -150,16 +142,8 @@ namespace {
     }
 
     template<typename Scalar>
-    void run_case(long d,
-                  long chiL,
-                  long chiR,
-                  long wL,
-                  long wR,
-                  std::size_t epochs,
-                  std::size_t iterations,
-                  const std::vector<std::string> &backends,
-                  bool profile_tblis,
-                  bool show_openmp_placement) {
+    void run_case(long d, long chiL, long chiR, long wL, long wR, std::size_t epochs, std::size_t iterations, const std::vector<std::string> &backends,
+                  bool profile_tblis, bool show_openmp_placement) {
         using tools::common::contraction::matrix_vector_product;
         using tools::common::contraction::internal::get_cutensor_operation_bytes;
         using tools::common::contraction::internal::InfoH1Mv;
@@ -182,7 +166,8 @@ namespace {
         const bool auto_selected     = has_backend(backends, "auto");
         if(cutensor_selected or auto_selected) {
             std::size_t required_bytes = 0;
-            if constexpr(tools::common::contraction::internal::cutensor_supported_v<Scalar>) required_bytes = get_cutensor_operation_bytes<Scalar>(mps, mpo, envL, envR);
+            if constexpr(tools::common::contraction::internal::cutensor_supported_v<Scalar>)
+                required_bytes = get_cutensor_operation_bytes<Scalar>(mps, mpo, envL, envR);
             const auto memory_status = config::cuda::query_memory(required_bytes);
             fmt::print("problem size {} | gpu_policy {} | gpu_id {} | gpu_switchsize {} | {}\n", mps.size(), gpu_policy_name(settings::cuda::gpu_policy),
                        settings::cuda::gpu_id, settings::cuda::gpu_switchsize, config::cuda::description());
@@ -222,41 +207,45 @@ namespace {
         };
 
         if(has_backend(backends, "auto"))
-            bench_case([&] { return InfoH1Mv{.backend = ContractionBackend::AUTO, .precision = ContractionPrecision::SAME, .H1_local_dims = mpo.dimensions()}; },
-                       "matvec auto");
+            bench_case(
+                [&] { return InfoH1Mv{.backend = ContractionBackend::AUTO, .precision = ContractionPrecision::SAME, .H1_local_dims = mpo.dimensions()}; },
+                "matvec auto");
         if(has_backend(backends, "eigen"))
-            bench_case([&] { return InfoH1Mv{.backend = ContractionBackend::EIGEN, .precision = ContractionPrecision::SAME, .H1_local_dims = mpo.dimensions()}; },
-                       "matvec eigen");
+            bench_case(
+                [&] { return InfoH1Mv{.backend = ContractionBackend::EIGEN, .precision = ContractionPrecision::SAME, .H1_local_dims = mpo.dimensions()}; },
+                "matvec eigen");
         if(has_backend(backends, "tblis"))
-            bench_case([&] { return InfoH1Mv{.backend = ContractionBackend::TBLIS, .precision = ContractionPrecision::SAME, .H1_local_dims = mpo.dimensions()}; },
-                       "matvec tblis");
+            bench_case(
+                [&] { return InfoH1Mv{.backend = ContractionBackend::TBLIS, .precision = ContractionPrecision::SAME, .H1_local_dims = mpo.dimensions()}; },
+                "matvec tblis");
         if(profile_tblis and has_backend(backends, "tblis")) profile_tblis_stages(mps, mpo, envL, envR);
         if(has_backend(backends, "x2"))
             bench_case([&] { return InfoH1Mv{.backend = ContractionBackend::AUTO, .precision = ContractionPrecision::X2, .H1_local_dims = mpo.dimensions()}; },
                        "matvec x2");
         if(has_backend(backends, "cutensor") and config::cuda::compiled())
-            bench_case([&] { return InfoH1Mv{.backend = ContractionBackend::CUTENSOR, .precision = ContractionPrecision::SAME, .H1_local_dims = mpo.dimensions()}; },
-                       "matvec cutensor");
+            bench_case(
+                [&] { return InfoH1Mv{.backend = ContractionBackend::CUTENSOR, .precision = ContractionPrecision::SAME, .H1_local_dims = mpo.dimensions()}; },
+                "matvec cutensor");
     }
 }
 
 int main(int argc, char **argv) {
     tools::log = tools::Logger::setLogger("matvec-dispatch", 2, true);
 
-    long        d          = 2;
-    long        chiL       = 128;
-    long        chiR       = 128;
-    long        wL         = 12;
-    long        wR         = 12;
-    std::size_t epochs     = 5;
-    std::size_t iterations = 50;
-    std::string           dtype      = "fp64";
-    std::string           gpu_id     = "auto";
+    long                                          d          = 2;
+    long                                          chiL       = 128;
+    long                                          chiR       = 128;
+    long                                          wL         = 12;
+    long                                          wR         = 12;
+    std::size_t                                   epochs     = 5;
+    std::size_t                                   iterations = 50;
+    std::string                                   dtype      = "fp64";
+    std::string                                   gpu_id     = "auto";
     std::map<std::string, GpuPolicy, std::less<>> gpu_policy_map{{"ON", GpuPolicy::ON}, {"OFF", GpuPolicy::OFF}, {"TRY", GpuPolicy::TRY}};
-    std::vector<std::string> backends {"auto", "eigen", "tblis", "x2", "cutensor"};
-    bool                     profile_tblis         = false;
-    bool                     show_openmp_placement = false;
-    bool                     check_affinity_only   = false;
+    std::vector<std::string>                      backends{"auto", "eigen", "tblis", "x2", "cutensor"};
+    bool                                          profile_tblis         = false;
+    bool                                          show_openmp_placement = false;
+    bool                                          check_affinity_only   = false;
 
     CLI::App app{"Benchmark matrix_vector_product backend dispatch"};
     app.add_option("--dtype", dtype, fmt::format("Scalar type: {}", enabled_dtype_list()));
@@ -275,7 +264,8 @@ int main(int argc, char **argv) {
         ->type_name("ENUM");
     app.add_option("--gpu-id", gpu_id, "CUDA device id, or auto");
     app.add_option("--gpu-switchsize", settings::cuda::gpu_switchsize, "Minimum problem size before AUTO can use the GPU");
-    app.add_option("--gpu-max-alloc-fraction", settings::cuda::gpu_max_alloc_fraction, "Refuse GPU matvec when the estimated allocation exceeds this fraction of free memory");
+    app.add_option("--gpu-max-alloc-fraction", settings::cuda::gpu_max_alloc_fraction,
+                   "Refuse GPU matvec when the estimated allocation exceeds this fraction of free memory");
     app.add_option("--epochs", epochs, "Nanobench epochs");
     app.add_option("--iterations", iterations, "Minimum nanobench iterations");
     app.parse(argc, argv);

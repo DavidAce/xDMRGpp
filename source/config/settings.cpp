@@ -231,6 +231,7 @@ void settings::load(Loader &dmrg_config) {
     dmrg_config.load_parameter("precision::optScalar"                                 , precision::optScalar);
     dmrg_config.load_parameter("precision::max_norm_slack"                            , precision::max_norm_slack);
 
+    dmrg_config.load_parameter("solvers::eig::eigslib"                                , solvers::eig::eigslib);
     dmrg_config.load_parameter("solvers::eig::max_size"                               , solvers::eig::max_size);
     dmrg_config.load_parameter("solvers::eig::max_size_shift_invert"                  , solvers::eig::max_size_shift_invert);
     dmrg_config.load_parameter("solvers::eig::iter_min"                               , solvers::eig::iter_min);

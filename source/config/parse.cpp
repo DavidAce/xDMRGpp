@@ -8,10 +8,19 @@
 #include "tools/common/log.h"
 #include <algorithm>
 #include <cctype>
+#include <string_view>
 #include <CLI/CLI.hpp>
 #include <h5pp/h5pp.h>
 
 namespace {
+    bool has_full_help_flag(int argc, char **argv) {
+        for(int idx = 1; idx < argc; ++idx) {
+            const std::string_view arg = argv[idx];
+            if(arg == "-h" or arg == "--help") return true;
+        }
+        return false;
+    }
+
     int parse_gpu_id(std::string value) {
         std::ranges::transform(value, value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if(value == "auto") return -1;
@@ -20,6 +29,15 @@ namespace {
         if(pos != value.size()) throw CLI::ValidationError("--gpu-id", "expected 'auto', -1, or a non-negative integer");
         if(dev < -1) throw CLI::ValidationError("--gpu-id", "expected 'auto', -1, or a non-negative integer");
         return dev;
+    }
+
+    settings::ParseResult parse_app(CLI::App &app, int argc, char **argv) {
+        try {
+            app.parse(argc, argv);
+        } catch(const CLI::ParseError &err) {
+            return {settings::ParseAction::EXIT, app.exit(err)};
+        }
+        return {};
     }
 }
 
@@ -112,7 +130,7 @@ spdlog::level::level_enum sv2enum<spdlog::level::level_enum>(std::string_view it
 }
 
 // MWE: https://godbolt.org/z/jddxod53d
-int settings::parse(int argc, char **argv) {
+settings::ParseResult settings::parse(int argc, char **argv) {
     using namespace settings;
     using namespace h5pp;
     using namespace spdlog;
@@ -120,11 +138,12 @@ int settings::parse(int argc, char **argv) {
     auto s2e_log     = mapStr2Enum<spdlog::level::level_enum>("trace", "debug", "info");
     auto s2e_logh5pp = mapStr2Enum<h5pp::LogLevel>("trace", "debug", "info");
     auto s2e_model   = mapEnum2Str<ModelType>(ModelType::ising_tf_rf, ModelType::ising_sdual, ModelType::ising_majorana, ModelType::lbit);
+    auto s2e_eigslib = mapEnum2Str<EigsLibrary>(EigsLibrary::ARPACK, EigsLibrary::SPECTRA, EigsLibrary::PRIMME, EigsLibrary::EIGSMPO, EigsLibrary::GRIT);
     auto s2e_gpu_policy = mapEnum2Str<GpuPolicy>(GpuPolicy::ON, GpuPolicy::OFF, GpuPolicy::TRY);
     auto gpu_id_text    = settings::cuda::gpu_id < 0 ? std::string{"auto"} : std::to_string(settings::cuda::gpu_id);
     int  dummy       = 0;
 
-    auto preload = [&argc, &argv, &s2e_log]() -> int {
+    auto preload = [&argc, &argv, &s2e_log]() -> ParseResult {
         CLI::App pre;
         pre.get_formatter()->column_width(90);
         pre.option_defaults()->always_capture_default();
@@ -135,7 +154,7 @@ int settings::parse(int argc, char **argv) {
         pre.add_option("-v,--log,--verbosity,--loglevel"   , console::loglevel      , "Log level of xDMRG++")->transform(CLI::CheckedTransformer(s2e_log, CLI::ignore_case))->type_name("ENUM");
         pre.add_option("--timestamp"                       , console::timestamp     , "Log timestamp");
         /* clang-format on */
-        pre.parse(argc, argv);
+        if(auto result = parse_app(pre, argc, argv); result.action == ParseAction::EXIT) return result;
         tools::log = tools::Logger::setLogger("xDMRG++ config", settings::console::loglevel, settings::console::timestamp);
         tools::log->info("Preloading {}", input::config_filename);
         //  Try loading the given config file.
@@ -148,9 +167,11 @@ int settings::parse(int argc, char **argv) {
             tools::log->warn("The default config file does not exist: {}", input::config_filename);
         } else
             throw except::runtime_error("Could not find config file: {}", settings::input::config_filename); // Invalid file
-        return 0;
+        return {};
     };
-    preload();
+    const auto full_help_requested = has_full_help_flag(argc, argv);
+    if(not full_help_requested)
+        if(auto result = preload(); result.action == ParseAction::EXIT) return result;
 
     CLI::App app;
     app.description("xDMRG++: An MPS-based algorithm to calculate 1D quantum-states");
@@ -165,6 +186,7 @@ int settings::parse(int argc, char **argv) {
     app.add_option("-o,--outfile"                      , storage::output_filepath       , "Path to the output file. The seed number gets appended by default (see -x)");
     app.add_option("-s,--seed"                         , input::seed                    , "Positive number seeds the random number generator");
     app.add_option("-t,--threads"                      , threading::num_threads         , "Total number of threads (omp + std threads). Use env OMP_NUM_THREADS to control omp.");
+    app.add_option("--eigslib"                         , solvers::eig::eigslib          , "Iterative eigensolver backend [ARPACK | SPECTRA | PRIMME | EIGSMPO | GRIT]")->transform(CLI::CheckedTransformer(s2e_eigslib, CLI::ignore_case))->type_name("ENUM");
     app.add_option("--gpu-policy"                      , cuda::gpu_policy               , "GPU contraction policy [ON | OFF | TRY]")->transform(CLI::CheckedTransformer(s2e_gpu_policy, CLI::ignore_case))->type_name("ENUM");
     app.add_option("--gpu-id"                          , gpu_id_text                    , "CUDA device id. Use auto or -1 to select the first working GPU");
     app.add_option("--gpu-switchsize"                  , cuda::gpu_switchsize           , "Minimum linear problem size before AUTO matvec may switch to the GPU");
@@ -185,7 +207,7 @@ int settings::parse(int argc, char **argv) {
 
     /* clang-format on */
 
-    app.parse(argc, argv);
+    if(auto result = parse_app(app, argc, argv); result.action == ParseAction::EXIT) return result;
     settings::cuda::gpu_id = parse_gpu_id(gpu_id_text);
 
     if(app.count("--resume") > 0 or app.count("--resume-iter") > 0 or app.count("--resume-name") > 0) {
@@ -205,5 +227,5 @@ int settings::parse(int argc, char **argv) {
         settings::storage::output_filepath = filename_append_seed(settings::storage::output_filepath, settings::input::seed);
         settings::storage::output_filepath = filename_append_pattern(settings::storage::output_filepath, settings::state::init::initial_pattern);
     }
-    return 0;
+    return {};
 }

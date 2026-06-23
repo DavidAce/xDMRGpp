@@ -15,11 +15,13 @@ endif()
 if(DMRG_USE_FLOAT128)
     include(cmake/CheckStdFloat128.cmake)
     check_std_float128_t()
-    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_USE_FLOAT128 DMRG_HIGHPREC_FLOAT128 H5PP_USE_FLOAT128)
+    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_USE_FLOAT128 DMRG_HIGHPREC_REAL=fp128 DMRG_HIGHPREC_CPLX=cx128 H5PP_USE_FLOAT128 GRIT_USE_FLOAT128)
 elseif(DMRG_USE_QUADMATH)
     find_package(quadmath REQUIRED BYPASS_PROVIDER)
-    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_USE_QUADMATH DMRG_HIGHPREC_FLOAT128 H5PP_USE_QUADMATH)
+    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_USE_QUADMATH DMRG_HIGHPREC_REAL=fp128 DMRG_HIGHPREC_CPLX=cx128 H5PP_USE_QUADMATH)
     target_link_libraries(xdmrg++-deps INTERFACE quadmath::quadmath)
+else()
+    target_compile_definitions(xdmrg++-flags INTERFACE DMRG_HIGHPREC_REAL=fp80 DMRG_HIGHPREC_CPLX=cx80)
 endif ()
 
 
@@ -54,6 +56,11 @@ pkg_install(primme)
 #pkg_install(LBFGSpp)
 pkg_install(spectra)
 pkg_install(cppoptlib)
+pkg_install(grit CMAKE_ARGS
+            -DGRIT_ENABLE_32BIT:BOOL=${DMRG_ENABLE_32BIT}
+            -DGRIT_ENABLE_64BIT:BOOL=${DMRG_ENABLE_64BIT}
+            -DGRIT_ENABLE_80BIT:BOOL=${DMRG_ENABLE_80BIT}
+            -DGRIT_ENABLE_128BIT:BOOL=${DMRG_ENABLE_128BIT})
 
 find_package(arpack-ng 3.8.0...3.9.0 REQUIRED MODULE BYPASS_PROVIDER)
 find_package(arpack++                REQUIRED MODULE BYPASS_PROVIDER)
@@ -61,6 +68,7 @@ find_package(primme                  REQUIRED MODULE BYPASS_PROVIDER)
 #find_package(lbfgspp   0.3.0         REQUIRED CONFIG BYPASS_PROVIDER)
 find_package(spectra   1.1.0         REQUIRED CONFIG BYPASS_PROVIDER)
 find_package(cppoptlib               REQUIRED MODULE BYPASS_PROVIDER)
+find_package(grit      1.0.0         REQUIRED CONFIG BYPASS_PROVIDER)
 
 # Link all dependencies to xdmrg++-deps
 if(NOT TARGET xdmrg++-deps)
@@ -87,6 +95,7 @@ target_link_libraries(xdmrg++-deps INTERFACE
 #            lbfgspp
             Spectra::Spectra
             cppoptlib::cppoptlib
+            grit::grit
             # We link Backward::Backward on the xdmrg++-stacktrace object directly
             )
 

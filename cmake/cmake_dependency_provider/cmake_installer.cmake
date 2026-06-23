@@ -45,6 +45,12 @@ function(pkg_install_dependencies  package_name)
 
         pkg_install(primme)
 
+        pkg_install(grit CMAKE_ARGS
+                    -DGRIT_ENABLE_32BIT:BOOL=${DMRG_ENABLE_32BIT}
+                    -DGRIT_ENABLE_64BIT:BOOL=${DMRG_ENABLE_64BIT}
+                    -DGRIT_ENABLE_80BIT:BOOL=${DMRG_ENABLE_80BIT}
+                    -DGRIT_ENABLE_128BIT:BOOL=${DMRG_ENABLE_128BIT})
+
         if(DMRG_ENABLE_TBLIS)
 #            pkg_install(tblis)
             pkg_install(TBLIS)

@@ -49,7 +49,8 @@
         "CMAKE_LINKER_TYPE": "MOLD",
         "CMAKE_SKIP_BUILD_RPATH": "FALSE",
         "CMAKE_BUILD_WITH_INSTALL_RPATH": "FALSE",
-        "CMAKE_INSTALL_RPATH_USE_LINK_PATH": "TRUE"
+        "CMAKE_INSTALL_RPATH_USE_LINK_PATH": "TRUE",
+        "CMAKE_LINK_DEPENDS_USE_LINKER": "FALSE"
       },
       "environment": {
         "NINJA_STATUS": "[run %r|beg %s|fin %f|tot %t|rate %o|time %e]:"
@@ -464,10 +465,14 @@
     },
     {
       "name": "kraken-debug",
-      "displayName": "Release|march=haswell|conan|openblas|debug flags",
+      "displayName": "Debug|march=haswell|conan|openblas|debug flags",
       "inherits": [
-        "openblas",
-        "kraken"
+        "float128",
+        "flexiblas",
+        "haswell",
+        "conan",
+        "debug",
+        "default"
       ],
       "binaryDir": "${sourceDir}/build/Debug",
       "cacheVariables": {
@@ -479,7 +484,12 @@
         "COMPILER_ENABLE_ASAN": "TRUE",
         "COMPILER_ENABLE_USAN": "TRUE",
         "COMPILER_ENABLE_PCH": "FALSE",
-        "COMPILER_ENABLE_CCACHE": "FALSE"
+        "COMPILER_ENABLE_CCACHE": "FALSE",
+        "DMRG_BUILD_TOOLS": "TRUE",
+        "DMRG_ENABLE_32BIT": "FALSE",
+        "DMRG_ENABLE_64BIT": "TRUE",
+        "DMRG_ENABLE_80BIT": "FALSE",
+        "DMRG_ENABLE_128BIT": "FALSE"
       },
       "environment": {
         "VERBOSE": "1"

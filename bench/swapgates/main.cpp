@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
         fmt::print("File does not exist: {}", filepath);
         exit(0);
     }
-    settings::parse(argc, argv);
+    if(auto parse_result = settings::parse(argc, argv); parse_result.action == settings::ParseAction::EXIT) return parse_result.exit_code;
     std::atexit(debug::print_mem_usage);
     std::atexit(tools::common::timer::print_timers);
     std::at_quick_exit(debug::print_mem_usage);

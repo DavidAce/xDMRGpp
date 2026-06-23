@@ -308,7 +308,7 @@ size_t assert_lbit_evolution(const flbit_t &f1, const flbit_t &f2) {
 void set_log(const std::string &name) { tools::log = tools::Logger::setLogger(name, settings::console::loglevel, settings::console::timestamp); }
 
 int main(int argc, char *argv[]) {
-    settings::parse(argc, argv);
+    if(auto parse_result = settings::parse(argc, argv); parse_result.action == settings::ParseAction::EXIT) return parse_result.exit_code;
 
     tools::log = tools::Logger::setLogger("lbit-evoution-test", settings::console::loglevel, settings::console::timestamp);
 
