@@ -7,7 +7,7 @@ namespace eig {
     using size_type = long;
 
     // Enums
-    enum class Lib { ARPACK, SPECTRA, PRIMME, EIGSMPO };      // Choose the underlying library
+    enum class Lib { ARPACK, SPECTRA, PRIMME, EIGSMPO, GRIT }; // Choose the underlying library
     enum class Form { SYMM, NSYM };                           // Symmetric or non-symmetric problems (complex symmetric are assumed Hermitian)
     enum class Type { FP32, FP64, FP80, FP128, CX32, CX64, CX80, CX128 }; // Real or complex scalar type
     enum class Side { L, R, LR };                             // Left, right or both eigenvectors (for nsym problems)
@@ -132,6 +132,7 @@ namespace eig {
         switch(prec) {
             case Preconditioner::NONE: return "NONE";
             case Preconditioner::JACOBI: return "JACOBI";
+            case Preconditioner::SOLVE: return "SOLVE";
             default: throw std::logic_error("No valid eig::Preconditioner given");
         }
     }
@@ -148,6 +149,7 @@ namespace eig {
             case Lib::SPECTRA: return "SPECTRA";
             case Lib::PRIMME: return "PRIMME";
             case Lib::EIGSMPO: return "EIGSMPO";
+            case Lib::GRIT: return "GRIT";
             default: throw std::logic_error("No valid eig::Lib given");
         }
     }
@@ -157,6 +159,7 @@ namespace eig {
         if(libstr == "PRIMME") return Lib::PRIMME;
         if(libstr == "SPECTRA") return Lib::SPECTRA;
         if(libstr == "EIGSMPO") return Lib::EIGSMPO;
+        if(libstr == "GRIT") return Lib::GRIT;
         throw std::logic_error("The string does not match any eig::Lib");
     }
 

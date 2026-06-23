@@ -562,34 +562,11 @@ void eig::solver_arpack<MatrixType>::compute_residual_norms() {
     }
 }
 
+#include "solver_arpack.inst.inc"
+
 #if defined(__clang__)
     // turn the warnings back on
     #pragma clang diagnostic pop
 #elif defined(__GNUC__) && (__GNUC__ >= 12)
     #pragma GCC diagnostic pop
 #endif
-
-template class eig::solver_arpack<MatVecMPOS<fp32>>;
-template class eig::solver_arpack<MatVecMPOS<fp64>>;
-template class eig::solver_arpack<MatVecMPOS<cx32>>;
-template class eig::solver_arpack<MatVecMPOS<cx64>>;
-//
-template class eig::solver_arpack<MatVecMPO<fp32>>;
-template class eig::solver_arpack<MatVecMPO<fp64>>;
-template class eig::solver_arpack<MatVecMPO<cx32>>;
-template class eig::solver_arpack<MatVecMPO<cx64>>;
-//
-template class eig::solver_arpack<MatVecDense<fp32>>;
-template class eig::solver_arpack<MatVecDense<fp64>>;
-template class eig::solver_arpack<MatVecDense<cx32>>;
-template class eig::solver_arpack<MatVecDense<cx64>>;
-//
-template class eig::solver_arpack<MatVecSparse<fp32>>;
-template class eig::solver_arpack<MatVecSparse<fp64>>;
-template class eig::solver_arpack<MatVecSparse<cx32>>;
-template class eig::solver_arpack<MatVecSparse<cx64>>;
-//
-template class eig::solver_arpack<MatVecZero<fp32>>;
-template class eig::solver_arpack<MatVecZero<fp64>>;
-template class eig::solver_arpack<MatVecZero<cx32>>;
-template class eig::solver_arpack<MatVecZero<cx64>>;

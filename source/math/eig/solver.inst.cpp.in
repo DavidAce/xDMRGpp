@@ -1,0 +1,61 @@
+#include "solver.h"
+#include "debug/exceptions.h"
+#include "log.h"
+#include "matvec/matvec_dense.h"
+#include "matvec/matvec_mpo.h"
+#include "matvec/matvec_mpos.h"
+#include "matvec/matvec_sparse.h"
+#include "matvec/matvec_zero.h"
+#include "math/float.h"
+#include "solver_arpack/solver_arpack.h"
+#include "solver_spectra/solver_spectra.h"
+#include "tid/tid.h"
+#include <complex>
+#include <utility>
+#include <general/sfinae.h>
+
+using @SCALAR_ALIAS@ = @SCALAR@;
+using RealScalar_@SCALAR_ALIAS@ = decltype(std::real(std::declval<@SCALAR_ALIAS@>()));
+
+/* clang-format off */
+
+template void eig::solver::subtract_phase(std::vector<@SCALAR_ALIAS@> &eigvecs, size_type L, int nev);
+
+template void eig::solver::eig<eig::Form::SYMM>(@SCALAR_ALIAS@ *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(@SCALAR_ALIAS@ *matrix, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(@SCALAR_ALIAS@ *matrixA, @SCALAR_ALIAS@ *matrixB, size_type, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::NSYM>(@SCALAR_ALIAS@ *matrixA, @SCALAR_ALIAS@ *matrixB, size_type, Vecs, Dephase);
+
+template void eig::solver::eig<eig::Form::SYMM>(@SCALAR_ALIAS@ *matrix, size_type, char, int, int, RealScalar_@SCALAR_ALIAS@, RealScalar_@SCALAR_ALIAS@, Vecs, Dephase);
+template void eig::solver::eig<eig::Form::SYMM>(@SCALAR_ALIAS@ *matrixA, @SCALAR_ALIAS@ *matrixB, size_type, char, int, int, RealScalar_@SCALAR_ALIAS@, RealScalar_@SCALAR_ALIAS@, Vecs, Dephase);
+
+template void eig::solver::eigs_init<@SCALAR_ALIAS@>(size_type L, int nev, int ncv, Ritz ritz, Form form, Type type, Side side, std::optional<cx64> sigma,
+                                                     Shinv shinv, Storage storage, Vecs compute_eigvecs_, Dephase remove_phase_, @SCALAR_ALIAS@ *residual, Lib lib);
+
+template void eig::solver::set_default_config(const MatVecMPOS<@SCALAR_ALIAS@> &matrix);
+template void eig::solver::set_default_config(const MatVecMPO<@SCALAR_ALIAS@> &matrix);
+template void eig::solver::set_default_config(const MatVecDense<@SCALAR_ALIAS@> &matrix);
+template void eig::solver::set_default_config(const MatVecSparse<@SCALAR_ALIAS@> &matrix);
+template void eig::solver::set_default_config(const MatVecZero<@SCALAR_ALIAS@> &matrix);
+
+template void eig::solver::eigs(const @SCALAR_ALIAS@ *matrix, size_type L, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma,
+                                Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, @SCALAR_ALIAS@ *residual);
+
+template void eig::solver::eigs(MatVecMPOS<@SCALAR_ALIAS@> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma,
+                                Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, @SCALAR_ALIAS@ *residual);
+template void eig::solver::eigs(MatVecMPO<@SCALAR_ALIAS@> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma,
+                                Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, @SCALAR_ALIAS@ *residual);
+template void eig::solver::eigs(MatVecDense<@SCALAR_ALIAS@> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma,
+                                Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, @SCALAR_ALIAS@ *residual);
+template void eig::solver::eigs(MatVecSparse<@SCALAR_ALIAS@> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma,
+                                Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, @SCALAR_ALIAS@ *residual);
+template void eig::solver::eigs(MatVecZero<@SCALAR_ALIAS@> &matrix, int nev, int ncv, Ritz ritz, Form form, Side side, std::optional<cx64> sigma,
+                                Shinv shift_invert, Vecs compute_eigvecs, Dephase remove_phase, @SCALAR_ALIAS@ *residual);
+
+template void eig::solver::eigs(MatVecMPOS<@SCALAR_ALIAS@> &matrix);
+template void eig::solver::eigs(MatVecMPO<@SCALAR_ALIAS@> &matrix);
+template void eig::solver::eigs(MatVecDense<@SCALAR_ALIAS@> &matrix);
+template void eig::solver::eigs(MatVecSparse<@SCALAR_ALIAS@> &matrix);
+template void eig::solver::eigs(MatVecZero<@SCALAR_ALIAS@> &matrix);
+
+/* clang-format on */

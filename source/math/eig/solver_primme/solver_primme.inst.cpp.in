@@ -1,0 +1,20 @@
+#include "solver.h"
+#include "matvec/matvec_dense.h"
+#include "matvec/matvec_mpo.h"
+#include "matvec/matvec_mpos.h"
+#include "matvec/matvec_sparse.h"
+#include "matvec/matvec_zero.h"
+#include "math/float.h"
+#include <general/sfinae.h>
+
+using @SCALAR_ALIAS@ = @SCALAR@;
+
+/* clang-format off */
+
+template int eig::solver::eigs_primme(MatVecMPO<@SCALAR_ALIAS@> &matrix);
+template int eig::solver::eigs_primme(MatVecMPOS<@SCALAR_ALIAS@> &matrix);
+template int eig::solver::eigs_primme(MatVecZero<@SCALAR_ALIAS@> &matrix);
+template int eig::solver::eigs_primme(MatVecDense<@SCALAR_ALIAS@> &matrix);
+template int eig::solver::eigs_primme(MatVecSparse<@SCALAR_ALIAS@> &matrix);
+
+/* clang-format on */

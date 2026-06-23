@@ -1,0 +1,21 @@
+#include "solver.h"
+#include "matvec/matvec_dense.h"
+#include "matvec/matvec_mpo.h"
+#include "matvec/matvec_mpos.h"
+#include "matvec/matvec_sparse.h"
+#include "matvec/matvec_zero.h"
+#include "math/float.h"
+#include "solver_arpack.h"
+#include <general/sfinae.h>
+
+using @SCALAR_ALIAS@ = @SCALAR@;
+
+/* clang-format off */
+
+template class eig::solver_arpack<MatVecMPOS<@SCALAR_ALIAS@>>;
+template class eig::solver_arpack<MatVecMPO<@SCALAR_ALIAS@>>;
+template class eig::solver_arpack<MatVecDense<@SCALAR_ALIAS@>>;
+template class eig::solver_arpack<MatVecSparse<@SCALAR_ALIAS@>>;
+template class eig::solver_arpack<MatVecZero<@SCALAR_ALIAS@>>;
+
+/* clang-format on */

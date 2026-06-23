@@ -6,6 +6,12 @@ add_subdirectory(solver_lapack)
 add_subdirectory(solver_eigsmpo)
 add_subdirectory(matvec)
 
+generate_scalar_instantiation_include(xdmrg_math_eig_solver_inst_include
+        TEMPLATE solver.inst.cpp.in
+        SCALARS ${DMRG_ENABLED_SCALARS}
+        OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/solver
+        )
+
 add_source_target(xdmrg++-math-eig
         TARGET_SOURCES
         log.cpp
@@ -23,3 +29,7 @@ add_source_target(xdmrg++-math-eig
         xdmrg++-math-eig-spectra
         xdmrg++-math-eig-eigsmpo
         )
+
+target_include_directories(xdmrg++-math-eig-o PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/generated/solver)

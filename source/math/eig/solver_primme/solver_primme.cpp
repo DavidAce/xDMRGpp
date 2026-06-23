@@ -573,27 +573,4 @@ int eig::solver::eigs_primme(MatrixProductType &matrix) {
     return info;
 }
 
-template int eig::solver::eigs_primme(MatVecMPO<fp32> &matrix);
-template int eig::solver::eigs_primme(MatVecMPO<cx32> &matrix);
-template int eig::solver::eigs_primme(MatVecMPO<fp64> &matrix);
-template int eig::solver::eigs_primme(MatVecMPO<cx64> &matrix);
-
-template int eig::solver::eigs_primme(MatVecMPOS<fp32> &matrix);
-template int eig::solver::eigs_primme(MatVecMPOS<cx32> &matrix);
-template int eig::solver::eigs_primme(MatVecMPOS<fp64> &matrix);
-template int eig::solver::eigs_primme(MatVecMPOS<cx64> &matrix);
-
-template int eig::solver::eigs_primme(MatVecZero<fp32> &matrix);
-template int eig::solver::eigs_primme(MatVecZero<cx32> &matrix);
-template int eig::solver::eigs_primme(MatVecZero<fp64> &matrix);
-template int eig::solver::eigs_primme(MatVecZero<cx64> &matrix);
-
-template int eig::solver::eigs_primme(MatVecDense<fp32> &matrix);
-template int eig::solver::eigs_primme(MatVecDense<cx32> &matrix);
-template int eig::solver::eigs_primme(MatVecDense<fp64> &matrix);
-template int eig::solver::eigs_primme(MatVecDense<cx64> &matrix);
-
-template int eig::solver::eigs_primme(MatVecSparse<fp32> &matrix);
-template int eig::solver::eigs_primme(MatVecSparse<cx32> &matrix);
-template int eig::solver::eigs_primme(MatVecSparse<fp64> &matrix);
-template int eig::solver::eigs_primme(MatVecSparse<cx64> &matrix);
+#include "solver_primme.inst.inc"
